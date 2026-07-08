@@ -42,5 +42,16 @@ check('port name def',  $bare['port_label'] === 'ioc0 (lsiutil -p2)');
 check('pcie empty',     $bare['pcie'] === []);
 check('alert color',    $bare['color'] === '#e74c3c');
 
+// multi-controller contract normalizer
+$multi = lsi_controllers(['controllers' => [['temp' => 72], ['temp' => 77]]]);
+check('controllers array', count($multi) === 2 && $multi[1]['temp'] === 77);
+$flat = lsi_controllers(['temp' => 50, 'status' => 'ok']);   // legacy flat -> 1 element
+check('flat wraps to one', count($flat) === 1 && $flat[0]['temp'] === 50);
+
+// storcli controller (empty port_name) labels by controller index, not lsiutil port
+$sc = lsi_hba_view(['temp' => 72, 'status' => 'ok', 'port_name' => '', 'board_name' => 'HBA 9400-16i'], 1, 1);
+check('storcli port label', $sc['port_label'] === 'Controller /c1');
+check('storcli model',      $sc['model'] === 'HBA 9400-16i');
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

@@ -17,12 +17,17 @@ if ($type === 'overview') {
     $out  = shell_exec("bash $scripts/get_hba_info.sh 2>/dev/null");
     $data = $out ? json_decode($out, true) : null;
     if (!$data) { echo '{"error":"No output from script"}'; exit; }
-    // Enrich with the shared status->color/label so the refresh JS needs no map of its own.
-    if (!isset($data['error'])) {
-        $data['color'] = lsi_status_color($data['status'] ?? 'ok');
-        $data['label'] = lsi_status_label($data['status'] ?? 'ok');
+    if (isset($data['error'])) { echo json_encode($data); exit; }  // total backend failure
+    // Always hand the JS a controllers[] array (normalizes flat + array shapes),
+    // each enriched with the shared status->color/label so the JS needs no map.
+    $ctls = lsi_controllers($data);
+    foreach ($ctls as &$c) {
+        if (isset($c['error'])) continue;
+        $c['color'] = lsi_status_color($c['status'] ?? 'ok');
+        $c['label'] = lsi_status_label($c['status'] ?? 'ok');
     }
-    echo json_encode($data);
+    unset($c);
+    echo json_encode(['controllers' => $ctls]);
     exit;
 }
 

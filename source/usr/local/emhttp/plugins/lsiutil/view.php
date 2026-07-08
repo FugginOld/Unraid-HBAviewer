@@ -12,9 +12,21 @@ function lsi_status_label(string $s): string {
     return match ($s) { 'alert' => 'ALERT', 'warn' => 'WARNING', default => 'NORMAL' };
 }
 
-/* $data = decoded get_hba_info.sh JSON; $port = configured lsiutil port (for the label). */
-function lsi_hba_view(array $data, int $port): array {
+/* Controllers from a decoded backend payload. Accepts the multi-controller
+   contract {"controllers":[...]} and (defensively) a legacy flat single object,
+   so consumers can loop uniformly regardless of backend or contract version. */
+function lsi_controllers(array $data): array {
+    return $data['controllers'] ?? [$data];
+}
+
+/* $data = one controller's JSON; $port = configured lsiutil port; $idx = its
+   position in the controllers list (for the storcli /cN label). */
+function lsi_hba_view(array $data, int $port, int $idx = 0): array {
     $status = $data['status'] ?? 'ok';
+    $portName = $data['port_name'] ?? 'ioc0';
+    // lsiutil cards name a port ("ioc0 (lsiutil -p1)"); storcli cards name the
+    // controller index ("Controller /c0") since port_name is empty there.
+    $portLabel = $portName !== '' ? "$portName (lsiutil -p$port)" : "Controller /c$idx";
 
     $pcie = [];
     foreach ([
@@ -34,8 +46,8 @@ function lsi_hba_view(array $data, int $port): array {
         'model'      => !empty($data['board_name']) ? $data['board_name'] : ($data['model'] ?? 'Unknown'),
         'chip'       => $data['model']     ?? 'Unknown',
         'firmware'   => $data['firmware']  ?? 'Unknown',
-        'port_name'  => $data['port_name'] ?? 'ioc0',
-        'port_label' => ($data['port_name'] ?? 'ioc0') . " (lsiutil -p$port)",
+        'port_name'  => $portName,
+        'port_label' => $portLabel,
         'pcie'       => $pcie,
     ];
 }

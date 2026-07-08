@@ -137,9 +137,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 <?php if ($error): ?>
   <div class="lu-error"><strong>Error:</strong> <?= htmlspecialchars($error) ?></div>
 <?php else:
-    $v     = lsi_hba_view($data, $port);
-    $tc    = $v['color'];
-    $badge = $v['label'];
+    $controllers = lsi_controllers($data);
 ?>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -151,13 +149,17 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <a href="/Settings/LSIUtil_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
-<!-- ── Overview tab ──────────────────────────────────────────────────────── -->
+<!-- ── Overview tab (one card per controller) ────────────────────────────── -->
 <div id="tab-overview" class="lu-tab-pane active">
-  <div class="lu-card first" style="--tc:<?= $tc ?>">
+  <?php foreach ($controllers as $i => $c): ?>
+    <?php if (isset($c['error'])): ?>
+  <div class="lu-card first"><div class="lu-error"><strong>Controller <?= $i ?>:</strong> <?= htmlspecialchars($c['error']) ?></div></div>
+    <?php continue; endif; $v = lsi_hba_view($c, $port, $i); ?>
+  <div class="lu-card first" style="--tc:<?= $v['color'] ?>" data-ctl="<?= $i ?>">
 
     <div class="lu-overview-row">
-      <div class="lu-circle" id="lu-circle">
-        <span class="val" id="lu-val"><?= $v['temp'] ?></span>
+      <div class="lu-circle" id="lu-circle-<?= $i ?>">
+        <span class="val" id="lu-val-<?= $i ?>"><?= $v['temp'] ?></span>
         <span class="unit">°C</span>
       </div>
       <div class="lu-meta">
@@ -166,20 +168,20 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span></p>
         <p>Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p>
         <p>Alert Threshold: <span><?= $threshold ?>°C</span></p>
-        <span class="lu-badge" id="lu-badge"><?= $badge ?></span>
+        <span class="lu-badge" id="lu-badge-<?= $i ?>"><?= $v['label'] ?></span>
       </div>
     </div>
 
-    <?php if ($showPcie && ($data['pcie_width'] || $data['pcie_speed'])): ?>
+    <?php if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))): ?>
     <hr class="lu-divider">
     <div class="lu-pcie-row">
       <?php foreach ($v['pcie'] as $item): ?><div class="lu-pcie-item"><?= $item['label'] ?>: <span><?= htmlspecialchars($item['value']) ?></span></div><?php endforeach; ?>
     </div>
     <?php endif; ?>
 
-    <div class="lu-ts" id="lu-ts">Last read: <?= date('H:i:s') ?></div>
+    <div class="lu-ts" id="lu-ts-<?= $i ?>">Last read: <?= date('H:i:s') ?></div>
   </div>
-
+  <?php endforeach; ?>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
@@ -265,19 +267,20 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         fetch('/plugins/lsiutil/ajax_info.php?type=overview')
             .then(function (r) { return r.json(); })
             .then(function (d) {
-                if (d.error) return;
+                if (d.error || !d.controllers) return;
                 // color/label computed server-side (view.php) — no client-side status map
-                var c = d.color;
+                d.controllers.forEach(function (ctl, i) {
+                    if (ctl.error) return;
+                    var circle = document.getElementById('lu-circle-' + i);
+                    var val    = document.getElementById('lu-val-' + i);
+                    var badge  = document.getElementById('lu-badge-' + i);
+                    var ts     = document.getElementById('lu-ts-' + i);
 
-                var circle = document.getElementById('lu-circle');
-                var val    = document.getElementById('lu-val');
-                var badge  = document.getElementById('lu-badge');
-                var ts     = document.getElementById('lu-ts');
-
-                if (circle) circle.style.setProperty('--tc', c);
-                if (val)    val.textContent   = d.temp;
-                if (badge)  { badge.textContent = d.label; badge.style.background = c; }
-                if (ts)     ts.textContent    = 'Last read: ' + new Date().toLocaleTimeString();
+                    if (circle) circle.style.setProperty('--tc', ctl.color);
+                    if (val)    val.textContent = ctl.temp;
+                    if (badge)  { badge.textContent = ctl.label; badge.style.background = ctl.color; }
+                    if (ts)     ts.textContent = 'Last read: ' + new Date().toLocaleTimeString();
+                });
             })
             .catch(function () {});
 
