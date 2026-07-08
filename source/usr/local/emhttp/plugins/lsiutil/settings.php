@@ -2,43 +2,21 @@
 /* LSIUtil Settings — full settings form.
    Reached via the LSIUtil icon card in Unraid Settings > System Settings. */
 
-$PLUGIN     = 'lsiutil';
-$PLUGIN_DIR = "/boot/config/plugins/$PLUGIN";
-$CFG_FILE   = "$PLUGIN_DIR/$PLUGIN.cfg";
-
-$defaults = [
-    'HBA_PORT'        => 1,
-    'ALERT_THRESHOLD' => 80,
-    'SHOW_PCIE'       => 1,
-    'SHOW_PHY'        => 1,
-    'SHOW_DRIVES'     => 1,
-    'SHOW_EVENTS'     => 1,
-];
-$cfg = $defaults;
-
-if (file_exists($CFG_FILE)) {
-    foreach (file($CFG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        if (strpos($line, '=') !== false) {
-            [$k, $v] = explode('=', $line, 2);
-            $cfg[trim($k)] = trim($v);
-        }
-    }
-}
-
+require_once __DIR__ . '/config.php';
+$cfg   = lsi_config_read();
 $saved = false;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lsiutil'])) {
-    $new = [
-        'HBA_PORT'        => max(1, min(8,   (int)($_POST['port']      ?? 1))),
-        'ALERT_THRESHOLD' => max(1, min(150, (int)($_POST['threshold'] ?? 80))),
+    // Map the form (checkbox-absent = off); config_write clamps to schema.
+    lsi_config_write([
+        'HBA_PORT'        => $_POST['port']      ?? 1,
+        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 80,
         'SHOW_PCIE'       => isset($_POST['show_pcie'])   ? 1 : 0,
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
         'SHOW_EVENTS'     => isset($_POST['show_events']) ? 1 : 0,
-    ];
-    @mkdir($PLUGIN_DIR, 0755, true);
-    $lines = array_map(fn($k, $v) => "$k=$v", array_keys($new), $new);
-    file_put_contents($CFG_FILE, implode("\n", $lines) . "\n");
-    $cfg   = $new;
+    ]);
+    $cfg   = lsi_config_read();
     $saved = true;
 }
 

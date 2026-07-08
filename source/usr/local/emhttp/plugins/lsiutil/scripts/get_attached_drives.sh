@@ -1,39 +1,31 @@
 #!/bin/bash
-# Attached drives — three-stage detection:
-#   1. lsiutil -a 42,0  → bus:target + OS device name  (authoritative device list)
-#   2. sysfs sas_end_device  → SAS address + PHY per block device
-#   3. sysfs host scan  → fallback OS device names if lsiutil -a 42,0 returns nothing
+# Attached-drives composer. Two pure parse stages (osmap, join) wrap impure
+# sysfs I/O that can't be captured as lsiutil text:
+#   Stage 1  lsiutil -a 42,0  -> parse/drives_osmap.sh   (pure, tested)
+#   Stage 2  /sys sas_end_device  -> SAS address + PHY    (impure I/O)
+#   Stage 3  /sys scsi_host fallback if stage 1 empty     (impure I/O)
+#   Join     parse/drives_join.sh                          (pure, tested)
 
-LSIUTIL="/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64"
-CFG="/boot/config/plugins/lsiutil/lsiutil.cfg"
-PORT=1
-[ -f "$CFG" ] && source "$CFG" && PORT="${HBA_PORT:-1}"
+DIR="$(dirname "$0")"
+source "$DIR/lib.sh"
+source "$DIR/config.sh"   # sets PORT, ALERT
 
-[ -x "$LSIUTIL" ] || { echo '{"error":"lsiutil binary not found"}'; exit 1; }
+require_binary || exit 1
 
-# ── Stage 1: OS device name map from lsiutil ─────────────────────────────────
-TMPOS=$(mktemp)
-"$LSIUTIL" -p"$PORT" -a 42,0 2>/dev/null | awk '
-/\/dev\/[a-z]/ {
-    bus=0; tgt=0; dev=""; n=0
-    for (i=1;i<=NF;i++) {
-        if ($i ~ /^\/dev\//) { dev=$i }
-        else if ($i ~ /^[0-9]+$/) { n++; if (n==1) bus=$i+0; else if (n==2) tgt=$i+0 }
-    }
-    if (dev != "") printf "%d_%d %s\n", bus, tgt, dev
-}' > "$TMPOS"
+TMPOS=$(mktemp); TMPSAS=$(mktemp)
+trap 'rm -f "$TMPOS" "$TMPSAS"' EXIT
+
+# ── Stage 1: OS device map from lsiutil (pure parse of query text) ───────────
+hba_query -p"$PORT" -a 42,0 2>/dev/null | bash "$DIR/parse/drives_osmap.sh" > "$TMPOS"
 
 # ── Stage 2: SAS address + PHY from sysfs ────────────────────────────────────
-# /sys/class/sas_end_device/ exists on kernels with SAS transport support (mpt3sas)
-# Each entry has sas_address, phy_identifier, and a device link to the SCSI device tree
-TMPSAS=$(mktemp)
+# /sys/class/sas_end_device/ exists on kernels with SAS transport (mpt3sas).
 if [ -d "/sys/class/sas_end_device" ]; then
     for ed in /sys/class/sas_end_device/end_device-*/; do
         [ -e "$ed" ] || continue
         sas=$(sed 's/0x//' "${ed}sas_address" 2>/dev/null | tr '[:lower:]' '[:upper:]' | tr -d ' \n')
         phy=$(tr -d ' \n' < "${ed}phy_identifier" 2>/dev/null)
         [ -n "$sas" ] || continue
-        # Traverse from end_device/device into the SCSI+block device subtree
         blk_dir=$(find -L "${ed}device" -maxdepth 12 -type d -name 'block' 2>/dev/null | head -1)
         blk=$(ls "$blk_dir" 2>/dev/null | head -1)
         [ -n "$blk" ] || continue
@@ -61,32 +53,5 @@ if [ ! -s "$TMPOS" ]; then
     done
 fi
 
-# ── Build JSON: join OS-name list with sysfs SAS/PHY map ─────────────────────
-awk '
-BEGIN { first=1; printf "{\"drives\":[" }
-NR==FNR {
-    # TMPOS: "bus_tgt /dev/sdX"
-    os[$1]=$2; n++; ord[n]=$1
-    next
-}
-{
-    # TMPSAS: "/dev/sdX sas_addr phy"
-    sasmap[$1]=$2; phymap[$1]=$3
-}
-END {
-    for (i=1; i<=n; i++) {
-        key=ord[i]; dev=os[key]
-        split(key, p, "_"); bus=p[1]+0; tgt=p[2]+0
-        sas=(dev in sasmap) ? sasmap[dev] : ""
-        # For SATA drives sas_end_device has no entry; target == PHY for direct-attached HBAs
-        phy=(dev in phymap) ? phymap[dev]+0 : tgt
-        if (!first) printf ","
-        first=0
-        printf "{\"bus\":%d,\"target\":%d,\"sas_address\":\"%s\",\"phy\":%d,\"os_name\":\"%s\"}",
-            bus, tgt, sas, phy, dev
-    }
-    printf "]}"
-}
-' "$TMPOS" "$TMPSAS"
-
-rm -f "$TMPOS" "$TMPSAS"
+# ── Join the two maps (pure parse) ───────────────────────────────────────────
+bash "$DIR/parse/drives_join.sh" "$TMPOS" "$TMPSAS"

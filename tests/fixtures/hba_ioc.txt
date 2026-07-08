@@ -1,0 +1,6 @@
+IOUnit Page 7:
+
+  IOCTemperature:                   0x2f
+  PCIeWidth:                        0x08
+  PCIeSpeed:                        0x04
+  CurrentPowerMode:                 0x00

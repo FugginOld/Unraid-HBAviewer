@@ -1,0 +1,19 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Status Code = 0
+Status = Success
+Description = None
+
+Number of Controllers = 2
+Host Name = Golem
+Operating System  = Linux 6.18.38-Unraid
+
+IT System Overview :
+==================
+
+---------------------------------------------------------------------------
+Ctl Model        AdapterType   VendId DevId SubVendId SubDevId PCI Address
+---------------------------------------------------------------------------
+  0 HBA 9400-16i   SAS3416(B0) 0x1000  0xAC    0x1000   0x3000 00:c1:00:00
+  1 HBA 9400-8i    SAS3408(B0) 0x1000  0xAF    0x1000   0x3010 00:65:00:00
+---------------------------------------------------------------------------

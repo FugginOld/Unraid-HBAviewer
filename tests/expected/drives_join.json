@@ -1,0 +1,1 @@
+{"drives":[{"bus":0,"target":1,"sas_address":"5000CCA0AABBCCDD","phy":4,"os_name":"/dev/sda"},{"bus":0,"target":2,"sas_address":"5000CCA0AABBCCEE","phy":5,"os_name":"/dev/sdb"},{"bus":0,"target":3,"sas_address":"","phy":3,"os_name":"/dev/sdc"}]}

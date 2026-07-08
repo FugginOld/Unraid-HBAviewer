@@ -1,0 +1,4 @@
+ B___T___L  Type       Vendor   Product          Rev      OS Device
+ 0   1   0  Disk       ATA      WDC WD40EFRX     0A80     /dev/sda
+ 0   2   0  Disk       ATA      WDC WD40EFRX     0A80     /dev/sdb
+ 0   3   0  Disk       ATA      ST8000VN004      SC60     /dev/sdc

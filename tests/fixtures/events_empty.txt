@@ -1,0 +1,3 @@
+Adapter firmware event log:
+
+ The log is empty

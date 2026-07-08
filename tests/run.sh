@@ -1,0 +1,53 @@
+#!/bin/bash
+# Full test suite: shell parser goldens + PHP unit tests. No hardware.
+# Golden cases feed a fixture to a parser and diff stdout against expected/ —
+# a dropped or renamed JSON field fails here. PHP tests run via run_php.sh.
+#
+#   bash tests/run.sh
+#
+# Regenerate goldens after an INTENTIONAL parser change:
+#   UPDATE=1 bash tests/run.sh
+cd "$(dirname "$0")" || exit 2
+P="../source/usr/local/emhttp/plugins/lsiutil/scripts/parse"
+fail=0
+
+check() {  # name  expected_file  command...
+    local name=$1 exp=$2; shift 2
+    local got; got=$("$@")
+    if [ "${UPDATE:-}" = "1" ]; then printf '%s' "$got" > "expected/$exp"; echo "WROTE $name"; return; fi
+    if [ "$got" = "$(cat "expected/$exp")" ]; then
+        echo "PASS  $name"
+    else
+        echo "FAIL  $name"
+        diff <(printf '%s\n' "$got") <(cat "expected/$exp"; echo)
+        fail=1
+    fi
+}
+
+# stdin filters
+check phy-healthy      phy_healthy.json      bash "$P/phy.sh"          < fixtures/phy_healthy.txt
+check phy-unsupported  phy_unsupported.json  bash "$P/phy.sh"          < fixtures/phy_unsupported.txt
+check events-entries   events_entries.json   bash "$P/events.sh"       < fixtures/events_entries.txt
+check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
+check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_lsiutil.txt
+check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < fixtures/storcli/overview_c0.txt
+
+# storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
+chmod +x stub/storcli 2>/dev/null
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli"
+check storcli-multi    storcli_multi.json   bash "$P/../backend_storcli.sh"
+
+# multi-file parsers
+check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
+
+echo
+echo "=== PHP tests ==="
+bash run_php.sh; php_fail=$?
+
+echo
+if [ $fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+    echo "--- all pass ---"; exit 0
+else
+    echo "--- FAILURES ---"; exit 1
+fi

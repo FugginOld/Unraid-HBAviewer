@@ -3,23 +3,15 @@
    Mirrors the Overview tab layout: circle gauge + card info + PCIe row.
    Result cached in /tmp for 60 s to avoid hardware reads on every page load. */
 
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/view.php';
 $pluginname = 'LSIUtil';
 $CACHE   = '/tmp/lsiutil_dash.json';
 $SCRIPT  = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
-$CFG     = '/boot/config/plugins/lsiutil/lsiutil.cfg';
 
-// Read config for port + alert threshold
-$c = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 80];
-if (file_exists($CFG)) {
-    foreach (file($CFG, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $ln) {
-        if (strpos($ln, '=') !== false) {
-            [$k, $v] = explode('=', $ln, 2);
-            $c[trim($k)] = trim($v);
-        }
-    }
-}
-$port      = (int)$c['HBA_PORT'];
-$threshold = (int)$c['ALERT_THRESHOLD'];
+$cfg       = lsi_config_read();
+$port      = $cfg['HBA_PORT'];
+$threshold = $cfg['ALERT_THRESHOLD'];
 
 // Use cached data or run fresh
 $data = null;
@@ -37,14 +29,15 @@ if (!$data || isset($data['error'])) {
 $temp     = isset($data['temp'])       ? (int)$data['temp']    : null;
 $status   = $data['status']            ?? 'ok';
 $error    = $data['error']             ?? ($temp === null ? 'lsiutil unavailable' : null);
-$tc       = match ($status) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
-$badge    = match ($status) { 'alert' => 'ALERT',   'warn' => 'WARNING',  default => 'NORMAL'  };
+$tc       = lsi_status_color($status);
+$badge    = lsi_status_label($status);
+$ts       = date('H:i:s');
 
-$boardName = htmlspecialchars(!empty($data['board_name']) ? $data['board_name'] : ($data['model'] ?? 'Unknown'));
-$chip      = htmlspecialchars($data['model']    ?? '');
-$firmware  = htmlspecialchars($data['firmware'] ?? '');
-$portName  = htmlspecialchars($data['port_name'] ?? 'ioc0');
-$ts        = date('H:i:s');
+$v         = $error ? null : lsi_hba_view($data, $port);
+$boardName = htmlspecialchars($error ? 'Unknown' : $v['model']);
+$chip      = $error ? '' : htmlspecialchars($v['chip']);
+$firmware  = $error ? '' : htmlspecialchars($v['firmware']);
+$portLabel = $error ? '' : htmlspecialchars($v['port_label']);
 
 // Scoped styles — output directly so they appear in the page <head> area
 echo <<<CSS
@@ -77,15 +70,14 @@ echo <<<CSS
 </style>
 CSS;
 
-// Build PCIe row
+// Build PCIe row from the shared view (same labels/order/escaping as the monitor)
 $pcieRow = '';
-if (!$error) {
+if (!$error && $v['pcie']) {
     $pcieParts = [];
-    if (!empty($data['pcie_width']))   $pcieParts[] = 'PCIe Width: <span>' . htmlspecialchars($data['pcie_width'])   . '</span>';
-    if (!empty($data['pcie_speed']))   $pcieParts[] = 'PCIe Speed: <span>' . htmlspecialchars($data['pcie_speed'])   . '</span>';
-    if (!empty($data['power_mode']))   $pcieParts[] = 'Power Mode: <span>' . htmlspecialchars($data['power_mode'])   . '</span>';
-    if (!empty($data['pci_location'])) $pcieParts[] = 'PCI Location: <span>' . htmlspecialchars($data['pci_location']) . '</span>';
-    if ($pcieParts) $pcieRow = '<div class="lu-d-pcie">' . implode('', $pcieParts) . '</div>';
+    foreach ($v['pcie'] as $item) {
+        $pcieParts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
+    }
+    $pcieRow = '<div class="lu-d-pcie">' . implode('', $pcieParts) . '</div>';
 }
 
 // Tile body
@@ -102,7 +94,7 @@ if ($error) {
         <p>Model: <span>{$boardName}</span></p>"
         . ($chip     ? "<p>Chip: <span>{$chip}</span></p>"                                : '')
         . ($firmware ? "<p>Firmware: <span>{$firmware}</span></p>"                        : '')
-        . "        <p>Port: <span>{$portName} (lsiutil -p{$port})</span></p>
+        . "        <p>Port: <span>{$portLabel}</span></p>
         <p>Alert Threshold: <span>{$threshold}°C</span></p>
         <span class='lu-d-badge'>{$badge}</span>
       </div>

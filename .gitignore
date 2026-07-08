@@ -3,3 +3,7 @@ source/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64
 
 # Built package — uploaded as a GitHub release asset, not committed
 releases/
+
+# Raw storcli captures from the box — contain real drive serials, SAS addresses,
+# WWNs. Sanitized fixtures live under tests/fixtures/storcli/ instead.
+/storcli/

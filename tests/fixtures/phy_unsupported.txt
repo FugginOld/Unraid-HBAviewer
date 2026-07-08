@@ -1,0 +1,3 @@
+LSI Logic MPT Configuration Utility, Version 1.70
+
+lsiutil: this adapter does not support PHY counters

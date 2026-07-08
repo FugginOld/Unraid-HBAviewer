@@ -1,0 +1,14 @@
+LSI Logic MPT Configuration Utility, Version 1.70
+
+Adapter Phy 0:  Link Up, No Errors
+Adapter Phy 1:  Link Up
+  Invalid DWord Count            5
+  Running Disparity Error Count  2
+  Loss of DWord Synch Count      0
+  Phy Reset Problem Count        0
+Adapter Phy 2:  Link Down, No Errors
+Adapter Phy 3:  Link Up
+  Invalid DWord Count            0
+  Running Disparity Error Count  0
+  Loss of DWord Synch Count      0
+  Phy Reset Problem Count        1

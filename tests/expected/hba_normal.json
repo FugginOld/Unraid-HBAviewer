@@ -1,0 +1,13 @@
+{
+  "temp": 47,
+  "model": "SAS2308",
+  "firmware": "14.00.07.00",
+  "port_name": "ioc0",
+  "board_name": "SAS9207-8i",
+  "pci_location": "03:00",
+  "pcie_width": "x8",
+  "pcie_speed": "Gen3 (8.0 GT/s)",
+  "power_mode": "Full",
+  "alert_threshold": 80,
+  "status": "ok"
+}

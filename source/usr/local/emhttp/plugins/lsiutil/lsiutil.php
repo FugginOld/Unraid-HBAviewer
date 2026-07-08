@@ -1,48 +1,22 @@
 <?PHP
 /* LSIUtil HBA Temperature Monitor — main plugin page */
 
-$PLUGIN     = 'lsiutil';
-$PLUGIN_DIR = "/boot/config/plugins/$PLUGIN";
-$CFG_FILE   = "$PLUGIN_DIR/$PLUGIN.cfg";
-$LSIUTIL    = "/usr/local/emhttp/plugins/$PLUGIN/lsiutil.x86_64";
-$SCRIPT     = "/usr/local/emhttp/plugins/$PLUGIN/scripts/get_hba_info.sh";
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/view.php';
+$SCRIPT = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
 
-$cfg = [
-    'HBA_PORT'        => 1,
-    'ALERT_THRESHOLD' => 80,
-    'SHOW_PCIE'       => 1,
-    'SHOW_PHY'        => 1,
-    'SHOW_DRIVES'     => 1,
-    'SHOW_EVENTS'     => 1,
-];
-
-if (file_exists($CFG_FILE)) {
-    foreach (file($CFG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
-        if (strpos($line, '=') !== false) {
-            [$k, $v] = explode('=', $line, 2);
-            $cfg[trim($k)] = trim($v);
-        }
-    }
-}
-
-$port      = (int)$cfg['HBA_PORT'];
-$threshold = (int)$cfg['ALERT_THRESHOLD'];
-$showPcie   = (int)$cfg['SHOW_PCIE'];
-$showPhy    = (int)$cfg['SHOW_PHY'];
-$showDrives = (int)$cfg['SHOW_DRIVES'];
-$showEvents = (int)$cfg['SHOW_EVENTS'];
+$cfg        = lsi_config_read();
+$port       = $cfg['HBA_PORT'];
+$threshold  = $cfg['ALERT_THRESHOLD'];
+$showPcie   = $cfg['SHOW_PCIE'];
+$showPhy    = $cfg['SHOW_PHY'];
+$showDrives = $cfg['SHOW_DRIVES'];
+$showEvents = $cfg['SHOW_EVENTS'];
 
 // Load overview data server-side on page load
 $raw  = file_exists($SCRIPT) ? shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') : null;
 $data = $raw ? json_decode($raw, true) : null;
 $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
-
-function statusColor(string $s): string {
-    return match($s) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
-}
-function statusLabel(string $s): string {
-    return match($s) { 'alert' => 'ALERT', 'warn' => 'WARNING', default => 'NORMAL' };
-}
 ?>
 
 <style>
@@ -163,8 +137,9 @@ function statusLabel(string $s): string {
 <?php if ($error): ?>
   <div class="lu-error"><strong>Error:</strong> <?= htmlspecialchars($error) ?></div>
 <?php else:
-    $tc    = statusColor($data['status'] ?? 'ok');
-    $badge = statusLabel($data['status'] ?? 'ok');
+    $v     = lsi_hba_view($data, $port);
+    $tc    = $v['color'];
+    $badge = $v['label'];
 ?>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -182,14 +157,14 @@ function statusLabel(string $s): string {
 
     <div class="lu-overview-row">
       <div class="lu-circle" id="lu-circle">
-        <span class="val" id="lu-val"><?= $data['temp'] ?></span>
+        <span class="val" id="lu-val"><?= $v['temp'] ?></span>
         <span class="unit">°C</span>
       </div>
       <div class="lu-meta">
-        <p>Model: <span><?= htmlspecialchars($data['board_name'] ?: ($data['model'] ?? 'Unknown')) ?></span></p>
-        <p>Chip: <span><?= htmlspecialchars($data['model'] ?? 'Unknown') ?></span></p>
-        <p>Firmware: <span><?= htmlspecialchars($data['firmware'] ?? 'Unknown') ?></span></p>
-        <p>Port: <span><?= htmlspecialchars($data['port_name'] ?? 'ioc0') ?> (lsiutil -p<?= $port ?>)</span></p>
+        <p>Model: <span><?= htmlspecialchars($v['model']) ?></span></p>
+        <p>Chip: <span><?= htmlspecialchars($v['chip']) ?></span></p>
+        <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span></p>
+        <p>Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p>
         <p>Alert Threshold: <span><?= $threshold ?>°C</span></p>
         <span class="lu-badge" id="lu-badge"><?= $badge ?></span>
       </div>
@@ -198,10 +173,7 @@ function statusLabel(string $s): string {
     <?php if ($showPcie && ($data['pcie_width'] || $data['pcie_speed'])): ?>
     <hr class="lu-divider">
     <div class="lu-pcie-row">
-      <?php if ($data['pcie_width']): ?><div class="lu-pcie-item">PCIe Width: <span><?= htmlspecialchars($data['pcie_width']) ?></span></div><?php endif; ?>
-      <?php if ($data['pcie_speed']): ?><div class="lu-pcie-item">PCIe Speed: <span><?= htmlspecialchars($data['pcie_speed']) ?></span></div><?php endif; ?>
-      <?php if ($data['power_mode']): ?><div class="lu-pcie-item">Power Mode: <span><?= htmlspecialchars($data['power_mode']) ?></span></div><?php endif; ?>
-      <?php if ($data['pci_location']): ?><div class="lu-pcie-item">PCI Location: <span><?= htmlspecialchars($data['pci_location']) ?></span></div><?php endif; ?>
+      <?php foreach ($v['pcie'] as $item): ?><div class="lu-pcie-item"><?= $item['label'] ?>: <span><?= htmlspecialchars($item['value']) ?></span></div><?php endforeach; ?>
     </div>
     <?php endif; ?>
 
@@ -294,9 +266,8 @@ function statusLabel(string $s): string {
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d.error) return;
-                var colors = { alert: '#e74c3c', warn: '#f39c12', ok: '#2ecc71' };
-                var labels = { alert: 'ALERT',   warn: 'WARNING', ok: 'NORMAL'  };
-                var c      = colors[d.status] || colors.ok;
+                // color/label computed server-side (view.php) — no client-side status map
+                var c = d.color;
 
                 var circle = document.getElementById('lu-circle');
                 var val    = document.getElementById('lu-val');
@@ -305,7 +276,7 @@ function statusLabel(string $s): string {
 
                 if (circle) circle.style.setProperty('--tc', c);
                 if (val)    val.textContent   = d.temp;
-                if (badge)  { badge.textContent = labels[d.status] || 'NORMAL'; badge.style.background = c; }
+                if (badge)  { badge.textContent = d.label; badge.style.background = c; }
                 if (ts)     ts.textContent    = 'Last read: ' + new Date().toLocaleTimeString();
             })
             .catch(function () {});

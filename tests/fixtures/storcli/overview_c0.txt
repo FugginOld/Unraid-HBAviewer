@@ -1,0 +1,34 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Basics :
+======
+Controller = 0
+Model = HBA 9400-16i
+Serial Number = SPXXXXXXXX
+SAS Address =  500605b0XXXXXXXX
+PCI Address = 00:c1:00:00
+System Time = 07/08/2026 18:00:00
+
+Version :
+=======
+Firmware Package Build = 24.00.00.00
+Firmware Version = 24.00.00.00
+Bios Version = 09.15.00.00_08.00.00.00
+NVDATA Version = 24.00.00.22
+
+PCI Version :
+===========
+Vendor Id = 0x1000
+Device Id = 0xAC
+SubVendor Id = 0x1000
+Host Interface = PCIE
+
+Status :
+======
+Controller Status = OK
+Temperature Sensor for ROC = Present
+ROC temperature(Degree Celsius) = 72

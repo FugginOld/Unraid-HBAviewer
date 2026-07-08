@@ -6,14 +6,23 @@
  * ?type=events    → HTML  (event log table)
  */
 
+require_once __DIR__ . '/view.php';
+
 $type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/lsiutil/scripts';
 
 if ($type === 'overview') {
     header('Content-Type: application/json');
-    $out = shell_exec("bash $scripts/get_hba_info.sh 2>/dev/null");
-    echo $out ?: '{"error":"No output from script"}';
+    $out  = shell_exec("bash $scripts/get_hba_info.sh 2>/dev/null");
+    $data = $out ? json_decode($out, true) : null;
+    if (!$data) { echo '{"error":"No output from script"}'; exit; }
+    // Enrich with the shared status->color/label so the refresh JS needs no map of its own.
+    if (!isset($data['error'])) {
+        $data['color'] = lsi_status_color($data['status'] ?? 'ok');
+        $data['label'] = lsi_status_label($data['status'] ?? 'ok');
+    }
+    echo json_encode($data);
     exit;
 }
 

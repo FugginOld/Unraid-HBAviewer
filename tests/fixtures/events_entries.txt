@@ -1,0 +1,4 @@
+Adapter firmware event log:
+
+ Entry    1  Qualifier 0x0001  Data: 00000000 00000000 00000000  Time: 00000000:000012ab
+ Entry    2  Qualifier 0x0002  Data: deadbeef 00000000 00000000  Time: 00000000:000034cd

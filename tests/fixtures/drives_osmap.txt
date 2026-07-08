@@ -1,0 +1,3 @@
+0_1 /dev/sda
+0_2 /dev/sdb
+0_3 /dev/sdc
