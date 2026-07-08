@@ -1,0 +1,7 @@
+Menu="LSIUtil"
+Title="HBA Monitor"
+Icon="thermometer-half"
+Tag="thermometer-half"
+Type="xmenu"
+---
+<?PHP require_once "/usr/local/emhttp/plugins/lsiutil/lsiutil.php"; ?>

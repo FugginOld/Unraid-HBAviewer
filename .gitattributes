@@ -1,0 +1,6 @@
+# Force LF for all text files — shell scripts and PHP must have Unix line endings to run on Unraid/Linux
+* text=auto eol=lf
+*.sh  text eol=lf
+*.php text eol=lf
+*.plg text eol=lf
+*.page text eol=lf

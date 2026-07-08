@@ -1,0 +1,121 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name        "LSIUtil">
+<!ENTITY author      "DevlinDelFuego">
+<!ENTITY version     "2026.06.30.1">
+<!ENTITY pluginURL   "https://raw.githubusercontent.com/DevlinDelFuego/Unraid-LSIUtil/main/lsiutil.plg">
+<!ENTITY pkgURL      "https://github.com/DevlinDelFuego/Unraid-LSIUtil/releases/download/&version;/lsiutil.txz">
+<!ENTITY md5         "ac426a59afc60ea8675e284deb5f622d">
+]>
+
+<!--
+  LSIUtil HBA Temperature Monitor for Unraid
+  ==========================================
+  Reads HBA temperature and card info directly from LSI SAS controllers
+  (SAS2308, SAS2008, 9207-8i, etc.) using lsiutil via the mpt2sas/mpt3sas driver.
+
+  The lsiutil binary is bundled inside lsiutil.txz - nothing is downloaded at
+  install time beyond the single package file.
+-->
+<PLUGIN name="&name;"
+        author="&author;"
+        version="&version;"
+        pluginURL="&pluginURL;"
+        icon="thermometer-half"
+        support="https://github.com/DevlinDelFuego/Unraid-LSIUtil/issues">
+
+<CHANGES>
+###2026.06.30.1###
+- Consolidate settings: removed duplicate Settings tab from HBA Monitor page
+- Settings now live exclusively at Settings > LSIUtil; monitor links there instead
+
+###2026.06.20.7###
+- Fix: XML comment contained double-hyphen (--) which is forbidden by the XML spec
+  and causes Unraid's parser to reject the PLG with "xml parse error"
+
+###2026.06.20.6###
+- Fix: PLG contained non-ASCII UTF-8 characters (em dash) that Unraid's parser rejected
+
+###2026.06.20.5###
+- Fix: Plugin update robustness - wipe of old files now happens AFTER the new package
+  is confirmed on disk, preventing blank plugin if download fails mid-update
+- Install now uses tar -xJf directly rather than upgradepkg for reliable file replacement
+
+###2026.06.20.4###
+- Fix: Drives tab PHY column shows correct port number for SATA drives (target = PHY
+  for direct-attached drives without expanders); SAS address shows - for SATA drives
+  (SATA devices do not have SAS addresses - this is correct behaviour)
+
+###2026.06.20.3###
+- Fix: Drives tab now reads SAS address and PHY number from sysfs sas_end_device entries
+  (accurate for mpt3sas/mpt2sas), resolving wrong values shown in previous release
+
+###2026.06.20.2###
+- Fix: Drives tab now detects drives via three methods: lsiutil -a 42,0 OS map,
+  lsiutil -a 16,0 with case-insensitive flexible regex, sysfs mpt3sas fallback
+- Fix: Drives table shows dashes for missing SAS/PHY/enclosure fields instead of empty cells
+
+###2026.06.20.1###
+- Dashboard tile now mirrors the Overview tab: circle gauge, card info, badge, PCIe row
+
+###2026.06.20###
+- Fix: Settings page now shows a proper icon card under Settings > System Settings
+- Fix: Dashboard tile now uses correct Unraid 7.2+ tile structure
+- Fix: Plugin name corrected to LSIUtil
+- Add: Settings tab inside the LSIUtil monitor page for quick access
+
+###2026.06.19###
+- Initial release
+- HBA temperature readout for LSI SAS controllers (LSI 9207-8i / SAS2308)
+- Card model, firmware, and PCIe info panel
+- Configurable alert threshold with Unraid notification
+- PHY health, attached drives, and event log tabs
+- Auto-refresh every 60 seconds
+- lsiutil 1.70 bundled - no internet access required after package download
+</CHANGES>
+
+<!-- Step 1: Download the package to the boot drive (re-download only when MD5 changes). -->
+<FILE Name="/boot/config/plugins/lsiutil/lsiutil.txz" Run="upgradepkg --install-new">
+  <URL>&pkgURL;</URL>
+  <MD5>&md5;</MD5>
+</FILE>
+
+<!--
+  Step 2: Force-extract from the now-confirmed package so every file is current.
+  Wipe happens AFTER the download succeeds - if the download ever fails the old
+  files stay intact and the plugin remains functional.
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+PKG=/boot/config/plugins/lsiutil/lsiutil.txz
+if [ ! -f "$PKG" ]; then
+  echo "lsiutil ERROR: package not found at $PKG - aborting install"
+  exit 1
+fi
+rm -rf /usr/local/emhttp/plugins/lsiutil 2>/dev/null
+tar -xJf "$PKG" -C /
+chmod +x /usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64 2>/dev/null
+
+# Write default config on first install only
+if [ ! -f /boot/config/plugins/lsiutil/lsiutil.cfg ]; then
+  mkdir -p /boot/config/plugins/lsiutil
+  printf 'HBA_PORT=1\nALERT_THRESHOLD=80\n' > /boot/config/plugins/lsiutil/lsiutil.cfg
+  echo "lsiutil: default config written"
+fi
+echo "lsiutil plugin ready"
+</INLINE>
+</FILE>
+
+<!--
+  Uninstall: remove plugin files; leave config on the boot drive so settings
+  survive a reinstall.
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+removepkg lsiutil 2>/dev/null
+rm -rf /usr/local/emhttp/plugins/lsiutil
+echo "lsiutil plugin removed. Config kept at /boot/config/plugins/lsiutil/"
+</INLINE>
+</FILE>
+
+</PLUGIN>
