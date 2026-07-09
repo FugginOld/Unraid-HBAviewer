@@ -1,28 +1,22 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
-<!ENTITY name "HBAviewer">
-<!ENTITY author "FugginOld">
-<!ENTITY version "2026.07.09.8">
-<!ENTITY launch "Tools/HBAviewer_Monitor">
+<!ENTITY name      "HBAviewer">
+<!ENTITY author    "FugginOld">
+<!ENTITY version   "2026.07.09.8">
+<!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09.8/hbaviewer.txz">
-<!ENTITY md5 "baac181c058062a5df4779915043cb60">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09.8/hbaviewer.txz">
+<!ENTITY md5       "baac181c058062a5df4779915043cb60">
+<!ENTITY icon      "fa-hdd-o">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="fa-hdd-o" support="https://github.com/FugginOld/Unraid-HBAviewer/issues">
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
 ###2026.07.09.8###
-- Fix: Corrected XML syntax to ensure compatibility with Unraid parser
-- Multiple controller support with dashboard tile
+- Fixed XML compatibility for Unraid parser
+- Dashboard tile display with multi-controller support
 - Hard drive icon throughout interface
-- Complete menu restructuring to Tools menu
-
-###2026.07.09.7###
-- Dashboard tile with verbose logging
-
-###2026.07.09.1###
-- Plugin name branding update to HBAviewer
 </CHANGES>
 
 <FILE Name="/boot/config/plugins/hbaviewer/hbaviewer.txz" Run="upgradepkg --install-new">
@@ -32,20 +26,20 @@
 
 <FILE Run="/bin/bash">
 <INLINE>
-rm -rf /usr/local/emhttp/plugins/hbaviewer 2>/dev/null
+rm -rf /usr/local/emhttp/plugins/hbaviewer
 tar -xJf /boot/config/plugins/hbaviewer/hbaviewer.txz -C /
-chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 2>/dev/null
-chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh 2>/dev/null
+chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64
+chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh
 if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
-  printf 'HBA_PORT=1\nALERT_THRESHOLD=80\n' > /boot/config/plugins/hbaviewer/hbaviewer.cfg
+  printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
 </INLINE>
 </FILE>
 
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
-removepkg hbaviewer 2>/dev/null
+removepkg hbaviewer
 rm -rf /usr/local/emhttp/plugins/hbaviewer
 </INLINE>
 </FILE>
