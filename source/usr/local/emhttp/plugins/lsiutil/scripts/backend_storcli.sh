@@ -10,7 +10,7 @@ source "$DIR/config.sh"          # ALERT (PORT unused by storcli)
 STORCLI="$(find_storcli)"
 
 [ -n "$STORCLI" ] || {
-    echo '{"error":"storcli not found. Install it or set the storcli path."}'; exit 1; }
+    echo '{"error":"storcli not found. Install it via the dkaser/unraid-storcli plugin (search \"storcli\" in Community Applications), then reload."}'; exit 1; }
 
 # Overview uses the light `show` (brief: model/fw/pci/devid) + `show temperature`
 # per controller — NOT `show all`, which does a slow per-drive SMART scan of

@@ -23,8 +23,10 @@ The plugin detects the controller generation and uses the right tool automatical
 Multiple controllers are shown side by side. Both SAS and SATA drives are supported.
 
 > **SAS3 / SAS3.5 cards need `storcli`** installed on the system — Broadcom's CLI,
-> which is not bundled (it's proprietary). SAS2 cards use the bundled `lsiutil`
-> and need nothing extra.
+> which is not bundled here (it's proprietary). The easiest way to install it on
+> Unraid is the **[storcli plugin by dkaser](https://github.com/dkaser/unraid-storcli)**
+> — search **"storcli"** in *Community Applications*. SAS2 cards use the bundled
+> `lsiutil` and need nothing extra.
 
 ## Features
 
@@ -57,8 +59,9 @@ and `smartctl` — no agents, no polling daemons, no external calls.
 
 - Unraid 6.12 or newer (7.2+ for the dashboard tile)
 - A supported LSI / Broadcom SAS controller (see the table above)
-- For **SAS3 / SAS3.5** cards: `storcli` installed and on `PATH` (or in a
-  standard `sbin` location)
+- For **SAS3 / SAS3.5** cards: `storcli` installed — easiest via the
+  [dkaser/unraid-storcli](https://github.com/dkaser/unraid-storcli) plugin
+  (search "storcli" in Community Applications)
 - `smartctl` (ships with Unraid) for the SMART features
 - The `lsiutil` binary for SAS2 cards is bundled in the `.txz` — nothing extra
   is downloaded
@@ -140,6 +143,8 @@ captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
   `lsiutil` binary that makes the SAS2 path possible.
 - **Broadcom** — `storcli` (used for SAS3 / SAS3.5 controllers) and the original
   `lsiutil` source.
+- **[dkaser — unraid-storcli](https://github.com/dkaser/unraid-storcli)** — the
+  easiest way to install `storcli` on Unraid for SAS3 / SAS3.5 cards.
 
 ## License
 

@@ -32,6 +32,12 @@ out=$(
     if use_storcli; then
         bash "$DIR/backend_storcli.sh"       # resolved $STORCLI is exported
     else
+        # A pure SAS3/3.5 box (mpt3sas, no mpt2sas) with no storcli: the bundled
+        # lsiutil 1.70 can't reliably read it — point the user at the storcli plugin.
+        if [ -z "$(find_storcli)" ] && [ -d /sys/module/mpt3sas ] && [ ! -d /sys/module/mpt2sas ]; then
+            echo '{"error":"storcli not found. This looks like a SAS3/SAS3.5 (mpt3sas) controller — install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}'
+            exit 0
+        fi
         require_binary || exit 1
         IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp)
         trap 'rm -f "$IOC" "$BANNER" "$BOARD"' EXIT
