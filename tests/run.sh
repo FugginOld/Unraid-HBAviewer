@@ -37,6 +37,7 @@ check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 
 check rollup-healthy   rollup_healthy.json   bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_healthy.txt
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
+check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
 check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
 

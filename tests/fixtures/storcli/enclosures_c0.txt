@@ -1,0 +1,26 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 0
+Status = Success
+
+Enclosure /c0/e0  :
+=================
+
+Information :
+===========
+Enclosure Type = SES
+Device Type = Backplane
+EnclLogicalID = 0x300605B010115B90
+
+Inquiry Data :
+============
+Vendor Identification = BROADCOM
+Product Identification = VirtualSES
+Product Revision Level = 03
+
+Properties :
+==========
+------------------------------------------------------------------
+EID State Slots PD PS Fans TSs Alms SIM ProdID     VendorSpecific
+------------------------------------------------------------------
+  0 OK       16 16  0    0   0    0   0 VirtualSES
+------------------------------------------------------------------

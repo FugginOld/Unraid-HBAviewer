@@ -10,9 +10,20 @@ DIR="$(dirname "$0")"
 source "$DIR/lib.sh"
 source "$DIR/config.sh"   # sets PORT, ALERT
 
-# storcli (SAS3/3.5): enclosure/slot + WWN + model per controller, direct.
+# storcli (SAS3/3.5): enclosure topology + drives per controller.
 if use_storcli; then
-    storcli_each "/c@/eall/sall show all" "$DIR/parse/storcli_drives.sh"
+    count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+    if [ -z "$count" ] || [ "$count" -eq 0 ]; then echo '{"error":"No storcli controllers found."}'; exit 0; fi
+    printf '{"controllers":['
+    for c in $(seq 0 $((count - 1))); do
+        [ "$c" -gt 0 ] && printf ','
+        encl=$("$STORCLI" /c"$c"/eall show all      2>/dev/null | bash "$DIR/parse/storcli_enclosures.sh")
+        drv=$( "$STORCLI" /c"$c"/eall/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh")
+        [ -n "$encl" ] || encl='{"enclosures":[]}'
+        [ -n "$drv" ]  || drv='{"drives":[]}'
+        printf '%s,%s' "${encl%\}}" "${drv#\{}"     # merge two single-key objects into one
+    done
+    printf ']}'
     exit 0
 fi
 

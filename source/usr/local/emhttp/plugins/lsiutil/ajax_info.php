@@ -221,6 +221,16 @@ if ($type === 'drives') {
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+
+        // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
+        foreach ($ctl['enclosures'] ?? [] as $e) {
+            $mode = !empty($e['direct']) ? 'direct-attach (no expander)' : 'expander / backplane';
+            $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Enclosure e' . htmlspecialchars($e['eid'])
+                  . ': ' . htmlspecialchars($e['product']) . ' (' . htmlspecialchars($e['vendor']) . ') &middot; '
+                  . htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives'])
+                  . ' drives &middot; ' . $mode . '</p>';
+        }
+
         $drives = $ctl['drives'] ?? [];
         if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
 
@@ -262,7 +272,30 @@ if ($type === 'drives') {
     exit;
 }
 
-/* ── Event Log (per controller; columns adapt to the backend) ─────────────── */
+/* Persist the firmware event ring-buffer to /boot so history survives reboots
+   and ring-buffer wrap. Dedup by seq+time; only writes when there's something
+   new (kind to the boot flash). Keyed per controller index. */
+function lsi_merge_event_history(int $ctl, array $current): array {
+    $dir  = '/boot/config/plugins/lsiutil';
+    $file = "$dir/events_c$ctl.json";
+    $hist = is_file($file) ? (json_decode((string) @file_get_contents($file), true) ?: []) : [];
+    $key  = fn($e) => ($e['seq'] ?? '') . '|' . ($e['time'] ?? ($e['timestamp'] ?? ''));
+    $seen = [];
+    foreach ($hist as $e) $seen[$key($e)] = true;
+    $changed = false;
+    foreach ($current as $e) {
+        $k = $key($e);
+        if (!isset($seen[$k])) { $hist[] = $e; $seen[$k] = true; $changed = true; }
+    }
+    if ($changed) {
+        if (count($hist) > 2000) $hist = array_slice($hist, -2000);  // cap flash growth
+        @mkdir($dir, 0755, true);
+        @file_put_contents($file, json_encode($hist));
+    }
+    return $hist;
+}
+
+/* ── Event Log (per controller; persisted to /boot across reboots) ─────────── */
 if ($type === 'events') {
     $ctls  = $data['controllers'] ?? [$data];
     $multi = count($ctls) > 1;
@@ -270,9 +303,12 @@ if ($type === 'events') {
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
-        $entries = $ctl['entries'] ?? [];
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
+
+        $entries = lsi_merge_event_history($i, $ctl['entries'] ?? []);
         if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
+        $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
+              . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)</p>';
 
         if (isset($entries[0]['description'])) {
             // storcli backend: seq, time, code, human-readable description (newest first)
