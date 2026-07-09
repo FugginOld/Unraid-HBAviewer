@@ -1,0 +1,25 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 0
+Status = Success
+
+
+seqNum: 0x00000001
+Time: Wed Jun  3 20:33:17 2020
+
+Code: 0x00000000
+Class: 0
+Locale: 0x20
+Event Description: Firmware initialization started (PCI ID 00ac/1000/3000/1000)
+Event Data:
+===========
+
+
+seqNum: 0x00000002
+Time: Wed Jun  3 20:34:02 2020
+
+Code: 0x00000015
+Class: 0
+Locale: 0x20
+Event Description: Enclosure discovery complete
+Event Data:
+===========

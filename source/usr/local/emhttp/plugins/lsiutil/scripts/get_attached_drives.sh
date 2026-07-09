@@ -10,6 +10,13 @@ DIR="$(dirname "$0")"
 source "$DIR/lib.sh"
 source "$DIR/config.sh"   # sets PORT, ALERT
 
+# storcli (SAS3/3.5): enclosure/slot + WWN + model per controller, direct.
+if use_storcli; then
+    storcli_each "/c@/eall/sall show all" "$DIR/parse/storcli_drives.sh"
+    exit 0
+fi
+
+# lsiutil (SAS2): lsiutil OS map + sysfs SAS join, wrapped as 1-element controllers[].
 require_binary || exit 1
 
 TMPOS=$(mktemp); TMPSAS=$(mktemp)
@@ -53,5 +60,7 @@ if [ ! -s "$TMPOS" ]; then
     done
 fi
 
-# ── Join the two maps (pure parse) ───────────────────────────────────────────
+# ── Join the two maps (pure parse), wrapped in the controllers[] contract ────
+printf '{"controllers":['
 bash "$DIR/parse/drives_join.sh" "$TMPOS" "$TMPSAS"
+printf ']}'

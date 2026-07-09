@@ -1,0 +1,14 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 1
+Status = Success
+
+Drive /c1/e0/s0 :
+===============
+
+Drive /c1/e0/s0 Device attributes :
+=================================
+Model Number = HUH721010AL42C0
+WWN = 5000CCA2YYYYYYE3
+Firmware Revision = A3Z4
+Raw size = 9.095 TB [0x48ffffff Sectors]
+Link Speed = 12.0Gb/s

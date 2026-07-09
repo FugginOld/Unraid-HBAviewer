@@ -1,0 +1,12 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 1
+Status = Success
+
+
+seqNum: 0x00000001
+Time: Wed Jun  3 20:33:20 2020
+
+Code: 0x00000000
+Event Description: Firmware initialization started (PCI ID 00af/1000/3010/1000)
+Event Data:
+===========

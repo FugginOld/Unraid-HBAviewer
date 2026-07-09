@@ -1,0 +1,38 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 0
+Status = Success
+Description = Show Drive Information Succeeded.
+
+
+Drive /c0/e0/s0 :
+===============
+
+------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model            Sp
+------------------------------------------------------------------------
+0:0      15 JBOD  -  12.733 TB SAS  HDD -   -  4 KB WUH721414AL4204  -
+------------------------------------------------------------------------
+
+
+Drive /c0/e0/s0 Device attributes :
+=================================
+Manufacturer Id = WDC
+Model Number = WUH721414AL4204
+SN =         XXXXXXXX
+WWN = 5000CCA2XXXXXX8B
+Firmware Revision = C240
+Raw size = 12.733 TB [0xcbbbffff Sectors]
+Link Speed = 12.0Gb/s
+
+
+Drive /c0/e0/s1 :
+===============
+
+Drive /c0/e0/s1 Device attributes :
+=================================
+Model Number = OOS14000G
+SN = YYYYYYYY
+WWN = 5000C500XXXXXXF8
+Firmware Revision = OOS1
+Raw size = 12.733 TB [0x65ddfffff Sectors]
+Link Speed = 12.0Gb/s

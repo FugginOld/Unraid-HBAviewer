@@ -114,46 +114,85 @@ if ($type === 'phy') {
     exit;
 }
 
-/* ── Attached Drives ─────────────────────────────────────────────────────── */
+/* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 if ($type === 'drives') {
-    $drives = $data['drives'] ?? [];
-    if (empty($drives)) { echo '<p class="lu-muted">No drives detected.</p>'; exit; }
+    $ctls  = $data['controllers'] ?? [$data];
+    $multi = count($ctls) > 1;
+    $out   = '';
+    foreach ($ctls as $i => $ctl) {
+        if ($multi) $out .= luCtlHead($i);
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        $drives = $ctl['drives'] ?? [];
+        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
 
-    $rows = [];
-    foreach ($drives as $d) {
-        $os  = !empty($d['os_name'])     ? '<code>' . $d['os_name'] . '</code>'              : '<span class="lu-muted">—</span>';
-        $sas = !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>';
-        $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . $d['phy']                      : '<span class="lu-muted">—</span>';
-        $rows[] = [
-            $d['bus'] . ':' . $d['target'],
-            $phy,
-            $sas,
-            $os,
-        ];
+        if (isset($drives[0]['slot'])) {
+            // storcli backend: enclosure/slot, model, size, SAS address (WWN), link, fw
+            $rows = [];
+            foreach ($drives as $d) {
+                $rows[] = [
+                    htmlspecialchars($d['slot']),
+                    htmlspecialchars($d['model']),
+                    htmlspecialchars($d['size']),
+                    !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>',
+                    htmlspecialchars($d['link']),
+                    htmlspecialchars($d['firmware']),
+                ];
+            }
+            $out .= luTable(['Encl:Slot', 'Model', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
+        } else {
+            // lsiutil backend: bus:target, port, SAS address, OS device
+            $rows = [];
+            foreach ($drives as $d) {
+                $os  = !empty($d['os_name'])     ? '<code>' . $d['os_name'] . '</code>'                : '<span class="lu-muted">—</span>';
+                $sas = !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>';
+                $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . $d['phy']                        : '<span class="lu-muted">—</span>';
+                $rows[] = [$d['bus'] . ':' . $d['target'], $phy, $sas, $os];
+            }
+            $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
+        }
     }
-    echo luTable(
-        ['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'],
-        $rows
-    );
+    echo $out;
     exit;
 }
 
-/* ── Event Log ───────────────────────────────────────────────────────────── */
+/* ── Event Log (per controller; columns adapt to the backend) ─────────────── */
 if ($type === 'events') {
-    $entries = $data['entries'] ?? [];
-    $note    = $data['note']    ?? '';
-    if ($note) echo '<p class="lu-muted">' . htmlspecialchars($note) . '</p>';
-    if (empty($entries)) { echo '<p class="lu-muted">No log entries.</p>'; exit; }
+    $ctls  = $data['controllers'] ?? [$data];
+    $multi = count($ctls) > 1;
+    $out   = '';
+    foreach ($ctls as $i => $ctl) {
+        if ($multi) $out .= luCtlHead($i);
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        $entries = $ctl['entries'] ?? [];
+        if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
+        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
 
-    $rows = [];
-    foreach (array_reverse($entries) as $e) {
-        $rows[] = [
-            $e['seq'],
-            '<code>' . $e['qualifier'] . '</code>',
-            '<code>' . htmlspecialchars($e['data']) . '</code>',
-            '<code>' . $e['timestamp'] . '</code>',
-        ];
+        if (isset($entries[0]['description'])) {
+            // storcli backend: seq, time, code, human-readable description (newest first)
+            $rows = [];
+            foreach (array_reverse($entries) as $e) {
+                $rows[] = [
+                    '<code>' . htmlspecialchars($e['seq']) . '</code>',
+                    htmlspecialchars($e['time']),
+                    '<code>' . htmlspecialchars($e['code']) . '</code>',
+                    htmlspecialchars($e['description']),
+                ];
+            }
+            $out .= luTable(['Seq', 'Time', 'Code', 'Description'], $rows);
+        } else {
+            // lsiutil backend: seq, qualifier, data, timestamp (hex)
+            $rows = [];
+            foreach (array_reverse($entries) as $e) {
+                $rows[] = [
+                    $e['seq'],
+                    '<code>' . $e['qualifier'] . '</code>',
+                    '<code>' . htmlspecialchars($e['data']) . '</code>',
+                    '<code>' . $e['timestamp'] . '</code>',
+                ];
+            }
+            $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
+        }
     }
-    echo luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
+    echo $out;
     exit;
 }
