@@ -46,10 +46,13 @@ if   [ "$TEMP" -ge "$ALERT" ];          then RANK=2
 elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then RANK=1
 else RANK=0; fi
 
-# Drive states from the brief drive-summary table (JBOD/Onln/Optl = healthy).
-if printf '%s\n' "$input" | grep -qiE '\b(Failed|Offln|Missing|UBad|Foreign)\b'; then
+# Drive states from the drive-summary table's State column ONLY ($3 of rows like
+# "0:0  15 JBOD ..."). Scanning the whole output would false-match legend text
+# such as "UBad-Unconfigured Bad". JBOD/Onln/Optl = healthy.
+DSTATES=$(printf '%s\n' "$input" | awk '/^[0-9]+:[0-9]+[ \t]/ { print $3 }')
+if printf '%s\n' "$DSTATES" | grep -qiE '^(Failed|Offln|Missing|UBad|Foreign)$'; then
     [ "$RANK" -lt 2 ] && RANK=2
-elif printf '%s\n' "$input" | grep -qiE '\b(Rbld|Rebuild|Copyback)\b'; then
+elif printf '%s\n' "$DSTATES" | grep -qiE '^(Rbld|Rebuild|Copyback)$'; then
     [ "$RANK" -lt 1 ] && RANK=1
 fi
 

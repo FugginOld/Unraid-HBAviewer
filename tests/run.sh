@@ -41,7 +41,7 @@ check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtur
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli 2>/dev/null
-export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli"
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null
 check storcli-multi    storcli_multi.json   bash "$P/../backend_storcli.sh"
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil

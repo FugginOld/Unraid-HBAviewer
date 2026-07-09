@@ -6,24 +6,16 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
 $pluginname = 'LSIUtil';
-$CACHE   = '/tmp/lsiutil_dash.json';
 $SCRIPT  = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
 
 $cfg       = lsi_config_read();
 $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
 
-// Use cached data or run fresh
+// get_hba_info.sh self-caches (60s), so this stays cheap on every tile refresh.
 $data = null;
-if (file_exists($CACHE) && (time() - filemtime($CACHE)) < 60) {
-    $data = json_decode(file_get_contents($CACHE), true);
-}
-if (!$data || isset($data['error'])) {
-    if (file_exists($SCRIPT)) {
-        $raw  = shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null');
-        $data = json_decode($raw ?? '', true);
-        if ($data && !isset($data['error'])) file_put_contents($CACHE, $raw);
-    }
+if (file_exists($SCRIPT)) {
+    $data = json_decode(shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '', true);
 }
 
 if (!is_array($data)) {

@@ -28,3 +28,7 @@ TOPOLOGY :
 ========
 EID:Slt DID State DG      Size Intf Med SED PI SeSz Model            Sp
 0:0      15 JBOD  -  12.733 TB SAS  HDD -   -  4 KB WUH721414AL4204  -
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
