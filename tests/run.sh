@@ -38,6 +38,7 @@ check rollup-healthy   rollup_healthy.json   bash "$P/storcli_overview.sh" 80 0 
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
+check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli 2>/dev/null

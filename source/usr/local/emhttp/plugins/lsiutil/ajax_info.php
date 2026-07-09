@@ -8,9 +8,44 @@
 
 require_once __DIR__ . '/view.php';
 
-$type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events'])
+$type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events','smart'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/lsiutil/scripts';
+
+/* ── Per-drive SMART (on demand) ────────────────────────────────────────────
+   Correlate the storcli drive to /dev by SERIAL (the WWN differs by a nibble
+   between storcli and /dev, but serials match exactly), then read SMART with
+   -n standby so a sleeping drive is never woken. */
+if ($type === 'smart') {
+    header('Content-Type: text/html; charset=utf-8');
+    $serial = preg_replace('/[^A-Za-z0-9_.:-]/', '', $_GET['serial'] ?? '');
+    if ($serial === '') { echo '<span class="lu-muted">no serial</span>'; exit; }
+
+    $dev = trim((string) shell_exec(
+        'lsblk -S -o NAME,SERIAL -n 2>/dev/null | awk -v s=' . escapeshellarg($serial)
+        . ' \'$2==s{print "/dev/"$1; exit}\''
+    ));
+    if ($dev === '') { echo '<span class="lu-muted">no /dev match</span>'; exit; }
+
+    $raw = shell_exec('smartctl -n standby -a ' . escapeshellarg($dev)
+        . ' 2>/dev/null | bash ' . escapeshellarg("$scripts/parse/smart.sh"));
+    $s = json_decode((string) $raw, true) ?: [];
+    if (($s['health'] ?? '') === '' && ($s['temp'] ?? '') === '') {
+        echo '<span class="lu-muted">standby (not read)</span>'; exit;
+    }
+
+    $health = strtoupper($s['health'] ?? '');
+    $ok     = $health === 'OK' || $health === 'PASSED';
+    $warn   = (int)($s['defects'] ?? 0) > 0 || (int)($s['pending'] ?? 0) > 0;
+    $color  = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
+    $f = fn($v) => $v === '' || $v === null ? '?' : htmlspecialchars($v);
+    printf(
+        '<span style="color:%s;font-weight:700">%s</span> &middot; %s&deg;C &middot; %s def &middot; %s pend &middot; %sh',
+        $color, $f($s['health'] ?? ''), $f($s['temp'] ?? ''),
+        $f($s['defects'] ?? ''), $f($s['pending'] ?? ''), $f($s['power_on_hours'] ?? '')
+    );
+    exit;
+}
 
 if ($type === 'overview') {
     header('Content-Type: application/json');
@@ -136,19 +171,23 @@ if ($type === 'drives') {
             // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
             $rows = [];
             foreach ($drives as $d) {
+                $serial = $d['serial'] ?? '';
+                $smart  = $serial !== ''
+                    ? '<button class="lu-refresh-btn" onclick="luSmart(this,\'' . htmlspecialchars($serial, ENT_QUOTES) . '\')">SMART</button>'
+                    : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     htmlspecialchars($d['slot']),
                     ($d['port'] ?? '') !== '' ? htmlspecialchars($d['port']) : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['model']),
-                    !empty($d['serial']) ? '<code>' . htmlspecialchars($d['serial']) . '</code>' : '<span class="lu-muted">—</span>',
+                    $serial !== '' ? '<code>' . htmlspecialchars($serial) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['state'] ?? ''),
                     htmlspecialchars($d['size']),
-                    !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['link']),
                     htmlspecialchars($d['firmware']),
+                    $smart,
                 ];
             }
-            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
+            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'Link', 'Firmware', 'SMART'], $rows);
         } else {
             // lsiutil backend: bus:target, port, SAS address, OS device
             $rows = [];

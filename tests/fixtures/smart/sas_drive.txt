@@ -1,0 +1,26 @@
+smartctl 7.5 2025-04-30 r5714 [x86_64-linux-6.18.38-Unraid] (local build)
+
+=== START OF INFORMATION SECTION ===
+Vendor:               SEAGATE
+Product:              ST14000NM002G
+Revision:             E002
+Serial number:        XXXXXXXXXXXXXXXX
+Transport protocol:   SAS (SPL-4)
+SMART support is:     Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART Health Status: OK
+
+Current Drive Temperature:     35 C
+Drive Trip Temperature:        60 C
+
+Accumulated power on time, hours:minutes 27409:48
+Elements in grown defect list: 0
+
+Error counter log:
+read:          0        0         0         0          0      52794.567           0
+write:         0        0         0         0          0        963.120           0
+
+Non-medium error count:        0
+
+  Pending defect count:0 Pending Defects

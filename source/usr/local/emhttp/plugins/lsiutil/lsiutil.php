@@ -278,6 +278,15 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
             });
     };
 
+    /* ── Per-drive SMART fetch (on demand; -n standby, never wakes a disk) ──── */
+    window.luSmart = function (btn, serial) {
+        btn.disabled = true; btn.textContent = '…';
+        fetch('/plugins/lsiutil/ajax_info.php?type=smart&serial=' + encodeURIComponent(serial))
+            .then(function (r) { return r.text(); })
+            .then(function (html) { btn.outerHTML = html; })
+            .catch(function () { btn.disabled = false; btn.textContent = 'retry'; });
+    };
+
     /* ── Copy a tab's rendered content to the clipboard (for support tickets) ── */
     window.luCopy = function (name, btn) {
         var el = document.getElementById(name + '-content');
