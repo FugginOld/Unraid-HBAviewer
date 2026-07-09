@@ -52,11 +52,10 @@ if ($type === 'smart') {
     ));
     if ($dev === '') { echo '<span class="lu-muted">no /dev match</span>'; exit; }
 
-    $raw = shell_exec('smartctl -n standby -a ' . escapeshellarg($dev)
-        . ' 2>/dev/null | bash ' . escapeshellarg("$scripts/parse/smart.sh"));
+    $raw = shell_exec('bash ' . escapeshellarg("$scripts/read_smart.sh") . ' ' . escapeshellarg($dev));
     $s = json_decode((string) $raw, true) ?: [];
     if (($s['health'] ?? '') === '' && ($s['temp'] ?? '') === '') {
-        echo '<span class="lu-muted">standby (not read)</span>'; exit;
+        echo '<span class="lu-muted">standby (SATA, not read)</span>'; exit;
     }
 
     $health = strtoupper($s['health'] ?? '');

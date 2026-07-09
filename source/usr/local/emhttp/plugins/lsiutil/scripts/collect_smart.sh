@@ -23,7 +23,7 @@ i=0
 first=1
 lsblk -S -o NAME,WWN,SERIAL,MODEL -n 2>/dev/null | awk '$2 ~ /^0x/' | while read -r name wwn serial model; do
     i=$(( i + 1 )); echo "$i/$total" > "$PROG"
-    smart=$(smartctl -n standby -a "/dev/$name" 2>/dev/null | bash "$DIR/parse/smart.sh")
+    smart=$(bash "$DIR/read_smart.sh" "/dev/$name")
     [ -n "$smart" ] || smart='{}'
     [ "$first" -eq 1 ] || printf ',' >> "$TMP"
     first=0
