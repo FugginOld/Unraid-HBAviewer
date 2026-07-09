@@ -239,12 +239,13 @@ if ($type === 'drives') {
                     $serial !== '' ? '<code>' . htmlspecialchars($serial) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['state'] ?? ''),
                     htmlspecialchars($d['size']),
+                    !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['link']),
                     htmlspecialchars($d['firmware']),
                     $smart,
                 ];
             }
-            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'Link', 'Firmware', 'SMART'], $rows);
+            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
         } else {
             // lsiutil backend: bus:target, port, SAS address, OS device
             $rows = [];

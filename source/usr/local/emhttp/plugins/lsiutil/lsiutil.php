@@ -21,7 +21,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 
 <style>
 /* ── Layout ──────────────────────────────────────────────────────────────── */
-#lu-wrap { font-family: inherit; max-width: 1080px; margin: 20px auto; }
+#lu-wrap { font-family: inherit; max-width: 1280px; margin: 20px auto; }
 /* Overview cards stay compact; the data tables (PHY/Drives/Events) get the width
    so long fields (serial, SAS address) size to their content, not a 720px cap. */
 #tab-overview .lu-card { max-width: 760px; }
@@ -154,8 +154,8 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <button class="lu-tab-btn active" data-tab="overview" onclick="luTab('overview')">Overview</button>
   <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
-  <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
+  <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <a href="/Settings/LSIUtil_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
