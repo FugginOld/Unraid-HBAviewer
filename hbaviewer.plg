@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name        "HBAviewer">
 <!ENTITY author      "FugginOld">
-<!ENTITY version     "2026.07.09.6">
+<!ENTITY version     "2026.07.09.7">
 <!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
 <!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/hbaviewer.txz">
 <!ENTITY md5         "baac181c058062a5df4779915043cb60">
@@ -97,9 +97,20 @@ if [ ! -f "$PKG" ]; then
   echo "hbaviewer ERROR: package not found at $PKG - aborting install"
   exit 1
 fi
+echo "hbaviewer: removing old installation..."
 rm -rf /usr/local/emhttp/plugins/hbaviewer 2>/dev/null
-tar -xJf "$PKG" -C /
+echo "hbaviewer: extracting package..."
+tar -xJf "$PKG" -C / 2>&1 || { echo "hbaviewer ERROR: tar extraction failed"; exit 1; }
+echo "hbaviewer: setting permissions..."
 chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 2>/dev/null
+chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh 2>/dev/null
+echo "hbaviewer: verifying installation..."
+if [ -f /usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh ]; then
+  echo "hbaviewer: backend script found - OK"
+else
+  echo "hbaviewer ERROR: backend script not found after extraction"
+  ls -la /usr/local/emhttp/plugins/hbaviewer/scripts/ 2>&1 || echo "scripts directory missing"
+fi
 
 # Write default config on first install only
 if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
