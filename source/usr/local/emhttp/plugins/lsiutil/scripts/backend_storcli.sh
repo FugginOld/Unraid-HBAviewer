@@ -5,10 +5,11 @@
 # STORCLI env overrides the binary so tests can point it at a stub.
 
 DIR="$(dirname "$0")"
+source "$DIR/lib.sh"             # find_storcli
 source "$DIR/config.sh"          # ALERT (PORT unused by storcli)
-STORCLI="${STORCLI:-storcli}"
+STORCLI="$(find_storcli)"
 
-command -v "$STORCLI" >/dev/null 2>&1 || [ -x "$STORCLI" ] || {
+[ -n "$STORCLI" ] || {
     echo '{"error":"storcli not found. Install it or set the storcli path."}'; exit 1; }
 
 count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')

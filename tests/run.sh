@@ -37,6 +37,11 @@ chmod +x stub/storcli 2>/dev/null
 export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli"
 check storcli-multi    storcli_multi.json   bash "$P/../backend_storcli.sh"
 
+# get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
+check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
+STORCLI=/nonexistent LSIUTIL=/nonexistent \
+check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
+
 # multi-file parsers
 check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
