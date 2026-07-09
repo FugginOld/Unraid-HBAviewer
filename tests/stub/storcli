@@ -3,8 +3,10 @@
 # STUB_FIX points at the fixtures dir. Lets backend_storcli.sh be tested off-box.
 case "$*" in
     "show")            cat "$STUB_FIX/controllers.txt" ;;
-    "/c0 show all")    cat "$STUB_FIX/overview_c0.txt" ;;
-    "/c1 show all")    cat "$STUB_FIX/overview_c1.txt" ;;
+    "/c0 show")        cat "$STUB_FIX/overview_c0.txt" ;;
+    "/c1 show")        cat "$STUB_FIX/overview_c1.txt" ;;
+    "/c0 show temperature") cat "$STUB_FIX/temp_c0.txt" ;;
+    "/c1 show temperature") cat "$STUB_FIX/temp_c1.txt" ;;
     "/c0/pall show")   cat "$STUB_FIX/phy_c0.txt" ;;
     "/c1/pall show")   cat "$STUB_FIX/phy_c1.txt" ;;
     "/c0/eall/sall show all") cat "$STUB_FIX/drives_c0.txt" ;;

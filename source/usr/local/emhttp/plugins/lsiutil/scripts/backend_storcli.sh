@@ -12,4 +12,17 @@ STORCLI="$(find_storcli)"
 [ -n "$STORCLI" ] || {
     echo '{"error":"storcli not found. Install it or set the storcli path."}'; exit 1; }
 
-storcli_each "/c@ show all" "$DIR/parse/storcli_overview.sh" "$ALERT"
+# Overview uses the light `show` (brief: model/fw/pci/devid) + `show temperature`
+# per controller — NOT `show all`, which does a slow per-drive SMART scan of
+# every attached disk and made the dashboard tile take seconds to render.
+count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+    echo '{"error":"No storcli controllers found."}'; exit 0
+fi
+printf '{"controllers":['
+for c in $(seq 0 $((count - 1))); do
+    [ "$c" -gt 0 ] && printf ','
+    { "$STORCLI" /c"$c" show; "$STORCLI" /c"$c" show temperature; } 2>/dev/null \
+        | bash "$DIR/parse/storcli_overview.sh" "$ALERT"
+done
+printf ']}'

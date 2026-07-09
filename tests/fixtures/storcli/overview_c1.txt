@@ -7,25 +7,17 @@ Description = None
 Basics :
 ======
 Controller = 1
-Model = HBA 9400-8i
+Product Name = HBA 9400-8i
 Serial Number = SPYYYYYYYY
-SAS Address =  500605b0YYYYYYYY
 PCI Address = 00:65:00:00
-System Time = 07/08/2026 18:00:00
 
 Version :
 =======
-Firmware Package Build = 24.00.00.00
-Firmware Version = 24.00.00.00
-Bios Version = 09.15.00.00_08.00.00.00
+FW Package Build = 24.00.00.00
+FW Version = 24.00.00.00
 
 PCI Version :
 ===========
 Vendor Id = 0x1000
 Device Id = 0xAF
 Host Interface = PCIE
-
-Status :
-======
-Controller Status = OK
-ROC temperature(Degree Celsius) = 77

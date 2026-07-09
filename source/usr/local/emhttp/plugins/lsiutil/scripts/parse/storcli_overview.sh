@@ -18,8 +18,9 @@ if [ -z "$TEMP" ]; then
     exit 0
 fi
 
-BOARD=$(val "Model")
-FW=$(val "Firmware Version")
+# Labels differ between `show` (brief) and `show all`; accept either.
+BOARD=$(val "Product Name"); [ -n "$BOARD" ] || BOARD=$(val "Model")
+FW=$(val "FW Version");      [ -n "$FW" ]    || FW=$(val "Firmware Version")
 PCI=$(val "PCI Address")
 DEVID=$(val "Device Id")
 case "${DEVID,,}" in

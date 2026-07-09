@@ -1,0 +1,14 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 1
+Status = Success
+Description = None
+
+
+Controller Properties :
+=====================
+
+--------------------------------------
+Ctrl_Prop                       Value
+--------------------------------------
+ROC temperature(Degree Celsius) 77
+--------------------------------------
