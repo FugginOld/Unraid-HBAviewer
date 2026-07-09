@@ -1,5 +1,5 @@
-Menu="HBAviewer"
-Title="Settings"
+Menu="OtherSettings"
+Title="HBAviewer"
 Icon="fa-hdd-o"
 Tag="hbaviewer-settings"
 Type="xmenu"

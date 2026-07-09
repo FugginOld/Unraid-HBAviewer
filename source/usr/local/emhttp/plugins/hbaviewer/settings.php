@@ -6,7 +6,7 @@ require_once __DIR__ . '/config.php';
 $cfg   = lsi_config_read();
 $saved = false;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_lsiutil'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // Map the form (checkbox-absent = off); config_write clamps to schema.
     lsi_config_write([
         'HBA_PORT'        => $_POST['port']      ?? 1,
@@ -103,7 +103,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       </label>
     </div>
 
-    <button class="lu-btn" type="submit" name="save_lsiutil" value="1">Save Settings</button>
+    <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings</button>
     <a class="lu-link" href="/Tools/HBAviewer_Monitor">← Open HBAviewer monitor</a>
 
   </form>
