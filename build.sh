@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds lsiutil.txz for the Unraid LSIUtil plugin.
+# Builds lsiutil.txz for the Unraid HBAviewer plugin.
 # Run this on Linux (or on your Unraid server directly) before creating a GitHub release.
 # This script fetches ONLY the Linux x86_64 binary — no Windows binaries, no source code.
 #
@@ -18,7 +18,7 @@ LSIUTIL_URL="https://github.com/thomaslovell/LSIUtil/raw/master/Binaries/LSIutil
 BINARY_DEST="source/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64"
 OUTPUT="releases/lsiutil.txz"
 
-echo "==> Unraid LSIUtil build  (version: $VERSION)"
+echo "==> Unraid HBAviewer build  (version: $VERSION)"
 
 # Download lsiutil Linux binary if not already present
 if [ ! -f "$BINARY_DEST" ]; then

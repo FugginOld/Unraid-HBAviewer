@@ -1,4 +1,4 @@
-# Unraid LSIUtil Plugin
+# Unraid HBAviewer
 
 Monitor LSI / Broadcom SAS Host Bus Adapters (HBAs) directly from Unraid —
 temperature, PHY health, attached drives, SMART, and the firmware event log —
@@ -72,22 +72,22 @@ and `smartctl` — no agents, no polling daemons, no external calls.
 2. Paste the plugin URL:
 
     ```text
-    https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/lsiutil.plg
+    https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/lsiutil.plg
     ```
 
 3. Click **Install**
 
-After installation, find the monitor under **Tools → LSIUtil → HBA Monitor**.
+After installation, find the monitor under **Tools → HBAviewer → HBA Monitor**.
 
 ## Layout
 
 ```text
 Tools
-└── LSIUtil
+└── HBAviewer
     └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log)
 
 Settings > System Settings
-└── LSIUtil            (full settings page)
+└── HBAviewer         (full settings page)
 
 Dashboard
 └── HBA Temperature tile (Unraid 7.2+)
@@ -95,7 +95,7 @@ Dashboard
 
 ## Configuration
 
-Open **Settings → System Settings → LSIUtil**:
+Open **Settings → System Settings → HBAviewer**:
 
 | Setting | Default | Description |
 | --- | --- | --- |
@@ -109,8 +109,8 @@ Open **Settings → System Settings → LSIUtil**:
 ## Building from source
 
 ```bash
-git clone https://github.com/FugginOld/Unraid-LSIUtil.git
-cd Unraid-LSIUtil
+git clone https://github.com/FugginOld/Unraid-HBAviewer.git
+cd Unraid-HBAviewer
 
 # Fetch the lsiutil binary and build the .txz (see build.sh for details)
 bash build.sh
@@ -138,7 +138,7 @@ captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
 ## Credits
 
 - **[DevlinDelFuego — Unraid-LSIUtil](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
-  — the original Unraid plugin this fork is built on.
+  — the original Unraid plugin this fork (Unraid-HBAviewer) is built on.
 - **[Thomas Lovell — LSIUtil](https://github.com/thomaslovell/LSIUtil/)** — the
   `lsiutil` binary that makes the SAS2 path possible.
 - **Broadcom** — `storcli` (used for SAS3 / SAS3.5 controllers) and the original

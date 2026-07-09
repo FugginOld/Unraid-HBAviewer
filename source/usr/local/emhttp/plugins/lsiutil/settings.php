@@ -1,6 +1,6 @@
 <?PHP
-/* LSIUtil Settings — full settings form.
-   Reached via the LSIUtil icon card in Unraid Settings > System Settings. */
+/* HBAviewer Settings — full settings form.
+   Reached via the HBAviewer icon card in Unraid Settings > System Settings. */
 
 require_once __DIR__ . '/config.php';
 $cfg   = lsi_config_read();
@@ -104,7 +104,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     </div>
 
     <button class="lu-btn" type="submit" name="save_lsiutil" value="1">Save Settings</button>
-    <a class="lu-link" href="/Tools/LSIUtil_Monitor">← Open LSIUtil monitor</a>
+    <a class="lu-link" href="/Tools/HBAviewer_Monitor">← Open HBAviewer monitor</a>
 
   </form>
 </div>

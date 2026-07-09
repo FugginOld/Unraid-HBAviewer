@@ -1,5 +1,5 @@
 <?PHP
-/* LSIUtil AJAX endpoint
+/* HBAviewer AJAX endpoint
  * ?type=overview  → JSON  (temperature + card info, for auto-refresh)
  * ?type=phy       → HTML  (PHY health table)
  * ?type=drives    → HTML  (attached drives table)

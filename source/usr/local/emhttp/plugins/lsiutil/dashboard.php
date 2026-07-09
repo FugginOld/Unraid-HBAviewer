@@ -1,11 +1,11 @@
 <?PHP
-/* LSIUtil dashboard tile — Unraid 7.2+ tile format.
+/* HBAviewer dashboard tile — Unraid 7.2+ tile format.
    Mirrors the Overview tab layout: circle gauge + card info + PCIe row.
    Result cached in /tmp for 60 s to avoid hardware reads on every page load. */
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
-$pluginname = 'LSIUtil';
+$pluginname = 'HBAviewer';
 $SCRIPT  = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
 
 $cfg       = lsi_config_read();
@@ -121,7 +121,7 @@ if ($error) {
 }
 
 $mytiles[$pluginname]['column1'] = <<<EOT
-<tbody id="tblLsiutil" title="HBA Temperature">
+<tbody id="tblHBAviewer" title="HBA Temperature">
   <tr>
     <td>
       <span class="tile-header">
@@ -134,7 +134,7 @@ $mytiles[$pluginname]['column1'] = <<<EOT
         </span>
         <span class="tile-header-right">
           <span class="tile-header-right-controls">
-            <a href="/Tools/LSIUtil_Monitor" title="Open LSIUtil">
+            <a href="/Tools/HBAviewer_Monitor" title="Open HBAviewer">
               <i class="fa fa-fw fa-cog control"></i>
             </a>
           </span>

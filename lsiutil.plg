@@ -1,16 +1,16 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
-<!ENTITY name        "LSIUtil">
+<!ENTITY name        "HBAviewer">
 <!ENTITY author      "FugginOld">
 <!ENTITY version     "2026.06.30.1">
-<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/lsiutil.plg">
-<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-LSIUtil/releases/download/&version;/lsiutil.txz">
+<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/lsiutil.plg">
+<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/lsiutil.txz">
 <!ENTITY md5         "ac426a59afc60ea8675e284deb5f622d">
 ]>
 
 <!--
-  LSIUtil HBA Monitor for Unraid
-  ==============================
+  HBAviewer — HBA Monitor for Unraid
+  ==================================
   Monitors LSI / Broadcom SAS HBAs across three generations: SAS2 (9200 family,
   via the bundled lsiutil) and SAS3 / SAS3.5 tri-mode (9300 / 9400 families, via
   the system storcli). Temperature, PHY health, drives, SMART, and the firmware
@@ -27,12 +27,12 @@
         version="&version;"
         pluginURL="&pluginURL;"
         icon="thermometer-half"
-        support="https://github.com/FugginOld/Unraid-LSIUtil/issues">
+        support="https://github.com/FugginOld/Unraid-HBAviewer/issues">
 
 <CHANGES>
 ###2026.06.30.1###
 - Consolidate settings: removed duplicate Settings tab from HBA Monitor page
-- Settings now live exclusively at Settings > LSIUtil; monitor links there instead
+- Settings now live exclusively at Settings > HBAviewer; monitor links there instead
 
 ###2026.06.20.7###
 - Fix: XML comment contained double-hyphen (--) which is forbidden by the XML spec
@@ -66,12 +66,12 @@
 ###2026.06.20###
 - Fix: Settings page now shows a proper icon card under Settings > System Settings
 - Fix: Dashboard tile now uses correct Unraid 7.2+ tile structure
-- Fix: Plugin name corrected to LSIUtil
-- Add: Settings tab inside the LSIUtil monitor page for quick access
+- Fix: Plugin name corrected to HBAviewer
+- Add: Settings tab inside the HBAviewer monitor page for quick access
 
 ###2026.06.19###
 - Initial release
-- HBA temperature readout for LSI SAS controllers (LSI 9207-8i / SAS2308)
+- HBA temperature readout for LSI / Broadcom SAS controllers (LSI 9207-8i / SAS2308)
 - Card model, firmware, and PCIe info panel
 - Configurable alert threshold with Unraid notification
 - PHY health, attached drives, and event log tabs

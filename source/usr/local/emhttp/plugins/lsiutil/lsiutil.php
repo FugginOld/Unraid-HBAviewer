@@ -1,5 +1,5 @@
 <?PHP
-/* LSIUtil HBA Temperature Monitor — main plugin page */
+/* HBAviewer HBA Temperature Monitor — main plugin page */
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
@@ -157,7 +157,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
-  <a href="/Settings/LSIUtil_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
+  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
 <!-- ── Overview tab (one card per controller) ────────────────────────────── -->
