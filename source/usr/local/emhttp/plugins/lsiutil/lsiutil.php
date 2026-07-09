@@ -155,6 +155,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
+  <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <a href="/Settings/LSIUtil_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
@@ -239,6 +240,17 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 </div>
 <?php endif; ?>
 
+<!-- ── SMART tab (all drives, collected in the background) ────────────────── -->
+<div id="tab-smart" class="lu-tab-pane">
+  <div class="lu-card first">
+    <div class="lu-tab-toolbar">
+      <span style="font-size:12px;color:#555;">Per-drive SMART health — collected in the background (safe: never wakes a standby drive)</span>
+      <button class="lu-refresh-btn" onclick="luSmartAll(true)">Refresh</button>
+    </div>
+    <div id="smart-content"><div class="lu-loading">Loading…</div></div>
+  </div>
+</div>
+
 <?php endif; // end !$error ?>
 
 </div><!-- #lu-wrap -->
@@ -247,6 +259,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 (function () {
     var REFRESH_MS = 60000;
     var timer;
+    var smartTimer;
     var loaded = {};
 
     /* ── Tab switching ────────────────────────────────────────────────────── */
@@ -257,7 +270,9 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         document.querySelectorAll('.lu-tab-pane').forEach(function (p) {
             p.classList.toggle('active', p.id === 'tab-' + name);
         });
-        if (name !== 'overview' && !loaded[name]) {
+        if (name === 'smart') {
+            luSmartAll(false);
+        } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
     };
@@ -276,6 +291,23 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
             .catch(function () {
                 el.innerHTML = '<div class="lu-error">Request failed.</div>';
             });
+    };
+
+    /* ── SMART tab: poll the background collector until the cache is ready ──── */
+    window.luSmartAll = function (force) {
+        var el = document.getElementById('smart-content');
+        if (!el) return;
+        clearTimeout(smartTimer);   // single poll loop
+        if (force) el.innerHTML = '<div class="lu-loading">Starting…</div>';
+        fetch('/plugins/lsiutil/ajax_info.php?type=smart_all' + (force ? '&refresh=1' : ''))
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                el.innerHTML = html;
+                if (/data-smart="collecting"/.test(html)) {
+                    smartTimer = setTimeout(function () { luSmartAll(false); }, 3000);
+                }
+            })
+            .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
     };
 
     /* ── Per-drive SMART fetch (on demand; -n standby, never wakes a disk) ──── */

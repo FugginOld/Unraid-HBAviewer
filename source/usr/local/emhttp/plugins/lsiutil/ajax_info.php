@@ -8,9 +8,34 @@
 
 require_once __DIR__ . '/view.php';
 
-$type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events','smart'])
+$type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events','smart','smart_all'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/lsiutil/scripts';
+
+/* ── SMART tab: all drives, collected in the background ─────────────────────
+   Returns the cached table if fresh; otherwise reports progress (or launches a
+   detached collector) so the request never blocks — the tab polls this. */
+if ($type === 'smart_all') {
+    header('Content-Type: text/html; charset=utf-8');
+    $cache = '/tmp/lsiutil_smart.json';
+    $prog  = $cache . '.progress';
+    if (($_GET['refresh'] ?? '') === '1') { @unlink($cache); }
+
+    if (is_file($cache) && (time() - filemtime($cache)) < 600) {
+        echo renderSmartTable(json_decode((string) file_get_contents($cache), true) ?: []);
+        exit;
+    }
+    if (is_file($prog)) {
+        echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
+           . htmlspecialchars(trim((string) file_get_contents($prog)))
+           . ' drives (you can use other tabs)</div>';
+        exit;
+    }
+    shell_exec('nohup bash ' . escapeshellarg("$scripts/collect_smart.sh") . ' >/dev/null 2>&1 &');
+    echo '<div class="lu-loading" data-smart="collecting">Collecting SMART in the background — this can take ~20s '
+       . 'for all drives. You can switch to other tabs; results appear here when ready.</div>';
+    exit;
+}
 
 /* ── Per-drive SMART (on demand) ────────────────────────────────────────────
    Correlate the storcli drive to /dev by SERIAL (the WWN differs by a nibble
@@ -93,6 +118,38 @@ function luTable(array $headers, array $rows): string {
         $h .= '</tr>';
     }
     return $h . '</tbody></table>';
+}
+
+/* Render the background-collected SMART cache as a table. */
+function renderSmartTable(array $data): string {
+    $drives = $data['drives'] ?? [];
+    if (!$drives) return '<p class="lu-muted">No drives found.</p>';
+    $dash = '<span class="lu-muted">—</span>';
+    $rows = [];
+    foreach ($drives as $d) {
+        $s = $d['smart'] ?? [];
+        $health = strtoupper((string) ($s['health'] ?? ''));
+        if ($health === '') {
+            $hb = '<span class="lu-muted">standby</span>';
+        } else {
+            $ok   = $health === 'OK' || $health === 'PASSED';
+            $warn = (int) ($s['defects'] ?? 0) > 0 || (int) ($s['pending'] ?? 0) > 0;
+            $hc   = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
+            $hb   = '<span style="color:' . $hc . ';font-weight:700">' . htmlspecialchars($s['health']) . '</span>';
+        }
+        $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;
+        $rows[] = [
+            '<code>' . htmlspecialchars($d['dev'] ?? '') . '</code>',
+            htmlspecialchars($d['model'] ?? ''),
+            '<code>' . htmlspecialchars($d['serial'] ?? '') . '</code>',
+            $hb,
+            $cell($s['temp'] ?? '', '&deg;C'),
+            $cell($s['defects'] ?? ''),
+            $cell($s['pending'] ?? ''),
+            ($s['power_on_hours'] ?? '') !== '' ? number_format((int) $s['power_on_hours']) . 'h' : $dash,
+        ];
+    }
+    return luTable(['Device', 'Model', 'Serial', 'Health', 'Temp', 'Grown Defects', 'Pending', 'Power-On'], $rows);
 }
 
 /* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
