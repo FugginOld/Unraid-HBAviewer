@@ -5,7 +5,7 @@
 <!ENTITY version     "2026.07.09">
 <!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
 <!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/hbaviewer.txz">
-<!ENTITY md5         "576848816580c0ec54ebe34fd1117c6f">
+<!ENTITY md5         "65f6f9133038fd83e214439872801d51">
 ]>
 
 <!--
