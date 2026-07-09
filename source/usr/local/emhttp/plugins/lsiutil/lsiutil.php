@@ -22,9 +22,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 <style>
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 #lu-wrap { font-family: inherit; max-width: 1280px; margin: 20px auto; }
-/* Overview cards stay compact; the data tables (PHY/Drives/Events) get the width
-   so long fields (serial, SAS address) size to their content, not a 720px cap. */
-#tab-overview .lu-card { max-width: 760px; }
+/* Overview cards span the full width too, matching the data tables. */
 
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 .lu-tabs { display: flex; gap: 2px; margin-bottom: 0; border-bottom: 2px solid #2a2a2a; }
