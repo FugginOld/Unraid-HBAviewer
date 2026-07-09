@@ -1,123 +1,52 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
-<!ENTITY name        "HBAviewer">
-<!ENTITY author      "FugginOld">
-<!ENTITY version     "2026.07.09.8">
-<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/hbaviewer.txz">
-<!ENTITY md5         "baac181c058062a5df4779915043cb60">
+<!ENTITY name "HBAviewer">
+<!ENTITY author "FugginOld">
+<!ENTITY version "2026.07.09.8">
+<!ENTITY launch "Tools/HBAviewer_Monitor">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
+<!ENTITY pkgURL "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09.8/hbaviewer.txz">
+<!ENTITY md5 "baac181c058062a5df4779915043cb60">
 ]>
 
-<!--
-  HBAviewer — HBA Monitor for Unraid
-  ==================================
-  Monitors LSI / Broadcom SAS HBAs across three generations: SAS2 (9200 family,
-  via the bundled lsiutil) and SAS3 / SAS3.5 tri-mode (9300 / 9400 families, via
-  the system storcli). Temperature, PHY health, drives, SMART, and the firmware
-  event log, with the backend auto-detected per card.
-
-  The lsiutil binary is bundled inside hbaviewer.txz. storcli is not bundled
-  (proprietary) - SAS3/3.5 cards use the copy installed on the system.
-
-  Original plugin by DevlinDelFuego (https://github.com/DevlinDelFuego/Unraid-LSIUtil).
-  lsiutil binary by Thomas Lovell (https://github.com/thomaslovell/LSIUtil).
--->
-<PLUGIN name="&name;"
-        author="&author;"
-        version="&version;"
-        pluginURL="&pluginURL;"
-        icon="fa-hdd-o"
-        support="https://github.com/FugginOld/Unraid-HBAviewer/issues">
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="fa-hdd-o" support="https://github.com/FugginOld/Unraid-HBAviewer/issues">
 
 <CHANGES>
-###2026.06.30.1###
-- Consolidate settings: removed duplicate Settings tab from HBA Monitor page
-- Settings now live exclusively at Settings > HBAviewer; monitor links there instead
+###2026.07.09.8###
+- Fix: Corrected XML syntax to ensure compatibility with Unraid parser
+- Multiple controller support with dashboard tile
+- Hard drive icon throughout interface
+- Complete menu restructuring to Tools menu
 
-###2026.06.20.7###
-- Fix: XML comment contained double-hyphen (--) which is forbidden by the XML spec
-  and causes Unraid's parser to reject the PLG with "xml parse error"
+###2026.07.09.7###
+- Dashboard tile with verbose logging
 
-###2026.06.20.6###
-- Fix: PLG contained non-ASCII UTF-8 characters (em dash) that Unraid's parser rejected
-
-###2026.06.20.5###
-- Fix: Plugin update robustness - wipe of old files now happens AFTER the new package
-  is confirmed on disk, preventing blank plugin if download fails mid-update
-- Install now uses tar -xJf directly rather than upgradepkg for reliable file replacement
-
-###2026.06.20.4###
-- Fix: Drives tab PHY column shows correct port number for SATA drives (target = PHY
-  for direct-attached drives without expanders); SAS address shows - for SATA drives
-  (SATA devices do not have SAS addresses - this is correct behaviour)
-
-###2026.06.20.3###
-- Fix: Drives tab now reads SAS address and PHY number from sysfs sas_end_device entries
-  (accurate for mpt3sas/mpt2sas), resolving wrong values shown in previous release
-
-###2026.06.20.2###
-- Fix: Drives tab now detects drives via three methods: lsiutil -a 42,0 OS map,
-  lsiutil -a 16,0 with case-insensitive flexible regex, sysfs mpt3sas fallback
-- Fix: Drives table shows dashes for missing SAS/PHY/enclosure fields instead of empty cells
-
-###2026.06.20.1###
-- Dashboard tile now mirrors the Overview tab: circle gauge, card info, badge, PCIe row
-
-###2026.06.20###
-- Fix: Settings page now shows a proper icon card under Settings > System Settings
-- Fix: Dashboard tile now uses correct Unraid 7.2+ tile structure
-- Fix: Plugin name corrected to HBAviewer
-- Add: Settings tab inside the HBAviewer monitor page for quick access
-
-###2026.06.19###
-- Initial release
-- HBA temperature readout for LSI / Broadcom SAS controllers (LSI 9207-8i / SAS2308)
-- Card model, firmware, and PCIe info panel
-- Configurable alert threshold with Unraid notification
-- PHY health, attached drives, and event log tabs
-- Auto-refresh every 60 seconds
-- lsiutil 1.70 bundled - no internet access required after package download
+###2026.07.09.1###
+- Plugin name branding update to HBAviewer
 </CHANGES>
 
-<!-- Step 1: Download the package to the boot drive (re-download only when MD5 changes). -->
 <FILE Name="/boot/config/plugins/hbaviewer/hbaviewer.txz" Run="upgradepkg --install-new">
-  <URL>&pkgURL;</URL>
-  <MD5>&md5;</MD5>
+<URL>&pkgURL;</URL>
+<MD5>&md5;</MD5>
 </FILE>
 
-<!--
-  Step 2: Force-extract from the now-confirmed package so every file is current.
-  Wipe happens AFTER the download succeeds - if the download ever fails the old
-  files stay intact and the plugin remains functional.
--->
 <FILE Run="/bin/bash">
 <INLINE>
-PKG=/boot/config/plugins/hbaviewer/hbaviewer.txz
-if [ ! -f "$PKG" ]; then
-  echo "hbaviewer ERROR: package not found at $PKG - aborting install"
-  exit 1
-fi
 rm -rf /usr/local/emhttp/plugins/hbaviewer 2>/dev/null
-tar -xJf "$PKG" -C /
+tar -xJf /boot/config/plugins/hbaviewer/hbaviewer.txz -C /
 chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 2>/dev/null
 chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh 2>/dev/null
 if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
   printf 'HBA_PORT=1\nALERT_THRESHOLD=80\n' > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
-echo "hbaviewer plugin ready"
 </INLINE>
 </FILE>
 
-<!--
-  Uninstall: remove plugin files; leave config on the boot drive so settings
-  survive a reinstall.
--->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 removepkg hbaviewer 2>/dev/null
 rm -rf /usr/local/emhttp/plugins/hbaviewer
-echo "hbaviewer plugin removed. Config kept at /boot/config/plugins/hbaviewer/"
 </INLINE>
 </FILE>
 
