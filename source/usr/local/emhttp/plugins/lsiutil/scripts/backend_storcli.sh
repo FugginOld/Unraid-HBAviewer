@@ -15,14 +15,28 @@ STORCLI="$(find_storcli)"
 # Overview uses the light `show` (brief: model/fw/pci/devid) + `show temperature`
 # per controller — NOT `show all`, which does a slow per-drive SMART scan of
 # every attached disk and made the dashboard tile take seconds to render.
+if   [ -r /sys/module/mpt3sas/version ]; then DRIVER="mpt3sas $(cat /sys/module/mpt3sas/version)"
+elif [ -r /sys/module/mpt2sas/version ]; then DRIVER="mpt2sas $(cat /sys/module/mpt2sas/version)"
+else DRIVER=""; fi
+
 count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
 if [ -z "$count" ] || [ "$count" -eq 0 ]; then
     echo '{"error":"No storcli controllers found."}'; exit 0
 fi
-printf '{"backend":"storcli","controllers":['
+printf '{"backend":"storcli","driver":"%s","controllers":[' "$DRIVER"
 for c in $(seq 0 $((count - 1))); do
     [ "$c" -gt 0 ] && printf ','
+    # Sum this controller's sysfs PHY error counters for the health rollup.
+    # ponytail: host N == controller N (holds for these HBAs); the PHY tab uses
+    # exact SAS correlation, this glanceable rollup uses the cheaper host index.
+    perr=0
+    for p in /sys/class/sas_phy/phy-"${c}":*/; do
+        [ -d "$p" ] || continue
+        for f in invalid_dword_count running_disparity_error_count loss_of_dword_sync_count phy_reset_problem_count; do
+            v=$(cat "$p/$f" 2>/dev/null); perr=$(( perr + ${v:-0} ))
+        done
+    done
     { "$STORCLI" /c"$c" show; "$STORCLI" /c"$c" show temperature; } 2>/dev/null \
-        | bash "$DIR/parse/storcli_overview.sh" "$ALERT"
+        | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr"
 done
 printf ']}'

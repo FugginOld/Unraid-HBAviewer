@@ -1,0 +1,12 @@
+Controller = 0
+Product Name = HBA 9400-16i
+PCI Address = 00:c1:00:00
+FW Version = 24.00.00.00
+BIOS Version = 09.15.00.00_08.00.00.00
+Physical Drives = 16
+Device Id = 0xAC
+
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model            Sp
+0:0      15 JBOD  -  12.733 TB SAS  HDD -   -  4 KB WUH721414AL4204  -
+
+ROC temperature(Degree Celsius) 50

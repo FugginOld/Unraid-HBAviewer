@@ -8,6 +8,7 @@
 
 input=$(cat)
 ALERT="${1:-80}"
+PHYERR="${2:-0}"   # total sysfs phy error counters for this controller (from composer)
 
 # First "Key = Value" line for an exact key (anchored, so "Model" != "Model Number")
 val() { printf '%s\n' "$input" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -39,9 +40,23 @@ if   printf '%s\n' "$input" | grep -qE '\bJBOD\b';          then MODE="IT"
 elif printf '%s\n' "$input" | grep -qE '\b(Onln|Optl|RAID)\b'; then MODE="IR"
 else MODE=""; fi
 
-if   [ "$TEMP" -ge "$ALERT" ];          then STATUS="alert"
-elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then STATUS="warn"
-else STATUS="ok"; fi
+# ── Health rollup: worst of temperature, drive states, and PHY errors ────────
+# 0=ok 1=warn 2=alert
+if   [ "$TEMP" -ge "$ALERT" ];          then RANK=2
+elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then RANK=1
+else RANK=0; fi
+
+# Drive states from the brief drive-summary table (JBOD/Onln/Optl = healthy).
+if printf '%s\n' "$input" | grep -qiE '\b(Failed|Offln|Missing|UBad|Foreign)\b'; then
+    [ "$RANK" -lt 2 ] && RANK=2
+elif printf '%s\n' "$input" | grep -qiE '\b(Rbld|Rebuild|Copyback)\b'; then
+    [ "$RANK" -lt 1 ] && RANK=1
+fi
+
+# Any PHY error counter on this controller is an early warning.
+if [ "${PHYERR:-0}" -gt 0 ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
+
+case "$RANK" in 2) STATUS="alert" ;; 1) STATUS="warn" ;; *) STATUS="ok" ;; esac
 
 cat <<EOF
 {"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":$ALERT,"status":"$STATUS"}

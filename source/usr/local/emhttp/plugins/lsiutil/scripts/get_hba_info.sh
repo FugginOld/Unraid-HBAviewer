@@ -28,6 +28,9 @@ hba_query -b                    2>/dev/null > "$BOARD"
 # Emit the shared multi-controller contract. lsiutil addresses one controller
 # per port, so this backend yields exactly one element; the storcli backend
 # yields N. Consumers loop either way.
-printf '{"backend":"lsiutil","controllers":['
+if   [ -r /sys/module/mpt2sas/version ]; then DRIVER="mpt2sas $(cat /sys/module/mpt2sas/version)"
+elif [ -r /sys/module/mpt3sas/version ]; then DRIVER="mpt3sas $(cat /sys/module/mpt3sas/version)"
+else DRIVER=""; fi
+printf '{"backend":"lsiutil","driver":"%s","controllers":[' "$DRIVER"
 bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
 printf ']}'

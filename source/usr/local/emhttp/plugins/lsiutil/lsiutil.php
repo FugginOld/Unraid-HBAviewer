@@ -142,6 +142,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 <?php else:
     $controllers = lsi_controllers($data);
     $backend     = $data['backend'] ?? 'lsiutil';
+    $driver      = $data['driver']  ?? '';
     // storcli exposes link/speed/attached-device per phy; lsiutil exposes error counters.
     $phyDesc = $backend === 'storcli'
         ? 'SAS link status, speed, and attached device per physical port'
@@ -175,6 +176,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         <p>Chip: <span><?= htmlspecialchars($v['chip']) ?></span></p>
         <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span></p>
         <?php if ($v['bios']   !== ''): ?><p>BIOS: <span><?= htmlspecialchars($v['bios']) ?></span></p><?php endif; ?>
+        <?php if ($driver      !== ''): ?><p>Driver: <span><?= htmlspecialchars($driver) ?></span></p><?php endif; ?>
         <?php if ($v['mode']   !== ''): ?><p>Mode: <span><?= htmlspecialchars($v['mode']) ?></span></p><?php endif; ?>
         <?php if ($v['drives'] !== ''): ?><p>Drives: <span><?= htmlspecialchars($v['drives']) ?> connected</span></p><?php endif; ?>
         <p>Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p>
