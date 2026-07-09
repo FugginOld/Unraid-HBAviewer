@@ -46,31 +46,32 @@ $boardName = htmlspecialchars(
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
 <style>
-#tblLsiutil .lu-d-ctl { padding-top:14px; margin-top:14px; border-top:1px solid #2a2a2a; }
-#tblLsiutil .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
-#tblLsiutil .lu-d-overview { display:flex; align-items:center; gap:20px; }
-#tblLsiutil .lu-d-circle {
-  width:90px; height:90px; border-radius:50%; border:4px solid #2ecc71;
+#tblHBAviewer .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
+#tblHBAviewer .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
+#tblHBAviewer .lu-d-overview { display:flex; align-items:flex-start; gap:16px; }
+#tblHBAviewer .lu-d-circle {
+  width:80px; height:80px; border-radius:50%; border:4px solid #2ecc71;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  flex-shrink:0;
+  flex-shrink:0; margin-top:2px;
 }
-#tblLsiutil .lu-d-circle .v { font-size:28px; font-weight:700; line-height:1; }
-#tblLsiutil .lu-d-circle .u { font-size:12px; color:#666; margin-top:3px; }
-#tblLsiutil .lu-d-meta p   { margin:3px 0; font-size:13px; color:#888; }
-#tblLsiutil .lu-d-meta span { color:#ddd; font-weight:500; }
-#tblLsiutil .lu-d-badge {
-  display:inline-block; margin-top:6px;
+#tblHBAviewer .lu-d-circle .v { font-size:26px; font-weight:700; line-height:1; }
+#tblHBAviewer .lu-d-circle .u { font-size:11px; color:#666; margin-top:3px; }
+#tblHBAviewer .lu-d-meta { flex:1; }
+#tblHBAviewer .lu-d-meta p   { margin:2px 0; font-size:12px; color:#888; }
+#tblHBAviewer .lu-d-meta span { color:#ddd; font-weight:500; }
+#tblHBAviewer .lu-d-badge {
+  display:inline-block; margin-top:4px;
   padding:2px 12px; border-radius:12px;
-  font-size:11px; font-weight:700; letter-spacing:0.05em; color:#111;
+  font-size:10px; font-weight:700; letter-spacing:0.05em; color:#111;
 }
-#tblLsiutil .lu-d-pcie {
-  display:flex; gap:18px; flex-wrap:wrap;
-  font-size:13px; color:#888;
-  padding-top:12px; margin-top:8px;
+#tblHBAviewer .lu-d-pcie {
+  display:flex; gap:16px; flex-wrap:wrap;
+  font-size:12px; color:#888;
+  padding-top:8px; margin-top:8px; margin-left:96px;
   border-top:1px solid #2a2a2a;
 }
-#tblLsiutil .lu-d-pcie span { color:#ddd; font-weight:500; }
-#tblLsiutil .lu-d-ts { font-size:11px; color:#444; text-align:right; margin-top:8px; }
+#tblHBAviewer .lu-d-pcie span { color:#ddd; font-weight:500; }
+#tblHBAviewer .lu-d-ts { font-size:10px; color:#555; text-align:right; margin-top:8px; }
 </style>
 CSS;
 
