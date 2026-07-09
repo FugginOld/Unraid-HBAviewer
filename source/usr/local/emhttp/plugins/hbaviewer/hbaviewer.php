@@ -14,7 +14,8 @@ $showDrives = $cfg['SHOW_DRIVES'];
 $showEvents = $cfg['SHOW_EVENTS'];
 
 // Load overview data server-side on page load
-$raw  = file_exists($SCRIPT) ? shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>&1') : null;
+// Use timeout to prevent page from hanging indefinitely
+$raw  = file_exists($SCRIPT) ? shell_exec('timeout 10 bash ' . escapeshellarg($SCRIPT) . ' 2>&1') : null;
 $data = $raw ? json_decode($raw, true) : null;
 $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 // If output wasn't valid JSON, it's an error message

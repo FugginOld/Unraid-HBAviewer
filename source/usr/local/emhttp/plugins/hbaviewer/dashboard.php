@@ -13,18 +13,20 @@ $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
 
 // get_hba_info.sh self-caches (60s), so this stays cheap on every tile refresh.
+// Use timeout to prevent dashboard from hanging if backend script fails
 $data = null;
 if (file_exists($SCRIPT)) {
-    $data = json_decode(shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '', true);
+    $raw = shell_exec('timeout 5 bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '';
+    $data = $raw ? json_decode($raw, true) : null;
 }
 
 if (!is_array($data)) {
-    $error = 'lsiutil unavailable';
+    $error = 'Backend unavailable';
 } else {
     $error = $data['error'] ?? null;
 }
 $controllers = $error ? [] : lsi_controllers($data);
-if (!$error && !$controllers) $error = 'lsiutil unavailable';
+if (!$error && !$controllers) $error = 'Backend unavailable';
 
 // Header icon reflects the worst controller; subtitle names the card or the count.
 $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
