@@ -15,12 +15,20 @@ $showEvents = $cfg['SHOW_EVENTS'];
 
 // Load overview data server-side on page load
 // Use timeout to prevent page from hanging indefinitely
-$raw  = file_exists($SCRIPT) ? shell_exec('timeout 10 bash ' . escapeshellarg($SCRIPT) . ' 2>&1') : null;
-$data = $raw ? json_decode($raw, true) : null;
-$error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
-// If output wasn't valid JSON, it's an error message
-if (!is_array($data) && $raw) {
-    $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 200));
+if (!file_exists($SCRIPT)) {
+    // Check parent directory for debugging
+    $dir = dirname($SCRIPT);
+    $dir_exists = is_dir($dir);
+    $error = "Backend script not found at $SCRIPT. Directory exists: " . ($dir_exists ? 'yes' : 'no');
+    $data = null;
+} else {
+    $raw  = shell_exec('timeout 10 bash ' . escapeshellarg($SCRIPT) . ' 2>&1');
+    $data = $raw ? json_decode($raw, true) : null;
+    $error = $data['error'] ?? ($raw ? null : 'Backend script produced no output.');
+    // If output wasn't valid JSON, it's an error message
+    if (!is_array($data) && $raw) {
+        $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 200));
+    }
 }
 ?>
 
