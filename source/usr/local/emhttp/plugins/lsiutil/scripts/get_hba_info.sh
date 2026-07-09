@@ -12,7 +12,9 @@ source "$DIR/config.sh"   # sets PORT, ALERT
 # hardware at most once a minute. Every caller gets a warm, snappy response.
 # LSI_CACHE overridable (tests point it at /dev/null to stay stateless).
 CACHE="${LSI_CACHE:-/tmp/lsiutil_dash.json}"
-if [ -f "$CACHE" ] && [ "$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) ))" -lt 60 ]; then
+# -s (non-empty) not -f: never serve a truncated/empty cache — fall through and
+# regenerate instead of returning nothing.
+if [ -s "$CACHE" ] && [ "$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) ))" -lt 60 ]; then
     cat "$CACHE"; exit 0
 fi
 
