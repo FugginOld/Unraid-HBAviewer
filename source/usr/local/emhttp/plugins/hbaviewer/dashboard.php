@@ -100,6 +100,10 @@ if ($error) {
         }
         $pcieRow = $pcieParts ? "<div class='lu-d-pcie'>" . implode('', $pcieParts) . "</div>" : '';
 
+        $bios   = htmlspecialchars($v['bios'] ?? '');
+        $mode   = htmlspecialchars($v['mode'] ?? '');
+        $drives = htmlspecialchars($v['drives'] ?? '');
+
         $body .= "
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
@@ -111,8 +115,11 @@ if ($error) {
           <p>Model: <span>{$model}</span></p>"
           . ($chip     ? "<p>Chip: <span>{$chip}</span></p>"         : '')
           . ($firmware ? "<p>Firmware: <span>{$firmware}</span></p>" : '')
-          . "<p>Port: <span>{$portLabel}</span></p>
-          <p>Alert Threshold: <span>{$threshold}°C</span></p>
+          . ($bios     ? "<p>BIOS: <span>{$bios}</span></p>"         : '')
+          . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
+          . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
+          . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
+          . "<p>Alert Threshold: <span>{$threshold}°C</span></p>
           <span class='lu-d-badge' style='background:{$col}'>{$badge}</span>
         </div>
       </div>
@@ -128,7 +135,7 @@ $mytiles[$pluginname]['column1'] = <<<EOT
     <td>
       <span class="tile-header">
         <span class="tile-header-left">
-          <i class="fa fa-thermometer-half f32" style="color:{$tc}"></i>
+          <i class="fa fa-hdd-o f32" style="color:{$tc}"></i>
           <div class="section">
             <h3 class="tile-header-main">HBA Temperature</h3>
             <span>{$boardName}</span>
