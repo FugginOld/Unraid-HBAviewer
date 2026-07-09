@@ -24,10 +24,19 @@ if (!file_exists($SCRIPT)) {
 } else {
     $raw  = shell_exec('timeout 10 bash ' . escapeshellarg($SCRIPT) . ' 2>&1');
     $data = $raw ? json_decode($raw, true) : null;
-    $error = $data['error'] ?? ($raw ? null : 'Backend script produced no output.');
-    // If output wasn't valid JSON, it's an error message
-    if (!is_array($data) && $raw) {
-        $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 200));
+
+    if (!$raw) {
+        // Script ran but produced no output - likely timed out or no HBAs detected
+        $error = 'Backend script produced no output (no HBAs detected or script timed out).';
+    } else if (!is_array($data)) {
+        // Output wasn't JSON - it's an error message from the script
+        $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 300));
+    } else if (isset($data['error'])) {
+        // JSON has an error field
+        $error = $data['error'];
+    } else {
+        // Success - no error
+        $error = null;
     }
 }
 ?>
