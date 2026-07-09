@@ -1,7 +1,7 @@
 Menu="OtherSettings"
-Title="LSIUtil"
+Title="HBAviewer"
 Icon="thermometer-half"
-Tag="lsiutil-settings"
+Tag="hbaviewer-settings"
 Type="xmenu"
 ---
-<?PHP require_once "/usr/local/emhttp/plugins/lsiutil/settings.php"; ?>
+<?PHP require_once "/usr/local/emhttp/plugins/hbaviewer/settings.php"; ?>

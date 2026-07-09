@@ -1,4 +1,4 @@
 Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'7.2.0-beta','>=')"
 Menu="Dashboard:0"
 ---
-<?PHP require_once "/usr/local/emhttp/plugins/lsiutil/dashboard.php"; ?>
+<?PHP require_once "/usr/local/emhttp/plugins/hbaviewer/dashboard.php"; ?>
