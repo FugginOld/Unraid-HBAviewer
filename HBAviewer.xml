@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Containers>
 <Plugin>True</Plugin>
-<PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/lsiutil.plg</PluginURL>
+<PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg</PluginURL>
 <PluginAuthor>FugginOld</PluginAuthor>
 <Beta>False</Beta>
 <Name>HBAviewer</Name>

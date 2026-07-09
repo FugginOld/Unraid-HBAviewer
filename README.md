@@ -72,7 +72,7 @@ and `smartctl` — no agents, no polling daemons, no external calls.
 2. Paste the plugin URL:
 
     ```text
-    https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/lsiutil.plg
+    https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg
     ```
 
 3. Click **Install**
@@ -115,7 +115,7 @@ cd Unraid-HBAviewer
 # Fetch the lsiutil binary and build the .txz (see build.sh for details)
 bash build.sh
 
-# build.sh prints the MD5 and version to update in lsiutil.plg
+# build.sh prints the MD5 and version to update in hbaviewer.plg
 ```
 
 The bundled `lsiutil.x86_64` is the original `lsiutil` v1.70 compiled for Linux

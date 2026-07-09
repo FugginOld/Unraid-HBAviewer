@@ -3,7 +3,7 @@
 <!ENTITY name        "HBAviewer">
 <!ENTITY author      "FugginOld">
 <!ENTITY version     "2026.06.30.1">
-<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/lsiutil.plg">
+<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
 <!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/lsiutil.txz">
 <!ENTITY md5         "ac426a59afc60ea8675e284deb5f622d">
 ]>
