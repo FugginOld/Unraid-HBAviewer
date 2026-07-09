@@ -11,7 +11,7 @@
 
 PORT="${1:-1}"
 OUT="${2:-tests/fixtures}"
-LSIUTIL="/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64"
+LSIUTIL="/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64"
 
 [ -x "$LSIUTIL" ] || { echo "lsiutil not found at $LSIUTIL — run on the Unraid box"; exit 1; }
 mkdir -p "$OUT"

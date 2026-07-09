@@ -3,7 +3,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
-$SCRIPT = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
+$SCRIPT = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
 $cfg        = lsi_config_read();
 $port       = $cfg['HBA_PORT'];
@@ -285,7 +285,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         var el = document.getElementById(name + '-content');
         if (!el) return;
         el.innerHTML = '<div class="lu-loading">Loading…</div>';
-        fetch('/plugins/lsiutil/ajax_info.php?type=' + name)
+        fetch('/plugins/hbaviewer/ajax_info.php?type=' + name)
             .then(function (r) { return r.text(); })
             .then(function (html) {
                 el.innerHTML = html;
@@ -302,7 +302,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         if (!el) return;
         clearTimeout(smartTimer);   // single poll loop
         if (force) el.innerHTML = '<div class="lu-loading">Starting…</div>';
-        fetch('/plugins/lsiutil/ajax_info.php?type=smart_all' + (force ? '&refresh=1' : ''))
+        fetch('/plugins/hbaviewer/ajax_info.php?type=smart_all' + (force ? '&refresh=1' : ''))
             .then(function (r) { return r.text(); })
             .then(function (html) {
                 el.innerHTML = html;
@@ -316,7 +316,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
     /* ── Per-drive SMART fetch (on demand; -n standby, never wakes a disk) ──── */
     window.luSmart = function (btn, serial) {
         btn.disabled = true; btn.textContent = '…';
-        fetch('/plugins/lsiutil/ajax_info.php?type=smart&serial=' + encodeURIComponent(serial))
+        fetch('/plugins/hbaviewer/ajax_info.php?type=smart&serial=' + encodeURIComponent(serial))
             .then(function (r) { return r.text(); })
             .then(function (html) { btn.outerHTML = html; })
             .catch(function () { btn.disabled = false; btn.textContent = 'retry'; });
@@ -343,7 +343,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 
     /* ── Overview auto-refresh (temperature only) ─────────────────────────── */
     function refreshOverview() {
-        fetch('/plugins/lsiutil/ajax_info.php?type=overview')
+        fetch('/plugins/hbaviewer/ajax_info.php?type=overview')
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (d.error || !d.controllers) return;

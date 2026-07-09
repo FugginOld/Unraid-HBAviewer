@@ -4,7 +4,7 @@
 # The cfg is written only by config.php (clamped) and the .plg (fixed), so
 # sourcing it as bash is safe. Defaults live once, here.
 
-CFG="${LSI_CFG_PATH:-/boot/config/plugins/lsiutil/lsiutil.cfg}"
+CFG="${LSI_CFG_PATH:-/boot/config/plugins/hbaviewer/hbaviewer.cfg}"
 [ -f "$CFG" ] && source "$CFG"
 PORT="${HBA_PORT:-1}"
 ALERT="${ALERT_THRESHOLD:-80}"

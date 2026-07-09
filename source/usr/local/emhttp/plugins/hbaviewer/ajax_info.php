@@ -10,7 +10,7 @@ require_once __DIR__ . '/view.php';
 
 $type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events','smart','smart_all'])
            ? $_GET['type'] : 'overview';
-$scripts = '/usr/local/emhttp/plugins/lsiutil/scripts';
+$scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
 /* ── SMART tab: all drives, collected in the background ─────────────────────
    Returns the cached table if fresh; otherwise reports progress (or launches a
@@ -275,7 +275,7 @@ if ($type === 'drives') {
    and ring-buffer wrap. Dedup by seq+time; only writes when there's something
    new (kind to the boot flash). Keyed per controller index. */
 function lsi_merge_event_history(int $ctl, array $current): array {
-    $dir  = '/boot/config/plugins/lsiutil';
+    $dir  = '/boot/config/plugins/hbaviewer';
     $file = "$dir/events_c$ctl.json";
     $hist = is_file($file) ? (json_decode((string) @file_get_contents($file), true) ?: []) : [];
     $key  = fn($e) => ($e['seq'] ?? '') . '|' . ($e['time'] ?? ($e['timestamp'] ?? ''));

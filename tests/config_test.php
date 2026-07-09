@@ -3,7 +3,7 @@
    No framework. Needs php (present on the Unraid box, absent on some dev machines):
      php tests/config_test.php   ->  "config: all pass"  (exit 0) */
 
-require_once __DIR__ . '/../source/usr/local/emhttp/plugins/lsiutil/config.php';
+require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/config.php';
 
 $fails = 0;
 function check(string $name, bool $ok): void {

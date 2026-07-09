@@ -12,7 +12,7 @@
 # require_binary emits the not-found error JSON and returns non-zero. Composers
 # call it BEFORE the query|parse pipe so the error reaches PHP, never a parser.
 
-LSIUTIL="${LSIUTIL:-/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64}"
+LSIUTIL="${LSIUTIL:-/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64}"
 
 require_binary() {
     if [ ! -x "$LSIUTIL" ]; then

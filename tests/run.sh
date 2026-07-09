@@ -8,7 +8,7 @@
 # Regenerate goldens after an INTENTIONAL parser change:
 #   UPDATE=1 bash tests/run.sh
 cd "$(dirname "$0")" || exit 2
-P="../source/usr/local/emhttp/plugins/lsiutil/scripts/parse"
+P="../source/usr/local/emhttp/plugins/hbaviewer/scripts/parse"
 fail=0
 
 check() {  # name  expected_file  command...

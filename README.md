@@ -118,7 +118,7 @@ bash build.sh
 # build.sh prints the MD5 and version to update in hbaviewer.plg
 ```
 
-The bundled `lsiutil.x86_64` is the original `lsiutil` v1.70 compiled for Linux
+The bundled `hbaviewer.x86_64` is the original `lsiutil` v1.70 compiled for Linux
 x86-64. `storcli` is **not** bundled — SAS3/3.5 cards use the copy installed on
 your system.
 

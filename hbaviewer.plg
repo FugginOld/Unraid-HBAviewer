@@ -4,7 +4,7 @@
 <!ENTITY author      "FugginOld">
 <!ENTITY version     "2026.06.30.1">
 <!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/lsiutil.txz">
+<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/&version;/hbaviewer.txz">
 <!ENTITY md5         "ac426a59afc60ea8675e284deb5f622d">
 ]>
 
@@ -16,7 +16,7 @@
   the system storcli). Temperature, PHY health, drives, SMART, and the firmware
   event log, with the backend auto-detected per card.
 
-  The lsiutil binary is bundled inside lsiutil.txz. storcli is not bundled
+  The lsiutil binary is bundled inside hbaviewer.txz. storcli is not bundled
   (proprietary) - SAS3/3.5 cards use the copy installed on the system.
 
   Original plugin by DevlinDelFuego (https://github.com/DevlinDelFuego/Unraid-LSIUtil).
@@ -80,7 +80,7 @@
 </CHANGES>
 
 <!-- Step 1: Download the package to the boot drive (re-download only when MD5 changes). -->
-<FILE Name="/boot/config/plugins/lsiutil/lsiutil.txz" Run="upgradepkg --install-new">
+<FILE Name="/boot/config/plugins/hbaviewer/hbaviewer.txz" Run="upgradepkg --install-new">
   <URL>&pkgURL;</URL>
   <MD5>&md5;</MD5>
 </FILE>
@@ -92,19 +92,19 @@
 -->
 <FILE Run="/bin/bash">
 <INLINE>
-PKG=/boot/config/plugins/lsiutil/lsiutil.txz
+PKG=/boot/config/plugins/hbaviewer/hbaviewer.txz
 if [ ! -f "$PKG" ]; then
   echo "lsiutil ERROR: package not found at $PKG - aborting install"
   exit 1
 fi
-rm -rf /usr/local/emhttp/plugins/lsiutil 2>/dev/null
+rm -rf /usr/local/emhttp/plugins/hbaviewer 2>/dev/null
 tar -xJf "$PKG" -C /
-chmod +x /usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64 2>/dev/null
+chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 2>/dev/null
 
 # Write default config on first install only
-if [ ! -f /boot/config/plugins/lsiutil/lsiutil.cfg ]; then
-  mkdir -p /boot/config/plugins/lsiutil
-  printf 'HBA_PORT=1\nALERT_THRESHOLD=80\n' > /boot/config/plugins/lsiutil/lsiutil.cfg
+if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
+  mkdir -p /boot/config/plugins/hbaviewer
+  printf 'HBA_PORT=1\nALERT_THRESHOLD=80\n' > /boot/config/plugins/hbaviewer/hbaviewer.cfg
   echo "lsiutil: default config written"
 fi
 echo "lsiutil plugin ready"
@@ -118,8 +118,8 @@ echo "lsiutil plugin ready"
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 removepkg lsiutil 2>/dev/null
-rm -rf /usr/local/emhttp/plugins/lsiutil
-echo "lsiutil plugin removed. Config kept at /boot/config/plugins/lsiutil/"
+rm -rf /usr/local/emhttp/plugins/hbaviewer
+echo "lsiutil plugin removed. Config kept at /boot/config/plugins/hbaviewer/"
 </INLINE>
 </FILE>
 

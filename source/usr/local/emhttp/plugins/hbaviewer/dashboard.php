@@ -6,7 +6,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
 $pluginname = 'HBAviewer';
-$SCRIPT  = '/usr/local/emhttp/plugins/lsiutil/scripts/get_hba_info.sh';
+$SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
 $cfg       = lsi_config_read();
 $port      = $cfg['HBA_PORT'];

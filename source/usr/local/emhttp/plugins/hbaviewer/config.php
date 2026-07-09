@@ -4,7 +4,7 @@
    The writer clamps every value to schema, so the file on disk is never garbage.
    Shell reads the same file via config.sh (PORT/ALERT only). */
 
-const LSI_CFG = '/boot/config/plugins/lsiutil/lsiutil.cfg';
+const LSI_CFG = '/boot/config/plugins/hbaviewer/hbaviewer.cfg';
 
 // key => [default, min, max]   (SHOW_* are booleans expressed as 0/1)
 const LSI_SCHEMA = [

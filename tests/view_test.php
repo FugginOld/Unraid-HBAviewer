@@ -2,7 +2,7 @@
 /* Runnable check for view.php: status map, fallbacks, PCIe assembly.
    Needs php (present on the Unraid box):  php tests/view_test.php  */
 
-require_once __DIR__ . '/../source/usr/local/emhttp/plugins/lsiutil/view.php';
+require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/view.php';
 
 $fails = 0;
 function check(string $name, bool $ok): void {
