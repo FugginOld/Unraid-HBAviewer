@@ -14,9 +14,13 @@ $showDrives = $cfg['SHOW_DRIVES'];
 $showEvents = $cfg['SHOW_EVENTS'];
 
 // Load overview data server-side on page load
-$raw  = file_exists($SCRIPT) ? shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') : null;
+$raw  = file_exists($SCRIPT) ? shell_exec('bash ' . escapeshellarg($SCRIPT) . ' 2>&1') : null;
 $data = $raw ? json_decode($raw, true) : null;
 $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
+// If output wasn't valid JSON, it's an error message
+if (!is_array($data) && $raw) {
+    $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 200));
+}
 ?>
 
 <style>
