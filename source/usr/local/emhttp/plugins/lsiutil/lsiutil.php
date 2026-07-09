@@ -67,6 +67,9 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 .lu-divider { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
 
 /* ── Temperature display ─────────────────────────────────────────────────── */
+/* Controllers side by side, splitting the width; a lone card is capped + centered. */
+.lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.lu-ov-grid .lu-card { flex: 1 1 380px; max-width: 700px; margin-bottom: 0; }
 .lu-overview-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
 .lu-circle {
     width: 96px; height: 96px;
@@ -159,6 +162,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 
 <!-- ── Overview tab (one card per controller) ────────────────────────────── -->
 <div id="tab-overview" class="lu-tab-pane active">
+  <div class="lu-ov-grid">
   <?php foreach ($controllers as $i => $c): ?>
     <?php if (isset($c['error'])): ?>
   <div class="lu-card first"><div class="lu-error"><strong>Controller <?= $i ?>:</strong> <?= htmlspecialchars($c['error']) ?></div></div>
@@ -194,6 +198,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
     <div class="lu-ts" id="lu-ts-<?= $i ?>">Last read: <?= date('H:i:s') ?></div>
   </div>
   <?php endforeach; ?>
+  </div>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
