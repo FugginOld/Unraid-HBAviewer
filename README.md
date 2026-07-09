@@ -1,49 +1,90 @@
 # Unraid LSIUtil Plugin
 
-An Unraid plugin for monitoring LSI SAS Host Bus Adapters (HBA) — specifically the **LSI 9207-8i / SAS2308** family — using the bundled `lsiutil` utility. No internet access is required after the single package download.
+Monitor LSI / Broadcom SAS Host Bus Adapters (HBAs) directly from Unraid —
+temperature, PHY health, attached drives, SMART, and the firmware event log —
+across **three controller generations**, with the correct backend auto-detected
+per card.
+
+> Originally created by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
+> for the SAS2308 / 9207-8i. This fork extends it to SAS3 (9300) and SAS3.5
+> tri-mode (9400) controllers, multi-controller systems, SMART, a background
+> SMART collector, a persistent event log, and more.
+
+## Supported hardware
+
+The plugin detects the controller generation and uses the right tool automatically:
+
+| Generation | Chipsets | Cards (examples) | Backend |
+| --- | --- | --- | --- |
+| **SAS2** (6 Gb/s) | SAS2004 / 2008 / 2108 / 2116 / 2208 / 2308 | 9207-8i, 9211-8i, IBM M1015, Dell H200/H310 | `lsiutil` (bundled) |
+| **SAS3** (12 Gb/s) | SAS3004 / 3008 / 3108 / 3216 / 3224 / 3316 | 9300-8i, 9305-16i, 9361-8i | `storcli` (system-installed) |
+| **SAS3.5 / tri-mode** | SAS3408 / 3416 / 3508 / 3516 / 3616 / 3808 / 3816 | 9400-16i, 9400-8i, 9500 series | `storcli` (system-installed) |
+
+Multiple controllers are shown side by side. Both SAS and SATA drives are supported.
+
+> **SAS3 / SAS3.5 cards need `storcli`** installed on the system — Broadcom's CLI,
+> which is not bundled (it's proprietary). SAS2 cards use the bundled `lsiutil`
+> and need nothing extra.
 
 ## Features
 
-- **Temperature gauge** — real-time HBA temperature with configurable alert threshold and Unraid notification
-- **PCIe info** — link width, speed, power mode, and PCI location
-- **PHY Health** — per-port SAS link state and error counters (invalid DWords, disparity, loss-of-sync, resets)
-- **Attached Drives** — drive list with SAS addresses, PHY assignment, and OS device names (`/dev/sdX`)
-- **Event Log** — HBA firmware event log entries
-- **Dashboard tile** — at-a-glance temperature on the Unraid dashboard (Unraid 7.2+)
-- **Settings** — lsiutil port selection, alert threshold, and panel toggles
+- **Overview** — per-controller temperature gauge with a configurable alert
+  threshold, plus a real **health rollup** (goes yellow/red on high temp, a
+  failed drive, or PHY errors — not just heat). Shows chip, firmware, BIOS,
+  driver version, IT/IR mode, connected-drive count, and PCIe info. Pre-P20
+  SAS2 firmware is flagged; cards with no onboard sensor show `N/A · no sensor`
+  instead of erroring.
+- **PHY Health** — per-PHY link state, negotiated speed, attached SAS address,
+  and error counters (invalid DWords, disparity, loss-of-sync, reset) — read
+  from the controller (lsiutil) or from Linux `sysfs` (`mpt3sas`) on SAS3/3.5.
+- **Attached Drives** — enclosure/slot, HBA port, model, serial, state, size,
+  SAS address, link speed, firmware, and a **per-drive SMART** button.
+- **SMART tab** — health, temperature, grown defects, pending sectors, and
+  power-on hours for every drive, collected **in the background** so it never
+  blocks the UI and (on SAS) **never spins up a standby drive**.
+- **Event Log** — the firmware event log, **archived to `/boot`** so history
+  survives reboots and firmware ring-buffer wrap, with copy-to-clipboard for
+  support tickets.
+- **Enclosure / topology** — an enclosure summary per controller (direct-attach
+  vs expander/backplane).
+- **Dashboard tile** — at-a-glance temperature and health on the Unraid
+  dashboard (Unraid 7.2+).
 
-All data is read directly from the HBA via `lsiutil` and Linux `sysfs` — no agents, no polling daemons, no external calls.
+All data is read directly from the HBA (`storcli` / `lsiutil`), Linux `sysfs`,
+and `smartctl` — no agents, no polling daemons, no external calls.
 
 ## Requirements
 
-- Unraid 6.12 or newer (Unraid 7.2+ for the dashboard tile)
-- LSI SAS controller supported by `mpt2sas` or `mpt3sas` kernel driver
-  - Tested on: **LSI 9207-8i (SAS2308)**
-  - Should work on: 9211-8i, 9205-8i, 9201-16i, and other SAS2x08-family cards
-- The `lsiutil` binary is bundled inside the `.txz` package — nothing else is downloaded
+- Unraid 6.12 or newer (7.2+ for the dashboard tile)
+- A supported LSI / Broadcom SAS controller (see the table above)
+- For **SAS3 / SAS3.5** cards: `storcli` installed and on `PATH` (or in a
+  standard `sbin` location)
+- `smartctl` (ships with Unraid) for the SMART features
+- The `lsiutil` binary for SAS2 cards is bundled in the `.txz` — nothing extra
+  is downloaded
 
 ## Installation
 
 1. In the Unraid web UI go to **Plugins → Install Plugin**
-1. Paste the plugin URL:
+2. Paste the plugin URL:
 
-```text
-https://raw.githubusercontent.com/DevlinDelFuego/Unraid-LSIUtil/main/lsiutil.plg
-```
+    ```text
+    https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/lsiutil.plg
+    ```
 
-1. Click **Install**
+3. Click **Install**
 
 After installation, find the monitor under **Tools → LSIUtil → HBA Monitor**.
 
-## Plugin Structure
+## Layout
 
 ```text
 Tools
 └── LSIUtil
-    └── HBA Monitor   (tabs: Temperature · PHY Health · Attached Drives · Event Log · Settings)
+    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log)
 
 Settings > System Settings
-└── LSIUtil            (opens full settings page)
+└── LSIUtil            (full settings page)
 
 Dashboard
 └── HBA Temperature tile (Unraid 7.2+)
@@ -51,41 +92,54 @@ Dashboard
 
 ## Configuration
 
-Open **Settings → System Settings → LSIUtil** or the **Settings** tab inside the monitor:
+Open **Settings → System Settings → LSIUtil**:
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| lsiutil Port | 1 | HBA port number (`lsiutil -p1`). Run `lsiutil` without arguments to list ports. |
-| Alert Threshold | 80 °C | Unraid notification fires when temperature reaches this value. |
-| Show PCIe Info | On | PCIe width/speed row in the Overview tab. |
-| Show PHY Health | On | PHY error counters tab. |
-| Show Attached Drives | On | Drive list tab. |
-| Show Event Log | On | HBA firmware event log tab. |
+| lsiutil Port | 1 | SAS2/lsiutil port number. SAS3/storcli cards are enumerated automatically. |
+| Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
+| Show PCIe Info | On | PCIe width/speed row in the Overview. |
+| Show PHY Health | On | PHY tab. |
+| Show Attached Drives | On | Drives tab. |
+| Show Event Log | On | Event Log tab. |
 
-## Building from Source
+## Building from source
 
 ```bash
-# Clone the repo
-git clone https://github.com/DevlinDelFuego/Unraid-LSIUtil.git
+git clone https://github.com/FugginOld/Unraid-LSIUtil.git
 cd Unraid-LSIUtil
 
-# Build the .txz package (requires tar, gzip)
-mkdir -p pkg
-cp -a source/* pkg/
-cd pkg
-makepkg ../lsiutil.txz        # or: tar -cJf ../lsiutil.txz .
-cd ..
+# Fetch the lsiutil binary and build the .txz (see build.sh for details)
+bash build.sh
 
-# Update the MD5 in lsiutil.plg
-md5sum lsiutil.txz
+# build.sh prints the MD5 and version to update in lsiutil.plg
 ```
 
-The `lsiutil.x86_64` binary inside the package is the original `lsiutil` v1.70 compiled for Linux x86-64.
+The bundled `lsiutil.x86_64` is the original `lsiutil` v1.70 compiled for Linux
+x86-64. `storcli` is **not** bundled — SAS3/3.5 cards use the copy installed on
+your system.
+
+## Testing
+
+The shell parsers and PHP helpers have a golden-file test suite that needs no
+hardware:
+
+```bash
+bash tests/run.sh
+```
+
+It runs the parser goldens plus the PHP unit tests (using a local `php`, or the
+`php:8.2-cli` Docker image if `php` isn't installed). Real-hardware output is
+captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
 
 ## Credits
 
-- **[Thomas Lovell — LSIUtil](https://github.com/thomaslovell/LSIUtil/)** — the `lsiutil` binary that makes this plugin possible. This project would not exist without his work preserving and maintaining the LSI utility.
-- LSI Logic / Broadcom for the original `lsiutil` source.
+- **[DevlinDelFuego — Unraid-LSIUtil](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
+  — the original Unraid plugin this fork is built on.
+- **[Thomas Lovell — LSIUtil](https://github.com/thomaslovell/LSIUtil/)** — the
+  `lsiutil` binary that makes the SAS2 path possible.
+- **Broadcom** — `storcli` (used for SAS3 / SAS3.5 controllers) and the original
+  `lsiutil` source.
 
 ## License
 

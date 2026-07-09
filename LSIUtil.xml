@@ -1,20 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Containers>
 <Plugin>True</Plugin>
-<PluginURL>https://raw.githubusercontent.com/DevlinDelFuego/Unraid-LSIUtil/main/lsiutil.plg</PluginURL>
-<PluginAuthor>DevlinDelFuego</PluginAuthor>
+<PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/lsiutil.plg</PluginURL>
+<PluginAuthor>FugginOld</PluginAuthor>
 <Beta>False</Beta>
 <Name>LSIUtil</Name>
 <Description>
-Monitor LSI SAS Host Bus Adapters (9207-8i, SAS2308 and similar) directly from Unraid.
-Displays real-time HBA temperature with configurable alert threshold and Unraid notification,
-PCIe link info, per-PHY SAS health counters, attached drive list with SAS addresses and OS
-device names, HBA firmware event log, and an at-a-glance dashboard tile (Unraid 7.2+).
-The lsiutil binary is bundled - nothing is downloaded after the initial install.
-Supported hardware: LSI 9207-8i, 9211-8i, 9205-8i, 9201-16i and other SAS2x08-family cards
-using the mpt2sas / mpt3sas kernel driver.
+Monitor LSI / Broadcom SAS HBAs directly from Unraid across three generations:
+SAS2 (9200 family, via the bundled lsiutil) and SAS3 / SAS3.5 tri-mode (9300 / 9400
+families, via the system storcli), with the backend auto-detected per card and
+multiple controllers shown side by side.
+Per-controller temperature with a health rollup, PHY link/speed/error counters,
+attached drives (enclosure/slot, model, serial, state, SAS address), per-drive and
+background SMART, a firmware event log archived to /boot, an enclosure/topology
+summary, and a dashboard tile (Unraid 7.2+). SAS and SATA drives supported.
+storcli must be installed for SAS3/3.5 cards; lsiutil is bundled for SAS2.
+Originally created by DevlinDelFuego; lsiutil by Thomas Lovell.
 </Description>
-<Support>https://github.com/DevlinDelFuego/Unraid-LSIUtil/issues</Support>
-<Icon>https://raw.githubusercontent.com/DevlinDelFuego/Unraid-LSIUtil/main/icon.svg</Icon>
-<Project>https://github.com/DevlinDelFuego/Unraid-LSIUtil</Project>
+<Support>https://github.com/FugginOld/Unraid-LSIUtil/issues</Support>
+<Icon>https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/icon.png</Icon>
+<Project>https://github.com/FugginOld/Unraid-LSIUtil</Project>
 </Containers>

@@ -1,28 +1,33 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
 <!ENTITY name        "LSIUtil">
-<!ENTITY author      "DevlinDelFuego">
+<!ENTITY author      "FugginOld">
 <!ENTITY version     "2026.06.30.1">
-<!ENTITY pluginURL   "https://raw.githubusercontent.com/DevlinDelFuego/Unraid-LSIUtil/main/lsiutil.plg">
-<!ENTITY pkgURL      "https://github.com/DevlinDelFuego/Unraid-LSIUtil/releases/download/&version;/lsiutil.txz">
+<!ENTITY pluginURL   "https://raw.githubusercontent.com/FugginOld/Unraid-LSIUtil/main/lsiutil.plg">
+<!ENTITY pkgURL      "https://github.com/FugginOld/Unraid-LSIUtil/releases/download/&version;/lsiutil.txz">
 <!ENTITY md5         "ac426a59afc60ea8675e284deb5f622d">
 ]>
 
 <!--
-  LSIUtil HBA Temperature Monitor for Unraid
-  ==========================================
-  Reads HBA temperature and card info directly from LSI SAS controllers
-  (SAS2308, SAS2008, 9207-8i, etc.) using lsiutil via the mpt2sas/mpt3sas driver.
+  LSIUtil HBA Monitor for Unraid
+  ==============================
+  Monitors LSI / Broadcom SAS HBAs across three generations: SAS2 (9200 family,
+  via the bundled lsiutil) and SAS3 / SAS3.5 tri-mode (9300 / 9400 families, via
+  the system storcli). Temperature, PHY health, drives, SMART, and the firmware
+  event log, with the backend auto-detected per card.
 
-  The lsiutil binary is bundled inside lsiutil.txz - nothing is downloaded at
-  install time beyond the single package file.
+  The lsiutil binary is bundled inside lsiutil.txz. storcli is not bundled
+  (proprietary) - SAS3/3.5 cards use the copy installed on the system.
+
+  Original plugin by DevlinDelFuego (https://github.com/DevlinDelFuego/Unraid-LSIUtil).
+  lsiutil binary by Thomas Lovell (https://github.com/thomaslovell/LSIUtil).
 -->
 <PLUGIN name="&name;"
         author="&author;"
         version="&version;"
         pluginURL="&pluginURL;"
         icon="thermometer-half"
-        support="https://github.com/DevlinDelFuego/Unraid-LSIUtil/issues">
+        support="https://github.com/FugginOld/Unraid-LSIUtil/issues">
 
 <CHANGES>
 ###2026.06.30.1###
