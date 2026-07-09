@@ -1,0 +1,5 @@
+IOUnit Page 7:
+
+  PCIeWidth:                        0x08
+  PCIeSpeed:                        0x02
+  CurrentPowerMode:                 0x00

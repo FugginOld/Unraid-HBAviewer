@@ -171,13 +171,13 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 
     <div class="lu-overview-row">
       <div class="lu-circle" id="lu-circle-<?= $i ?>">
-        <span class="val" id="lu-val-<?= $i ?>"><?= $v['temp'] ?></span>
-        <span class="unit">°C</span>
+        <span class="val" id="lu-val-<?= $i ?>"><?= $v['temp'] !== '' ? $v['temp'] : 'N/A' ?></span>
+        <span class="unit"><?= $v['temp'] !== '' ? '°C' : 'no sensor' ?></span>
       </div>
       <div class="lu-meta">
         <p>Model: <span><?= htmlspecialchars($v['model']) ?></span></p>
         <p>Chip: <span><?= htmlspecialchars($v['chip']) ?></span></p>
-        <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span></p>
+        <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span><?php if ($v['fw_old']): ?> <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">⚠ pre-P20</span><?php endif; ?></p>
         <?php if ($v['bios']   !== ''): ?><p>BIOS: <span><?= htmlspecialchars($v['bios']) ?></span></p><?php endif; ?>
         <?php if ($driver      !== ''): ?><p>Driver: <span><?= htmlspecialchars($driver) ?></span></p><?php endif; ?>
         <?php if ($v['mode']   !== ''): ?><p>Mode: <span><?= htmlspecialchars($v['mode']) ?></span></p><?php endif; ?>

@@ -46,6 +46,7 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
         'model'      => !empty($data['board_name']) ? $data['board_name'] : ($data['model'] ?? 'Unknown'),
         'chip'       => $data['model']     ?? 'Unknown',
         'firmware'   => $data['firmware']  ?? 'Unknown',
+        'fw_old'     => !empty($data['fw_old']),      // SAS2 pre-P20 flag
         'bios'       => $data['bios']        ?? '',   // storcli only
         'mode'       => $data['mode']        ?? '',   // IT/IR (storcli)
         'drives'     => $data['drive_count'] ?? '',   // connected drive count (storcli)

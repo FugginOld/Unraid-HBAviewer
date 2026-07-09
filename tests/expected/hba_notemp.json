@@ -1,5 +1,5 @@
 {
-  "temp": 47,
+  "temp": "",
   "model": "SAS2308",
   "firmware": "14.00.07.00",
   "fw_old": true,
@@ -7,7 +7,7 @@
   "board_name": "SAS9207-8i",
   "pci_location": "03:00",
   "pcie_width": "x8",
-  "pcie_speed": "Gen3 (8.0 GT/s)",
+  "pcie_speed": "Gen2 (5.0 GT/s)",
   "power_mode": "Full",
   "alert_threshold": 80,
   "status": "ok"

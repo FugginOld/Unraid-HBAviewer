@@ -8,7 +8,8 @@
 
 input=$(cat)
 ALERT="${1:-80}"
-PHYERR="${2:-0}"   # total sysfs phy error counters for this controller (from composer)
+PHYERR="${2:-0}"    # total sysfs phy error counters for this controller (from composer)
+CHIPARG="${3:-}"    # chip name from storcli AdapterType (covers every chipset; no ID map)
 
 # First "Key = Value" line for an exact key (anchored, so "Model" != "Model Number")
 val() { printf '%s\n' "$input" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -25,15 +26,20 @@ FW=$(val "FW Version");      [ -n "$FW" ]    || FW=$(val "Firmware Version")
 PCI=$(val "PCI Address")
 BIOS=$(val "BIOS Version")
 DRIVES=$(val "Physical Drives")
-DEVID=$(val "Device Id")
-case "${DEVID,,}" in
-    0xac) CHIP="SAS3416" ;;
-    0xaf|0xad) CHIP="SAS3408" ;;
-    0x97) CHIP="SAS3008" ;;
-    0x87) CHIP="SAS2308" ;;
-    0x72) CHIP="SAS2008" ;;
-    *)    CHIP="" ;;
-esac
+# Chip: prefer storcli's AdapterType (works for any SAS2/SAS3/SAS3.5 chipset);
+# fall back to a small device-ID map only if AdapterType wasn't passed.
+CHIP="$CHIPARG"
+if [ -z "$CHIP" ]; then
+    DEVID=$(val "Device Id")
+    case "${DEVID,,}" in
+        0xac) CHIP="SAS3416" ;;
+        0xaf|0xad) CHIP="SAS3408" ;;
+        0x97) CHIP="SAS3008" ;;
+        0x87) CHIP="SAS2308" ;;
+        0x72) CHIP="SAS2008" ;;
+        *)    CHIP="" ;;
+    esac
+fi
 
 # IT vs IR from the drive states: JBOD = passthrough (IT); RAID/Onln/Optl = IR.
 if   printf '%s\n' "$input" | grep -qE '\bJBOD\b';          then MODE="IT"

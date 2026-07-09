@@ -13,13 +13,9 @@ BANNER=$(cat "$2" 2>/dev/null)
 BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
 
-# ── 1. Temperature (fatal if absent — same domain error as before) ──────────
+# ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
-if [ -z "$TEMP_HEX" ]; then
-    echo '{"error":"Temperature read failed. Check HBA_PORT in settings."}'
-    exit 0
-fi
-TEMP=$((16#${TEMP_HEX#0x}))
+if [ -n "$TEMP_HEX" ]; then TEMP=$((16#${TEMP_HEX#0x})); else TEMP=""; fi
 
 parse_hex() { echo "$IOC" | grep "$1" | grep -oE '0x[0-9A-Fa-f]+' | head -1; }
 
@@ -65,16 +61,34 @@ BOARD_NAME=$(echo "$BOARD_LINE" | awk '{print $5}')
 PCI_BUS=$(echo "$BOARD_LINE"    | awk '{print $3}')
 PCI_DEV=$(echo "$BOARD_LINE"    | awk '{print $4}')
 
-# ── 4. Status ───────────────────────────────────────────────────────────────
-if   [ "$TEMP" -ge "$ALERT" ];          then STATUS="alert"
-elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then STATUS="warn"
-else STATUS="ok"; fi
+# Not responding at all (no temp, no model, no board) — likely the wrong port.
+if [ -z "$TEMP_HEX" ] && [ -z "$MODEL" ] && [ -z "$BOARD_NAME" ]; then
+    echo '{"error":"No response from the HBA. Check the lsiutil port in Settings."}'
+    exit 0
+fi
+
+# Firmware baseline: P20 (major version 20) is the IT-mode standard for SAS2;
+# flag anything older (a known ZFS/passthrough headache on 9200s).
+FW_MAJOR="${FW_VER%%.*}"
+FW_OLD="false"
+case "$FW_MAJOR" in ''|*[!0-9]*) : ;; *) [ "$FW_MAJOR" -lt 20 ] && FW_OLD="true" ;; esac
+
+# ── 4. Status (temp-based when a sensor exists; otherwise ok — no false alarm) ─
+if [ -n "$TEMP" ]; then
+    if   [ "$TEMP" -ge "$ALERT" ];          then STATUS="alert"
+    elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then STATUS="warn"
+    else STATUS="ok"; fi
+    TEMPJSON="$TEMP"
+else
+    STATUS="ok"; TEMPJSON='""'
+fi
 
 cat <<EOF
 {
-  "temp": $TEMP,
+  "temp": $TEMPJSON,
   "model": "${MODEL:-Unknown}",
   "firmware": "${FW_VER}",
+  "fw_old": $FW_OLD,
   "port_name": "${PORT_NAME:-ioc0}",
   "board_name": "${BOARD_NAME:-}",
   "pci_location": "${PCI_BUS:-0}:${PCI_DEV:-0}",

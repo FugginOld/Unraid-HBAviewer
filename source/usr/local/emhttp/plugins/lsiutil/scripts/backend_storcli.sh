@@ -19,13 +19,16 @@ if   [ -r /sys/module/mpt3sas/version ]; then DRIVER="mpt3sas $(cat /sys/module/
 elif [ -r /sys/module/mpt2sas/version ]; then DRIVER="mpt2sas $(cat /sys/module/mpt2sas/version)"
 else DRIVER=""; fi
 
-count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+SHOW=$("$STORCLI" show 2>/dev/null)
+count=$(grep -m1 'Number of Controllers' <<<"$SHOW" | grep -oE '[0-9]+')
 if [ -z "$count" ] || [ "$count" -eq 0 ]; then
     echo '{"error":"No storcli controllers found."}'; exit 0
 fi
 printf '{"backend":"storcli","driver":"%s","controllers":[' "$DRIVER"
 for c in $(seq 0 $((count - 1))); do
     [ "$c" -gt 0 ] && printf ','
+    # Chip from the enumeration's AdapterType (e.g. SAS3416, SAS2008, SAS3108).
+    chip=$(awk -v c="$c" '$1==c && /SAS[0-9]/' <<<"$SHOW" | grep -oE 'SAS[0-9]+[A-Za-z0-9]*' | head -1)
     # Sum this controller's sysfs PHY error counters for the health rollup.
     # ponytail: host N == controller N (holds for these HBAs); the PHY tab uses
     # exact SAS correlation, this glanceable rollup uses the cheaper host index.

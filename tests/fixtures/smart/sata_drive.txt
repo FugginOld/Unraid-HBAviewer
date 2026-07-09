@@ -1,0 +1,14 @@
+smartctl 7.5 2025-04-30 r5714 [x86_64-linux-6.18.38-Unraid] (local build)
+
+=== START OF INFORMATION SECTION ===
+Device Model:     WDC WD40EFRX-68N32N0
+Serial Number:    WD-XXXXXXXXXXXX
+=== START OF READ SMART DATA SECTION ===
+SMART overall-health self-assessment test result: PASSED
+
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  5 Reallocated_Sector_Ct   0x0033   200   200   140    Pre-fail  Always       -       0
+  9 Power_On_Hours          0x0032   088   088   000    Old_age   Always       -       9012
+194 Temperature_Celsius     0x0022   118   103   000    Old_age   Always       -       34
+197 Current_Pending_Sector  0x0012   200   200   000    Old_age   Always       -       0
