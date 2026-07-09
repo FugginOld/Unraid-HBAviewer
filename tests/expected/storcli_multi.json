@@ -1,3 +1,3 @@
-{"controllers":[{"temp":72,"model":"SAS3416","firmware":"24.00.00.00","port_name":"","board_name":"HBA 9400-16i","pci_location":"00:c1:00:00","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":80,"status":"warn"}
+{"backend":"storcli","controllers":[{"temp":72,"model":"SAS3416","firmware":"24.00.00.00","port_name":"","board_name":"HBA 9400-16i","pci_location":"00:c1:00:00","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":80,"status":"warn"}
 ,{"temp":77,"model":"SAS3408","firmware":"24.00.00.00","port_name":"","board_name":"HBA 9400-8i","pci_location":"00:65:00:00","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":80,"status":"warn"}
 ]}

@@ -19,7 +19,7 @@ count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -o
 if [ -z "$count" ] || [ "$count" -eq 0 ]; then
     echo '{"error":"No storcli controllers found."}'; exit 0
 fi
-printf '{"controllers":['
+printf '{"backend":"storcli","controllers":['
 for c in $(seq 0 $((count - 1))); do
     [ "$c" -gt 0 ] && printf ','
     { "$STORCLI" /c"$c" show; "$STORCLI" /c"$c" show temperature; } 2>/dev/null \

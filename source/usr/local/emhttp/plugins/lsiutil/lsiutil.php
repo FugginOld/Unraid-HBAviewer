@@ -138,6 +138,11 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <div class="lu-error"><strong>Error:</strong> <?= htmlspecialchars($error) ?></div>
 <?php else:
     $controllers = lsi_controllers($data);
+    $backend     = $data['backend'] ?? 'lsiutil';
+    // storcli exposes link/speed/attached-device per phy; lsiutil exposes error counters.
+    $phyDesc = $backend === 'storcli'
+        ? 'SAS link status, speed, and attached device per physical port'
+        : 'SAS link status and error counters per physical port';
 ?>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
@@ -189,7 +194,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 <div id="tab-phy" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">SAS link status and error counters per physical port</span>
+      <span style="font-size:12px;color:#555;"><?= $phyDesc ?></span>
       <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
     </div>
     <div id="phy-content"><div class="lu-loading">Loading…</div></div>

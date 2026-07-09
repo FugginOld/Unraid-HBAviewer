@@ -28,6 +28,6 @@ hba_query -b                    2>/dev/null > "$BOARD"
 # Emit the shared multi-controller contract. lsiutil addresses one controller
 # per port, so this backend yields exactly one element; the storcli backend
 # yields N. Consumers loop either way.
-printf '{"controllers":['
+printf '{"backend":"lsiutil","controllers":['
 bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
 printf ']}'
