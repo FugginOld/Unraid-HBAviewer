@@ -11,13 +11,8 @@ source "$DIR/config.sh"   # sets PORT, ALERT
 # otherwise lsiutil (SAS2: 9200). Both emit the same {"controllers":[...]} shape.
 # ponytail: auto-detect only. Add a BACKEND config override the day a box has
 # BOTH a SAS2 and a SAS3 card and auto picks the wrong one.
-STORCLI="$(find_storcli)"
-if [ -n "$STORCLI" ]; then
-    n=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
-    if [ -n "$n" ] && [ "$n" -gt 0 ]; then
-        export STORCLI                       # hand the resolved path to the backend
-        exec bash "$DIR/backend_storcli.sh"
-    fi
+if use_storcli; then
+    exec bash "$DIR/backend_storcli.sh"      # resolved $STORCLI is exported
 fi
 
 # ── lsiutil backend (SAS2) ───────────────────────────────────────────────────

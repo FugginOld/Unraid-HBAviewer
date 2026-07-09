@@ -1,0 +1,18 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Controller = 0
+Status = Success
+Description = None
+
+
+Test Link State :
+===============
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+PhyNo SASLinkSpeed HBASASADDR       Enbl APhy AhDH AhDevAddr        Port Vendor SMPT SMPI STPT STPI SSPT SSPI SEPDI ATAPT DIRAD SATAH SATAE DTYPE ABS
+------------------------------------------------------------------------------------------------------------------------------------------------------
+    0 12.0 Gbps    500605B0XXXXXX90 Y    0    0017 5000CCA2XXXXXX45 0    -      0    0    0    0    1    0    0     0     1     0     0     1     N
+    1 12.0 Gbps    500605B0XXXXXX91 Y    0    001e 5000CCA2XXXXXXF5 6    -      0    0    0    0    1    0    0     0     1     0     0     1     N
+    2 12.0 Gbps    500605B0XXXXXX92 Y    0    001d 5000C500XXXXXXE9 5    -      0    0    0    0    1    0    0     0     1     0     0     1     N
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+PhyNo-Phy Number|HBASASADDR-HBA SAS ADDRESS|Enbl-Enable|APhy-Attached Phy Identifier

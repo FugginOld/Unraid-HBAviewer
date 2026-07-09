@@ -35,3 +35,33 @@ find_storcli() {
         [ -x "$c" ] && { echo "$c"; return; }
     done
 }
+
+# True (and export a resolved $STORCLI) iff storcli is present and enumerates a
+# controller. The routing test every tab composer uses to pick its backend.
+use_storcli() {
+    local sc n
+    sc="$(find_storcli)"
+    [ -n "$sc" ] || return 1
+    n=$("$sc" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+    [ -n "$n" ] && [ "$n" -gt 0 ] || return 1
+    STORCLI="$sc"; export STORCLI; return 0
+}
+
+# Run a parser over every storcli controller, emitting {"controllers":[...]}.
+# $1 = storcli arg template ('@' = controller index); $2 = parser path; $3+ = parser args.
+# Requires $STORCLI resolved (use_storcli).
+storcli_each() {
+    local tmpl="$1" parser="$2"; shift 2
+    local count c args
+    count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
+        echo '{"error":"No storcli controllers found."}'; return
+    fi
+    printf '{"controllers":['
+    for c in $(seq 0 $((count - 1))); do
+        [ "$c" -gt 0 ] && printf ','
+        args="${tmpl//@/$c}"
+        "$STORCLI" $args 2>/dev/null | bash "$parser" "$@"
+    done
+    printf ']}'
+}

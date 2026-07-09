@@ -31,6 +31,7 @@ check events-entries   events_entries.json   bash "$P/events.sh"       < fixture
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_lsiutil.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < fixtures/storcli/overview_c0.txt
+check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" < fixtures/storcli/phy_c0.txt
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli 2>/dev/null
@@ -41,6 +42,7 @@ check storcli-multi    storcli_multi.json   bash "$P/../backend_storcli.sh"
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
+check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 
 # multi-file parsers
 check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80

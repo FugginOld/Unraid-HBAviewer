@@ -5,6 +5,8 @@ case "$*" in
     "show")            cat "$STUB_FIX/controllers.txt" ;;
     "/c0 show all")    cat "$STUB_FIX/overview_c0.txt" ;;
     "/c1 show all")    cat "$STUB_FIX/overview_c1.txt" ;;
+    "/c0/pall show")   cat "$STUB_FIX/phy_c0.txt" ;;
+    "/c1/pall show")   cat "$STUB_FIX/phy_c1.txt" ;;
     "version")         echo "StorCli SAS Customization Utility Ver 007.3404.0000.0000" ;;
     *) echo "stub: unhandled args: $*" >&2; exit 1 ;;
 esac

@@ -60,31 +60,57 @@ function luTable(array $headers, array $rows): string {
     return $h . '</tbody></table>';
 }
 
-/* ── PHY Health ─────────────────────────────────────────────────────────────  */
-if ($type === 'phy') {
-    $phys = $data['phys'] ?? [];
-    if (empty($phys)) { echo '<p class="lu-muted">No PHY data.</p>'; exit; }
+/* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
+function luCtlHead(int $i): string {
+    return '<h3 style="margin:18px 0 8px;color:#f5a623;font-size:12px;'
+         . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
+}
+function luLinkBadge(string $link): string {
+    return strtolower($link) === 'up'
+        ? '<span class="lu-link-up">UP</span>' : '<span class="lu-link-down">DOWN</span>';
+}
 
-    $rows = [];
-    foreach ($phys as $p) {
-        $up    = strtolower($p['link']) === 'up';
-        $badge = $up
-            ? '<span class="lu-link-up">UP</span>'
-            : '<span class="lu-link-down">DOWN</span>';
-        $hasErr = ($p['inv'] + $p['disp'] + $p['sync'] + $p['reset']) > 0;
-        $rows[] = [
-            $p['phy'],
-            $badge,
-            $hasErr ? '<span class="lu-err-val">'.$p['inv'].'</span>'   : $p['inv'],
-            $hasErr ? '<span class="lu-err-val">'.$p['disp'].'</span>'  : $p['disp'],
-            $hasErr ? '<span class="lu-err-val">'.$p['sync'].'</span>'  : $p['sync'],
-            $hasErr ? '<span class="lu-err-val">'.$p['reset'].'</span>' : $p['reset'],
-        ];
+if ($type === 'phy') {
+    $ctls  = $data['controllers'] ?? [$data];
+    $multi = count($ctls) > 1;
+    $out   = '';
+    foreach ($ctls as $i => $ctl) {
+        if ($multi) $out .= luCtlHead($i);
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        $phys = $ctl['phys'] ?? [];
+        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
+
+        if (isset($phys[0]['speed'])) {
+            // storcli backend: link / speed / attached SAS address / port
+            $rows = [];
+            foreach ($phys as $p) {
+                $rows[] = [
+                    $p['phy'],
+                    luLinkBadge($p['link']),
+                    htmlspecialchars($p['speed']),
+                    !empty($p['sas_addr']) ? '<code>' . strtoupper($p['sas_addr']) . '</code>' : '<span class="lu-muted">—</span>',
+                    $p['port'] !== '' ? htmlspecialchars($p['port']) : '<span class="lu-muted">—</span>',
+                ];
+            }
+            $out .= luTable(['PHY', 'Link', 'Speed', 'Attached SAS Address', 'Port'], $rows);
+        } else {
+            // lsiutil backend: SAS error counters
+            $rows = [];
+            foreach ($phys as $p) {
+                $hasErr = ($p['inv'] + $p['disp'] + $p['sync'] + $p['reset']) > 0;
+                $rows[] = [
+                    $p['phy'],
+                    luLinkBadge($p['link']),
+                    $hasErr ? '<span class="lu-err-val">'.$p['inv'].'</span>'   : $p['inv'],
+                    $hasErr ? '<span class="lu-err-val">'.$p['disp'].'</span>'  : $p['disp'],
+                    $hasErr ? '<span class="lu-err-val">'.$p['sync'].'</span>'  : $p['sync'],
+                    $hasErr ? '<span class="lu-err-val">'.$p['reset'].'</span>' : $p['reset'],
+                ];
+            }
+            $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
+        }
     }
-    echo luTable(
-        ['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'],
-        $rows
-    );
+    echo $out;
     exit;
 }
 
