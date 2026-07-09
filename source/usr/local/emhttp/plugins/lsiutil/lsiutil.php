@@ -67,7 +67,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 .lu-divider { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
 
 /* ── Temperature display ─────────────────────────────────────────────────── */
-.lu-overview-row { display: flex; align-items: center; gap: 24px; }
+.lu-overview-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
 .lu-circle {
     width: 96px; height: 96px;
     border-radius: 50%;
@@ -90,7 +90,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
 }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
-.lu-pcie-row { display: flex; gap: 24px; flex-wrap: wrap; }
+.lu-pcie-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
 .lu-pcie-item { font-size: 13px; color: #888; }
 .lu-pcie-item span { color: #ddd; font-weight: 500; }
 
