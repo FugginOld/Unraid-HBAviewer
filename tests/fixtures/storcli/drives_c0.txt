@@ -23,6 +23,8 @@ WWN = 5000CCA2XXXXXX8B
 Firmware Revision = C240
 Raw size = 12.733 TB [0xcbbbffff Sectors]
 Link Speed = 12.0Gb/s
+Connector Name = C0   x1
+Connected Port Number = 14(path0)
 
 
 Drive /c0/e0/s1 :

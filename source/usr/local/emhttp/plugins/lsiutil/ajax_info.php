@@ -138,6 +138,7 @@ if ($type === 'drives') {
             foreach ($drives as $d) {
                 $rows[] = [
                     htmlspecialchars($d['slot']),
+                    ($d['port'] ?? '') !== '' ? htmlspecialchars($d['port']) : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['model']),
                     !empty($d['serial']) ? '<code>' . htmlspecialchars($d['serial']) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['state'] ?? ''),
@@ -147,7 +148,7 @@ if ($type === 'drives') {
                     htmlspecialchars($d['firmware']),
                 ];
             }
-            $out .= luTable(['Encl:Slot', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
+            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
         } else {
             // lsiutil backend: bus:target, port, SAS address, OS device
             $rows = [];
