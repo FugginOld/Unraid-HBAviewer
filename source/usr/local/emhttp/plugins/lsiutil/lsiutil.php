@@ -182,7 +182,7 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         <?php if ($driver      !== ''): ?><p>Driver: <span><?= htmlspecialchars($driver) ?></span></p><?php endif; ?>
         <?php if ($v['mode']   !== ''): ?><p>Mode: <span><?= htmlspecialchars($v['mode']) ?></span></p><?php endif; ?>
         <?php if ($v['drives'] !== ''): ?><p>Drives: <span><?= htmlspecialchars($v['drives']) ?> connected</span></p><?php endif; ?>
-        <p>Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p>
+        <?php if ($v['port_name'] !== ''): ?><p>lsiutil Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p><?php endif; ?>
         <p>Alert Threshold: <span><?= $threshold ?>°C</span></p>
         <span class="lu-badge" id="lu-badge-<?= $i ?>"><?= $v['label'] ?></span>
       </div>
