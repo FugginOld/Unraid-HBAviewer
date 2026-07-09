@@ -15,7 +15,8 @@ Version :
 =======
 FW Package Build = 24.00.00.00
 FW Version = 24.00.00.00
-Bios Version = 09.15.00.00_08.00.00.00
+BIOS Version = 09.15.00.00_08.00.00.00
+Physical Drives = 16
 
 PCI Version :
 ===========

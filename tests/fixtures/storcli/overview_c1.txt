@@ -15,9 +15,16 @@ Version :
 =======
 FW Package Build = 24.00.00.00
 FW Version = 24.00.00.00
+BIOS Version = 09.03.00.00_02.00.00.00
+Physical Drives = 8
 
 PCI Version :
 ===========
 Vendor Id = 0x1000
 Device Id = 0xAF
 Host Interface = PCIE
+
+TOPOLOGY :
+========
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model            Sp
+0:0       9 JBOD  -  12.733 TB SAS  HDD -   -  512B HUH721010AL42C0  -

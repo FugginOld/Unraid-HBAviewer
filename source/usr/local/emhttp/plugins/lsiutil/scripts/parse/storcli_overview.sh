@@ -22,6 +22,8 @@ fi
 BOARD=$(val "Product Name"); [ -n "$BOARD" ] || BOARD=$(val "Model")
 FW=$(val "FW Version");      [ -n "$FW" ]    || FW=$(val "Firmware Version")
 PCI=$(val "PCI Address")
+BIOS=$(val "BIOS Version")
+DRIVES=$(val "Physical Drives")
 DEVID=$(val "Device Id")
 case "${DEVID,,}" in
     0xac) CHIP="SAS3416" ;;
@@ -32,10 +34,15 @@ case "${DEVID,,}" in
     *)    CHIP="" ;;
 esac
 
+# IT vs IR from the drive states: JBOD = passthrough (IT); RAID/Onln/Optl = IR.
+if   printf '%s\n' "$input" | grep -qE '\bJBOD\b';          then MODE="IT"
+elif printf '%s\n' "$input" | grep -qE '\b(Onln|Optl|RAID)\b'; then MODE="IR"
+else MODE=""; fi
+
 if   [ "$TEMP" -ge "$ALERT" ];          then STATUS="alert"
 elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then STATUS="warn"
 else STATUS="ok"; fi
 
 cat <<EOF
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":$ALERT,"status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":$ALERT,"status":"$STATUS"}
 EOF

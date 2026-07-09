@@ -171,6 +171,9 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
         <p>Model: <span><?= htmlspecialchars($v['model']) ?></span></p>
         <p>Chip: <span><?= htmlspecialchars($v['chip']) ?></span></p>
         <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span></p>
+        <?php if ($v['bios']   !== ''): ?><p>BIOS: <span><?= htmlspecialchars($v['bios']) ?></span></p><?php endif; ?>
+        <?php if ($v['mode']   !== ''): ?><p>Mode: <span><?= htmlspecialchars($v['mode']) ?></span></p><?php endif; ?>
+        <?php if ($v['drives'] !== ''): ?><p>Drives: <span><?= htmlspecialchars($v['drives']) ?> connected</span></p><?php endif; ?>
         <p>Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p>
         <p>Alert Threshold: <span><?= $threshold ?>°C</span></p>
         <span class="lu-badge" id="lu-badge-<?= $i ?>"><?= $v['label'] ?></span>
@@ -221,7 +224,10 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
       <span style="font-size:12px;color:#555;">HBA firmware event log (newest first)</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
+      <span>
+        <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
+        <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
+      </span>
     </div>
     <div id="events-content"><div class="lu-loading">Loading…</div></div>
   </div>
@@ -265,6 +271,25 @@ $error = $data['error'] ?? ($raw ? null : 'Backend script not found.');
             .catch(function () {
                 el.innerHTML = '<div class="lu-error">Request failed.</div>';
             });
+    };
+
+    /* ── Copy a tab's rendered content to the clipboard (for support tickets) ── */
+    window.luCopy = function (name, btn) {
+        var el = document.getElementById(name + '-content');
+        if (!el) return;
+        var text = el.innerText || el.textContent || '';
+        var done = function () {
+            var old = btn.textContent; btn.textContent = 'Copied';
+            setTimeout(function () { btn.textContent = old; }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function () {});
+        } else {
+            var r = document.createRange(); r.selectNode(el);
+            var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            sel.removeAllRanges();
+        }
     };
 
     /* ── Overview auto-refresh (temperature only) ─────────────────────────── */

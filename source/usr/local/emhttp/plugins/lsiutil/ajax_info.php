@@ -126,19 +126,21 @@ if ($type === 'drives') {
         if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
 
         if (isset($drives[0]['slot'])) {
-            // storcli backend: enclosure/slot, model, size, SAS address (WWN), link, fw
+            // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
             $rows = [];
             foreach ($drives as $d) {
                 $rows[] = [
                     htmlspecialchars($d['slot']),
                     htmlspecialchars($d['model']),
+                    !empty($d['serial']) ? '<code>' . htmlspecialchars($d['serial']) . '</code>' : '<span class="lu-muted">—</span>',
+                    htmlspecialchars($d['state'] ?? ''),
                     htmlspecialchars($d['size']),
                     !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['link']),
                     htmlspecialchars($d['firmware']),
                 ];
             }
-            $out .= luTable(['Encl:Slot', 'Model', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
+            $out .= luTable(['Encl:Slot', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware'], $rows);
         } else {
             // lsiutil backend: bus:target, port, SAS address, OS device
             $rows = [];
