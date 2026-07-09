@@ -81,18 +81,25 @@ if ($type === 'phy') {
         if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
 
         if (isset($phys[0]['speed'])) {
-            // storcli backend: link / speed / attached SAS address / port
+            // storcli backend: link/speed/attached-SAS (storcli) + error counters (sysfs)
             $rows = [];
             foreach ($phys as $p) {
+                $hasErr = (($p['inv'] ?? 0) + ($p['disp'] ?? 0) + ($p['sync'] ?? 0) + ($p['reset'] ?? 0)) > 0;
+                $ec = function ($v) use ($hasErr) {
+                    return $hasErr && $v > 0 ? '<span class="lu-err-val">' . $v . '</span>' : $v;
+                };
                 $rows[] = [
                     $p['phy'],
                     luLinkBadge($p['link']),
                     htmlspecialchars($p['speed']),
                     !empty($p['sas_addr']) ? '<code>' . strtoupper($p['sas_addr']) . '</code>' : '<span class="lu-muted">—</span>',
-                    $p['port'] !== '' ? htmlspecialchars($p['port']) : '<span class="lu-muted">—</span>',
+                    $ec($p['inv'] ?? 0),
+                    $ec($p['disp'] ?? 0),
+                    $ec($p['sync'] ?? 0),
+                    $ec($p['reset'] ?? 0),
                 ];
             }
-            $out .= luTable(['PHY', 'Link', 'Speed', 'Attached SAS Address', 'Port'], $rows);
+            $out .= luTable(['PHY', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         } else {
             // lsiutil backend: SAS error counters
             $rows = [];

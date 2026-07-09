@@ -31,7 +31,7 @@ check events-entries   events_entries.json   bash "$P/events.sh"       < fixture
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_lsiutil.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
-check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" < fixtures/storcli/phy_c0.txt
+check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
 
