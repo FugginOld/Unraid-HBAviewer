@@ -1,5 +1,5 @@
-Menu="Tools"
+Menu="Disk Utilities"
 Title="HBAviewer"
-Icon="thermometer-half"
-Tag="thermometer-half"
+Icon="fa-hdd-o"
+Tag="hbaviewer"
 Type="menu"

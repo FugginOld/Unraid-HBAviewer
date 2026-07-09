@@ -1,7 +1,7 @@
-Menu="HBAviewer"
+Menu="Disk Utilities"
 Title="HBA Monitor"
-Icon="thermometer-half"
-Tag="thermometer-half"
+Icon="fa-hdd-o"
+Tag="hbaviewer-monitor"
 Type="xmenu"
 ---
 <?PHP require_once "/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php"; ?>

@@ -1,6 +1,6 @@
-Menu="OtherSettings"
-Title="HBAviewer"
-Icon="thermometer-half"
+Menu="HBAviewer"
+Title="Settings"
+Icon="fa-hdd-o"
 Tag="hbaviewer-settings"
 Type="xmenu"
 ---
