@@ -14,7 +14,7 @@ $showDrives = $cfg['SHOW_DRIVES'];
 $showEvents = $cfg['SHOW_EVENTS'];
 
 // Load overview data server-side on page load
-// Use timeout to prevent page from hanging indefinitely
+// Increased timeout to 60s for slow storcli systems; script has 60s cache so usually faster
 if (!file_exists($SCRIPT)) {
     // Check parent directory for debugging
     $dir = dirname($SCRIPT);
@@ -22,7 +22,7 @@ if (!file_exists($SCRIPT)) {
     $error = "Backend script not found at $SCRIPT. Directory exists: " . ($dir_exists ? 'yes' : 'no');
     $data = null;
 } else {
-    $raw  = shell_exec('timeout 10 bash ' . escapeshellarg($SCRIPT) . ' 2>&1');
+    $raw  = shell_exec('timeout 60 bash ' . escapeshellarg($SCRIPT) . ' 2>&1');
     $data = $raw ? json_decode($raw, true) : null;
 
     if (!$raw) {

@@ -13,10 +13,10 @@ $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
 
 // get_hba_info.sh self-caches (60s), so this stays cheap on every tile refresh.
-// Use timeout to prevent dashboard from hanging if backend script fails
+// Increased timeout to 60s for slow storcli systems; script has 60s cache so usually faster
 $data = null;
 if (file_exists($SCRIPT)) {
-    $raw = shell_exec('timeout 5 bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '';
+    $raw = shell_exec('timeout 60 bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '';
     $data = $raw ? json_decode($raw, true) : null;
 }
 
