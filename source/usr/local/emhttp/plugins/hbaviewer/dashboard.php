@@ -48,30 +48,34 @@ echo <<<CSS
 <style>
 #tblHBAviewer .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
 #tblHBAviewer .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
-#tblHBAviewer .lu-d-overview { display:flex; align-items:flex-start; gap:16px; }
+#tblHBAviewer .lu-d-overview { display:flex; align-items:center; gap:16px; }
 #tblHBAviewer .lu-d-circle {
-  width:80px; height:80px; border-radius:50%; border:4px solid #2ecc71;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  flex-shrink:0; margin-top:2px;
+  position:relative; width:84px; height:84px; flex-shrink:0; border-radius:50%;
+  background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), #2a2a2a 0);
+  display:grid; place-items:center;
+  filter:drop-shadow(0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent));
 }
-#tblHBAviewer .lu-d-circle .v { font-size:26px; font-weight:700; line-height:1; }
-#tblHBAviewer .lu-d-circle .u { font-size:11px; color:#666; margin-top:3px; }
+#tblHBAviewer .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:#1c1c1c; border:1px solid #2a2a2a; }
+#tblHBAviewer .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:#ddd; line-height:1; }
+#tblHBAviewer .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#999; letter-spacing:0.05em; }
 #tblHBAviewer .lu-d-meta { flex:1; }
-#tblHBAviewer .lu-d-meta p   { margin:2px 0; font-size:12px; color:#888; }
-#tblHBAviewer .lu-d-meta span { color:#ddd; font-weight:500; }
+#tblHBAviewer .lu-d-meta p   { margin:3px 0; font-size:12px; color:#666; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
+#tblHBAviewer .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
 #tblHBAviewer .lu-d-badge {
-  display:inline-block; margin-top:4px;
-  padding:2px 12px; border-radius:12px;
-  font-size:10px; font-weight:700; letter-spacing:0.05em; color:#111;
+  display:inline-flex; align-items:center; gap:6px; margin-top:6px;
+  padding:3px 11px; border-radius:20px;
+  font-size:10px; font-weight:700; letter-spacing:0.05em;
+  color:var(--tc,#2ecc71); background:color-mix(in srgb, var(--tc,#2ecc71) 16%, transparent);
 }
+#tblHBAviewer .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 #tblHBAviewer .lu-d-pcie {
   display:flex; gap:16px; flex-wrap:wrap;
-  font-size:12px; color:#888;
-  padding-top:8px; margin-top:8px; margin-left:96px;
+  font-size:12px; color:#666;
+  padding-top:8px; margin-top:8px; margin-left:100px;
   border-top:1px solid #2a2a2a;
 }
 #tblHBAviewer .lu-d-pcie span { color:#ddd; font-weight:500; }
-#tblHBAviewer .lu-d-ts { font-size:10px; color:#555; text-align:right; margin-top:8px; }
+#tblHBAviewer .lu-d-ts { font-size:10px; color:#555; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 </style>
 CSS;
 
@@ -108,8 +112,8 @@ if ($error) {
         $body .= "
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
-        <div class='lu-d-circle' style='border-color:{$col}'>
-          <span class='v' style='color:{$col}'>{$temp}</span>
+        <div class='lu-d-circle' style='--tc:{$col};--pct:{$temp}'>
+          <span class='v'>{$temp}</span>
           <span class='u'>°C</span>
         </div>
         <div class='lu-d-meta'>
@@ -121,7 +125,7 @@ if ($error) {
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
           . "<p>Alert Threshold: <span>{$threshold}°C</span></p>
-          <span class='lu-d-badge' style='background:{$col}'>{$badge}</span>
+          <span class='lu-d-badge' style='--tc:{$col}'>{$badge}</span>
         </div>
       </div>
       {$pcieRow}
@@ -136,7 +140,7 @@ $mytiles[$pluginname]['column1'] = <<<EOT
     <td>
       <span class="tile-header">
         <span class="tile-header-left">
-          <i class="fa fa-hdd-o f32" style="color:{$tc}"></i>
+          <img src="/plugins/hbaviewer/icon.png" alt="HBAviewer" style="width:32px;height:32px;object-fit:contain;vertical-align:middle">
           <div class="section">
             <h3 class="tile-header-main">HBA Temperature</h3>
             <span>{$boardName}</span>

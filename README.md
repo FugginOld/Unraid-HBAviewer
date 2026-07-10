@@ -1,14 +1,14 @@
 # Unraid HBAviewer
 
 Monitor LSI / Broadcom SAS Host Bus Adapters (HBAs) directly from Unraid —
-temperature, PHY health, attached drives, SMART, and the firmware event log —
-across **three controller generations**, with the correct backend auto-detected
-per card.
+temperature, PHY health, attached drives, SMART, the firmware event log, and
+**real-time performance graphs** — across **three controller generations**, with
+the correct backend auto-detected per card. An optional, opt-in **firmware/BIOS
+update** tab is available for users who need it.
 
-> Originally created by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
-> for the SAS2308 / 9207-8i. This fork extends it to SAS3 (9300) and SAS3.5
-> tri-mode (9400) controllers, multi-controller systems, SMART, a background
-> SMART collector, a persistent event log, and more.
+> Inspired by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
+> for the SAS2308 / 9207-8i. This was a project I had been working on for a while with a similar capability but extends it to SAS3 (9300) and SAS3.5
+> tri-mode (9400) controllers and multi-controller systems since I have SAS3 HBAs. I wanted something that had metrics and firmware/bios flashing capability so I had a bunch of scripts but didn't know how to tie it together cleanly until I saw Devlin's program.
 
 ## Supported hardware
 
@@ -51,9 +51,72 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   vs expander/backplane).
 - **Dashboard tile** — at-a-glance temperature and health on the Unraid
   dashboard (Unraid 7.2+).
+- **Performance graphs** *(real-time, in-browser)* — live per-controller
+  throughput, IOPS, %util, latency, PHY error-rate, and temperature, sampled
+  ~2 s from `/proc/diskstats` and `sysfs` (zero-dependency — no sampler daemon,
+  no flash writes; history lives in the browser and resets on reload).
+- **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
+  flash tab that detects the card + running firmware, runs a read-only
+  per-controller sanity check, takes your model-correct image, and flashes one
+  controller behind hard guardrails with a live log. See the safety section below.
 
-All data is read directly from the HBA (`storcli` / `lsiutil`), Linux `sysfs`,
-and `smartctl` — no agents, no polling daemons, no external calls.
+All *monitoring* data is read directly from the HBA (`storcli` / `lsiutil`),
+Linux `sysfs`, and `smartctl` — no agents, no polling daemons, no external calls.
+
+## Firmware / BIOS updates (advanced, opt-in)
+
+> **⚠ Flashing HBA firmware can permanently brick your controller.** This
+> feature is **off by default** and is for users who already know how to flash
+> an LSI/Broadcom HBA from a console. If you are not sure, do not enable it.
+
+HBAviewer is otherwise strictly read-only. The optional **Firmware/BIOS Update**
+tab is *assisted, not automatic*: it detects the card and runs the tools, but
+**you** supply the model-correct firmware image and (if not already installed)
+the flash tool.
+
+**Enabling it:** Settings → *Advanced — Firmware Flashing* → tick
+**Enable firmware/BIOS flashing** → Save. A **Firmware/BIOS Update** tab then
+appears on the Monitor.
+
+**How a flash works, per controller:**
+
+1. **Verify** — a read-only listing **scoped to that one controller** (`storcli /cN show`
+   or `sasNflash -c N -list`) confirms the tool sees the exact card you're about to flash.
+2. **Upload** — the exact firmware `.bin`/`.rom` for *your* model (optionally a
+   BIOS `.rom`, and the `sas2flash`/`sas3flash` binary if it isn't in `PATH`).
+3. **Confirm & flash** — tick the acknowledgement, type `FLASH`, and flash. A
+   live log streams; on success it prompts you to **reboot**.
+
+**Tools used** (auto-detected in `PATH`, or upload them — none are bundled):
+
+| Generation | Chip | Flash tool |
+| --- | --- | --- |
+| SAS2 (9200/9211/2308) | `SAS2xxx` | `sas2flash` |
+| SAS3 (9300/9305) | `SAS30xx`/`SAS31xx` | `sas3flash` |
+| SAS3.5 / 9400 tri-mode | `SAS34xx`/`SAS35xx` | `storcli /cN download` |
+
+**Guardrails (all enforced server-side, not just in the browser):**
+
+- Opt-in toggle gates the whole feature (default off).
+- The Unraid **array must be STOPPED** — the flash is refused otherwise.
+- Read-only verify first, **scoped to the single target controller**, so you flash
+  the card you actually confirmed — not another HBA in the box.
+- Explicit acknowledgement checkbox **and** a typed `FLASH` confirmation.
+- Single-flight lock — one flash at a time, never auto-retried.
+- Uploaded filenames are sanitised and confined to a fixed working directory.
+
+**Caveats — read these:**
+
+- **Bricking is a real, unavoidable risk** if the image doesn't match the card.
+  Double-check the model/chip against the image before you flash.
+- The flash tools are **proprietary** and per-generation — not shipped with the
+  plugin. Install them (e.g. via a storcli/flash plugin) or upload them.
+- Some SAS2 cards need a specific `sas2flash` build (e.g. a 9207-8i wants the P14
+  tool). Use the right one; the plugin won't second-guess it.
+- storcli 94xx flashing semantics vary by firmware package (a downrev may need
+  `noverchk`); the log is shown verbatim — treat it as best-effort.
+- Linux flashers **update** the BIOS region but **cannot erase** it.
+- Stop any Unassigned Devices on the HBA as well before flashing.
 
 ## Requirements
 
@@ -84,7 +147,9 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 ```text
 Tools
 └── HBAviewer
-    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log)
+    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log
+                              · Performance · Firmware/BIOS Update*)
+                              *opt-in, off by default
 
 User Utilities
 └── HBAviewer         (full settings page)
@@ -108,6 +173,8 @@ right backend is in use before opening the Monitor.
 | Show PHY Health | On | PHY tab. |
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
+| Show Performance | On | Performance tab — real-time throughput / IOPS / %util / latency / PHY-error-rate / temperature graphs (in-browser, resets on reload). |
+| Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
 immediately with a **"Loading HBA information"** banner and reads the hardware in
@@ -128,7 +195,9 @@ bash build.sh
 
 The bundled `hbaviewer.x86_64` is the original `lsiutil` v1.70 compiled for Linux
 x86-64. `storcli` is **not** bundled — SAS3/3.5 cards use the copy installed on
-your system.
+your system. `build.sh` also fetches **Chart.js** (the Performance tab's charting
+library, MIT) into the plugin dir; like the `lsiutil` binary it isn't committed
+to the repo. The Performance tab degrades gracefully with a message if it's absent.
 
 ## Testing
 
@@ -146,7 +215,7 @@ captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
 ## Credits
 
 - **[DevlinDelFuego — Unraid-LSIUtil](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
-  — the original Unraid plugin this fork (Unraid-HBAviewer) is built on.
+  — the original Unraid plugin this repo (Unraid-HBAviewer) is inspired on.
 - **[Thomas Lovell — LSIUtil](https://github.com/thomaslovell/LSIUtil/)** — the
   `lsiutil` binary that makes the SAS2 path possible.
 - **Broadcom** — `storcli` (used for SAS3 / SAS3.5 controllers) and the original

@@ -1,0 +1,4 @@
+#!/bin/bash
+# Test stub: pretends to be sas2flash/sas3flash/storcli for flash_hba.sh command
+# composition tests. Echoes its args so the test can assert the exact command.
+echo "FLASHER $*"

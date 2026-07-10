@@ -44,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
         'SHOW_EVENTS'     => isset($_POST['show_events']) ? 1 : 0,
+        'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
+        'ENABLE_FLASH'    => isset($_POST['enable_flash']) ? 1 : 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -53,24 +55,37 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
 <style>
-#lu-settings-wrap { font-family: inherit; max-width: 560px; margin: 20px auto; }
-.lu-s-card { background: #1c1c1c; border: 1px solid #333; border-radius: 6px; padding: 20px 24px; margin-bottom: 16px; }
-.lu-s-card h3 { margin: 0 0 16px; color: #bbb; font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 1px solid #2a2a2a; padding-bottom: 10px; }
+/* Original HBAviewer palette in the new component format. Matches the Monitor. */
+#lu-settings-wrap {
+    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
+    --border:#333333; --border-soft:#2a2a2a;
+    --text:#dddddd; --muted:#999999; --faint:#666666;
+    --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
+    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+    font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
+    background: radial-gradient(700px 300px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%), var(--bg);
+    border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
+}
+.lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+.lu-s-card h3 { margin: 0 0 16px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 1px solid var(--border-soft); padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.lu-s-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
 .lu-s-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
 .lu-s-row:last-child { margin-bottom: 0; }
-.lu-s-label { flex: 0 0 180px; font-size: 13px; color: #ccc; padding-top: 8px; }
-.lu-s-label small { display: block; font-size: 11px; color: #555; margin-top: 3px; line-height: 1.4; }
+.lu-s-label { flex: 0 0 180px; font-size: 13px; color: var(--text); padding-top: 8px; }
+.lu-s-label small { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.4; }
 .lu-s-control { flex: 1; }
-.lu-s-control input[type=number] { width: 90px; background: #111; border: 1px solid #3a3a3a; border-radius: 4px; color: #ddd; padding: 7px 10px; font-size: 14px; }
-.lu-s-control input[type=number]:focus { outline: none; border-color: #f5a623; }
+.lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
+.lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
 .lu-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
-.lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: #f5a623; cursor: pointer; }
-.lu-toggle span { font-size: 13px; color: #ddd; }
-.lu-toggle small { font-size: 11px; color: #555; margin-left: auto; }
-.lu-notice { background: #1a2a1a; border: 1px solid #2a4a2a; border-radius: 4px; color: #8c8; font-size: 12px; padding: 8px 14px; margin-bottom: 14px; }
-.lu-btn { background: #f5a623; border: none; border-radius: 4px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
+.lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.lu-toggle span { font-size: 13px; color: var(--text); }
+.lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #8ccc8c; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #e0a0a0; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: var(--crit); }
+.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
-.lu-link { font-size: 12px; color: #f5a623; text-decoration: none; }
+.lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
 
@@ -92,7 +107,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         </div>
         <div class="lu-s-control" style="padding-top:8px">
           <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
-          <small style="display:block;color:#666;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+          <small style="display:block;color:#888;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
 
@@ -142,6 +157,27 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         <input type="checkbox" name="show_events" <?= lu_checked((int)$cfg['SHOW_EVENTS']) ?>>
         <span>Event Log</span>
         <small>HBA firmware event log (requires expert mode)</small>
+      </label>
+      <label class="lu-toggle">
+        <input type="checkbox" name="show_perf" <?= lu_checked((int)$cfg['SHOW_PERF']) ?>>
+        <span>Performance</span>
+        <small>Real-time throughput / IOPS / %util / latency graphs</small>
+      </label>
+    </div>
+
+    <div class="lu-s-card">
+      <h3>Advanced — Firmware Flashing</h3>
+      <div class="lu-danger">
+        <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
+        <strong>brick</strong> your controller if the wrong image is used. The array
+        must be <strong>stopped</strong> before flashing. The flash tools
+        (sas2flash / sas3flash) are not bundled — you supply the model-correct image
+        and tool. Leave this off unless you know exactly what you are doing.
+      </div>
+      <label class="lu-toggle">
+        <input type="checkbox" name="enable_flash" <?= lu_checked((int)$cfg['ENABLE_FLASH']) ?>>
+        <span>Enable firmware/BIOS flashing (advanced)</span>
+        <small>adds a Firmware/BIOS Update tab to the Monitor</small>
       </label>
     </div>
 

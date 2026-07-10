@@ -1,5 +1,5 @@
 Menu="Tools"
 Title="HBAviewer"
-Icon="fa-hdd-o"
+Icon="icon.png"
 Tag="hbaviewer"
 Type="menu"

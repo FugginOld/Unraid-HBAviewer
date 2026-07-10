@@ -1,6 +1,6 @@
 Menu="Utilities"
 Title="HBAviewer"
-Icon="fa-hdd-o"
+Icon="icon.png"
 Tag="hbaviewer-settings"
 Type="xmenu"
 ---

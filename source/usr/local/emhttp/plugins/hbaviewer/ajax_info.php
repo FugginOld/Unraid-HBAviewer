@@ -11,9 +11,20 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/event_archive.php';
 require_once __DIR__ . '/cached_read.php';
 
-$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all'])
+$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all','metrics'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
+
+/* ── Performance tab: instant counter snapshot (browser computes the rates) ──
+   Polled ~2s. get_metrics.sh touches only /proc + /sys + the overview cache —
+   never storcli/lsiutil — so this stays fast. Its JSON is already the shape the
+   JS wants; echo it straight through. */
+if ($type === 'metrics') {
+    header('Content-Type: application/json');
+    $out = shell_exec("bash $scripts/get_metrics.sh 2>/dev/null");
+    echo ($out !== null && trim($out) !== '') ? $out : '{"t":0,"controllers":[]}';
+    exit;
+}
 
 /* ── SMART tab: all drives, collected in the background ─────────────────────
    Returns the cached table if fresh; otherwise reports progress (or launches a
@@ -197,7 +208,7 @@ function renderOverviewCards(array $data, array $cfg): string {
             continue;
         }
         $v = lsi_hba_view($c, $port, $i);
-        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . '" data-ctl="' . $i . '">'
+        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
               . '<div class="lu-overview-row">'
               . '<div class="lu-circle" id="lu-circle-' . $i . '">'
               . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'

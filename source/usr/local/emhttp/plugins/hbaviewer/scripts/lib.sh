@@ -30,7 +30,28 @@ find_storcli() {
     local c
     for c in storcli storcli64 storcli2 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
+             /usr/local/bin/storcli /usr/local/bin/storcli64 \
              /usr/sbin/storcli /usr/sbin/storcli64; do
+        command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
+        [ -x "$c" ] && { echo "$c"; return; }
+    done
+}
+
+# Locate the per-generation flash tool — sibling of find_storcli, same posture
+# (proprietary, never bundled: probe PATH + common sbin dirs + the plugin's
+# persisted upload dir). $1 = "sas2" | "sas3". Honors a preset $FLASHER (tests).
+# Prints the resolved path, or nothing if not found.
+find_flasher() {
+    local gen="$1" tool c
+    if [ -n "$FLASHER" ]; then echo "$FLASHER"; return; fi
+    case "$gen" in
+        sas2) tool=sas2flash ;;
+        sas3) tool=sas3flash ;;
+        *)    return 1 ;;
+    esac
+    for c in "$tool" \
+             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool" \
+             "/boot/config/plugins/hbaviewer/tools/$tool"; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }
     done

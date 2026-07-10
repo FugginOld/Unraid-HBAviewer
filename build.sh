@@ -16,6 +16,10 @@ VERSION="${1:-$(date +%Y.%m.%d)}"
 # Linux x86_64 binary only — single file from the repo, not the whole archive
 LSIUTIL_URL="https://github.com/thomaslovell/LSIUtil/raw/master/Binaries/LSIutil_1.70_release_binaries/linux/lsiutil.x86_64"
 BINARY_DEST="source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64"
+# Chart.js UMD build (Performance tab) — MIT, fetched like the lsiutil binary.
+CHARTJS_VER="4.4.6"
+CHARTJS_URL="https://cdn.jsdelivr.net/npm/chart.js@${CHARTJS_VER}/dist/chart.umd.min.js"
+CHARTJS_DEST="source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js"
 OUTPUT="releases/hbaviewer.txz"
 
 echo "==> Unraid HBAviewer build  (version: $VERSION)"
@@ -28,6 +32,15 @@ if [ ! -f "$BINARY_DEST" ]; then
     echo "    Saved to: $BINARY_DEST"
 else
     echo "--> lsiutil binary already present, skipping download"
+fi
+
+# Download Chart.js (Performance tab) if not already present
+if [ ! -f "$CHARTJS_DEST" ]; then
+    echo "--> Downloading Chart.js $CHARTJS_VER (UMD)..."
+    curl -fL "$CHARTJS_URL" -o "$CHARTJS_DEST"
+    echo "    Saved to: $CHARTJS_DEST"
+else
+    echo "--> Chart.js already present, skipping download"
 fi
 
 # Sanity-check: ensure it's a Linux ELF binary (not a Windows PE)

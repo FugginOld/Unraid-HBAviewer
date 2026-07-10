@@ -7,12 +7,24 @@
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
 <!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.10.1/hbaviewer.txz">
 <!ENTITY md5       "4d6242738df649e7467896d96a8d1060">
-<!ENTITY icon      "fa-hdd-o">
+<!ENTITY icon      "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.10.2 (unreleased)###
+- NEW: Performance tab — real-time per-controller graphs (throughput, IOPS,
+  %util, latency, PHY error-rate, temperature). Sampled ~2s in the browser from
+  /proc/diskstats + sysfs (zero-dependency, no sampler daemon, no flash writes);
+  history is in-browser only and resets on reload. Toggle in Settings (default on).
+- NEW (advanced, opt-in, OFF by default): Firmware/BIOS Update tab. Enable it in
+  Settings to detect the card, run a read-only per-controller verify, upload a
+  model-correct firmware image (auto-detects storcli / sas2flash / sas3flash, or
+  upload the tool), and flash ONE controller behind hard guardrails — array must
+  be stopped, typed-FLASH confirmation, single-flight lock — with a live log and
+  reboot prompt. Flash tools are proprietary and never bundled. Read the README
+  safety section first: a wrong image can permanently brick the controller.
 ###2026.07.10.1###
 - Internal architecture refactor — no visible change, same output on every tab.
   The storcli/lsiutil backend choice, controller enumeration, and driver
@@ -58,6 +70,8 @@ if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
   printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
+# Persisted dir for user-uploaded flash tools (sas2flash/sas3flash) — survives updates.
+mkdir -p /boot/config/plugins/hbaviewer/tools
 </INLINE>
 </FILE>
 
