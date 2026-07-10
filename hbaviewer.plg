@@ -2,17 +2,27 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.07.09.2">
+<!ENTITY version   "2026.07.10">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09.2/hbaviewer.txz">
-<!ENTITY md5       "87c91f86e1a312707a0a4685d0248e1e">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.10/hbaviewer.txz">
+<!ENTITY md5       "4d6242738df649e7467896d96a8d1060">
 <!ENTITY icon      "fa-hdd-o">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.10###
+- Internal architecture refactor — no visible change, same output on every tab.
+  The storcli/lsiutil backend choice, controller enumeration, and driver
+  detection are now one shared module (scripts/lib.sh hba_each); the
+  PHY/Drives/Events tabs pick their columns from an explicit "backend" field
+  instead of inferring it from the data shape, so a new column can't misfire
+- Event-log archive and the cached background read are now standalone,
+  unit-tested modules (event_archive.php, cached_read.php)
+- Removed the duplicated backend_storcli.sh and fixed a driver-string detection
+  order that could differ between code paths
 ###2026.07.09.2###
 - Fixed "Backend produced no output" on the Overview when a slow storcli scan
   exceeded the web timeout — the hardware read now runs as a detached background
