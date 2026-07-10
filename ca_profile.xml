@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Maintainer>
+  <Icon>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png</Icon>
+  <Profile>
+    Maintainer of HBAviewer — an Unraid plugin for monitoring LSI / Broadcom SAS
+    HBAs (SAS2, SAS3, and SAS3.5 tri-mode) directly from the web UI: temperature,
+    PHY health, attached drives, SMART, and the firmware event log, with the
+    correct backend auto-detected per card. A community fork extending
+    DevlinDelFuego's original Unraid-LSIUtil.
+  </Profile>
+  <WebPage>https://github.com/FugginOld/Unraid-HBAviewer</WebPage>
+</Maintainer>
