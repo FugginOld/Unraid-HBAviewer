@@ -14,9 +14,11 @@ $enableFlash = $cfg['ENABLE_FLASH'];
 // Array must be stopped before flashing. Read the state once (cheap, no hardware);
 // the flash.php preflight is the authoritative gate — this banner is advisory.
 $arrayStopped = false;
+$csrfToken    = '';
 if ($enableFlash) {
     $vi = @parse_ini_file('/var/local/emhttp/var.ini');
     $arrayStopped = is_array($vi) && strtoupper((string) ($vi['mdState'] ?? '')) === 'STOPPED';
+    $csrfToken    = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';  // Unraid requires this on POST
 }
 ?>
 
@@ -364,6 +366,7 @@ if ($enableFlash) {
        drives flash.php; every real guard (array stopped, confirm, lock) is
        re-checked on the server, so the JS checks here are only fast feedback. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
+    var flashCsrf = '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';   // Unraid rejects POST without it
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     function flashChip(i){ var c=flashCard(i); return c?c.getAttribute('data-chip'):''; }
@@ -406,7 +409,7 @@ if ($enableFlash) {
     window.luFlashList = function (i) {
         var pre = document.getElementById('flash-list-'+i);
         pre.style.display='block'; pre.textContent='Running…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(i), ctl:i})})
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(i), ctl:i, csrf_token:flashCsrf})})
           .then(function(r){ return r.text(); })
           .then(function(t){ pre.textContent = t || '(no output)'; })
           .catch(function(){ pre.textContent='Request failed.'; });
@@ -418,7 +421,7 @@ if ($enableFlash) {
         var bios=document.getElementById('flash-bios-'+i).files[0];
         var tool=document.getElementById('flash-tool-'+i).files[0];
         if (!fw && !tool) { out.style.color='#e88'; out.textContent='Choose a firmware file first.'; return; }
-        var fd = new FormData(); fd.append('action','upload');
+        var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
         if (fw) fd.append('firmware', fw);
         if (bios) fd.append('bios', bios);
         if (tool) fd.append('tool', tool);
@@ -447,7 +450,7 @@ if ($enableFlash) {
         if (!fw) { alert('Upload a firmware image first.'); return; }
         if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
         log.style.display='block'; log.textContent='Starting flash…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt})})
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})
           .then(function(r){ return r.json(); })
           .then(function(d){
             if (d.error) { log.textContent='Refused: '+d.error; return; }

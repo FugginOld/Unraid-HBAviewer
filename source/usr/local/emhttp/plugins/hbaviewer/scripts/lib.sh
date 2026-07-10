@@ -30,6 +30,7 @@ find_storcli() {
     local c
     for c in storcli storcli64 storcli2 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
+             /usr/local/bin/storcli /usr/local/bin/storcli64 \
              /usr/sbin/storcli /usr/sbin/storcli64; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }
@@ -49,7 +50,7 @@ find_flasher() {
         *)    return 1 ;;
     esac
     for c in "$tool" \
-             "/usr/local/sbin/$tool" "/usr/sbin/$tool" \
+             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool" \
              "/boot/config/plugins/hbaviewer/tools/$tool"; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }

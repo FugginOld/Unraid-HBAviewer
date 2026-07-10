@@ -69,6 +69,18 @@ $enable = (int) $cfg['ENABLE_FLASH'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disabled.'; exit; }
+
+// Unraid CSRF: every mutating POST must carry the session token. (Unraid also
+// enforces this at the platform level; re-checking here keeps this bricking-
+// capable endpoint safe even if that layer is bypassed.) GET actions (status)
+// are read-only and exempt.
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $vi   = @parse_ini_file(FLASH_VARINI);
+    $csrf = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
+    if ($csrf !== '' && (($_POST['csrf_token'] ?? '') !== $csrf)) {
+        http_response_code(403); echo 'Invalid CSRF token. Reload the page and try again.'; exit;
+    }
+}
 @mkdir(FLASH_DIR, 0755, true);
 
 if ($action === 'upload') {
