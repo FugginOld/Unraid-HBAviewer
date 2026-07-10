@@ -53,7 +53,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   dashboard (Unraid 7.2+).
 - **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
   flash tab that detects the card + running firmware, runs a read-only
-  `-listall` sanity check, takes your model-correct image, and flashes one
+  read-only per-controller sanity check, takes your model-correct image, and flashes one
   controller behind hard guardrails with a live log. See the safety section below.
 
 All *monitoring* data is read directly from the HBA (`storcli` / `lsiutil`),
@@ -76,7 +76,8 @@ appears on the Monitor.
 
 **How a flash works, per controller:**
 
-1. **Verify** — run the tool's `-listall` (read-only) to confirm it sees the card.
+1. **Verify** — a read-only listing **scoped to that one controller** (`storcli /cN show`
+   or `sasNflash -c N -list`) confirms the tool sees the exact card you're about to flash.
 2. **Upload** — the exact firmware `.bin`/`.rom` for *your* model (optionally a
    BIOS `.rom`, and the `sas2flash`/`sas3flash` binary if it isn't in `PATH`).
 3. **Confirm & flash** — tick the acknowledgement, type `FLASH`, and flash. A
@@ -94,7 +95,8 @@ appears on the Monitor.
 
 - Opt-in toggle gates the whole feature (default off).
 - The Unraid **array must be STOPPED** — the flash is refused otherwise.
-- Read-only `-listall` first, so you confirm the tool sees the card.
+- Read-only verify first, **scoped to the single target controller**, so you flash
+  the card you actually confirmed — not another HBA in the box.
 - Explicit acknowledgement checkbox **and** a typed `FLASH` confirmation.
 - Single-flight lock — one flash at a time, never auto-retried.
 - Uploaded filenames are sanitised and confined to a fixed working directory.

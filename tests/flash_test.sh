@@ -13,10 +13,10 @@ bad() { echo "FAIL  $1 -- $2"; fail=1; }
 has()  { case "$out" in *"$2"*) ok "$1" ;; *) bad "$1" "want '$2' in: $out" ;; esac; }
 code() { [ "$2" = "$3" ] && ok "$1" || bad "$1" "want exit $2 got $3"; }
 
-# ── list mode: read-only, resolves the right tool + listing flag ─────────────
-out=$(FLASHER="$STUB" bash "$FH" list SAS2008 0 2>&1); has "list sas2 -listall" "FLASHER -listall"
-out=$(FLASHER="$STUB" bash "$FH" list SAS3008 0 2>&1); has "list sas3 -listall" "FLASHER -listall"
-out=$(STORCLI="$STUB" bash "$FH" list SAS3416 0 2>&1); has "list storcli show"  "FLASHER show"
+# ── list mode: read-only, scoped to the referenced controller only ───────────
+out=$(FLASHER="$STUB" bash "$FH" list SAS2008 0 2>&1); has "list sas2 scoped" "FLASHER -c 0 -list"
+out=$(FLASHER="$STUB" bash "$FH" list SAS3008 1 2>&1); has "list sas3 scoped" "FLASHER -c 1 -list"
+out=$(STORCLI="$STUB" bash "$FH" list SAS3416 1 2>&1); has "list storcli scoped" "FLASHER /c1 show"
 
 # ── flash mode: exact per-generation command ─────────────────────────────────
 out=$(FLASHER="$STUB" bash "$FH" flash SAS2008 0 "$FW" 2>&1)

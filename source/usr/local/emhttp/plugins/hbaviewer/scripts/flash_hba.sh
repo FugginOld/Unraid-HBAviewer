@@ -45,7 +45,10 @@ if [ "$gen" = storcli ]; then tool=$(find_storcli); else tool=$(find_flasher "$g
 [ -n "$tool" ] || die "flash tool for $chip ($gen) not found — install it or upload it in Settings" 4
 
 if [ "$mode" = list ]; then
-    if [ "$gen" = storcli ]; then "$tool" show; else "$tool" -listall; fi
+    # Scope to THE referenced controller (not -listall / show-all) so the operator
+    # verifies the exact card /c$ctl that the flash command will write to — a
+    # multi-HBA box must not confuse which physical card maps to this index.
+    if [ "$gen" = storcli ]; then "$tool" /c"$ctl" show; else "$tool" -c "$ctl" -list; fi
     exit $?
 fi
 
