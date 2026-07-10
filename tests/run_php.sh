@@ -7,10 +7,10 @@
 cd "$(dirname "$0")/.." || exit 2
 
 if command -v php >/dev/null 2>&1; then
-    php tests/config_test.php && php tests/view_test.php
+    php tests/config_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php
 else
     echo "no local php — using php:8.2-cli via docker"
     MSYS_NO_PATHCONV=1 docker run --rm \
         -v "$(pwd -W 2>/dev/null || pwd):/app" -w /app php:8.2-cli \
-        sh -c 'php tests/config_test.php && php tests/view_test.php'
+        sh -c 'php tests/config_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php'
 fi

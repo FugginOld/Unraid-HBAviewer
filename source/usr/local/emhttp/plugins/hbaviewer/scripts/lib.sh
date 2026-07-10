@@ -47,21 +47,41 @@ use_storcli() {
     STORCLI="$sc"; export STORCLI; return 0
 }
 
-# Run a parser over every storcli controller, emitting {"controllers":[...]}.
-# $1 = storcli arg template ('@' = controller index); $2 = parser path; $3+ = parser args.
-# Requires $STORCLI resolved (use_storcli).
-storcli_each() {
-    local tmpl="$1" parser="$2"; shift 2
-    local count c args
-    count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
-    if [ -z "$count" ] || [ "$count" -eq 0 ]; then
-        echo '{"error":"No storcli controllers found."}'; return
+# Controller count from storcli's enumeration — the single parse of
+# "Number of Controllers" that every storcli path shares. Empty if none.
+storcli_count() {
+    "$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+'
+}
+
+# Driver + version string for the loaded mpt driver. One detector for both
+# backends. ponytail: mpt3sas first — a storcli box is SAS3 (mpt3sas); a SAS2
+# lsiutil box loads only mpt2sas, so order can't misfire there.
+hba_driver() {
+    if   [ -r /sys/module/mpt3sas/version ]; then echo "mpt3sas $(cat /sys/module/mpt3sas/version)"
+    elif [ -r /sys/module/mpt2sas/version ]; then echo "mpt2sas $(cat /sys/module/mpt2sas/version)"
     fi
-    printf '{"controllers":['
-    for c in $(seq 0 $((count - 1))); do
-        [ "$c" -gt 0 ] && printf ','
-        args="${tmpl//@/$c}"
-        "$STORCLI" $args 2>/dev/null | bash "$parser" "$@"
-    done
-    printf ']}'
+}
+
+# The backend seam. Chooses storcli-vs-lsiutil ONCE, owns controller
+# enumeration and the {"backend","driver","controllers":[...]} wrapper, so a
+# composer only declares *what to run per controller*.
+#   $1 = storcli fn: `fn <c>` prints controller c's JSON object ($STORCLI
+#        resolved+exported, count already > 0).
+#   $2 = lsiutil fn: prints the inner controller object(s) on success, OR
+#        prints a top-level error JSON and returns non-zero to abort the wrap.
+hba_each() {
+    local storcli_fn="$1" lsiutil_fn="$2" c count body rc
+    if use_storcli; then
+        count=$(storcli_count)
+        printf '{"backend":"storcli","driver":"%s","controllers":[' "$(hba_driver)"
+        for c in $(seq 0 $((count - 1))); do
+            [ "$c" -gt 0 ] && printf ','
+            "$storcli_fn" "$c"
+        done
+        printf ']}'
+    else
+        body=$("$lsiutil_fn"); rc=$?
+        if [ "$rc" -ne 0 ]; then printf '%s' "$body"; return; fi
+        printf '{"backend":"lsiutil","driver":"%s","controllers":[%s]}' "$(hba_driver)" "$body"
+    fi
 }

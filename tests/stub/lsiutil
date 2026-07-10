@@ -1,0 +1,8 @@
+#!/bin/bash
+# Test stub: pretends to be the lsiutil binary, replaying a captured fixture per
+# menu command. Mirrors stub/storcli so the module's lsiutil dispatch path (the
+# currently-untested backend half) gets coverage. STUB_FIX points at fixtures.
+case "$*" in
+    *"35,0"*)  cat "$STUB_FIX/events_entries.txt" ;;   # -e -a 35,0 : firmware log
+    *)         echo "stub: unhandled args: $*" >&2; exit 1 ;;
+esac

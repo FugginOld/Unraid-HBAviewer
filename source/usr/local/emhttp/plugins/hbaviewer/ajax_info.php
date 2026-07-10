@@ -8,6 +8,8 @@
 
 require_once __DIR__ . '/view.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/event_archive.php';
+require_once __DIR__ . '/cached_read.php';
 
 $type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all'])
            ? $_GET['type'] : 'overview';
@@ -79,14 +81,14 @@ if ($type === 'smart') {
    detached background job is the sole reader; the JS polls until it lands. */
 if ($type === 'overview_html') {
     header('Content-Type: text/html; charset=utf-8');
-    $cfg    = lsi_config_read();
-    $script = "$scripts/get_hba_info.sh";
-    $result = '/tmp/hbav_overview.json';   // background job's captured output (incl. errors)
-    $lock   = '/tmp/hbav_overview.lock';
+    $cfg = lsi_config_read();
 
-    // Fresh result → render it (or surface a real backend error).
-    if (is_file($result) && (time() - filemtime($result)) < 60) {
-        $raw  = (string) file_get_contents($result);
+    // cached_read owns the freshness/lock/atomic-swap; this handler only turns a
+    // ready result into cards (or a backend error) and a warming result into the
+    // loading banner the JS polls on.
+    $r = cached_read('overview', 60, 'bash ' . escapeshellarg("$scripts/get_hba_info.sh"));
+    if ($r['state'] === 'ready') {
+        $raw  = $r['body'];
         $data = $raw !== '' ? json_decode($raw, true) : null;
         if (is_array($data) && !isset($data['error'])) { echo renderOverviewCards($data, $cfg); exit; }
         if (is_array($data) && isset($data['error'])) {
@@ -95,14 +97,6 @@ if ($type === 'overview_html') {
         if (trim($raw) !== '') {
             echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars(substr($raw, 0, 300)) . '</div>'; exit;
         }
-    }
-
-    // Stale/absent → launch one detached reader (lock guards against a stampede)
-    // that captures stdout+stderr and swaps the result in atomically when done.
-    if (!is_file($lock) || (time() - filemtime($lock)) > 120) {
-        @touch($lock);
-        $inner = "bash $script > $result.tmp 2>&1; mv $result.tmp $result; rm -f $lock";
-        shell_exec('nohup sh -c ' . escapeshellarg($inner) . ' >/dev/null 2>&1 &');
     }
     echo '<div class="lu-loading" data-overview="warming">Reading controller information… the first read can take up to a minute on slow controllers. This updates automatically.</div>';
     exit;
@@ -244,8 +238,9 @@ function luLinkBadge(string $link): string {
 }
 
 if ($type === 'phy') {
-    $ctls  = $data['controllers'] ?? [$data];
-    $multi = count($ctls) > 1;
+    $ctls    = $data['controllers'] ?? [$data];
+    $storcli = ($data['backend'] ?? '') === 'storcli';
+    $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
@@ -253,7 +248,8 @@ if ($type === 'phy') {
         $phys = $ctl['phys'] ?? [];
         if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
 
-        if (isset($phys[0]['speed'])) {
+        // storcli backend if stamped; fall back to key-sniff pre-rollout.
+        if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
             // storcli backend: link/speed/attached-SAS (storcli) + error counters (sysfs)
             $rows = [];
             foreach ($phys as $p) {
@@ -296,8 +292,9 @@ if ($type === 'phy') {
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 if ($type === 'drives') {
-    $ctls  = $data['controllers'] ?? [$data];
-    $multi = count($ctls) > 1;
+    $ctls    = $data['controllers'] ?? [$data];
+    $storcli = ($data['backend'] ?? '') === 'storcli';
+    $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
@@ -315,7 +312,8 @@ if ($type === 'drives') {
         $drives = $ctl['drives'] ?? [];
         if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
 
-        if (isset($drives[0]['slot'])) {
+        // storcli backend if stamped; fall back to key-sniff pre-rollout.
+        if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
             // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
             $rows = [];
             foreach ($drives as $d) {
@@ -353,45 +351,26 @@ if ($type === 'drives') {
     exit;
 }
 
-/* Persist the firmware event ring-buffer to /boot so history survives reboots
-   and ring-buffer wrap. Dedup by seq+time; only writes when there's something
-   new (kind to the boot flash). Keyed per controller index. */
-function lsi_merge_event_history(int $ctl, array $current): array {
-    $dir  = '/boot/config/plugins/hbaviewer';
-    $file = "$dir/events_c$ctl.json";
-    $hist = is_file($file) ? (json_decode((string) @file_get_contents($file), true) ?: []) : [];
-    $key  = fn($e) => ($e['seq'] ?? '') . '|' . ($e['time'] ?? ($e['timestamp'] ?? ''));
-    $seen = [];
-    foreach ($hist as $e) $seen[$key($e)] = true;
-    $changed = false;
-    foreach ($current as $e) {
-        $k = $key($e);
-        if (!isset($seen[$k])) { $hist[] = $e; $seen[$k] = true; $changed = true; }
-    }
-    if ($changed) {
-        if (count($hist) > 2000) $hist = array_slice($hist, -2000);  // cap flash growth
-        @mkdir($dir, 0755, true);
-        @file_put_contents($file, json_encode($hist));
-    }
-    return $hist;
-}
-
 /* ── Event Log (per controller; persisted to /boot across reboots) ─────────── */
 if ($type === 'events') {
-    $ctls  = $data['controllers'] ?? [$data];
-    $multi = count($ctls) > 1;
+    $ctls    = $data['controllers'] ?? [$data];
+    $storcli = ($data['backend'] ?? '') === 'storcli';
+    $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
-        $entries = lsi_merge_event_history($i, $ctl['entries'] ?? []);
+        $file = event_store_path($i);
+        [$entries, $changed] = event_merge(event_store_read($file), $ctl['entries'] ?? []);
+        if ($changed) event_store_write($file, $entries);
         if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)</p>';
 
-        if (isset($entries[0]['description'])) {
+        // storcli backend if stamped; fall back to key-sniff pre-rollout.
+        if ($storcli || (($data['backend'] ?? '') === '' && isset($entries[0]['description']))) {
             // storcli backend: seq, time, code, human-readable description (newest first)
             $rows = [];
             foreach (array_reverse($entries) as $e) {

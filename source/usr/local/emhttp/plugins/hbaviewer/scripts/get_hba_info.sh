@@ -24,34 +24,47 @@ if [ -s "$CACHE" ] && [ "$(( NOW - CMT ))" -lt 60 ] && [ "$CMT" -gt "$SMT" ]; th
 fi
 
 # ── Produce fresh output (captured so we can cache it) ────────────────────────
-# Backend selection: storcli (SAS3/3.5: 9300/9400) if installed and it enumerates
-# a controller; else lsiutil (SAS2: 9200). Both emit {"controllers":[...]}.
+# Backend selection lives in the module (lib.sh hba_each): storcli (SAS3/3.5:
+# 9300/9400) if it enumerates a controller, else lsiutil (SAS2: 9200). This
+# composer only declares what to read per controller for each backend.
 # ponytail: auto-detect only. Add a BACKEND config override the day a box has
 # BOTH a SAS2 and a SAS3 card and auto picks the wrong one.
-out=$(
-    if use_storcli; then
-        bash "$DIR/backend_storcli.sh"       # resolved $STORCLI is exported
-    else
-        # A pure SAS3/3.5 box (mpt3sas, no mpt2sas) with no storcli: the bundled
-        # lsiutil 1.70 can't reliably read it — point the user at the storcli plugin.
-        if [ -z "$(find_storcli)" ] && [ -d /sys/module/mpt3sas ] && [ ! -d /sys/module/mpt2sas ]; then
-            echo '{"error":"storcli not found. This looks like a SAS3/SAS3.5 (mpt3sas) controller — install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}'
-            exit 0
-        fi
-        require_binary || exit 1
-        IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp)
-        trap 'rm -f "$IOC" "$BANNER" "$BOARD"' EXIT
-        hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
-        printf '0\n' | hba_query        2>/dev/null > "$BANNER"
-        hba_query -b                    2>/dev/null > "$BOARD"
-        if   [ -r /sys/module/mpt2sas/version ]; then DRIVER="mpt2sas $(cat /sys/module/mpt2sas/version)"
-        elif [ -r /sys/module/mpt3sas/version ]; then DRIVER="mpt3sas $(cat /sys/module/mpt3sas/version)"
-        else DRIVER=""; fi
-        printf '{"backend":"lsiutil","driver":"%s","controllers":[' "$DRIVER"
-        bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
-        printf ']}'
+
+# storcli overview: light `show` + `show temperature` (NOT `show all`, which does
+# a slow per-drive SMART scan). $2 to the parser is this controller's summed
+# sysfs PHY error count, for the glanceable health rollup.
+# ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
+# SAS correlation, this cheaper host index is only for the rollup.
+ov_storcli() {   # $1 = controller index
+    local perr=0 p f v
+    for p in /sys/class/sas_phy/phy-"${1}":*/; do
+        [ -d "$p" ] || continue
+        for f in invalid_dword_count running_disparity_error_count loss_of_dword_sync_count phy_reset_problem_count; do
+            v=$(cat "$p/$f" 2>/dev/null); perr=$(( perr + ${v:-0} ))
+        done
+    done
+    { "$STORCLI" /c"$1" show; "$STORCLI" /c"$1" show temperature; } 2>/dev/null \
+        | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr"
+}
+
+ov_lsiutil() {
+    # A pure SAS3/3.5 box (mpt3sas, no mpt2sas) with no storcli: the bundled
+    # lsiutil 1.70 can't reliably read it — point the user at the storcli plugin.
+    if [ -z "$(find_storcli)" ] && [ -d /sys/module/mpt3sas ] && [ ! -d /sys/module/mpt2sas ]; then
+        echo '{"error":"storcli not found. This looks like a SAS3/SAS3.5 (mpt3sas) controller — install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}'
+        return 1
     fi
-)
+    require_binary || return 1
+    local IOC BANNER BOARD
+    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp)
+    trap 'rm -f "$IOC" "$BANNER" "$BOARD"' EXIT
+    hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
+    printf '0\n' | hba_query        2>/dev/null > "$BANNER"
+    hba_query -b                    2>/dev/null > "$BOARD"
+    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
+}
+
+out=$(hba_each ov_storcli ov_lsiutil)
 
 printf '%s' "$out"
 # Cache only good output, so a transient error is retried next call.

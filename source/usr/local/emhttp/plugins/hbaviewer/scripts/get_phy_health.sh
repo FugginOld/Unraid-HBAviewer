@@ -1,14 +1,16 @@
 #!/bin/bash
-# PHY health composer: query the SAS PHY counters, parse to JSON.
-#   -a 20,12,0,0  = Diagnostics > Display PHY counters > quit
+# PHY health composer: declare the per-backend read, let the module dispatch.
+#   storcli: link/speed/attached-SAS from storcli, merged with the SAS error
+#            counters mpt3sas exposes in /sys/class/sas_phy (storcli can't read).
+#   lsiutil: -a 20,12,0,0  = Diagnostics > Display PHY counters > quit
 DIR="$(dirname "$0")"
 source "$DIR/lib.sh"
 source "$DIR/config.sh"   # sets PORT, ALERT
 
-# storcli (SAS3/3.5): link/speed/attached-SAS from storcli, merged with SAS
-# error counters from sysfs (mpt3sas populates /sys/class/sas_phy; storcli can't).
-if use_storcli; then
-    SYSFS=$(mktemp); trap 'rm -f "$SYSFS"' EXIT
+# Snapshot every sysfs PHY (sas_addr + error counters) once, keyed by SAS addr,
+# for storcli_phy.sh to merge. Built lazily on the first controller only.
+_build_phy_sysfs() {
+    local p sas idx
     for p in /sys/class/sas_phy/phy-*/; do
         [ -d "$p" ] || continue
         sas=$(sed 's/0x//' "$p/sas_address" 2>/dev/null | tr 'a-f' 'A-F' | tr -d ' \n')
@@ -18,22 +20,15 @@ if use_storcli; then
             "$(cat "$p/running_disparity_error_count" 2>/dev/null || echo 0)" \
             "$(cat "$p/loss_of_dword_sync_count"      2>/dev/null || echo 0)" \
             "$(cat "$p/phy_reset_problem_count"       2>/dev/null || echo 0)" \
-            "$(cat "$p/negotiated_linkrate"           2>/dev/null | tr ' ' '_')" >> "$SYSFS"
+            "$(cat "$p/negotiated_linkrate"           2>/dev/null | tr ' ' '_')"
     done
-
-    count=$("$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
-    if [ -z "$count" ] || [ "$count" -eq 0 ]; then echo '{"error":"No storcli controllers found."}'; exit 0; fi
-    printf '{"controllers":['
-    for c in $(seq 0 $((count - 1))); do
-        [ "$c" -gt 0 ] && printf ','
-        "$STORCLI" /c"$c"/pall show 2>/dev/null | bash "$DIR/parse/storcli_phy.sh" "$SYSFS"
-    done
-    printf ']}'
-    exit 0
-fi
-
-# lsiutil (SAS2): error counters per phy. Wrapped as a 1-element controllers[].
-require_binary || exit 1
-printf '{"controllers":['
-hba_query -p"$PORT" -a 20,12,0,0 2>/dev/null | bash "$DIR/parse/phy.sh"
-printf ']}'
+}
+phy_storcli() {
+    [ -n "$SYSFS" ] || { SYSFS=$(mktemp); trap 'rm -f "$SYSFS"' EXIT; _build_phy_sysfs > "$SYSFS"; }
+    "$STORCLI" /c"$1"/pall show 2>/dev/null | bash "$DIR/parse/storcli_phy.sh" "$SYSFS"
+}
+phy_lsiutil() {
+    require_binary || return 1
+    hba_query -p"$PORT" -a 20,12,0,0 2>/dev/null | bash "$DIR/parse/phy.sh"
+}
+hba_each phy_storcli phy_lsiutil
