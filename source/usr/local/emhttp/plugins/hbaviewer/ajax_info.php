@@ -75,7 +75,7 @@ if ($type === 'smart') {
     $health = strtoupper($s['health'] ?? '');
     $ok     = $health === 'OK' || $health === 'PASSED';
     $warn   = (int)($s['defects'] ?? 0) > 0 || (int)($s['pending'] ?? 0) > 0;
-    $color  = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
+    $color  = !$ok ? '#fb7185' : ($warn ? '#fbbf24' : '#34d399');
     $f = fn($v) => $v === '' || $v === null ? '?' : htmlspecialchars($v);
     printf(
         '<span style="color:%s;font-weight:700">%s</span> &middot; %s&deg;C &middot; %s def &middot; %s pend &middot; %sh',
@@ -175,7 +175,7 @@ function renderSmartTable(array $data): string {
         } else {
             $ok   = $health === 'OK' || $health === 'PASSED';
             $warn = (int) ($s['defects'] ?? 0) > 0 || (int) ($s['pending'] ?? 0) > 0;
-            $hc   = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
+            $hc   = !$ok ? '#fb7185' : ($warn ? '#fbbf24' : '#34d399');
             $hb   = '<span style="color:' . $hc . ';font-weight:700">' . htmlspecialchars($s['health']) . '</span>';
         }
         $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;
@@ -208,7 +208,7 @@ function renderOverviewCards(array $data, array $cfg): string {
             continue;
         }
         $v = lsi_hba_view($c, $port, $i);
-        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . '" data-ctl="' . $i . '">'
+        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
               . '<div class="lu-overview-row">'
               . '<div class="lu-circle" id="lu-circle-' . $i . '">'
               . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
@@ -217,7 +217,7 @@ function renderOverviewCards(array $data, array $cfg): string {
               . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
               . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
               . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'
-              . ($v['fw_old'] ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '') . '</p>'
+              . ($v['fw_old'] ? ' <span style="color:#fbbf24" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '') . '</p>'
               . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
               . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
@@ -240,7 +240,7 @@ function renderOverviewCards(array $data, array $cfg): string {
 
 /* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
 function luCtlHead(int $i): string {
-    return '<h3 style="margin:18px 0 8px;color:#f5a623;font-size:12px;'
+    return '<h3 style="margin:18px 0 8px;color:#22d3ee;font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
 function luLinkBadge(string $link): string {

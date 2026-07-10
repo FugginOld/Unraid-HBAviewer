@@ -6,7 +6,7 @@
    Values are returned RAW; each consumer escapes for its own medium. */
 
 function lsi_status_color(string $s): string {
-    return match ($s) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
+    return match ($s) { 'alert' => '#fb7185', 'warn' => '#fbbf24', default => '#34d399' };
 }
 function lsi_status_label(string $s): string {
     return match ($s) { 'alert' => 'ALERT', 'warn' => 'WARNING', default => 'NORMAL' };

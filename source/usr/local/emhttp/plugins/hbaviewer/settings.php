@@ -55,26 +55,37 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
 <style>
-#lu-settings-wrap { font-family: inherit; max-width: 560px; margin: 20px auto; }
-.lu-s-card { background: #1c1c1c; border: 1px solid #333; border-radius: 6px; padding: 20px 24px; margin-bottom: 16px; }
-.lu-s-card h3 { margin: 0 0 16px; color: #bbb; font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 1px solid #2a2a2a; padding-bottom: 10px; }
+/* Slate + Cyan — matches the Monitor page. Tokens scoped to the settings panel. */
+#lu-settings-wrap {
+    --bg:#0e1626; --surface:#152033; --surface-2:#1b2942;
+    --border:#26344d; --border-soft:#1d2a41;
+    --text:#e6edf7; --muted:#8ea3c2; --faint:#5c6f8f;
+    --accent:#22d3ee; --good:#34d399; --crit:#fb7185;
+    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
+    font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
+    background: radial-gradient(700px 300px at 85% -20%, #16273f 0%, rgba(20,36,61,0) 55%), var(--bg);
+    border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
+}
+.lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+.lu-s-card h3 { margin: 0 0 16px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 1px solid var(--border-soft); padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.lu-s-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
 .lu-s-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
 .lu-s-row:last-child { margin-bottom: 0; }
-.lu-s-label { flex: 0 0 180px; font-size: 13px; color: #ccc; padding-top: 8px; }
-.lu-s-label small { display: block; font-size: 11px; color: #555; margin-top: 3px; line-height: 1.4; }
+.lu-s-label { flex: 0 0 180px; font-size: 13px; color: var(--text); padding-top: 8px; }
+.lu-s-label small { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.4; }
 .lu-s-control { flex: 1; }
-.lu-s-control input[type=number] { width: 90px; background: #111; border: 1px solid #3a3a3a; border-radius: 4px; color: #ddd; padding: 7px 10px; font-size: 14px; }
-.lu-s-control input[type=number]:focus { outline: none; border-color: #f5a623; }
+.lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
+.lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
 .lu-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
-.lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: #f5a623; cursor: pointer; }
-.lu-toggle span { font-size: 13px; color: #ddd; }
-.lu-toggle small { font-size: 11px; color: #555; margin-left: auto; }
-.lu-notice { background: #1a2a1a; border: 1px solid #2a4a2a; border-radius: 4px; color: #8c8; font-size: 12px; padding: 8px 14px; margin-bottom: 14px; }
-.lu-danger { background: #2a1414; border: 1px solid #7a2020; border-radius: 4px; color: #e88; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
-.lu-danger strong { color: #ff6b6b; }
-.lu-btn { background: #f5a623; border: none; border-radius: 4px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
-.lu-btn:hover { background: #d9901a; }
-.lu-link { font-size: 12px; color: #f5a623; text-decoration: none; }
+.lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.lu-toggle span { font-size: 13px; color: var(--text); }
+.lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #9be6c4; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #f6c3ca; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: var(--crit); }
+.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #062430; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
+.lu-btn:hover { background: #4ee0f4; }
+.lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
 
@@ -95,8 +106,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>How HBAviewer reads controller information.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
-          <small style="display:block;color:#666;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+          <span style="color:#22d3ee;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
+          <small style="display:block;color:#8ea3c2;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
 

@@ -50,7 +50,7 @@ echo <<<CSS
 #tblHBAviewer .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
 #tblHBAviewer .lu-d-overview { display:flex; align-items:flex-start; gap:16px; }
 #tblHBAviewer .lu-d-circle {
-  width:80px; height:80px; border-radius:50%; border:4px solid #2ecc71;
+  width:80px; height:80px; border-radius:50%; border:4px solid #34d399;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   flex-shrink:0; margin-top:2px;
 }

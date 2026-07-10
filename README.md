@@ -9,7 +9,7 @@ update** tab is available for users who need it.
 > Originally created by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
 > for the SAS2308 / 9207-8i. This fork extends it to SAS3 (9300) and SAS3.5
 > tri-mode (9400) controllers, multi-controller systems, SMART, a background
-> SMART collector, a persistent event log, and more.
+> SMART collector, a persistent event log, and more. 
 
 ## Supported hardware
 

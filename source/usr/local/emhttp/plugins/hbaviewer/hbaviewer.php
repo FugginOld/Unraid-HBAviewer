@@ -24,149 +24,142 @@ if ($enableFlash) {
 ?>
 
 <style>
-/* ── Layout ──────────────────────────────────────────────────────────────── */
-#lu-wrap { font-family: inherit; max-width: 1280px; margin: 20px auto; }
-/* Overview cards span the full width too, matching the data tables. */
-
-/* ── Tabs ────────────────────────────────────────────────────────────────── */
-.lu-tabs { display: flex; gap: 2px; margin-bottom: 0; border-bottom: 2px solid #2a2a2a; }
-.lu-tab-btn {
-    padding: 8px 18px;
-    background: #141414;
-    border: 1px solid #2a2a2a;
-    border-bottom: none;
-    border-radius: 5px 5px 0 0;
-    color: #666;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    transition: color 0.15s;
+/* ── Slate + Cyan design tokens (scoped to the plugin) ───────────────────── */
+#lu-wrap {
+    --bg:#0e1626; --surface:#152033; --surface-2:#1b2942;
+    --border:#26344d; --border-soft:#1d2a41;
+    --text:#e6edf7; --muted:#8ea3c2; --faint:#5c6f8f;
+    --accent:#22d3ee; --accent-2:#38bdf8; --track:#20304b;
+    --good:#34d399; --warn:#fbbf24; --crit:#fb7185;
+    --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
+    font-family: inherit; max-width: 1180px; margin: 20px auto;
+    color: var(--text);
+    background:
+        radial-gradient(900px 350px at 85% -20%, #16273f 0%, rgba(20,36,61,0) 55%),
+        var(--bg);
+    border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px 26px;
 }
-.lu-tab-btn:hover  { color: #bbb; }
-.lu-tab-btn.active { background: #1c1c1c; border-bottom-color: #1c1c1c; color: #f5a623; }
+
+/* ── Tabs (underline) ────────────────────────────────────────────────────── */
+.lu-tabs { display: flex; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
+.lu-tab-btn {
+    appearance: none; background: none; border: none; cursor: pointer;
+    color: var(--faint); font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
+    padding: 11px 14px 12px; position: relative; white-space: nowrap; transition: color 0.15s; text-transform: none;
+}
+.lu-tab-btn:hover  { color: var(--muted); }
+.lu-tab-btn.active { color: var(--text); }
+.lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
+.lu-tab-btn[data-tab="flash"] { color: #cf93a0; }
+.lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
 .lu-tab-pane { display: none; }
 .lu-tab-pane.active { display: block; }
 
 /* ── Cards ───────────────────────────────────────────────────────────────── */
 .lu-card {
-    background: #1c1c1c;
-    border: 1px solid #333;
-    border-top: none;
-    border-radius: 0 6px 6px 6px;
-    padding: 20px 24px;
-    margin-bottom: 16px;
+    background: linear-gradient(180deg, var(--surface-2), var(--surface));
+    border: 1px solid var(--border-soft); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px;
+    box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 12px 32px -24px rgba(0,0,0,.9);
 }
-.lu-card.first { border-radius: 0 0 6px 6px; }
+.lu-card.first { border-radius: 14px; }
 .lu-card h3 {
-    margin: 0 0 14px;
-    color: #bbb;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    border-bottom: 1px solid #2a2a2a;
-    padding-bottom: 8px;
+    margin: 0 0 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px;
 }
-.lu-divider { border: none; border-top: 1px solid #2a2a2a; margin: 16px 0; }
+.lu-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
+.lu-divider { border: none; border-top: 1px solid var(--border-soft); margin: 16px 0; }
 
-/* ── Temperature display ─────────────────────────────────────────────────── */
-/* Controllers side by side, splitting the width; a lone card is capped + centered. */
+/* ── Overview + temperature ring ─────────────────────────────────────────── */
 .lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.lu-ov-grid .lu-card { flex: 1 1 380px; max-width: 700px; margin-bottom: 0; }
-.lu-overview-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
+.lu-ov-grid .lu-card { flex: 1 1 360px; max-width: 640px; margin-bottom: 0; }
+.lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
 .lu-circle {
-    width: 96px; height: 96px;
-    border-radius: 50%;
-    border: 4px solid var(--tc, #2ecc71);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    flex-shrink: 0;
-    transition: border-color 0.3s;
+    position: relative; width: 108px; height: 108px; flex-shrink: 0; border-radius: 50%;
+    background: conic-gradient(var(--tc, var(--good)) calc(var(--pct,0)*1%), var(--track) 0);
+    display: grid; place-items: center;
+    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tc, var(--good)) 32%, transparent));
+    transition: background 0.4s;
 }
-.lu-circle .val  { font-size: 30px; font-weight: 700; color: var(--tc, #2ecc71); line-height: 1; }
-.lu-circle .unit { font-size: 12px; color: #666; margin-top: 3px; }
-.lu-meta p       { margin: 4px 0; font-size: 13px; color: #888; }
-.lu-meta p span  { color: #ddd; font-weight: 500; }
+.lu-circle::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface)); border: 1px solid var(--border-soft); }
+.lu-circle .val  { position: relative; z-index: 1; transform: translateY(-4px); font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1; }
+.lu-circle .unit { position: absolute; z-index: 1; left: 0; right: 0; bottom: 19px; text-align: center; font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
+.lu-meta { flex: 1; min-width: 0; }
+.lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
+.lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .lu-badge {
-    display: inline-block; margin-top: 6px;
-    padding: 2px 12px; border-radius: 12px;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
-    background: var(--tc, #2ecc71); color: #111;
-    transition: background 0.3s;
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+    padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+    color: var(--tc, var(--good)); background: color-mix(in srgb, var(--tc, var(--good)) 15%, transparent);
+    transition: color 0.4s, background 0.4s;
 }
+.lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
 .lu-pcie-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
-.lu-pcie-item { font-size: 13px; color: #888; }
-.lu-pcie-item span { color: #ddd; font-weight: 500; }
+.lu-pcie-item { font-size: 12.5px; color: var(--faint); }
+.lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
-/* ── Tables (shared between tabs) ────────────────────────────────────────── */
+/* ── Tables ──────────────────────────────────────────────────────────────── */
 .lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-table th {
-    text-align: left; padding: 6px 10px;
-    color: #777; font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.05em;
-    border-bottom: 1px solid #2a2a2a;
+    text-align: left; padding: 8px 12px; color: var(--faint);
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
 }
-.lu-table td { padding: 7px 10px; color: #ccc; border-bottom: 1px solid #1a1a1a; }
+.lu-table td { padding: 9px 12px; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
 .lu-table tr:last-child td { border-bottom: none; }
-.lu-table code { color: #88aaff; font-size: 12px; }
+.lu-table tbody tr:hover td { background: rgba(34,211,238,.04); }
+.lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
 
-/* ── Link badges ─────────────────────────────────────────────────────────── */
-.lu-link-up   { color: #2ecc71; font-weight: 700; font-size: 11px; }
-.lu-link-down { color: #e74c3c; font-weight: 700; font-size: 11px; }
-.lu-err-val   { color: #f39c12; font-weight: 600; }
+/* ── Link + error badges ─────────────────────────────────────────────────── */
+.lu-link-up   { color: var(--good); font-weight: 700; font-size: 11px; letter-spacing: 0.03em; }
+.lu-link-down { color: var(--crit); font-weight: 700; font-size: 11px; }
+.lu-err-val   { color: var(--warn); font-weight: 600; }
 
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .lu-error {
-    background: #1e0e0e; border: 1px solid #7a2020;
-    border-radius: 6px; padding: 14px 18px;
-    color: #d88; font-size: 13px; margin-bottom: 12px;
+    background: color-mix(in srgb, var(--crit) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
+    border-radius: 8px; padding: 14px 18px; color: #f6c3ca; font-size: 13px; margin-bottom: 12px;
 }
-.lu-muted  { color: #555; font-size: 13px; }
-.lu-ts     { font-size: 11px; color: #444; text-align: right; margin-top: 10px; }
-.lu-loading { color: #555; font-size: 13px; padding: 20px 0; text-align: center; }
-.lu-tab-toolbar {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 12px;
-}
+.lu-muted  { color: var(--faint); font-size: 13px; }
+.lu-ts     { font-size: 11px; color: var(--faint); font-family: var(--mono); text-align: right; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
+.lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .lu-refresh-btn {
-    background: transparent; border: 1px solid #444;
-    border-radius: 4px; color: #aaa;
-    font-size: 11px; font-weight: 600; padding: 5px 12px;
-    cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;
+    background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+    font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
 }
-.lu-refresh-btn:hover { border-color: #888; color: #ddd; }
+.lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
-.lu-flash-warn { background:#2a1414; border:1px solid #7a2020; border-radius:6px; color:#e88; font-size:13px; line-height:1.5; padding:12px 16px; margin-bottom:14px; }
-.lu-flash-warn strong { color:#ff6b6b; }
-.lu-flash-array { border-radius:6px; font-size:13px; padding:10px 16px; margin-bottom:16px; }
-.lu-flash-array.ok  { background:#14240f; border:1px solid #2a4a1f; color:#9c9; }
-.lu-flash-array.bad { background:#241a0f; border:1px solid #5a3f1f; color:#dba24a; }
-.lu-fc { border:1px solid #333; border-radius:6px; padding:16px 18px; margin-bottom:16px; }
-.lu-fc h4 { margin:0 0 4px; color:#f5a623; font-size:13px; }
-.lu-fc .sub { color:#888; font-size:12px; margin:0 0 14px; }
-.lu-fstep { margin:14px 0; }
-.lu-fstep label.step { display:block; color:#aaa; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
-.lu-fc input[type=file] { color:#bbb; font-size:12px; }
-.lu-fc input[type=text] { background:#111; border:1px solid #3a3a3a; border-radius:4px; color:#ddd; padding:6px 9px; font-size:13px; width:120px; }
-.lu-fc pre { background:#0d0d0d; border:1px solid #222; border-radius:4px; color:#bbb; font-size:11px; line-height:1.4; max-height:280px; overflow:auto; padding:10px; margin:8px 0 0; white-space:pre-wrap; }
-.lu-fbtn { background:#f5a623; border:none; border-radius:4px; color:#111; font-size:12px; font-weight:700; padding:7px 16px; cursor:pointer; }
-.lu-fbtn:hover { background:#d9901a; }
-.lu-fbtn.danger { background:#c0392b; color:#fff; }
-.lu-fbtn.danger:hover { background:#a5281b; }
-.lu-fack { display:flex; align-items:center; gap:8px; color:#ddd; font-size:12px; margin:8px 0; }
+.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: #f6c3ca; font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
+.lu-flash-warn strong { color: var(--crit); }
+.lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; margin-bottom: 16px; }
+.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: #9be6c4; }
+.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: #f2d59a; }
+.lu-fc { border: 1px solid var(--border-soft); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: var(--bg); }
+.lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
+.lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
+.lu-fstep { margin: 14px 0; }
+.lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
+.lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
+.lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
+.lu-fc pre { background: #0a111d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
+.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #062430; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
+.lu-fbtn:hover { background: #4ee0f4; }
+.lu-fbtn.danger { background: var(--crit); color: #2a0d13; }
+.lu-fbtn.danger:hover { background: #ff8a9a; }
+.lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 .lu-perf-ctl { margin-bottom: 22px; }
-.lu-perf-ctl h4 { margin:0 0 10px; color:#f5a623; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
-.lu-perf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
-.lu-perf-cell { background:#141414; border:1px solid #262626; border-radius:6px; padding:8px 10px 6px; }
-.lu-perf-cell .cap { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; display:flex; justify-content:space-between; align-items:baseline; }
-.lu-perf-cell .cap b { color:#ddd; font-weight:600; font-size:12px; }
-.lu-perf-canvas { position:relative; height:88px; }
+.lu-perf-ctl h4 { margin: 0 0 10px; color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.lu-perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.lu-perf-cell { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 12px 6px; }
+.lu-perf-cell .cap { font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; }
+.lu-perf-cell .cap b { color: var(--text); font-weight: 600; font-size: 13px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.lu-perf-canvas { position: relative; height: 88px; }
 </style>
 
 <div id="lu-wrap">
@@ -180,7 +173,7 @@ if ($enableFlash) {
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
-  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
+  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:11px 14px;font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:#5c6f8f;text-decoration:none;" onmouseover="this.style.color='#8ea3c2'" onmouseout="this.style.color='#5c6f8f'">&#9881; Settings</a>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
@@ -528,7 +521,7 @@ if ($enableFlash) {
             options: {
                 animation: false, responsive: true, maintainAspectRatio: false,
                 scales: { x: { display: false },
-                          y: { beginAtZero: true, ticks: { color:'#777', font:{size:9}, maxTicksLimit:4 }, grid: { color:'#1e1e1e' } } },
+                          y: { beginAtZero: true, ticks: { color:'#5c6f8f', font:{size:9}, maxTicksLimit:4 }, grid: { color:'#1e2b42' } } },
                 plugins: { legend: { display: false }, tooltip: { enabled: false } }
             }
         });
@@ -547,12 +540,12 @@ if ($enableFlash) {
     function perfBuild(ctls) {
         var host = document.getElementById('perf-content'); host.innerHTML = ''; perfCharts = {};
         var defs = [
-            { key:'thr',  title:'Throughput MB/s', series:['#3aa0ff','#f5a623'] },  // read, write
-            { key:'iops', title:'IOPS',            series:['#2ecc71'] },
-            { key:'util', title:'% Util',          series:['#9b59b6'] },
-            { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
-            { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
-            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
+            { key:'thr',  title:'Throughput MB/s', series:['#22d3ee','#60a5fa'] },  // read cyan, write sky
+            { key:'iops', title:'IOPS',            series:['#38bdf8'] },
+            { key:'util', title:'% Util',          series:['#34d399'] },
+            { key:'lat',  title:'Latency ms',      series:['#fbbf24'] },
+            { key:'phy',  title:'PHY err/s',       series:['#fb7185'] },
+            { key:'temp', title:'Temp °C',         series:['#2dd4bf'] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl';
