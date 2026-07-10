@@ -366,7 +366,9 @@ if ($enableFlash) {
        drives flash.php; every real guard (array stopped, confirm, lock) is
        re-checked on the server, so the JS checks here are only fast feedback. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
-    var flashCsrf = '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';   // Unraid rejects POST without it
+    // Unraid rejects POSTs without its CSRF token. Prefer Unraid's own fresh JS
+    // global; fall back to the token we read from var.ini at render time.
+    var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     function flashChip(i){ var c=flashCard(i); return c?c.getAttribute('data-chip'):''; }
