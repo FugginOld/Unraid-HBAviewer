@@ -73,23 +73,38 @@ if ($type === 'smart') {
 }
 
 /* ── Overview cards as HTML (the Monitor page's initial + auto-refresh load) ──
-   Deferred here so hbaviewer.php paints instantly and shows a loading banner
-   instead of blocking on the storcli read. get_hba_info.sh self-caches (60s). */
+   The foreground request NEVER reads the hardware — it serves a result file.
+   A slow storcli scan can take >60s; running it inline would get killed by the
+   web timeout and leave nothing (that was the "no output" error). Instead a
+   detached background job is the sole reader; the JS polls until it lands. */
 if ($type === 'overview_html') {
     header('Content-Type: text/html; charset=utf-8');
-    $cfg  = lsi_config_read();
-    $raw  = shell_exec("timeout 60 bash $scripts/get_hba_info.sh 2>&1");
-    $data = $raw ? json_decode($raw, true) : null;
-    if (!is_array($data)) {
-        echo '<div class="lu-error"><strong>Error:</strong> '
-           . htmlspecialchars($raw ? substr($raw, 0, 300) : 'Backend produced no output.') . '</div>';
-        exit;
+    $cfg    = lsi_config_read();
+    $script = "$scripts/get_hba_info.sh";
+    $result = '/tmp/hbav_overview.json';   // background job's captured output (incl. errors)
+    $lock   = '/tmp/hbav_overview.lock';
+
+    // Fresh result → render it (or surface a real backend error).
+    if (is_file($result) && (time() - filemtime($result)) < 60) {
+        $raw  = (string) file_get_contents($result);
+        $data = $raw !== '' ? json_decode($raw, true) : null;
+        if (is_array($data) && !isset($data['error'])) { echo renderOverviewCards($data, $cfg); exit; }
+        if (is_array($data) && isset($data['error'])) {
+            echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars($data['error']) . '</div>'; exit;
+        }
+        if (trim($raw) !== '') {
+            echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars(substr($raw, 0, 300)) . '</div>'; exit;
+        }
     }
-    if (isset($data['error'])) {
-        echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars($data['error']) . '</div>';
-        exit;
+
+    // Stale/absent → launch one detached reader (lock guards against a stampede)
+    // that captures stdout+stderr and swaps the result in atomically when done.
+    if (!is_file($lock) || (time() - filemtime($lock)) > 120) {
+        @touch($lock);
+        $inner = "bash $script > $result.tmp 2>&1; mv $result.tmp $result; rm -f $lock";
+        shell_exec('nohup sh -c ' . escapeshellarg($inner) . ' >/dev/null 2>&1 &');
     }
-    echo renderOverviewCards($data, $cfg);
+    echo '<div class="lu-loading" data-overview="warming">Reading controller information… the first read can take up to a minute on slow controllers. This updates automatically.</div>';
     exit;
 }
 

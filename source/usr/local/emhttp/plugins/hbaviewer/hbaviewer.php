@@ -284,18 +284,25 @@ $showEvents = $cfg['SHOW_EVENTS'];
         }
     };
 
-    /* ── Overview: full card HTML via AJAX (banner shows until the read done) ── */
+    /* ── Overview: full card HTML via AJAX (banner shows until the read done) ──
+       While the backend is still reading (data-overview="warming") poll every
+       few seconds; once cards are in, settle into the slow auto-refresh. */
     function loadOverview() {
         var el = document.getElementById('overview-content');
         if (!el) return;
         fetch('/plugins/hbaviewer/ajax_info.php?type=overview_html')
             .then(function (r) { return r.text(); })
-            .then(function (html) { el.innerHTML = html; })
+            .then(function (html) {
+                el.innerHTML = html;
+                clearTimeout(timer);
+                var warming = /data-overview="warming"/.test(html);
+                timer = setTimeout(loadOverview, warming ? 4000 : REFRESH_MS);
+            })
             .catch(function () {
-                el.innerHTML = '<div class="lu-error">Request failed — the backend may still be reading the controller. It will retry shortly.</div>';
+                el.innerHTML = '<div class="lu-error">Request failed — retrying…</div>';
+                clearTimeout(timer);
+                timer = setTimeout(loadOverview, 5000);
             });
-        clearTimeout(timer);
-        timer = setTimeout(loadOverview, REFRESH_MS);
     }
 
     loadOverview();   // fire immediately on page load, then auto-refresh
