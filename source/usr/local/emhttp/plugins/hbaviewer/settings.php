@@ -3,8 +3,25 @@
    Reached via the HBAviewer icon card in Unraid Settings > System Settings. */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/view.php';
 $cfg   = lsi_config_read();
 $saved = false;
+
+// Load HBA info to check for SAS2 controllers
+$has_sas2 = false;
+$script = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
+if (file_exists($script)) {
+    $raw = shell_exec('timeout 60 bash ' . escapeshellarg($script) . ' 2>/dev/null') ?? '';
+    $data = $raw ? json_decode($raw, true) : null;
+    if (is_array($data) && isset($data['controllers'])) {
+        foreach ($data['controllers'] as $c) {
+            if (!empty($c['port_name'])) {
+                $has_sas2 = true;
+                break;
+            }
+        }
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // Map the form (checkbox-absent = off); config_write clamps to schema.
@@ -56,6 +73,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     <div class="lu-s-card">
       <h3>HBA Connection</h3>
 
+      <?php if ($has_sas2): ?>
       <div class="lu-s-row">
         <div class="lu-s-label">
           lsiutil Port
@@ -65,6 +83,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <input type="number" name="port" value="<?= (int)$cfg['HBA_PORT'] ?>" min="1" max="8">
         </div>
       </div>
+      <?php endif; ?>
 
       <div class="lu-s-row">
         <div class="lu-s-label">
@@ -103,8 +122,11 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       </label>
     </div>
 
-    <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings</button>
-    <a class="lu-link" href="/Tools/HBAviewer_Monitor">← Open HBAviewer monitor</a>
+    <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
+    <?php if ($saved): ?>
+    <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block">Open HBAviewer Monitor</a>
+    <div class="lu-notice" style="margin-top:16px">The HBA Monitor may take up to 60 seconds to load while collecting controller information.</div>
+    <?php endif; ?>
 
   </form>
 </div>
