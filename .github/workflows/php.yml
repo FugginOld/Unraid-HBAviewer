@@ -1,0 +1,39 @@
+name: tests
+
+# This plugin has no Composer dependencies — tests are plain shell + core PHP.
+# CI: syntax-lint every PHP and shell file, then run the full suite
+# (bash tests/run.sh: parser goldens, backend routing, PHP unit tests).
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.2 (matches Unraid 7.x)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      # The parsers use GNU awk, which Unraid (Slackware) ships as `awk`.
+      # ubuntu-latest defaults to mawk, so make gawk the default here.
+      - name: Use GNU awk
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gawk
+          sudo update-alternatives --set awk /usr/bin/gawk
+
+      - name: Lint PHP (php -l on every .php)
+        run: find source tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Lint shell (bash -n on every .sh)
+        run: find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+
+      - name: Run test suite
+        run: bash tests/run.sh
