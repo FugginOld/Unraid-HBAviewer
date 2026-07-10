@@ -1,9 +1,10 @@
 # Unraid HBAviewer
 
 Monitor LSI / Broadcom SAS Host Bus Adapters (HBAs) directly from Unraid —
-temperature, PHY health, attached drives, SMART, and the firmware event log —
-across **three controller generations**, with the correct backend auto-detected
-per card.
+temperature, PHY health, attached drives, SMART, the firmware event log, and
+**real-time performance graphs** — across **three controller generations**, with
+the correct backend auto-detected per card. An optional, opt-in **firmware/BIOS
+update** tab is available for users who need it.
 
 > Originally created by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
 > for the SAS2308 / 9207-8i. This fork extends it to SAS3 (9300) and SAS3.5
@@ -57,7 +58,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   no flash writes; history lives in the browser and resets on reload).
 - **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
   flash tab that detects the card + running firmware, runs a read-only
-  read-only per-controller sanity check, takes your model-correct image, and flashes one
+  per-controller sanity check, takes your model-correct image, and flashes one
   controller behind hard guardrails with a live log. See the safety section below.
 
 All *monitoring* data is read directly from the HBA (`storcli` / `lsiutil`),
@@ -173,6 +174,7 @@ right backend is in use before opening the Monitor.
 | Show PHY Health | On | PHY tab. |
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
+| Show Performance | On | Performance tab — real-time throughput / IOPS / %util / latency / PHY-error-rate / temperature graphs (in-browser, resets on reload). |
 | Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
@@ -194,7 +196,9 @@ bash build.sh
 
 The bundled `hbaviewer.x86_64` is the original `lsiutil` v1.70 compiled for Linux
 x86-64. `storcli` is **not** bundled — SAS3/3.5 cards use the copy installed on
-your system.
+your system. `build.sh` also fetches **Chart.js** (the Performance tab's charting
+library, MIT) into the plugin dir; like the `lsiutil` binary it isn't committed
+to the repo. The Performance tab degrades gracefully with a message if it's absent.
 
 ## Testing
 
