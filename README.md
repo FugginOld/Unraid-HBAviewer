@@ -95,10 +95,13 @@ Dashboard
 
 ## Configuration
 
-Open **User Utilities → HBAviewer**:
+Open **User Utilities → HBAviewer**. The settings page opens instantly and shows
+the detected **Access Method** (`storcli` or `lsiutil`) so you can confirm the
+right backend is in use before opening the Monitor.
 
 | Setting | Default | Description |
 | --- | --- | --- |
+| Access Method | (auto) | Read-only. Shows whether `storcli` (SAS3/3.5) or `lsiutil` (SAS2) is used, and warns if a SAS3 card is found but `storcli` isn't installed. |
 | lsiutil Port | 1 | *SAS2 only* — lsiutil port number. Only shown if SAS2 cards are detected. SAS3/storcli cards are enumerated automatically. |
 | Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
 | Show PCIe Info | On | PCIe width/speed row in the Overview. |
@@ -106,7 +109,10 @@ Open **User Utilities → HBAviewer**:
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
 
-The HBA Monitor may take up to 60 seconds to load on the first access while it queries controller information from your hardware.
+Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
+immediately with a **"Loading HBA information"** banner and reads the hardware in
+the background — the first read can take up to a minute on slow controllers, and
+the page fills in automatically when it's ready (no blank hang, no timeout).
 
 ## Building from source
 
