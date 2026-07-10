@@ -12,9 +12,9 @@ function check(string $name, bool $ok): void {
 }
 
 // status map
-check('color ok',    lsi_status_color('ok')    === '#34d399');
-check('color warn',  lsi_status_color('warn')  === '#fbbf24');
-check('color alert', lsi_status_color('alert') === '#fb7185');
+check('color ok',    lsi_status_color('ok')    === '#2ecc71');
+check('color warn',  lsi_status_color('warn')  === '#f39c12');
+check('color alert', lsi_status_color('alert') === '#e74c3c');
 check('label alert', lsi_status_label('alert') === 'ALERT');
 
 // full view over a representative payload
@@ -27,7 +27,7 @@ $data = [
 ];
 $v = lsi_hba_view($data, 1);
 check('temp',       $v['temp'] === 47);
-check('color',      $v['color'] === '#34d399');
+check('color',      $v['color'] === '#2ecc71');
 check('label',      $v['label'] === 'NORMAL');
 check('model=board',$v['model'] === 'SAS9207-8i');       // board_name wins
 check('chip=model', $v['chip'] === 'SAS2308');
@@ -40,7 +40,7 @@ $bare = lsi_hba_view(['temp' => 30, 'status' => 'alert'], 2);
 check('model fallback', $bare['model'] === 'Unknown');
 check('port name def',  $bare['port_label'] === 'ioc0 (lsiutil -p2)');
 check('pcie empty',     $bare['pcie'] === []);
-check('alert color',    $bare['color'] === '#fb7185');
+check('alert color',    $bare['color'] === '#e74c3c');
 
 // multi-controller contract normalizer
 $multi = lsi_controllers(['controllers' => [['temp' => 72], ['temp' => 77]]]);

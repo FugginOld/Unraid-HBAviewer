@@ -55,15 +55,15 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
 <style>
-/* Slate + Cyan — matches the Monitor page. Tokens scoped to the settings panel. */
+/* Original HBAviewer palette in the new component format. Matches the Monitor. */
 #lu-settings-wrap {
-    --bg:#0e1626; --surface:#152033; --surface-2:#1b2942;
-    --border:#26344d; --border-soft:#1d2a41;
-    --text:#e6edf7; --muted:#8ea3c2; --faint:#5c6f8f;
-    --accent:#22d3ee; --good:#34d399; --crit:#fb7185;
+    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
+    --border:#333333; --border-soft:#2a2a2a;
+    --text:#dddddd; --muted:#999999; --faint:#666666;
+    --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
-    background: radial-gradient(700px 300px at 85% -20%, #16273f 0%, rgba(20,36,61,0) 55%), var(--bg);
+    background: radial-gradient(700px 300px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%), var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
 }
 .lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
@@ -80,11 +80,11 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .lu-toggle span { font-size: 13px; color: var(--text); }
 .lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
-.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #9be6c4; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
-.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #f6c3ca; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #8ccc8c; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #e0a0a0; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
 .lu-danger strong { color: var(--crit); }
-.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #062430; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
-.lu-btn:hover { background: #4ee0f4; }
+.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
+.lu-btn:hover { background: #d9901a; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
@@ -106,8 +106,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>How HBAviewer reads controller information.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:#22d3ee;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
-          <small style="display:block;color:#8ea3c2;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+          <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
+          <small style="display:block;color:#888;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
 

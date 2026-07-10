@@ -24,18 +24,18 @@ if ($enableFlash) {
 ?>
 
 <style>
-/* ── Slate + Cyan design tokens (scoped to the plugin) ───────────────────── */
+/* ── Design tokens: original HBAviewer palette in the new component format ── */
 #lu-wrap {
-    --bg:#0e1626; --surface:#152033; --surface-2:#1b2942;
-    --border:#26344d; --border-soft:#1d2a41;
-    --text:#e6edf7; --muted:#8ea3c2; --faint:#5c6f8f;
-    --accent:#22d3ee; --accent-2:#38bdf8; --track:#20304b;
-    --good:#34d399; --warn:#fbbf24; --crit:#fb7185;
+    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
+    --border:#333333; --border-soft:#2a2a2a;
+    --text:#dddddd; --muted:#999999; --faint:#666666;
+    --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
+    --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
     font-family: inherit; max-width: 1180px; margin: 20px auto;
     color: var(--text);
     background:
-        radial-gradient(900px 350px at 85% -20%, #16273f 0%, rgba(20,36,61,0) 55%),
+        radial-gradient(900px 350px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%),
         var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px 26px;
 }
@@ -48,9 +48,9 @@ if ($enableFlash) {
     padding: 11px 14px 12px; position: relative; white-space: nowrap; transition: color 0.15s; text-transform: none;
 }
 .lu-tab-btn:hover  { color: var(--muted); }
-.lu-tab-btn.active { color: var(--text); }
+.lu-tab-btn.active { color: var(--accent); }
 .lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
-.lu-tab-btn[data-tab="flash"] { color: #cf93a0; }
+.lu-tab-btn[data-tab="flash"] { color: #c98d88; }
 .lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
 .lu-tab-pane { display: none; }
 .lu-tab-pane.active { display: block; }
@@ -108,7 +108,7 @@ if ($enableFlash) {
 }
 .lu-table td { padding: 9px 12px; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
 .lu-table tr:last-child td { border-bottom: none; }
-.lu-table tbody tr:hover td { background: rgba(34,211,238,.04); }
+.lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
 
 /* ── Link + error badges ─────────────────────────────────────────────────── */
@@ -119,7 +119,7 @@ if ($enableFlash) {
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .lu-error {
     background: color-mix(in srgb, var(--crit) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
-    border-radius: 8px; padding: 14px 18px; color: #f6c3ca; font-size: 13px; margin-bottom: 12px;
+    border-radius: 8px; padding: 14px 18px; color: #e0a0a0; font-size: 13px; margin-bottom: 12px;
 }
 .lu-muted  { color: var(--faint); font-size: 13px; }
 .lu-ts     { font-size: 11px; color: var(--faint); font-family: var(--mono); text-align: right; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
@@ -132,11 +132,11 @@ if ($enableFlash) {
 .lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
-.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: #f6c3ca; font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
+.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: #e0a0a0; font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
 .lu-flash-warn strong { color: var(--crit); }
 .lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; margin-bottom: 16px; }
-.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: #9be6c4; }
-.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: #f2d59a; }
+.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: #9cc99c; }
+.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: #dba24a; }
 .lu-fc { border: 1px solid var(--border-soft); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: var(--bg); }
 .lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
@@ -145,11 +145,11 @@ if ($enableFlash) {
 .lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
 .lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
 .lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
-.lu-fc pre { background: #0a111d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
-.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #062430; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
-.lu-fbtn:hover { background: #4ee0f4; }
-.lu-fbtn.danger { background: var(--crit); color: #2a0d13; }
-.lu-fbtn.danger:hover { background: #ff8a9a; }
+.lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
+.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
+.lu-fbtn:hover { background: #d9901a; }
+.lu-fbtn.danger { background: var(--crit); color: #fff; }
+.lu-fbtn.danger:hover { background: #c0392b; }
 .lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
@@ -173,7 +173,7 @@ if ($enableFlash) {
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
-  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:11px 14px;font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:#5c6f8f;text-decoration:none;" onmouseover="this.style.color='#8ea3c2'" onmouseout="this.style.color='#5c6f8f'">&#9881; Settings</a>
+  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:11px 14px;font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:#666;text-decoration:none;" onmouseover="this.style.color='#999'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
@@ -521,7 +521,7 @@ if ($enableFlash) {
             options: {
                 animation: false, responsive: true, maintainAspectRatio: false,
                 scales: { x: { display: false },
-                          y: { beginAtZero: true, ticks: { color:'#5c6f8f', font:{size:9}, maxTicksLimit:4 }, grid: { color:'#1e2b42' } } },
+                          y: { beginAtZero: true, ticks: { color:'#777', font:{size:9}, maxTicksLimit:4 }, grid: { color:'#242424' } } },
                 plugins: { legend: { display: false }, tooltip: { enabled: false } }
             }
         });
@@ -540,12 +540,12 @@ if ($enableFlash) {
     function perfBuild(ctls) {
         var host = document.getElementById('perf-content'); host.innerHTML = ''; perfCharts = {};
         var defs = [
-            { key:'thr',  title:'Throughput MB/s', series:['#22d3ee','#60a5fa'] },  // read cyan, write sky
-            { key:'iops', title:'IOPS',            series:['#38bdf8'] },
-            { key:'util', title:'% Util',          series:['#34d399'] },
-            { key:'lat',  title:'Latency ms',      series:['#fbbf24'] },
-            { key:'phy',  title:'PHY err/s',       series:['#fb7185'] },
-            { key:'temp', title:'Temp °C',         series:['#2dd4bf'] }
+            { key:'thr',  title:'Throughput MB/s', series:['#3aa0ff','#f5a623'] },  // read, write
+            { key:'iops', title:'IOPS',            series:['#2ecc71'] },
+            { key:'util', title:'% Util',          series:['#9b59b6'] },
+            { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
+            { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
+            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl';

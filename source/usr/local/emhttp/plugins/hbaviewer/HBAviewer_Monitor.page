@@ -1,6 +1,6 @@
 Menu="HBAviewer"
 Title="HBA Monitor"
-Icon="fa-hdd-o"
+Icon="icon.png"
 Tag="hbaviewer-monitor"
 Type="xmenu"
 ---
