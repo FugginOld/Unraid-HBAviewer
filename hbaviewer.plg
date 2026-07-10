@@ -2,18 +2,22 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.07.10">
+<!ENTITY version   "2026.07.09">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.10/hbaviewer.txz">
-<!ENTITY md5       "8889d98678434833197b4f91f14664a4">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09/hbaviewer.txz">
+<!ENTITY md5       "4b43e5c7fb1c5601531a23498d8cec48">
 <!ENTITY icon      "fa-hdd-o">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
-###2026.07.09.8###
+###2026.07.09###
+- Settings moved to User Utilities menu (was System Settings)
+- lsiutil Port field now hidden for non-SAS2 controllers
+- Redesigned settings buttons: 'Save Settings First' + 'Open HBAviewer Monitor' (conditional)
+- Added note about monitor load time for slow systems
 - Fixed XML compatibility for Unraid parser
 - Dashboard tile display with multi-controller support
 - Hard drive icon throughout interface
