@@ -6,10 +6,9 @@ temperature, PHY health, attached drives, SMART, the firmware event log, and
 the correct backend auto-detected per card. An optional, opt-in **firmware/BIOS
 update** tab is available for users who need it.
 
-> Originally created by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
-> for the SAS2308 / 9207-8i. This fork extends it to SAS3 (9300) and SAS3.5
-> tri-mode (9400) controllers, multi-controller systems, SMART, a background
-> SMART collector, a persistent event log, and more. 
+> Inspired by **[DevlinDelFuego](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
+> for the SAS2308 / 9207-8i. This was a project I had been working on for a while with a similar capability but extends it to SAS3 (9300) and SAS3.5
+> tri-mode (9400) controllers and multi-controller systems since I have SAS3 HBAs. I wanted something that had metrics and firmware/bios flashing capability so I had a bunch of scripts but didn't know how to tie it together cleanly until I saw Devlin's program.
 
 ## Supported hardware
 
@@ -216,7 +215,7 @@ captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
 ## Credits
 
 - **[DevlinDelFuego — Unraid-LSIUtil](https://github.com/DevlinDelFuego/Unraid-LSIUtil)**
-  — the original Unraid plugin this fork (Unraid-HBAviewer) is built on.
+  — the original Unraid plugin this repo (Unraid-HBAviewer) is inspired on.
 - **[Thomas Lovell — LSIUtil](https://github.com/thomaslovell/LSIUtil/)** — the
   `lsiutil` binary that makes the SAS2 path possible.
 - **Broadcom** — `storcli` (used for SAS3 / SAS3.5 controllers) and the original
