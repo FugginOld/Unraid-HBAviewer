@@ -86,7 +86,7 @@ Tools
 └── HBAviewer
     └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log)
 
-Settings > System Settings
+User Utilities
 └── HBAviewer         (full settings page)
 
 Dashboard
@@ -95,16 +95,18 @@ Dashboard
 
 ## Configuration
 
-Open **Settings → System Settings → HBAviewer**:
+Open **User Utilities → HBAviewer**:
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| lsiutil Port | 1 | SAS2/lsiutil port number. SAS3/storcli cards are enumerated automatically. |
+| lsiutil Port | 1 | *SAS2 only* — lsiutil port number. Only shown if SAS2 cards are detected. SAS3/storcli cards are enumerated automatically. |
 | Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
 | Show PCIe Info | On | PCIe width/speed row in the Overview. |
 | Show PHY Health | On | PHY tab. |
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
+
+The HBA Monitor may take up to 60 seconds to load on the first access while it queries controller information from your hardware.
 
 ## Building from source
 
