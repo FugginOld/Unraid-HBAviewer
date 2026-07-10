@@ -2,17 +2,22 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.07.09">
+<!ENTITY version   "2026.07.09.1">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09/hbaviewer.txz">
-<!ENTITY md5       "4b43e5c7fb1c5601531a23498d8cec48">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.09.1/hbaviewer.txz">
+<!ENTITY md5       "026146237d0a5fd73bdf58101c6ffcf1">
 <!ENTITY icon      "fa-hdd-o">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.09.1###
+- Monitor page now opens instantly with a "Loading HBA information" banner; the
+  hardware read runs in the background (no more page-load hang)
+- Settings page shows the Access Method (storcli / lsiutil) with zero lag
+- Open HBAviewer Monitor button shows a load-time confirmation popup
 ###2026.07.09###
 - Settings moved to User Utilities menu (was System Settings)
 - lsiutil Port field now hidden for non-SAS2 controllers

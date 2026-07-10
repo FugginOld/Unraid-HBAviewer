@@ -3,24 +3,36 @@
    Reached via the HBAviewer icon card in Unraid Settings > System Settings. */
 
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/view.php';
 $cfg   = lsi_config_read();
 $saved = false;
 
-// Load HBA info to check for SAS2 controllers
-$has_sas2 = false;
-$script = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
-if (file_exists($script)) {
-    $raw = shell_exec('timeout 60 bash ' . escapeshellarg($script) . ' 2>/dev/null') ?? '';
-    $data = $raw ? json_decode($raw, true) : null;
-    if (is_array($data) && isset($data['controllers'])) {
-        foreach ($data['controllers'] as $c) {
-            if (!empty($c['port_name'])) {
-                $has_sas2 = true;
-                break;
-            }
-        }
+// Backend detection — driver via sysfs + storcli path lookup. Both are instant
+// (no hardware enumeration), so the page never lags. SAS2 (6 Gb) cards use the
+// mpt2sas driver + bundled lsiutil; SAS3/3.5 use mpt3sas + system storcli.
+$has_sas2 = is_dir('/sys/module/mpt2sas');
+$has_sas3 = is_dir('/sys/module/mpt3sas');
+$storcli  = '';
+foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
+    if (is_executable($c)) { $storcli = $c; break; }
+}
+if ($storcli === '') {
+    $w = trim((string) shell_exec('command -v storcli storcli64 2>/dev/null'));
+    if ($w !== '') $storcli = strtok($w, "\n");
+}
+if ($has_sas2 && !$has_sas3) {
+    $backend_label = 'lsiutil (bundled)';
+    $backend_note  = 'SAS2 controller detected (mpt2sas driver).';
+} elseif ($has_sas3) {
+    if ($storcli !== '') {
+        $backend_label = 'storcli';
+        $backend_note  = 'SAS3 / SAS3.5 controller detected (mpt3sas driver).';
+    } else {
+        $backend_label = 'storcli — NOT INSTALLED';
+        $backend_note  = 'SAS3 / SAS3.5 controller detected, but storcli is missing. Install it via the dkaser/unraid-storcli plugin (Community Applications).';
     }
+} else {
+    $backend_label = 'none detected';
+    $backend_note  = 'No supported HBA driver (mpt2sas / mpt3sas) is loaded.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
@@ -73,6 +85,17 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     <div class="lu-s-card">
       <h3>HBA Connection</h3>
 
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Access Method
+          <small>How HBAviewer reads controller information.</small>
+        </div>
+        <div class="lu-s-control" style="padding-top:8px">
+          <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
+          <small style="display:block;color:#666;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+        </div>
+      </div>
+
       <?php if ($has_sas2): ?>
       <div class="lu-s-row">
         <div class="lu-s-label">
@@ -124,8 +147,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 
     <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
     <?php if ($saved): ?>
-    <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block">Open HBAviewer Monitor</a>
-    <div class="lu-notice" style="margin-top:16px">The HBA Monitor may take up to 60 seconds to load while collecting controller information.</div>
+    <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block"
+       onclick="return confirm('The HBA Monitor reads live information from your controller(s).\n\nThe first load can take up to 60 seconds while it queries the hardware. After you press OK, the Monitor opens and shows a \'Loading HBA information\' banner until it is ready.\n\nPress OK to continue.')">Open HBAviewer Monitor</a>
     <?php endif; ?>
 
   </form>

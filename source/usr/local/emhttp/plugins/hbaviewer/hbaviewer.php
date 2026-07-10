@@ -2,43 +2,14 @@
 /* HBAviewer HBA Temperature Monitor — main plugin page */
 
 require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/view.php';
-$SCRIPT = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
+// Only config is read server-side (instant). The hardware read is deferred to
+// AJAX (ajax_info.php?type=overview_html) so the page shell paints immediately
+// and shows a "Loading HBA information" banner instead of blocking for storcli.
 $cfg        = lsi_config_read();
-$port       = $cfg['HBA_PORT'];
-$threshold  = $cfg['ALERT_THRESHOLD'];
-$showPcie   = $cfg['SHOW_PCIE'];
 $showPhy    = $cfg['SHOW_PHY'];
 $showDrives = $cfg['SHOW_DRIVES'];
 $showEvents = $cfg['SHOW_EVENTS'];
-
-// Load overview data server-side on page load
-// Increased timeout to 60s for slow storcli systems; script has 60s cache so usually faster
-if (!file_exists($SCRIPT)) {
-    // Check parent directory for debugging
-    $dir = dirname($SCRIPT);
-    $dir_exists = is_dir($dir);
-    $error = "Backend script not found at $SCRIPT. Directory exists: " . ($dir_exists ? 'yes' : 'no');
-    $data = null;
-} else {
-    $raw  = shell_exec('timeout 60 bash ' . escapeshellarg($SCRIPT) . ' 2>&1');
-    $data = $raw ? json_decode($raw, true) : null;
-
-    if (!$raw) {
-        // Script ran but produced no output - likely timed out or no HBAs detected
-        $error = 'Backend script produced no output (no HBAs detected or script timed out).';
-    } else if (!is_array($data)) {
-        // Output wasn't JSON - it's an error message from the script
-        $error = 'Backend error: ' . htmlspecialchars(substr($raw, 0, 300));
-    } else if (isset($data['error'])) {
-        // JSON has an error field
-        $error = $data['error'];
-    } else {
-        // Success - no error
-        $error = null;
-    }
-}
 ?>
 
 <style>
@@ -160,18 +131,6 @@ if (!file_exists($SCRIPT)) {
 
 <div id="lu-wrap">
 
-<?php if ($error): ?>
-  <div class="lu-error"><strong>Error:</strong> <?= htmlspecialchars($error) ?></div>
-<?php else:
-    $controllers = lsi_controllers($data);
-    $backend     = $data['backend'] ?? 'lsiutil';
-    $driver      = $data['driver']  ?? '';
-    // storcli exposes link/speed/attached-device per phy; lsiutil exposes error counters.
-    $phyDesc = $backend === 'storcli'
-        ? 'SAS link status, speed, and attached device per physical port'
-        : 'SAS link status and error counters per physical port';
-?>
-
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
 <div class="lu-tabs">
   <button class="lu-tab-btn active" data-tab="overview" onclick="luTab('overview')">Overview</button>
@@ -182,45 +141,9 @@ if (!file_exists($SCRIPT)) {
   <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
-<!-- ── Overview tab (one card per controller) ────────────────────────────── -->
+<!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
 <div id="tab-overview" class="lu-tab-pane active">
-  <div class="lu-ov-grid">
-  <?php foreach ($controllers as $i => $c): ?>
-    <?php if (isset($c['error'])): ?>
-  <div class="lu-card first"><div class="lu-error"><strong>Controller <?= $i ?>:</strong> <?= htmlspecialchars($c['error']) ?></div></div>
-    <?php continue; endif; $v = lsi_hba_view($c, $port, $i); ?>
-  <div class="lu-card first" style="--tc:<?= $v['color'] ?>" data-ctl="<?= $i ?>">
-
-    <div class="lu-overview-row">
-      <div class="lu-circle" id="lu-circle-<?= $i ?>">
-        <span class="val" id="lu-val-<?= $i ?>"><?= $v['temp'] !== '' ? $v['temp'] : 'N/A' ?></span>
-        <span class="unit"><?= $v['temp'] !== '' ? '°C' : 'no sensor' ?></span>
-      </div>
-      <div class="lu-meta">
-        <p>Model: <span><?= htmlspecialchars($v['model']) ?></span></p>
-        <p>Chip: <span><?= htmlspecialchars($v['chip']) ?></span></p>
-        <p>Firmware: <span><?= htmlspecialchars($v['firmware']) ?></span><?php if ($v['fw_old']): ?> <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">⚠ pre-P20</span><?php endif; ?></p>
-        <?php if ($v['bios']   !== ''): ?><p>BIOS: <span><?= htmlspecialchars($v['bios']) ?></span></p><?php endif; ?>
-        <?php if ($driver      !== ''): ?><p>Driver: <span><?= htmlspecialchars($driver) ?></span></p><?php endif; ?>
-        <?php if ($v['mode']   !== ''): ?><p>Mode: <span><?= htmlspecialchars($v['mode']) ?></span></p><?php endif; ?>
-        <?php if ($v['drives'] !== ''): ?><p>Drives: <span><?= htmlspecialchars($v['drives']) ?> connected</span></p><?php endif; ?>
-        <?php if ($v['port_name'] !== ''): ?><p>lsiutil Port: <span><?= htmlspecialchars($v['port_label']) ?></span></p><?php endif; ?>
-        <p>Alert Threshold: <span><?= $threshold ?>°C</span></p>
-        <span class="lu-badge" id="lu-badge-<?= $i ?>"><?= $v['label'] ?></span>
-      </div>
-    </div>
-
-    <?php if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))): ?>
-    <hr class="lu-divider">
-    <div class="lu-pcie-row">
-      <?php foreach ($v['pcie'] as $item): ?><div class="lu-pcie-item"><?= $item['label'] ?>: <span><?= htmlspecialchars($item['value']) ?></span></div><?php endforeach; ?>
-    </div>
-    <?php endif; ?>
-
-    <div class="lu-ts" id="lu-ts-<?= $i ?>">Last read: <?= date('H:i:s') ?></div>
-  </div>
-  <?php endforeach; ?>
-  </div>
+  <div id="overview-content"><div class="lu-loading">Loading HBA information… (first read can take up to 60 seconds)</div></div>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
@@ -228,7 +151,7 @@ if (!file_exists($SCRIPT)) {
 <div id="tab-phy" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;"><?= $phyDesc ?></span>
+      <span style="font-size:12px;color:#555;">SAS link status, speed, and error counters per physical port</span>
       <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
     </div>
     <div id="phy-content"><div class="lu-loading">Loading…</div></div>
@@ -275,8 +198,6 @@ if (!file_exists($SCRIPT)) {
     <div id="smart-content"><div class="lu-loading">Loading…</div></div>
   </div>
 </div>
-
-<?php endif; // end !$error ?>
 
 </div><!-- #lu-wrap -->
 
@@ -363,33 +284,21 @@ if (!file_exists($SCRIPT)) {
         }
     };
 
-    /* ── Overview auto-refresh (temperature only) ─────────────────────────── */
-    function refreshOverview() {
-        fetch('/plugins/hbaviewer/ajax_info.php?type=overview')
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-                if (d.error || !d.controllers) return;
-                // color/label computed server-side (view.php) — no client-side status map
-                d.controllers.forEach(function (ctl, i) {
-                    if (ctl.error) return;
-                    var circle = document.getElementById('lu-circle-' + i);
-                    var val    = document.getElementById('lu-val-' + i);
-                    var badge  = document.getElementById('lu-badge-' + i);
-                    var ts     = document.getElementById('lu-ts-' + i);
-
-                    if (circle) circle.style.setProperty('--tc', ctl.color);
-                    if (val)    val.textContent = ctl.temp;
-                    if (badge)  { badge.textContent = ctl.label; badge.style.background = ctl.color; }
-                    if (ts)     ts.textContent = 'Last read: ' + new Date().toLocaleTimeString();
-                });
-            })
-            .catch(function () {});
-
+    /* ── Overview: full card HTML via AJAX (banner shows until the read done) ── */
+    function loadOverview() {
+        var el = document.getElementById('overview-content');
+        if (!el) return;
+        fetch('/plugins/hbaviewer/ajax_info.php?type=overview_html')
+            .then(function (r) { return r.text(); })
+            .then(function (html) { el.innerHTML = html; })
+            .catch(function () {
+                el.innerHTML = '<div class="lu-error">Request failed — the backend may still be reading the controller. It will retry shortly.</div>';
+            });
         clearTimeout(timer);
-        timer = setTimeout(refreshOverview, REFRESH_MS);
+        timer = setTimeout(loadOverview, REFRESH_MS);
     }
 
-    timer = setTimeout(refreshOverview, REFRESH_MS);
+    loadOverview();   // fire immediately on page load, then auto-refresh
 
     // Auto-open tab from URL param (?tab=xxx)
     var urlTab = new URLSearchParams(window.location.search).get('tab');

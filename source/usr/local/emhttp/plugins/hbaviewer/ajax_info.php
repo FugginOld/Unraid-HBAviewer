@@ -7,8 +7,9 @@
  */
 
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/config.php';
 
-$type    = in_array($_GET['type'] ?? '', ['overview','phy','drives','events','smart','smart_all'])
+$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
@@ -68,6 +69,27 @@ if ($type === 'smart') {
         $color, $f($s['health'] ?? ''), $f($s['temp'] ?? ''),
         $f($s['defects'] ?? ''), $f($s['pending'] ?? ''), $f($s['power_on_hours'] ?? '')
     );
+    exit;
+}
+
+/* ── Overview cards as HTML (the Monitor page's initial + auto-refresh load) ──
+   Deferred here so hbaviewer.php paints instantly and shows a loading banner
+   instead of blocking on the storcli read. get_hba_info.sh self-caches (60s). */
+if ($type === 'overview_html') {
+    header('Content-Type: text/html; charset=utf-8');
+    $cfg  = lsi_config_read();
+    $raw  = shell_exec("timeout 60 bash $scripts/get_hba_info.sh 2>&1");
+    $data = $raw ? json_decode($raw, true) : null;
+    if (!is_array($data)) {
+        echo '<div class="lu-error"><strong>Error:</strong> '
+           . htmlspecialchars($raw ? substr($raw, 0, 300) : 'Backend produced no output.') . '</div>';
+        exit;
+    }
+    if (isset($data['error'])) {
+        echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars($data['error']) . '</div>';
+        exit;
+    }
+    echo renderOverviewCards($data, $cfg);
     exit;
 }
 
@@ -149,6 +171,51 @@ function renderSmartTable(array $data): string {
         ];
     }
     return luTable(['Device', 'Model', 'Serial', 'Health', 'Temp', 'Grown Defects', 'Pending', 'Power-On'], $rows);
+}
+
+/* Render the Overview cards (one per controller) — same markup the Monitor page
+   used to emit server-side, moved here so the initial load is async. */
+function renderOverviewCards(array $data, array $cfg): string {
+    $port      = $cfg['HBA_PORT'];
+    $threshold = $cfg['ALERT_THRESHOLD'];
+    $showPcie  = $cfg['SHOW_PCIE'];
+    $driver    = $data['driver'] ?? '';
+    $out = '<div class="lu-ov-grid">';
+    foreach (lsi_controllers($data) as $i => $c) {
+        if (isset($c['error'])) {
+            $out .= '<div class="lu-card first"><div class="lu-error"><strong>Controller ' . $i . ':</strong> '
+                  . htmlspecialchars($c['error']) . '</div></div>';
+            continue;
+        }
+        $v = lsi_hba_view($c, $port, $i);
+        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . '" data-ctl="' . $i . '">'
+              . '<div class="lu-overview-row">'
+              . '<div class="lu-circle" id="lu-circle-' . $i . '">'
+              . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
+              . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div>'
+              . '<div class="lu-meta">'
+              . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
+              . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
+              . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'
+              . ($v['fw_old'] ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '') . '</p>'
+              . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
+              . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
+              . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
+              . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
+              . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
+              . '<p>Alert Threshold: <span>' . $threshold . '&deg;C</span></p>'
+              . '<span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span>'
+              . '</div></div>';
+        if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
+            $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
+            foreach ($v['pcie'] as $item) {
+                $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
+            }
+            $out .= '</div>';
+        }
+        $out .= '<div class="lu-ts" id="lu-ts-' . $i . '">Last read: ' . date('H:i:s') . '</div></div>';
+    }
+    return $out . '</div>';
 }
 
 /* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
