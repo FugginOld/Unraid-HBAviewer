@@ -29,7 +29,7 @@ check phy-healthy      phy_healthy.json      bash "$P/phy.sh"          < fixture
 check phy-unsupported  phy_unsupported.json  bash "$P/phy.sh"          < fixtures/phy_unsupported.txt
 check events-entries   events_entries.json   bash "$P/events.sh"       < fixtures/events_entries.txt
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
-check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_lsiutil.txt
+check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_hbaviewer.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # health rollup: failed drive -> alert (even at 50C); PHY errors -> warn
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt

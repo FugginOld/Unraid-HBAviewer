@@ -13,6 +13,14 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.10.2 (unreleased)###
+- NEW (advanced, opt-in, OFF by default): Firmware/BIOS Update tab. Enable it in
+  Settings to detect the card, run a read-only per-controller verify, upload a
+  model-correct firmware image (auto-detects storcli / sas2flash / sas3flash, or
+  upload the tool), and flash ONE controller behind hard guardrails — array must
+  be stopped, typed-FLASH confirmation, single-flight lock — with a live log and
+  reboot prompt. Flash tools are proprietary and never bundled. Read the README
+  safety section first: a wrong image can permanently brick the controller.
 ###2026.07.10.1###
 - Internal architecture refactor — no visible change, same output on every tab.
   The storcli/lsiutil backend choice, controller enumeration, and driver
