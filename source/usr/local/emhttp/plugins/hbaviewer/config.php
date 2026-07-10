@@ -14,6 +14,7 @@ const LSI_SCHEMA = [
     'SHOW_PHY'        => [1,  0, 1],
     'SHOW_DRIVES'     => [1,  0, 1],
     'SHOW_EVENTS'     => [1,  0, 1],
+    'SHOW_PERF'       => [1,  0, 1],   // Performance (real-time graphs) tab
     'ENABLE_FLASH'    => [0,  0, 1],   // advanced: unlocks the Firmware/BIOS tab
 ];
 

@@ -10,6 +10,7 @@ $cfg         = lsi_config_read();
 $showPhy     = $cfg['SHOW_PHY'];
 $showDrives  = $cfg['SHOW_DRIVES'];
 $showEvents  = $cfg['SHOW_EVENTS'];
+$showPerf    = $cfg['SHOW_PERF'];
 $enableFlash = $cfg['ENABLE_FLASH'];
 // Array must be stopped before flashing. Read the state once (cheap, no hardware);
 // the flash.php preflight is the authoritative gate — this banner is advisory.
@@ -157,6 +158,15 @@ if ($enableFlash) {
 .lu-fbtn.danger { background:#c0392b; color:#fff; }
 .lu-fbtn.danger:hover { background:#a5281b; }
 .lu-fack { display:flex; align-items:center; gap:8px; color:#ddd; font-size:12px; margin:8px 0; }
+
+/* ── Performance tab ─────────────────────────────────────────────────────── */
+.lu-perf-ctl { margin-bottom: 22px; }
+.lu-perf-ctl h4 { margin:0 0 10px; color:#f5a623; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
+.lu-perf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+.lu-perf-cell { background:#141414; border:1px solid #262626; border-radius:6px; padding:8px 10px 6px; }
+.lu-perf-cell .cap { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; display:flex; justify-content:space-between; align-items:baseline; }
+.lu-perf-cell .cap b { color:#ddd; font-weight:600; font-size:12px; }
+.lu-perf-canvas { position:relative; height:88px; }
 </style>
 
 <div id="lu-wrap">
@@ -168,6 +178,7 @@ if ($enableFlash) {
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
+  <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
   <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
@@ -230,6 +241,18 @@ if ($enableFlash) {
   </div>
 </div>
 
+<!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->
+<?php if ($showPerf): ?>
+<div id="tab-perf" class="lu-tab-pane">
+  <div class="lu-card first">
+    <div class="lu-tab-toolbar">
+      <span style="font-size:12px;color:#555;">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
+    </div>
+    <div id="perf-content"><div class="lu-loading">Waiting for first samples…</div></div>
+  </div>
+</div>
+<?php endif; ?>
+
 <!-- ── Firmware/BIOS Update tab (opt-in; hidden unless ENABLE_FLASH) ──────── -->
 <?php if ($enableFlash): ?>
 <div id="tab-flash" class="lu-tab-pane">
@@ -255,6 +278,7 @@ if ($enableFlash) {
 
 </div><!-- #lu-wrap -->
 
+<?php if ($showPerf): ?><script src="/plugins/hbaviewer/chart.umd.min.js"></script><?php endif; ?>
 <script>
 (function () {
     var REFRESH_MS = 60000;
@@ -264,6 +288,7 @@ if ($enableFlash) {
 
     /* ── Tab switching ────────────────────────────────────────────────────── */
     window.luTab = function (name) {
+        if (window.luMetricsStop) luMetricsStop();   // pause perf polling on any switch
         document.querySelectorAll('.lu-tab-btn').forEach(function (b) {
             b.classList.toggle('active', b.dataset.tab === name);
         });
@@ -274,6 +299,8 @@ if ($enableFlash) {
             luSmartAll(false);
         } else if (name === 'flash') {
             if (!loaded['flash']) luFlashInit();
+        } else if (name === 'perf') {
+            luMetricsStart();
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
@@ -473,6 +500,132 @@ if ($enableFlash) {
           })
           .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(i); }, 3000); });
     };
+
+    /* ── Performance tab: poll instant counters, compute rates, plot ─────────
+       In-browser only: a ring buffer (~5 min) of rates derived from the delta
+       between two /proc/diskstats + sysfs snapshots. Runs ONLY while the tab is
+       open (luTab starts/stops it). Server stays stateless. */
+    var perfTimer = null, perfActive = false, perfPrev = null, perfCharts = {};
+    var PERF_MAX = 150;   // ~5 min at 2s
+
+    function perfCell(title) {
+        var wrap = document.createElement('div'); wrap.className = 'lu-perf-cell';
+        var cap = document.createElement('div'); cap.className = 'cap';
+        var t = document.createElement('span'); t.textContent = title;
+        var v = document.createElement('b'); v.textContent = '–';
+        cap.appendChild(t); cap.appendChild(v);
+        var cv = document.createElement('div'); cv.className = 'lu-perf-canvas';
+        var canvas = document.createElement('canvas'); cv.appendChild(canvas);
+        wrap.appendChild(cap); wrap.appendChild(cv);
+        return { wrap: wrap, canvas: canvas, val: v };
+    }
+    function perfChart(canvas, colors) {
+        return new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: { labels: [], datasets: colors.map(function (c) { return {
+                data: [], borderColor: c, backgroundColor: 'transparent',
+                borderWidth: 1.4, pointRadius: 0, tension: 0.25, spanGaps: true }; }) },
+            options: {
+                animation: false, responsive: true, maintainAspectRatio: false,
+                scales: { x: { display: false },
+                          y: { beginAtZero: true, ticks: { color:'#777', font:{size:9}, maxTicksLimit:4 }, grid: { color:'#1e1e1e' } } },
+                plugins: { legend: { display: false }, tooltip: { enabled: false } }
+            }
+        });
+    }
+    function perfPush(cell, values, valText) {
+        var ch = cell.chart;
+        ch.data.labels.push('');
+        values.forEach(function (v, i) { if (ch.data.datasets[i]) ch.data.datasets[i].data.push(v); });
+        if (ch.data.labels.length > PERF_MAX) {
+            ch.data.labels.shift();
+            ch.data.datasets.forEach(function (ds) { ds.data.shift(); });
+        }
+        ch.update('none');
+        cell.val.textContent = valText;
+    }
+    function perfBuild(ctls) {
+        var host = document.getElementById('perf-content'); host.innerHTML = ''; perfCharts = {};
+        var defs = [
+            { key:'thr',  title:'Throughput MB/s', series:['#3aa0ff','#f5a623'] },  // read, write
+            { key:'iops', title:'IOPS',            series:['#2ecc71'] },
+            { key:'util', title:'% Util',          series:['#9b59b6'] },
+            { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
+            { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
+            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
+        ];
+        ctls.forEach(function (c) {
+            var box = document.createElement('div'); box.className = 'lu-perf-ctl';
+            var h = document.createElement('h4'); h.textContent = 'Controller /c' + c.idx; box.appendChild(h);
+            var grid = document.createElement('div'); grid.className = 'lu-perf-grid';
+            var cells = {};
+            defs.forEach(function (d) {
+                var cell = perfCell(d.title); grid.appendChild(cell.wrap);
+                cell.chart = perfChart(cell.canvas, d.series); cells[d.key] = cell;
+            });
+            box.appendChild(grid); host.appendChild(box); perfCharts[c.idx] = cells;
+        });
+    }
+    function perfDriveMap(c) { var m = {}; (c.drives || []).forEach(function (d) { m[d.dev] = d; }); return m; }
+
+    function luMetricsRender(snap) {
+        var ctls = snap.controllers || [];
+        if (!ctls.length) { document.getElementById('perf-content').innerHTML = '<p class="lu-muted">No SAS controllers detected.</p>'; perfPrev = null; return; }
+        if (Object.keys(perfCharts).length !== ctls.length) { perfBuild(ctls); perfPrev = null; }
+
+        if (perfPrev) {
+            var dt = snap.t - perfPrev.t;
+            if (dt > 0) {
+                var prevById = {}; (perfPrev.controllers || []).forEach(function (c) { prevById[c.idx] = c; });
+                ctls.forEach(function (c) {
+                    var cells = perfCharts[c.idx]; if (!cells) return;
+                    var pc = prevById[c.idx];
+                    if (pc) {
+                        var pm = perfDriveMap(pc), cm = perfDriveMap(c);
+                        var rMB = 0, wMB = 0, iops = 0, utilSum = 0, utilN = 0, dWt = 0, dOps = 0;
+                        Object.keys(cm).forEach(function (dev) {
+                            var cur = cm[dev], prv = pm[dev]; if (!prv) return;
+                            var dR = cur.r_sect - prv.r_sect, dWs = cur.w_sect - prv.w_sect;
+                            var dRi = cur.r_io - prv.r_io, dWi = cur.w_io - prv.w_io;
+                            var dTick = cur.io_ticks - prv.io_ticks, dW = cur.weighted - prv.weighted;
+                            if (dR < 0 || dWs < 0 || dRi < 0 || dWi < 0 || dTick < 0 || dW < 0) return;  // counter wrap -> skip drive
+                            rMB += dR * 512 / dt / 1e6; wMB += dWs * 512 / dt / 1e6;
+                            iops += (dRi + dWi) / dt;
+                            utilSum += Math.min(100, dTick / dt / 10); utilN++;
+                            dWt += dW; dOps += (dRi + dWi);
+                        });
+                        var util = utilN ? utilSum / utilN : 0;
+                        var lat = dOps > 0 ? dWt / dOps : 0;
+                        var dPhy = (c.phy.inv + c.phy.disp + c.phy.sync + c.phy.reset)
+                                 - (pc.phy.inv + pc.phy.disp + pc.phy.sync + pc.phy.reset);
+                        var phyRate = dPhy >= 0 ? dPhy / dt : 0;
+                        perfPush(cells.thr,  [rMB, wMB], (rMB + wMB).toFixed(1));
+                        perfPush(cells.iops, [iops], Math.round(iops).toString());
+                        perfPush(cells.util, [util], util.toFixed(0) + '%');
+                        perfPush(cells.lat,  [lat], lat.toFixed(1));
+                        perfPush(cells.phy,  [phyRate], phyRate.toFixed(1));
+                    }
+                    var temp = (c.temp == null) ? null : c.temp;
+                    perfPush(cells.temp, [temp == null ? NaN : temp], temp == null ? '–' : temp + '°');
+                });
+            }
+        }
+        perfPrev = snap;
+    }
+
+    function luMetricsPoll() {
+        if (!perfActive) return;
+        fetch('/plugins/hbaviewer/ajax_info.php?type=metrics')
+          .then(function (r) { return r.json(); })
+          .then(function (snap) { if (!perfActive) return; luMetricsRender(snap); perfTimer = setTimeout(luMetricsPoll, 2000); })
+          .catch(function () { if (perfActive) perfTimer = setTimeout(luMetricsPoll, 3000); });
+    }
+    window.luMetricsStart = function () {
+        var host = document.getElementById('perf-content');
+        if (typeof Chart === 'undefined') { host.innerHTML = '<div class="lu-error">Chart.js failed to load — reinstall the plugin (build.sh bundles chart.umd.min.js).</div>'; return; }
+        perfActive = true; luMetricsPoll();
+    };
+    window.luMetricsStop = function () { perfActive = false; clearTimeout(perfTimer); perfPrev = null; };
 
     loadOverview();   // fire immediately on page load, then auto-refresh
 

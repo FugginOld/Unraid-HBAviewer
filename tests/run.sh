@@ -41,6 +41,7 @@ check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" <
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
 check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
 check smart-sata       smart_sata.json      bash "$P/smart.sh" < fixtures/smart/sata_drive.txt
+check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null

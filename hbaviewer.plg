@@ -14,6 +14,10 @@
 
 <CHANGES>
 ###2026.07.10.2 (unreleased)###
+- NEW: Performance tab — real-time per-controller graphs (throughput, IOPS,
+  %util, latency, PHY error-rate, temperature). Sampled ~2s in the browser from
+  /proc/diskstats + sysfs (zero-dependency, no sampler daemon, no flash writes);
+  history is in-browser only and resets on reload. Toggle in Settings (default on).
 - NEW (advanced, opt-in, OFF by default): Firmware/BIOS Update tab. Enable it in
   Settings to detect the card, run a read-only per-controller verify, upload a
   model-correct firmware image (auto-detects storcli / sas2flash / sas3flash, or

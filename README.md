@@ -51,6 +51,10 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   vs expander/backplane).
 - **Dashboard tile** — at-a-glance temperature and health on the Unraid
   dashboard (Unraid 7.2+).
+- **Performance graphs** *(real-time, in-browser)* — live per-controller
+  throughput, IOPS, %util, latency, PHY error-rate, and temperature, sampled
+  ~2 s from `/proc/diskstats` and `sysfs` (zero-dependency — no sampler daemon,
+  no flash writes; history lives in the browser and resets on reload).
 - **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
   flash tab that detects the card + running firmware, runs a read-only
   read-only per-controller sanity check, takes your model-correct image, and flashes one
@@ -144,7 +148,8 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 Tools
 └── HBAviewer
     └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log
-                              · Firmware/BIOS Update*)   *opt-in, off by default
+                              · Performance · Firmware/BIOS Update*)
+                              *opt-in, off by default
 
 User Utilities
 └── HBAviewer         (full settings page)

@@ -1,6 +1,9 @@
 # Downloaded binary — fetched by build.sh at build time
 source/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64
 
+# Third-party Chart.js UMD build — fetched by build.sh (Performance tab)
+source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js
+
 # Built package — uploaded as a GitHub release asset, not committed
 releases/
 

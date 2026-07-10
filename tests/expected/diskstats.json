@@ -1,0 +1,1 @@
+{"drives":[{"dev":"sdb","r_io":1000,"r_sect":16000,"w_io":700,"w_sect":14000,"io_ticks":900,"weighted":1250},{"dev":"sdc","r_io":50,"r_sect":800,"w_io":25,"w_sect":400,"io_ticks":30,"weighted":45}]}
