@@ -2,18 +2,18 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.07.10.1">
+<!ENTITY version   "2026.07.10.2">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.10.1/hbaviewer.txz">
-<!ENTITY md5       "4d6242738df649e7467896d96a8d1060">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.10.2/hbaviewer.txz">
+<!ENTITY md5       "437eb2fe1e4c8c1e3cefdd6e9239d101">
 <!ENTITY icon      "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
-###2026.07.10.2 (unreleased)###
+###2026.07.10.2###
 - NEW: Performance tab — real-time per-controller graphs (throughput, IOPS,
   %util, latency, PHY error-rate, temperature). Sampled ~2s in the browser from
   /proc/diskstats + sysfs (zero-dependency, no sampler daemon, no flash writes);
@@ -25,6 +25,9 @@
   be stopped, typed-FLASH confirmation, single-flight lock — with a live log and
   reboot prompt. Flash tools are proprietary and never bundled. Read the README
   safety section first: a wrong image can permanently brick the controller.
+- UI refresh: refreshed Monitor / Settings / dashboard-tile styling (rounded
+  cards, cleaner tabs, temperature ring) and a branded plugin icon. No change to
+  what's shown, just how it looks.
 ###2026.07.10.1###
 - Internal architecture refactor — no visible change, same output on every tab.
   The storcli/lsiutil backend choice, controller enumeration, and driver
