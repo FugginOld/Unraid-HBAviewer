@@ -19,6 +19,17 @@ and ring-buffer wrap. `event_merge(history, current) -> [kept, changed]` is pure
 is the injectable store. `ajax_info.php` `type=events` is a thin read→merge→write
 caller.
 
+## flash (mutating) — `flash.php` + `scripts/flash_hba.sh`
+The ONE place HBAviewer writes to hardware, kept off the read-only path. Opt-in
+(`ENABLE_FLASH`, default off). `flash.php` owns the guards — `flash_preflight`
+(array STOPPED via `flash_array_stopped`, valid controller, confirmed image,
+single-flight lock), `flash_safe_name` (upload confinement) — all pure and
+unit-tested; the HTTP dispatch is skipped under CLI. `scripts/flash_hba.sh` maps
+chip→tool (`flasher_for_chip`: SAS2→sas2flash, SAS30/31→sas3flash,
+SAS34/35→storcli), resolves it via `find_flasher`/`find_storcli`, and runs
+`list` (read-only preflight) or `flash`. Tool binaries are never bundled —
+found in PATH or uploaded to `/boot/config/plugins/hbaviewer/tools/`.
+
 ## cached read — `cached_read.php` (`cached_read`)
 The "slow read → serve cached → detached job" orchestration in one place:
 freshness, single-flight lock, atomic tmp→rename swap. Returns

@@ -6,10 +6,18 @@ require_once __DIR__ . '/config.php';
 // Only config is read server-side (instant). The hardware read is deferred to
 // AJAX (ajax_info.php?type=overview_html) so the page shell paints immediately
 // and shows a "Loading HBA information" banner instead of blocking for storcli.
-$cfg        = lsi_config_read();
-$showPhy    = $cfg['SHOW_PHY'];
-$showDrives = $cfg['SHOW_DRIVES'];
-$showEvents = $cfg['SHOW_EVENTS'];
+$cfg         = lsi_config_read();
+$showPhy     = $cfg['SHOW_PHY'];
+$showDrives  = $cfg['SHOW_DRIVES'];
+$showEvents  = $cfg['SHOW_EVENTS'];
+$enableFlash = $cfg['ENABLE_FLASH'];
+// Array must be stopped before flashing. Read the state once (cheap, no hardware);
+// the flash.php preflight is the authoritative gate — this banner is advisory.
+$arrayStopped = false;
+if ($enableFlash) {
+    $vi = @parse_ini_file('/var/local/emhttp/var.ini');
+    $arrayStopped = is_array($vi) && strtoupper((string) ($vi['mdState'] ?? '')) === 'STOPPED';
+}
 ?>
 
 <style>
@@ -127,6 +135,26 @@ $showEvents = $cfg['SHOW_EVENTS'];
     cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;
 }
 .lu-refresh-btn:hover { border-color: #888; color: #ddd; }
+
+/* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
+.lu-flash-warn { background:#2a1414; border:1px solid #7a2020; border-radius:6px; color:#e88; font-size:13px; line-height:1.5; padding:12px 16px; margin-bottom:14px; }
+.lu-flash-warn strong { color:#ff6b6b; }
+.lu-flash-array { border-radius:6px; font-size:13px; padding:10px 16px; margin-bottom:16px; }
+.lu-flash-array.ok  { background:#14240f; border:1px solid #2a4a1f; color:#9c9; }
+.lu-flash-array.bad { background:#241a0f; border:1px solid #5a3f1f; color:#dba24a; }
+.lu-fc { border:1px solid #333; border-radius:6px; padding:16px 18px; margin-bottom:16px; }
+.lu-fc h4 { margin:0 0 4px; color:#f5a623; font-size:13px; }
+.lu-fc .sub { color:#888; font-size:12px; margin:0 0 14px; }
+.lu-fstep { margin:14px 0; }
+.lu-fstep label.step { display:block; color:#aaa; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
+.lu-fc input[type=file] { color:#bbb; font-size:12px; }
+.lu-fc input[type=text] { background:#111; border:1px solid #3a3a3a; border-radius:4px; color:#ddd; padding:6px 9px; font-size:13px; width:120px; }
+.lu-fc pre { background:#0d0d0d; border:1px solid #222; border-radius:4px; color:#bbb; font-size:11px; line-height:1.4; max-height:280px; overflow:auto; padding:10px; margin:8px 0 0; white-space:pre-wrap; }
+.lu-fbtn { background:#f5a623; border:none; border-radius:4px; color:#111; font-size:12px; font-weight:700; padding:7px 16px; cursor:pointer; }
+.lu-fbtn:hover { background:#d9901a; }
+.lu-fbtn.danger { background:#c0392b; color:#fff; }
+.lu-fbtn.danger:hover { background:#a5281b; }
+.lu-fack { display:flex; align-items:center; gap:8px; color:#ddd; font-size:12px; margin:8px 0; }
 </style>
 
 <div id="lu-wrap">
@@ -138,6 +166,7 @@ $showEvents = $cfg['SHOW_EVENTS'];
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
+  <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
   <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:8px 18px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#666;text-decoration:none;" onmouseover="this.style.color='#bbb'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
 </div>
 
@@ -199,6 +228,29 @@ $showEvents = $cfg['SHOW_EVENTS'];
   </div>
 </div>
 
+<!-- ── Firmware/BIOS Update tab (opt-in; hidden unless ENABLE_FLASH) ──────── -->
+<?php if ($enableFlash): ?>
+<div id="tab-flash" class="lu-tab-pane">
+  <div class="lu-card first">
+    <div class="lu-flash-warn">
+      <strong>&#9888; Firmware / BIOS flashing.</strong> A wrong or mismatched image
+      will <strong>permanently brick</strong> your controller. Verify the image
+      matches your exact card and chip. The array must be stopped. Proceed entirely
+      at your own risk.
+    </div>
+    <div class="lu-flash-array <?= $arrayStopped ? 'ok' : 'bad' ?>">
+      <?php if ($arrayStopped): ?>
+        Array is <strong>STOPPED</strong> — safe to flash.
+      <?php else: ?>
+        Array is <strong>NOT stopped</strong> — stop it on the Main tab, then reload
+        this page. Flashing is blocked by the server until the array is stopped.
+      <?php endif; ?>
+    </div>
+    <div id="flash-content"><div class="lu-loading">Loading controllers…</div></div>
+  </div>
+</div>
+<?php endif; ?>
+
 </div><!-- #lu-wrap -->
 
 <script>
@@ -218,6 +270,8 @@ $showEvents = $cfg['SHOW_EVENTS'];
         });
         if (name === 'smart') {
             luSmartAll(false);
+        } else if (name === 'flash') {
+            if (!loaded['flash']) luFlashInit();
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
@@ -304,6 +358,116 @@ $showEvents = $cfg['SHOW_EVENTS'];
                 timer = setTimeout(loadOverview, 5000);
             });
     }
+
+    /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────
+       Opt-in, single-flight (one flash at a time, enforced server-side). This UI
+       drives flash.php; every real guard (array stopped, confirm, lock) is
+       re-checked on the server, so the JS checks here are only fast feedback. */
+    var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
+    function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
+    function flashChip(i){ var c=flashCard(i); return c?c.getAttribute('data-chip'):''; }
+
+    window.luFlashInit = function () {
+        var el = document.getElementById('flash-content');
+        if (!el) return;
+        fetch('/plugins/hbaviewer/ajax_info.php?type=overview')
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            var ctls = (d && d.controllers) || [];
+            if (!ctls.length) { el.innerHTML = '<div class="lu-error">No controllers detected (or backend error).</div>'; return; }
+            el.innerHTML = ctls.map(function(c,i){
+              if (c.error) return '<div class="lu-fc"><h4>Controller /c'+i+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
+              var chip = c.model || '';
+              return '<div class="lu-fc" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
+                + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
+                + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
+                + '<div class="lu-fstep"><label class="step">Step 1 — verify the flash tool sees this card</label>'
+                +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Run listall</button>'
+                +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
+                + '<div class="lu-fstep"><label class="step">Step 2 — upload the model-correct image (+ optional BIOS / tool)</label>'
+                +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
+                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"><br><br>'
+                +   'Flash tool if not installed (sas2flash/sas3flash): <input type="file" id="flash-tool-'+i+'"> '
+                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
+                +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
+                + '<div class="lu-fstep"><label class="step">Step 3 — confirm &amp; flash</label>'
+                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"> I understand a wrong image can permanently brick this controller.</label>'
+                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"> '
+                +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')">Flash /c'+i+'</button></div>'
+                + '<pre id="flash-log-'+i+'" style="display:none"></pre>'
+                + '</div>';
+            }).join('');
+            loaded['flash'] = true;
+          })
+          .catch(function(){ el.innerHTML = '<div class="lu-error">Failed to load controllers.</div>'; });
+    };
+
+    window.luFlashList = function (i) {
+        var pre = document.getElementById('flash-list-'+i);
+        pre.style.display='block'; pre.textContent='Running…';
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(i), ctl:i})})
+          .then(function(r){ return r.text(); })
+          .then(function(t){ pre.textContent = t || '(no output)'; })
+          .catch(function(){ pre.textContent='Request failed.'; });
+    };
+
+    window.luFlashUpload = function (i) {
+        var out = document.getElementById('flash-up-'+i); out.style.color='#888'; out.textContent='Uploading…';
+        var fw=document.getElementById('flash-fw-'+i).files[0];
+        var bios=document.getElementById('flash-bios-'+i).files[0];
+        var tool=document.getElementById('flash-tool-'+i).files[0];
+        if (!fw && !tool) { out.style.color='#e88'; out.textContent='Choose a firmware file first.'; return; }
+        var fd = new FormData(); fd.append('action','upload');
+        if (fw) fd.append('firmware', fw);
+        if (bios) fd.append('bios', bios);
+        if (tool) fd.append('tool', tool);
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if (d.error) { out.style.color='#e88'; out.textContent=d.error; return; }
+            var c=flashCard(i);
+            if (d.firmware) c.setAttribute('data-fw', d.firmware);
+            if (d.bios) c.setAttribute('data-bios', d.bios);
+            out.style.color='#9c9';
+            out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
+          })
+          .catch(function(){ out.style.color='#e88'; out.textContent='Upload failed.'; });
+    };
+
+    window.luFlashGo = function (i) {
+        var log = document.getElementById('flash-log-'+i);
+        var c = flashCard(i);
+        var fw = c.getAttribute('data-fw'); var bios = c.getAttribute('data-bios') || '';
+        var ack = document.getElementById('flash-ack-'+i).checked;
+        var confirmTxt = document.getElementById('flash-confirm-'+i).value;
+        if (!flashArrayStopped) { alert('The array is not stopped. Stop it on the Main tab and reload this page.'); return; }
+        if (!ack) { alert('Tick the acknowledgement box first.'); return; }
+        if (confirmTxt !== 'FLASH') { alert('Type FLASH (all caps) to confirm.'); return; }
+        if (!fw) { alert('Upload a firmware image first.'); return; }
+        if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
+        log.style.display='block'; log.textContent='Starting flash…';
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt})})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if (d.error) { log.textContent='Refused: '+d.error; return; }
+            luFlashPoll(i);
+          })
+          .catch(function(){ log.textContent='Request failed.'; });
+    };
+
+    window.luFlashPoll = function (i) {
+        var log = document.getElementById('flash-log-'+i);
+        fetch('/plugins/hbaviewer/flash.php?action=status')
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            log.textContent = d.log || '(waiting for output…)';
+            if (d.running) { setTimeout(function(){ luFlashPoll(i); }, 2000); return; }
+            if (d.done === 'success') log.textContent += '\n\n✔ Flash completed. REBOOT the server to load the new firmware. (Linux flashers update the BIOS but cannot erase it.)';
+            else if (d.done === 'error') log.textContent += '\n\n✖ Flash tool exited with an error (code '+d.exit+'). Read the log above; do NOT reboot — reflash the correct image first.';
+          })
+          .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(i); }, 3000); });
+    };
 
     loadOverview();   // fire immediately on page load, then auto-refresh
 

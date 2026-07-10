@@ -44,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
         'SHOW_EVENTS'     => isset($_POST['show_events']) ? 1 : 0,
+        'ENABLE_FLASH'    => isset($_POST['enable_flash']) ? 1 : 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -68,6 +69,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-toggle span { font-size: 13px; color: #ddd; }
 .lu-toggle small { font-size: 11px; color: #555; margin-left: auto; }
 .lu-notice { background: #1a2a1a; border: 1px solid #2a4a2a; border-radius: 4px; color: #8c8; font-size: 12px; padding: 8px 14px; margin-bottom: 14px; }
+.lu-danger { background: #2a1414; border: 1px solid #7a2020; border-radius: 4px; color: #e88; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: #ff6b6b; }
 .lu-btn { background: #f5a623; border: none; border-radius: 4px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
 .lu-link { font-size: 12px; color: #f5a623; text-decoration: none; }
@@ -142,6 +145,22 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         <input type="checkbox" name="show_events" <?= lu_checked((int)$cfg['SHOW_EVENTS']) ?>>
         <span>Event Log</span>
         <small>HBA firmware event log (requires expert mode)</small>
+      </label>
+    </div>
+
+    <div class="lu-s-card">
+      <h3>Advanced — Firmware Flashing</h3>
+      <div class="lu-danger">
+        <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
+        <strong>brick</strong> your controller if the wrong image is used. The array
+        must be <strong>stopped</strong> before flashing. The flash tools
+        (sas2flash / sas3flash) are not bundled — you supply the model-correct image
+        and tool. Leave this off unless you know exactly what you are doing.
+      </div>
+      <label class="lu-toggle">
+        <input type="checkbox" name="enable_flash" <?= lu_checked((int)$cfg['ENABLE_FLASH']) ?>>
+        <span>Enable firmware/BIOS flashing (advanced)</span>
+        <small>adds a Firmware/BIOS Update tab to the Monitor</small>
       </label>
     </div>
 

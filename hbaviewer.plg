@@ -58,6 +58,8 @@ if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
   printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
+# Persisted dir for user-uploaded flash tools (sas2flash/sas3flash) — survives updates.
+mkdir -p /boot/config/plugins/hbaviewer/tools
 </INLINE>
 </FILE>
 

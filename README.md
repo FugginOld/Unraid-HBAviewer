@@ -51,9 +51,66 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   vs expander/backplane).
 - **Dashboard tile** — at-a-glance temperature and health on the Unraid
   dashboard (Unraid 7.2+).
+- **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
+  flash tab that detects the card + running firmware, runs a read-only
+  `-listall` sanity check, takes your model-correct image, and flashes one
+  controller behind hard guardrails with a live log. See the safety section below.
 
-All data is read directly from the HBA (`storcli` / `lsiutil`), Linux `sysfs`,
-and `smartctl` — no agents, no polling daemons, no external calls.
+All *monitoring* data is read directly from the HBA (`storcli` / `lsiutil`),
+Linux `sysfs`, and `smartctl` — no agents, no polling daemons, no external calls.
+
+## Firmware / BIOS updates (advanced, opt-in)
+
+> **⚠ Flashing HBA firmware can permanently brick your controller.** This
+> feature is **off by default** and is for users who already know how to flash
+> an LSI/Broadcom HBA from a console. If you are not sure, do not enable it.
+
+HBAviewer is otherwise strictly read-only. The optional **Firmware/BIOS Update**
+tab is *assisted, not automatic*: it detects the card and runs the tools, but
+**you** supply the model-correct firmware image and (if not already installed)
+the flash tool.
+
+**Enabling it:** Settings → *Advanced — Firmware Flashing* → tick
+**Enable firmware/BIOS flashing** → Save. A **Firmware/BIOS Update** tab then
+appears on the Monitor.
+
+**How a flash works, per controller:**
+
+1. **Verify** — run the tool's `-listall` (read-only) to confirm it sees the card.
+2. **Upload** — the exact firmware `.bin`/`.rom` for *your* model (optionally a
+   BIOS `.rom`, and the `sas2flash`/`sas3flash` binary if it isn't in `PATH`).
+3. **Confirm & flash** — tick the acknowledgement, type `FLASH`, and flash. A
+   live log streams; on success it prompts you to **reboot**.
+
+**Tools used** (auto-detected in `PATH`, or upload them — none are bundled):
+
+| Generation | Chip | Flash tool |
+| --- | --- | --- |
+| SAS2 (9200/9211/2308) | `SAS2xxx` | `sas2flash` |
+| SAS3 (9300/9305) | `SAS30xx`/`SAS31xx` | `sas3flash` |
+| SAS3.5 / 9400 tri-mode | `SAS34xx`/`SAS35xx` | `storcli /cN download` |
+
+**Guardrails (all enforced server-side, not just in the browser):**
+
+- Opt-in toggle gates the whole feature (default off).
+- The Unraid **array must be STOPPED** — the flash is refused otherwise.
+- Read-only `-listall` first, so you confirm the tool sees the card.
+- Explicit acknowledgement checkbox **and** a typed `FLASH` confirmation.
+- Single-flight lock — one flash at a time, never auto-retried.
+- Uploaded filenames are sanitised and confined to a fixed working directory.
+
+**Caveats — read these:**
+
+- **Bricking is a real, unavoidable risk** if the image doesn't match the card.
+  Double-check the model/chip against the image before you flash.
+- The flash tools are **proprietary** and per-generation — not shipped with the
+  plugin. Install them (e.g. via a storcli/flash plugin) or upload them.
+- Some SAS2 cards need a specific `sas2flash` build (e.g. a 9207-8i wants the P14
+  tool). Use the right one; the plugin won't second-guess it.
+- storcli 94xx flashing semantics vary by firmware package (a downrev may need
+  `noverchk`); the log is shown verbatim — treat it as best-effort.
+- Linux flashers **update** the BIOS region but **cannot erase** it.
+- Stop any Unassigned Devices on the HBA as well before flashing.
 
 ## Requirements
 
@@ -84,7 +141,8 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 ```text
 Tools
 └── HBAviewer
-    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log)
+    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log
+                              · Firmware/BIOS Update*)   *opt-in, off by default
 
 User Utilities
 └── HBAviewer         (full settings page)
@@ -108,6 +166,7 @@ right backend is in use before opening the Monitor.
 | Show PHY Health | On | PHY tab. |
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
+| Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
 immediately with a **"Loading HBA information"** banner and reads the hardware in
