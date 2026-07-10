@@ -1,7 +1,8 @@
 name: tests
 
-# This plugin has no Composer dependencies — tests are plain shell + core PHP
-# (bash tests/run.sh: parser goldens, backend routing, and PHP unit tests).
+# This plugin has no Composer dependencies — tests are plain shell + core PHP.
+# CI: syntax-lint every PHP and shell file, then run the full suite
+# (bash tests/run.sh: parser goldens, backend routing, PHP unit tests).
 on:
   push:
   pull_request:
@@ -27,6 +28,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gawk
           sudo update-alternatives --set awk /usr/bin/gawk
+
+      - name: Lint PHP (php -l on every .php)
+        run: find source tests -name '*.php' -print0 | xargs -0 -r -n1 php -l
+
+      - name: Lint shell (bash -n on every .sh)
+        run: find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
 
       - name: Run test suite
         run: bash tests/run.sh
