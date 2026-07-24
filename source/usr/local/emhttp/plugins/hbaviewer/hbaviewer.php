@@ -28,7 +28,8 @@ if ($enableFlash) {
 #lu-wrap {
     --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
     --border:#333333; --border-soft:#2a2a2a;
-    --text:#dddddd; --muted:#999999; --faint:#666666;
+    /* ponytail: one text colour; --muted/--faint kept as aliases so the ~40 call sites stay untouched */
+    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
     --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
@@ -50,6 +51,11 @@ if ($enableFlash) {
 .lu-tab-btn:hover  { color: var(--muted); }
 .lu-tab-btn.active { color: var(--accent); }
 .lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
+.lu-settings-link {
+    margin-left: auto; padding: 11px 14px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--text); text-decoration: none; transition: color 0.15s;
+}
+.lu-settings-link:hover { color: var(--accent); }
 .lu-tab-btn[data-tab="flash"] { color: #c98d88; }
 .lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
 .lu-tab-pane { display: none; }
@@ -173,7 +179,7 @@ if ($enableFlash) {
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
-  <a href="/Settings/HBAviewer_Settings" style="margin-left:auto;padding:11px 14px;font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:#666;text-decoration:none;" onmouseover="this.style.color='#999'" onmouseout="this.style.color='#666'">&#9881; Settings</a>
+  <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
@@ -186,7 +192,7 @@ if ($enableFlash) {
 <div id="tab-phy" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">SAS link status, speed, and error counters per physical port</span>
+      <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
       <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
     </div>
     <div id="phy-content"><div class="lu-loading">Loading…</div></div>
@@ -199,7 +205,7 @@ if ($enableFlash) {
 <div id="tab-drives" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">Devices attached to the HBA</span>
+      <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
       <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
     </div>
     <div id="drives-content"><div class="lu-loading">Loading…</div></div>
@@ -212,7 +218,7 @@ if ($enableFlash) {
 <div id="tab-events" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">HBA firmware event log (newest first)</span>
+      <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
       <span>
         <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
         <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
@@ -227,7 +233,7 @@ if ($enableFlash) {
 <div id="tab-smart" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">Per-drive SMART health — collected in the background (safe: never wakes a standby drive)</span>
+      <span style="font-size:12px;color:var(--text);">Per-drive SMART health — collected in the background (safe: never wakes a standby drive)</span>
       <button class="lu-refresh-btn" onclick="luSmartAll(true)">Refresh</button>
     </div>
     <div id="smart-content"><div class="lu-loading">Loading…</div></div>
@@ -239,7 +245,7 @@ if ($enableFlash) {
 <div id="tab-perf" class="lu-tab-pane">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:#555;">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
+      <span style="font-size:12px;color:var(--text);">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
     </div>
     <div id="perf-content"><div class="lu-loading">Waiting for first samples…</div></div>
   </div>

@@ -59,7 +59,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 #lu-settings-wrap {
     --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
     --border:#333333; --border-soft:#2a2a2a;
-    --text:#dddddd; --muted:#999999; --faint:#666666;
+    /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
+    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
     --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
@@ -107,7 +108,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         </div>
         <div class="lu-s-control" style="padding-top:8px">
           <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
-          <small style="display:block;color:#888;margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+          <small style="display:block;color:var(--text);margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
 
@@ -136,7 +137,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 
     <div class="lu-s-card">
       <h3>Display Panels</h3>
-      <p style="font-size:12px;color:#555;margin:0 0 14px">Temperature is always shown. Toggle additional panels below.</p>
+      <p style="font-size:12px;color:var(--text);margin:0 0 14px">Temperature is always shown. Toggle additional panels below.</p>
 
       <label class="lu-toggle">
         <input type="checkbox" name="show_pcie" <?= lu_checked((int)$cfg['SHOW_PCIE']) ?>>

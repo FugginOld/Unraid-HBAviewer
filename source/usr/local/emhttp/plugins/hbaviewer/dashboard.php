@@ -57,9 +57,9 @@ echo <<<CSS
 }
 #tblHBAviewer .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:#1c1c1c; border:1px solid #2a2a2a; }
 #tblHBAviewer .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:#ddd; line-height:1; }
-#tblHBAviewer .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#999; letter-spacing:0.05em; }
+#tblHBAviewer .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#ddd; letter-spacing:0.05em; }
 #tblHBAviewer .lu-d-meta { flex:1; }
-#tblHBAviewer .lu-d-meta p   { margin:3px 0; font-size:12px; color:#666; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
+#tblHBAviewer .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
 #tblHBAviewer .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
 #tblHBAviewer .lu-d-badge {
   display:inline-flex; align-items:center; gap:6px; margin-top:6px;
@@ -70,12 +70,12 @@ echo <<<CSS
 #tblHBAviewer .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 #tblHBAviewer .lu-d-pcie {
   display:flex; gap:16px; flex-wrap:wrap;
-  font-size:12px; color:#666;
+  font-size:12px; color:#ddd;
   padding-top:8px; margin-top:8px; margin-left:100px;
   border-top:1px solid #2a2a2a;
 }
 #tblHBAviewer .lu-d-pcie span { color:#ddd; font-weight:500; }
-#tblHBAviewer .lu-d-ts { font-size:10px; color:#555; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
+#tblHBAviewer .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 </style>
 CSS;
 
