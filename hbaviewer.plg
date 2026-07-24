@@ -13,6 +13,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.23###
+- UI: one consistent text color across the Monitor tabs, Settings and the
+  dashboard tile, replacing the several shades of gray that were harder to read
+  on some themes. Appearance only — no change to what's collected or shown.
 ###2026.07.10.2###
 - NEW: Performance tab — real-time per-controller graphs (throughput, IOPS,
   %util, latency, PHY error-rate, temperature). Sampled ~2s in the browser from

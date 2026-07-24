@@ -1,5 +1,6 @@
-# Downloaded binary — fetched by build.sh at build time
-source/usr/local/emhttp/plugins/lsiutil/lsiutil.x86_64
+# Note: the lsiutil binary (plugins/hbaviewer/hbaviewer.x86_64) is committed, not
+# ignored — build.sh only downloads it when missing, so releases don't depend on
+# that upstream URL still being up.
 
 # Third-party Chart.js UMD build — fetched by build.sh (Performance tab)
 source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js

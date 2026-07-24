@@ -1,0 +1,81 @@
+name: release
+
+# Cut a release by pushing a date tag from main:
+#   1. add a ###2026.07.23### block to <CHANGES> in hbaviewer.plg, commit, push
+#   2. git tag 2026.07.23 && git push --tags
+#
+# This workflow then runs the tests, builds the .txz, patches the version /
+# md5 / pkgURL entities in hbaviewer.plg on main, and publishes the release.
+# Unraid clients poll that plg on main, so the patch commit is what ships.
+on:
+  push:
+    tags: ['20*']
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/php.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # The plg is patched and pushed to main, so the tag must be main's tip —
+      # otherwise we'd ship a txz built from code the tag doesn't point at.
+      - name: Tag must point at main
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$GITHUB_REF_NAME^{commit}")" \
+            || { echo "::error::tag $GITHUB_REF_NAME is not main's tip"; exit 1; }
+
+      # Release notes = the CHANGES block you wrote before tagging, with GitHub's
+      # generated commit/PR list appended at publish time. No block, no release —
+      # that's the forcing function for the changelog Unraid actually displays.
+      - name: Extract changelog for this version
+        run: |
+          awk -v v="###$GITHUB_REF_NAME###" \
+            '$0==v {f=1; next} /^###/ {f=0} f' hbaviewer.plg > block.md
+          test -s block.md \
+            || { echo "::error::no ###$GITHUB_REF_NAME### block in hbaviewer.plg <CHANGES>"; exit 1; }
+          { echo "## Highlights"; echo; cat block.md; } > notes.md
+
+      # makepkg is Slackware-only; build.sh falls back to tar --owner=root, which
+      # is what these releases have always shipped.
+      - name: Build hbaviewer.txz
+        run: bash build.sh "$GITHUB_REF_NAME"
+
+      - name: Patch version, md5 and pkgURL in hbaviewer.plg
+        run: |
+          MD5=$(md5sum releases/hbaviewer.txz | cut -d' ' -f1)
+          VER="$GITHUB_REF_NAME"
+          sed -i \
+            -e "s|<!ENTITY version .*|<!ENTITY version   \"$VER\">|" \
+            -e "s|<!ENTITY md5 .*|<!ENTITY md5       \"$MD5\">|" \
+            -e "s|\(<!ENTITY pkgURL .*/download/\)[^/]*\(/hbaviewer.txz\">\)|\1$VER\2|" \
+            hbaviewer.plg
+          # pkgURL repeats the version as a literal, so all three must land.
+          grep -q "ENTITY version .*\"$VER\"" hbaviewer.plg \
+            && grep -q "ENTITY md5 .*\"$MD5\"" hbaviewer.plg \
+            && grep -q "/download/$VER/hbaviewer.txz" hbaviewer.plg \
+            || { echo "::error::plg patch missed an entity"; grep '<!ENTITY' hbaviewer.plg; exit 1; }
+
+      - name: Commit the bumped plg to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit hbaviewer.plg -m "Release $GITHUB_REF_NAME"
+          git push origin main
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # --generate-notes appends the commit/PR list under the Highlights block.
+          gh release create "$GITHUB_REF_NAME" releases/hbaviewer.txz \
+            -t "$GITHUB_REF_NAME" -F notes.md --generate-notes
