@@ -4,7 +4,7 @@
 <PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg</PluginURL>
 <PluginAuthor>FugginOld</PluginAuthor>
 <Beta>False</Beta>
-<Category>Tools: System:</Category>
+<Category>Tools</Category>
 <Name>HBAviewer</Name>
 <Description>
 Monitor LSI / Broadcom SAS HBAs directly from Unraid across three generations:
