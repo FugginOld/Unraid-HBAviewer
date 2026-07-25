@@ -1,24 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Containers>
-<Plugin>True</Plugin>
-<PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg</PluginURL>
-<PluginAuthor>FugginOld</PluginAuthor>
-<Beta>False</Beta>
-<Category>Tools</Category>
-<Name>HBAviewer</Name>
-<Description>
+<Plugin>
+  <Name>HBAviewer</Name>
+
+  <Overview>
 Monitor LSI / Broadcom SAS HBAs directly from Unraid across three generations:
 SAS2 (9200 family, via the bundled lsiutil) and SAS3 / SAS3.5 tri-mode (9300 / 9400
 families, via the system storcli), with the backend auto-detected per card and
 multiple controllers shown side by side.
+
 Per-controller temperature with a health rollup, PHY link/speed/error counters,
 attached drives (enclosure/slot, model, serial, state, SAS address), per-drive and
 background SMART, a firmware event log archived to /boot, an enclosure/topology
 summary, and a dashboard tile (Unraid 7.2+). SAS and SATA drives supported.
+
 storcli must be installed for SAS3/3.5 cards; lsiutil is bundled for SAS2.
 Originally created by DevlinDelFuego; lsiutil by Thomas Lovell.
-</Description>
-<Support>https://github.com/FugginOld/Unraid-HBAviewer/issues</Support>
-<Icon>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png</Icon>
-<Project>https://github.com/FugginOld/Unraid-HBAviewer</Project>
-</Containers>
+  </Overview>
+
+  <PluginURL>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg</PluginURL>
+  <PluginAuthor>FugginOld</PluginAuthor>
+
+  <Support>https://github.com/FugginOld/Unraid-HBAviewer/issues</Support>
+  <Project>https://github.com/FugginOld/Unraid-HBAviewer</Project>
+  <ReadMe>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/README.md</ReadMe>
+
+  <Category>Tools:System</Category>
+  <Beta>false</Beta>
+  <License>MIT</License>
+
+  <Icon>https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png</Icon>
+</Plugin>
