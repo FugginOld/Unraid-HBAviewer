@@ -17,13 +17,13 @@ commands are inlined in the plan file itself.
 | 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — approved, awaiting merge (branch `advisor/001-settings-notification-claim`, commit `6c7ac03`) |
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | TODO |
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | TODO |
-| 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | IMPLEMENTED — uncommitted on `main`, awaiting hardware test (closes issue #2) |
+| 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | DONE — `f3ebea5`, released in 2026.07.27, closed issue #2 (hardware check still outstanding) |
 | 005 | Claim the flash single-flight lock atomically | P1 | S | — | TODO |
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | TODO |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | TODO |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | TODO |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
-| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | TODO (from issue #3) |
+| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | BLOCKED — issue #3 reopened, waiting on the reporter's driver diagnostic |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -170,8 +170,19 @@ bugs, neither of which had a plan:
   else bundled lsiutil, warning only when there is no lsiutil fallback. Verified
   across all seven module/storcli combinations.
 
-Plan 010 covers what remains of issue #3: the message is still wrong for the
-`mpt3sas`-only case, where it asserts a SAS3 controller purely from the driver.
+**Released as 2026.07.27**, tag pushed 2026-07-26. The workflow built the `.txz`,
+patched the `.plg` version/md5/pkgURL and committed that back to `main`
+(`dca10c9`), then published. Commits `f3ebea5` (issue #2), `eb7ccce` (issue #3),
+`5f5dace` (dashboard tile). Shipped without a hardware check, by explicit
+decision — the realistic downside was cosmetic, since PHP lints clean, the
+parsers are fixture-tested and the settings logic was verified across all seven
+driver/storcli combinations.
+
+Issue #2 is closed. **Issue #3 was reopened deliberately**: its firmware half
+shipped, but the `mpt3sas`-only case remains, and the reporter has been asked
+for the driver diagnostic that decides how common it is. Note that the
+`Fixes #3` trailer in `eb7ccce` auto-closed it on push — reopening was manual.
+Plan 010 covers the remainder and is BLOCKED on that answer.
 
 ## Where the risk is
 

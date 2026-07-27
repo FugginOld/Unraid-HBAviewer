@@ -7,11 +7,11 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 0346777..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh source/usr/local/emhttp/plugins/hbaviewer/settings.php`
-> `settings.php` was modified after `0346777` by the issue-3 fix (backend
-> precedence). That change is expected — confirm it matches the excerpt in
-> "Current state" below, which already reflects it. Any *other* difference is a
-> STOP condition.
+> `git diff --stat eb7ccce..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh source/usr/local/emhttp/plugins/hbaviewer/settings.php`
+> Baseline re-pinned to `eb7ccce` ("Decode lsiutil firmware as hex; stop
+> demanding storcli for SAS2 cards"), which shipped in release 2026.07.27 and
+> already changed `settings.php`. The "Current state" excerpts below reflect that
+> commit. Any difference from it is a STOP condition.
 
 ## Status
 
@@ -20,7 +20,10 @@
 - **Risk**: LOW
 - **Depends on**: none
 - **Category**: bug / docs
-- **Planned at**: commit `0346777` (+ the uncommitted issue-3 fix), 2026-07-26
+- **Planned at**: commit `eb7ccce` (released in 2026.07.27), 2026-07-26
+- **Issue**: [#3](https://github.com/FugginOld/Unraid-HBAviewer/issues/3) —
+  reopened, awaiting the reporter's driver diagnostic (see "The decision this
+  plan feeds")
 
 ## Why this matters
 
@@ -462,8 +465,15 @@ rendered — which is only possible if `ov_lsiutil`'s guard did not fire, which
 requires `mpt2sas` to be loaded on their box. So at least one current Unraid
 install still binds a 9200-series card to `mpt2sas`.
 
-Once the "Detected Hardware" row from Step 3 ships, users can report it directly.
-Then:
+**Issue #3 was deliberately reopened after the 2026.07.27 release** to collect
+that evidence. The firmware half is fixed and shipped; the reporter has been
+asked for the Step 1 output. Read the issue thread before starting — if they
+have answered, that answer decides the priority of this plan and of the deferred
+`sysfs` backend, and it may make Step 3's "Detected Hardware" row less urgent
+than the message fix in Step 2.
+
+Once the "Detected Hardware" row from Step 3 ships, other users can report the
+same thing without being asked. Then:
 
 - **If 9200-series cards are on `mpt2sas`** on current Unraid, this scenario is
   rare, the corrected message is sufficient, and no further work is needed.

@@ -21,6 +21,46 @@
 - **Category**: bug
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — implemented, merged to `main`, released in 2026.07.27.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-26, directly in the working tree (not via an executor subagent) |
+| Commit | `f3ebea5` — "Read Performance-tab temperatures per controller" |
+| Released | tag `2026.07.27`, closes GitHub issue #2 |
+| Baseline | `0346777` (drift check clean) |
+
+This plan was written from an audit finding **before** anyone reported it.
+GitHub issue #2 ("Performance stats not showing temp", LSI SAS9207-8i) arrived
+afterwards and was Defect A exactly — a SAS2 card whose Overview and dashboard
+tile showed temperature while the Performance tab showed none. Reproduced
+against the fixtures before any code changed:
+
+| Backend | Cache text | Old grep result |
+|---|---|---|
+| lsiutil (the reporter's 9207-8i) | `"temp": 47` | *(nothing)* |
+| storcli | `"temp":72` | `72 77` |
+
+`json_decode` ignores the whitespace, which is why only the grep-based path was
+affected.
+
+**What shipped**: `scripts/parse/cache_temps.sh` plus the three-line composer
+change, with three golden cases. Verified by running the composer's exact lines
+against all three fixtures — `72/77`, `null`, and `null/77`. That last one is the
+Defect B proof: the old code returned a single `77` and put controller 1's
+temperature on controller 0's graph.
+
+**Not verified**: end to end on hardware. `get_metrics.sh` returns an empty
+controllers array on a workstation with no SAS hosts, so the parser and the
+wiring are proven by fixtures but the full path is not. Confirm on the Unraid
+box that the Performance tab now graphs temperature on a SAS2 controller.
+
+**Three corrections were folded back into this plan** after executing it — see
+the `UPDATE=1` warning in Step 3 and the revised done criteria. All three were
+defects in the plan, not in the code.
+
 ## Why this matters
 
 The Performance tab's temperature graph reads controller temperatures out of a
