@@ -21,6 +21,46 @@
 - **Category**: bug
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent in an isolated worktree |
+| Commit | `04b7335` — "Time out a dead SMART collector's progress marker" |
+| Merged | `6e19e68` into `dev` |
+| Based on | `dca10c9` (Release 2026.07.27); drift check clean, excerpt matched exactly |
+| Diff | 1 file, 11 insertions, 2 deletions — `ajax_info.php` only |
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+- Scope clean. One file, nothing outside the in-scope list, no uncommitted
+  leftovers in the worktree.
+- All done criteria re-run and passing: the const and its single use, refresh
+  unlinking both files, the bare `is_file($prog)` gone, and — the one that
+  matters for the JS — **both** progress messages still carrying
+  `data-smart="collecting"`.
+- Control flow confirmed by reading the region: a stale marker skips the
+  progress branch and falls through to the `shell_exec` collector launch, so the
+  tab self-heals rather than returning an empty response.
+- `php -l` clean across all 14 files; `bash tests/run.sh` exits 0 with both
+  halves passing (Docker was available this run, unlike for plan 001).
+- Behaviour checked against the decision table rather than greps alone:
+
+  | Marker state | Outcome |
+  |---|---|
+  | absent | launch fresh collector |
+  | 5s old (live) | report progress |
+  | 299s old (slow but live) | report progress |
+  | 301s old (dead) | **launch fresh collector — the fix** |
+  | 600s old (dead) | launch fresh collector |
+  | 5s old + Refresh | **launch fresh collector — the escape hatch** |
+
+**Still outstanding**: the manual repro on real hardware (plant a stale
+`.progress` file, confirm the tab recovers). Not possible off-box; the executor
+correctly said so rather than claiming it.
+
 ## Why this matters
 
 The SMART tab collects drive health in a detached background job and polls a
