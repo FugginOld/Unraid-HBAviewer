@@ -11,7 +11,12 @@
 > Baseline re-pinned to `eb7ccce` ("Decode lsiutil firmware as hex; stop
 > demanding storcli for SAS2 cards"), which shipped in release 2026.07.27 and
 > already changed `settings.php`. The "Current state" excerpts below reflect that
-> commit. Any difference from it is a STOP condition.
+> commit.
+>
+> **One expected difference**: `dev` also carries plan 001's one-line change to
+> the Alert Threshold help text (`settings.php`, the `<small>` in the Alert
+> Threshold row, merged as `add8cd9`). It is nowhere near the backend-detection
+> block this plan edits. Any *other* difference is a STOP condition.
 
 ## Status
 
