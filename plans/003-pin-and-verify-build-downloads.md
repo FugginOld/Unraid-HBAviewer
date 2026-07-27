@@ -25,6 +25,54 @@
 - **Category**: security
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent |
+| Commit | `41d3d03` — "Pin and checksum-verify the lsiutil and Chart.js downloads" |
+| Merged | `e9409ed` into `dev` |
+| Diff | 1 file, 28 insertions, 2 deletions — `build.sh` only |
+| Pinned | lsiutil → upstream commit `106857e2f9f218513c95e5778a0fd0b88e73ec48`, sha256 `7107df6a…`; Chart.js 4.4.6 sha256 `9653a081…` |
+
+**Two dispatch problems worth recording, because both are process lessons:**
+
+1. **First dispatch stopped immediately** — the executor's worktree is
+   provisioned from `main`, where `plans/` does not exist (it lives only on
+   `dev`), so the plan file was unreadable. The executor diagnosed this from git
+   rather than improvising, and declined to check out `dev` to get unstuck.
+   **Always inline the full plan text in the dispatch prompt**; never reference
+   it by path.
+2. **Isolation broke mid-run.** The executor's worktree disappeared and its shell
+   was silently repointed at the operator's main checkout, where it created the
+   branch and committed. Verified afterwards that `dev` and `main` were both
+   untouched (`0 0` against their remotes), the committed `hbaviewer.x86_64` was
+   byte-identical, and no stray artifacts remained. **Verify the worktree is real
+   and correctly based before trusting the isolation flag.**
+
+**Review findings (verified in a worktree the reviewer created and destroyed,
+not the operator's checkout):**
+
+- `/raw/master/` gone; URL now carries a 40-character commit SHA.
+- Both hashes present and 64 hex characters; two `verify_sha256` call sites.
+- **The structural point**: `verify_sha256` sits *after* both `if/else` blocks,
+  so it runs on the cached path as well as the fresh download. A file already in
+  the tree is exactly the one nobody checks — that is the whole purpose.
+- Behaviour proven four ways, two beyond what the plan asks for:
+
+  | Scenario | Result |
+  |---|---|
+  | Fresh Chart.js download + cached lsiutil | `Checksum OK` ×2, exit 0 |
+  | Tampered **cached** file | mismatch, exit 1 |
+  | Tampered **committed** lsiutil binary | mismatch, exit 1 |
+  | Deliberately wrong pinned hash (simulates upstream drift) | mismatch, exit 1 |
+
+- The upstream download hashed **identically** to the committed binary, so
+  upstream has not drifted and the pin captures exactly what has been shipping.
+- `bash tests/run.sh` exits 0.
+
 ## Why this matters
 
 `build.sh` fetches two third-party files with `curl` and packages them into the

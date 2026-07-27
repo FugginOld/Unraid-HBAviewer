@@ -16,7 +16,7 @@ commands are inlined in the plan file itself.
 |------|-------|----------|--------|------------|--------|
 | 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — merged to `dev` (`add8cd9`, from `6c7ac03`); ships in the next release |
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | DONE — merged to `dev` (`6e19e68`, from `04b7335`); ships in the next release |
-| 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | TODO |
+| 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | DONE — merged to `dev` (`e9409ed`, from `41d3d03`); ships in the next release |
 | 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | DONE — `f3ebea5`, released in 2026.07.27, closed issue #2 (hardware check still outstanding) |
 | 005 | Claim the flash single-flight lock atomically | P1 | S | — | TODO |
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | TODO |
@@ -27,6 +27,21 @@ commands are inlined in the plan file itself.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
+
+## Dispatching an executor — two lessons learned the hard way
+
+Both surfaced while executing 003; both cost a full dispatch.
+
+1. **Always inline the full plan text in the executor's prompt.** Never reference
+   it by path. Executor worktrees are provisioned from `main`, and `plans/` only
+   exists on `dev` — so a plan referenced by path is simply unreadable, and the
+   run stops before Step 1.
+2. **Verify the worktree is real and correctly based before trusting isolation.**
+   During 003 the executor's worktree disappeared mid-run and its shell was
+   repointed at the operator's main checkout, where it created its branch and
+   committed. No damage that time (`dev` and `main` both verified untouched
+   against their remotes, tracked binaries byte-identical), but the isolation
+   guarantee did not hold and should not be assumed.
 
 ## Branching
 
