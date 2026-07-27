@@ -43,6 +43,13 @@ check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/
 check smart-sata       smart_sata.json      bash "$P/smart.sh" < fixtures/smart/sata_drive.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
+# Performance-tab temperatures: per controller, in order. Covers the lsiutil
+# pretty-printed shape (space after the colon) and an erroring controller —
+# the two cases a positional grep got wrong.
+check cache-temps-storcli cache_temps_storcli.txt bash "$P/cache_temps.sh" < fixtures/cache_storcli_multi.json
+check cache-temps-lsiutil cache_temps_lsiutil.txt bash "$P/cache_temps.sh" < fixtures/cache_lsiutil_notemp.json
+check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fixtures/cache_mixed_error.json
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
 export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null

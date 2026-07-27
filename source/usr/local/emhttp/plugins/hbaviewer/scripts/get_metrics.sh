@@ -53,8 +53,12 @@ done
 DS=$(cat /proc/diskstats 2>/dev/null)
 
 # Controller temperatures from the existing overview cache (no hardware hit).
+# Parsed per controller so index N really is controller N — see cache_temps.sh
+# for why a flat grep silently mis-attributes them (and missed the lsiutil
+# backend entirely, which pretty-prints `"temp": 47` with a space).
 CACHE="${LSI_CACHE:-/tmp/lsiutil_dash.json}"
-temps=($(grep -oE '"temp":[0-9]+' "$CACHE" 2>/dev/null | grep -oE '[0-9]+'))
+temps=()
+[ -s "$CACHE" ] && mapfile -t temps < <(bash "$DIR/parse/cache_temps.sh" < "$CACHE" 2>/dev/null)
 
 phy_sum() {   # $1 = host number; echoes "inv disp sync reset"
     local host=$1 inv=0 disp=0 sync=0 reset=0 p v
