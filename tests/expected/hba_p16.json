@@ -1,8 +1,8 @@
 {
   "temp": 47,
   "model": "SAS2308",
-  "firmware": "20.00.07.00",
-  "fw_old": false,
+  "firmware": "16.00.07.00",
+  "fw_old": true,
   "port_name": "ioc0",
   "board_name": "SAS9207-8i",
   "pci_location": "03:00",

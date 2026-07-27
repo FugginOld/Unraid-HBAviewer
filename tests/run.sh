@@ -43,6 +43,13 @@ check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/
 check smart-sata       smart_sata.json      bash "$P/smart.sh" < fixtures/smart/sata_drive.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
+# Performance-tab temperatures: per controller, in order. Covers the lsiutil
+# pretty-printed shape (space after the colon) and an erroring controller —
+# the two cases a positional grep got wrong.
+check cache-temps-storcli cache_temps_storcli.txt bash "$P/cache_temps.sh" < fixtures/cache_storcli_multi.json
+check cache-temps-lsiutil cache_temps_lsiutil.txt bash "$P/cache_temps.sh" < fixtures/cache_lsiutil_notemp.json
+check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fixtures/cache_mixed_error.json
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
 export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null
@@ -63,6 +70,10 @@ check events-lsiutil   get_events_lsiutil.json bash "$P/../get_event_log.sh"
 # multi-file parsers
 check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 check hba-notemp   hba_notemp.json   bash "$P/hba.sh" fixtures/hba_ioc_notemp.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+# Firmware is four packed HEX bytes: 14000700 is P20 (0x14=20), not "14.00.07.00".
+# hba-normal covers the P20 decode; this covers a genuinely old one still tripping
+# the pre-P20 flag (10000700 = P16).
+check hba-p16      hba_p16.json      bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner_p16.txt fixtures/hba_board.txt 80
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
 
 echo

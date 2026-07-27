@@ -37,11 +37,19 @@ foreach ($controllers as $c) {
 }
 $tc = lsi_status_color($worst);
 $ts = date('H:i:s');
-$boardName = htmlspecialchars(
-    $error ? 'Unknown'
-           : (count($controllers) === 1 ? lsi_hba_view($controllers[0], $port, 0)['model']
-                                        : count($controllers) . ' controllers')
-);
+
+// Header subtitle: model + temperature, one entry per controller. The header row
+// is what survives when the tile is minimised, so this line has to carry the
+// at-a-glance answer on its own — "9400-16i 72°C · 9400-8i 77°C".
+$summary = [];
+foreach ($controllers as $i => $c) {
+    if (isset($c['error'])) { $summary[] = "/c{$i} error"; continue; }
+    $v = lsi_hba_view($c, $port, $i);
+    // temp is '' on cards with no onboard sensor (see parse/hba.sh) — say so
+    // rather than printing a bare 0°C.
+    $summary[] = $v['model'] . ' ' . ($v['temp'] === '' || $v['temp'] === null ? 'no sensor' : $v['temp'] . '°C');
+}
+$boardName = htmlspecialchars($error ? 'Unknown' : implode(' · ', $summary));
 
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
@@ -140,7 +148,17 @@ $mytiles[$pluginname]['column1'] = <<<EOT
     <td>
       <span class="tile-header">
         <span class="tile-header-left">
-          <img src="/plugins/hbaviewer/icon.png" alt="HBAviewer" style="width:32px;height:32px;object-fit:contain;vertical-align:middle">
+          <svg viewBox="0 0 64 64" width="32" height="32" fill="none" stroke="{$tc}"
+               stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+               style="vertical-align:middle;flex-shrink:0" role="img" aria-label="HBAviewer">
+            <path d="M13 8H7v21H4v6h3v21h6"/>
+            <rect x="16" y="12" width="44" height="40" rx="3"/>
+            <rect x="20" y="19" width="9" height="6" rx="1"/>
+            <rect x="20" y="30" width="9" height="6" rx="1"/>
+            <rect x="36" y="24" width="16" height="16" rx="1"/>
+            <rect x="40" y="28" width="8" height="8" rx="1"/>
+            <path d="M40 20v4M44 20v4M48 20v4M40 40v4M44 40v4M48 40v4M32 28h4M32 32h4M32 36h4M52 28h4M52 32h4M52 36h4"/>
+          </svg>
           <div class="section">
             <h3 class="tile-header-main">HBA Temperature</h3>
             <span>{$boardName}</span>

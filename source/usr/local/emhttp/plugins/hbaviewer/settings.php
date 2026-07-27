@@ -19,17 +19,26 @@ if ($storcli === '') {
     $w = trim((string) shell_exec('command -v storcli storcli64 2>/dev/null'));
     if ($w !== '') $storcli = strtok($w, "\n");
 }
-if ($has_sas2 && !$has_sas3) {
+// Mirror what scripts/lib.sh hba_each ACTUALLY does at read time: try storcli
+// first, otherwise fall back to the bundled lsiutil. Driver modules are not
+// evidence of controller generation — a modern kernel loads mpt3sas for SAS2
+// hardware, and a box can have both modules loaded at once. Keying the warning
+// off "mpt3sas is present" told SAS2-only owners to install storcli they do not
+// need, and disagreed with get_hba_info.sh, which only refuses when mpt3sas is
+// loaded and mpt2sas is not.
+if ($storcli !== '') {
+    $backend_label = 'storcli';
+    $backend_note  = $has_sas2
+        ? 'storcli is installed and is tried first; the bundled lsiutil covers any SAS2 card it does not enumerate.'
+        : 'SAS3 / SAS3.5 controller detected (mpt3sas driver).';
+} elseif ($has_sas2) {
     $backend_label = 'lsiutil (bundled)';
-    $backend_note  = 'SAS2 controller detected (mpt2sas driver).';
+    $backend_note  = $has_sas3
+        ? 'SAS2 controller detected (mpt2sas driver). mpt3sas is also loaded, but nothing here needs storcli unless a card fails to read.'
+        : 'SAS2 controller detected (mpt2sas driver).';
 } elseif ($has_sas3) {
-    if ($storcli !== '') {
-        $backend_label = 'storcli';
-        $backend_note  = 'SAS3 / SAS3.5 controller detected (mpt3sas driver).';
-    } else {
-        $backend_label = 'storcli — NOT INSTALLED';
-        $backend_note  = 'SAS3 / SAS3.5 controller detected, but storcli is missing. Install it via the dkaser/unraid-storcli plugin (Community Applications).';
-    }
+    $backend_label = 'storcli — NOT INSTALLED';
+    $backend_note  = 'SAS3 / SAS3.5 controller detected (mpt3sas only), but storcli is missing. Install it via the dkaser/unraid-storcli plugin (Community Applications).';
 } else {
     $backend_label = 'none detected';
     $backend_note  = 'No supported HBA driver (mpt2sas / mpt3sas) is loaded.';

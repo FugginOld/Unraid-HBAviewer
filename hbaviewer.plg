@@ -2,17 +2,33 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.07.23">
+<!ENTITY version   "2026.07.27">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.23/hbaviewer.txz">
-<!ENTITY md5       "c5d7fb68c6bd66d5234f4f3459fab660">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.27/hbaviewer.txz">
+<!ENTITY md5       "35a4627de7d47c99fd54a6d3870b6a80">
 <!ENTITY icon      "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.07.27###
+- Fixed: the Performance tab showed no temperature on SAS2 (9200-series) cards.
+  Temperatures were matched with a pattern that never fit the lsiutil backend's
+  output, so those controllers graphed nothing while the Overview and dashboard
+  tile showed the reading correctly. On multi-controller systems a card that
+  failed to report could also shift the next card's temperature onto it. (#2)
+- Fixed: firmware version misread on SAS2 cards. The version is packed as four
+  hex bytes, so a card reporting 14000700 is running 20.00.07.00 — it was shown
+  as 14.00.07.00 and then flagged with a false "pre-P20" warning. (#3)
+- Fixed: Settings no longer tells SAS2-only systems to install storcli. The
+  check keyed off the mpt3sas driver being present, but mpt3sas also drives SAS2
+  hardware, so cards that need nothing extra were reported as SAS3. (#3)
+- Dashboard tile: new HBA card icon that takes the controller's status colour,
+  and the header now shows model and temperature per controller — so the tile
+  still answers at a glance when it is minimised. Cards with no onboard sensor
+  say "no sensor" instead of 0 °C.
 ###2026.07.23###
 - UI: one consistent text color across the Monitor tabs, Settings and the
   dashboard tile, replacing the several shades of gray that were harder to read
