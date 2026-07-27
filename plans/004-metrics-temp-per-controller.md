@@ -337,6 +337,29 @@ Generate the expected files:
 UPDATE=1 bash tests/run.sh
 ```
 
+> **`UPDATE=1` rewrites EVERY golden, not just the new ones.** It re-runs all
+> cases and overwrites each `expected/` file with `printf '%s'`, which strips the
+> trailing newline the committed goldens carry — so ten unrelated files show up
+> as modified with identical content. Verified: this happens.
+>
+> Immediately afterwards, confirm the damage is limited to the three new files
+> and revert the rest:
+>
+> ```bash
+> git status --porcelain tests/expected/
+> # every pre-existing file listed here should be reverted:
+> git checkout -- tests/expected/hba_normal.json tests/expected/hba_notemp.json \
+>   tests/expected/drives_osmap.txt tests/expected/events_empty.json \
+>   tests/expected/phy_unsupported.json tests/expected/rollup_faildrive.json \
+>   tests/expected/rollup_healthy.json tests/expected/rollup_phyerr.json \
+>   tests/expected/route_no_backend.json tests/expected/storcli_overview.json
+> ```
+>
+> Before reverting any file, confirm its content is genuinely unchanged:
+> `test "$(git show HEAD:<file>)" = "$(cat <file>)"` exits 0 when only the
+> trailing newline differs. If a file's *content* changed, that is a real
+> regression from your parser edit — STOP and report it rather than reverting.
+
 Now **read the three generated files and confirm they are correct** before
 accepting them. `UPDATE=1` records whatever the code produced; it does not know
 what the right answer is.
@@ -446,10 +469,11 @@ Machine-checkable. ALL must hold:
 
 - [ ] `test -f source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/cache_temps.sh`
 - [ ] `bash source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/cache_temps.sh < tests/expected/storcli_multi.json` prints exactly `72` and `77`
-- [ ] `printf 'null\n' | diff - tests/expected/cache_temps_lsiutil.txt` reports no difference
-- [ ] `printf 'null\n77\n' | diff - tests/expected/cache_temps_mixed.txt` reports no difference
+- [ ] `test "$(cat tests/expected/cache_temps_lsiutil.txt)" = "null"` exits 0
+- [ ] `test "$(cat tests/expected/cache_temps_mixed.txt)" = "$(printf 'null\n77')"` exits 0 — **the Defect B proof**
 - [ ] `grep -c "grep -oE .\"temp\":" source/usr/local/emhttp/plugins/hbaviewer/scripts/get_metrics.sh` prints `0`
-- [ ] `grep -c 'cache_temps.sh' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_metrics.sh` prints `1`
+- [ ] `grep -c 'parse/cache_temps.sh' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_metrics.sh` prints `1` (the invocation; the explanatory comment names the file without the `parse/` prefix and is not counted)
+- [ ] `git status --porcelain tests/expected/` lists **only** the three new `cache_temps_*.txt` files — see the `UPDATE=1` warning in Step 3
 - [ ] `find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n` exits 0
 - [ ] `bash tests/run.sh` exits 0, prints `--- all pass ---`, and includes all three `PASS  cache-temps-*` lines
 - [ ] `git status --porcelain` shows only the files listed in "In scope" (plus `plans/README.md`)

@@ -17,12 +17,13 @@ commands are inlined in the plan file itself.
 | 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — approved, awaiting merge (branch `advisor/001-settings-notification-claim`, commit `6c7ac03`) |
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | TODO |
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | TODO |
-| 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | TODO |
+| 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | IMPLEMENTED — uncommitted on `main`, awaiting hardware test (closes issue #2) |
 | 005 | Claim the flash single-flight lock atomically | P1 | S | — | TODO |
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | TODO |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | TODO |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | TODO |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
+| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | TODO (from issue #3) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -105,8 +106,11 @@ a workstation without `php` or Docker.
   its diff is smaller, so landing it first avoids a merge conflict in the one
   file where a bad merge can brick hardware. This is sequencing only — neither
   depends on the other's behaviour.
-- **001–005 and 008 are fully independent** of each other and of everything
+- **001–005, 008 and 010 are fully independent** of each other and of everything
   else. They can be done in any order, or in parallel by different executors.
+- **010 is gated on evidence, not on another plan.** It deliberately stops short
+  of building a `sysfs` backend; its own "The decision this plan feeds" section
+  explains what to measure first and what would justify writing 011.
 
 ## Execution log
 
@@ -128,6 +132,46 @@ and re-running it on the Unraid box (which has `php`) closes it properly.
 baseline at `0346777` on this machine (no local `php`, Docker daemon not
 running). Environmental, not a regression — confirmed by running the same
 command at the baseline commit.
+
+**004 implemented directly, 2026-07-26.** Not via an executor — implemented in
+the working tree on `main` at the operator's request, uncommitted, to close
+GitHub issue #2 ("Performance stats not showing temp", LSI SAS9207-8i). The
+reporter's symptom is Defect A exactly: the lsiutil backend pretty-prints
+`"temp": 47` with a space, the old `"temp":[0-9]+` grep never matched, and the
+Performance tab showed nothing while the Overview and dashboard tile — which go
+through `json_decode` — showed the temperature fine. Reproduced against the
+fixtures before fixing. Full suite green, all three new goldens passing.
+Still unverified end to end: this workstation has no SAS hosts, so
+`get_metrics.sh` returns an empty controllers array. Needs the Unraid box.
+
+Three corrections were folded back into plan 004 after executing it — two wrong
+done-criteria (a `diff` against `printf 'null\n'` always fails, because the
+runner writes goldens without a trailing newline; and `grep -c 'cache_temps.sh'`
+returns 2, not 1) and a warning that `UPDATE=1 bash tests/run.sh` rewrites
+**every** golden, not just the new ones.
+
+**Issue #3 fixed directly, 2026-07-26** (uncommitted on `main`), two independent
+bugs, neither of which had a plan:
+
+- *Firmware misread.* The lsiutil banner packs the version as four **hex** bytes,
+  so `14000700` is `0x14.0x00.0x07.0x00` = **20.00.07.00**. The parser split the
+  digits as decimal and reported `14.00.07.00` — then the pre-P20 check saw
+  `14 < 20` and stamped a false "⚠ pre-P20" warning on a card that was already
+  P20. The reporter's own `lsiutil` output confirms the decode:
+  *"Current active firmware version is 14000700 (20.00.07)"*. Fixed in
+  `parse/hba.sh`; added the `hba-p16` golden (`10000700` → `16.00.07.00`,
+  `fw_old: true`), because the fix would otherwise have deleted all `fw_old:true`
+  coverage from the suite.
+- *Spurious storcli prompt.* `settings.php` demanded storcli whenever `mpt3sas`
+  was loaded, while `get_hba_info.sh` only refuses when `mpt3sas` is loaded
+  **and** `mpt2sas` is not. The two files disagreed about the same question, so a
+  SAS2-only box with both modules loaded was told to install storcli it does not
+  need. `settings.php` now mirrors `hba_each`'s real precedence — storcli first,
+  else bundled lsiutil, warning only when there is no lsiutil fallback. Verified
+  across all seven module/storcli combinations.
+
+Plan 010 covers what remains of issue #3: the message is still wrong for the
+`mpt3sas`-only case, where it asserts a SAS3 controller purely from the driver.
 
 ## Where the risk is
 
