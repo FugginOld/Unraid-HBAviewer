@@ -13,14 +13,38 @@ set -e
 
 VERSION="${1:-$(date +%Y.%m.%d)}"
 
-# Linux x86_64 binary only — single file from the repo, not the whole archive
-LSIUTIL_URL="https://github.com/thomaslovell/LSIUtil/raw/master/Binaries/LSIutil_1.70_release_binaries/linux/lsiutil.x86_64"
+# Linux x86_64 binary only — single file from the repo, not the whole archive.
+# Pinned to an immutable commit permalink, not a branch: this binary is packaged
+# into the .txz and runs as root on every user's server, and release.yml builds
+# unattended in CI, so "whatever master serves right now" is not an acceptable
+# input. Bump the SHA and the checksum together, deliberately.
+LSIUTIL_URL="https://github.com/thomaslovell/LSIUtil/raw/106857e2f9f218513c95e5778a0fd0b88e73ec48/Binaries/LSIutil_1.70_release_binaries/linux/lsiutil.x86_64"
+LSIUTIL_SHA256="7107df6a3ee152e8239cf2c0a422a0edb4e02035dc9740bdb2e77f19fbef6e78"
 BINARY_DEST="source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64"
 # Chart.js UMD build (Performance tab) — MIT, fetched like the lsiutil binary.
+# Version-pinned already; the checksum pins the bytes behind that version too.
 CHARTJS_VER="4.4.6"
 CHARTJS_URL="https://cdn.jsdelivr.net/npm/chart.js@${CHARTJS_VER}/dist/chart.umd.min.js"
+CHARTJS_SHA256="9653a0813db743bbe78332a3896e28c7bc7546e4fff51e7e979e908d1f0471d1"
 CHARTJS_DEST="source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js"
 OUTPUT="releases/hbaviewer.txz"
+
+# Fail the build on any byte that isn't what we pinned. Runs on the cached file
+# too, not just a fresh download — a stale or tampered file sitting in the work
+# tree must not get a free pass just because it already exists.
+verify_sha256() {   # $1 = file, $2 = expected hash
+    local got
+    got=$(sha256sum "$1" | awk '{print $1}')
+    if [ "$got" != "$2" ]; then
+        echo "ERROR: checksum mismatch for $1"
+        echo "    expected: $2"
+        echo "    got:      $got"
+        echo "    Refusing to package an unverified file. If this change is"
+        echo "    intentional, review the new file and update the pinned hash."
+        exit 1
+    fi
+    echo "    Checksum OK"
+}
 
 echo "==> Unraid HBAviewer build  (version: $VERSION)"
 
@@ -33,6 +57,7 @@ if [ ! -f "$BINARY_DEST" ]; then
 else
     echo "--> lsiutil binary already present, skipping download"
 fi
+verify_sha256 "$BINARY_DEST" "$LSIUTIL_SHA256"
 
 # Download Chart.js (Performance tab) if not already present
 if [ ! -f "$CHARTJS_DEST" ]; then
@@ -42,6 +67,7 @@ if [ ! -f "$CHARTJS_DEST" ]; then
 else
     echo "--> Chart.js already present, skipping download"
 fi
+verify_sha256 "$CHARTJS_DEST" "$CHARTJS_SHA256"
 
 # Sanity-check: ensure it's a Linux ELF binary (not a Windows PE)
 FILE_TYPE=$(file "$BINARY_DEST" 2>/dev/null)
