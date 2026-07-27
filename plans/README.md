@@ -14,7 +14,7 @@ commands are inlined in the plan file itself.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | TODO |
+| 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — approved, awaiting merge (branch `advisor/001-settings-notification-claim`, commit `6c7ac03`) |
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | TODO |
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | TODO |
 | 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | TODO |
@@ -55,10 +55,12 @@ rsync -rlpv --delete \
 
 Three details that will otherwise waste your afternoon:
 
-1. **The two excludes are mandatory.** `chart.umd.min.js` and `hbaviewer.x86_64`
-   are downloaded by `build.sh`, are git-ignored, and are not in the repo. With
-   `--delete` and no excludes, rsync removes them from the server and the
-   Performance tab and the whole SAS2 path break until you reinstall.
+1. **`chart.umd.min.js` must be excluded.** It is git-ignored and absent from a
+   fresh checkout, so with `--delete` and no exclude, rsync deletes it off the
+   server and the Performance tab breaks until you reinstall.
+   `hbaviewer.x86_64` is **committed**, so excluding it is optional — it is kept
+   in the command above only to avoid pushing a 1 MB binary over the wire on
+   every sync. Syncing it would be harmless.
 2. **`-rlpv`, not `-a`.** `-a` implies `-t`, which preserves your local mtimes.
    `get_hba_info.sh` invalidates its cache by comparing the cache's mtime against
    *its own* (`get_hba_info.sh:22`), so a preserved older mtime means your new
@@ -105,6 +107,27 @@ a workstation without `php` or Docker.
   depends on the other's behaviour.
 - **001–005 and 008 are fully independent** of each other and of everything
   else. They can be done in any order, or in parallel by different executors.
+
+## Execution log
+
+**001 — reviewed and approved, 2026-07-26.** Executor branch
+`advisor/001-settings-notification-claim`, commit `6c7ac03`, one file and one
+line changed. Reviewed against the plan: scope clean, diff matches the specified
+replacement exactly, and the new sentence was fact-checked against the `RANK`
+logic in **both** backends (`parse/storcli_overview.sh:51-53` and
+`parse/hba.sh:78-80` use the same threshold and the same 10 °C amber band) and
+against `view.php:8-13` for the colours. The claim "does not send notifications"
+was re-confirmed by sweeping the repo — zero `notify` call sites.
+
+One done criterion could not be executed: `php -l` needs a `php` binary, which
+this workstation does not have. The change is a static string inside HTML, not
+PHP code, so the syntax risk is nil — but it is unverified rather than verified,
+and re-running it on the Unraid box (which has `php`) closes it properly.
+
+`bash tests/run.sh` shell half passes; the PHP half fails identically to the
+baseline at `0346777` on this machine (no local `php`, Docker daemon not
+running). Environmental, not a regression — confirmed by running the same
+command at the baseline commit.
 
 ## Where the risk is
 

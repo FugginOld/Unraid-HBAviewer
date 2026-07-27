@@ -21,6 +21,52 @@
 - **Category**: docs
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — approved on review, not yet merged.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-26, by a dispatched executor subagent in an isolated worktree |
+| Branch | `advisor/001-settings-notification-claim` |
+| Commit | `6c7ac03` — "Correct the Alert Threshold help text" |
+| Baseline | `0346777` (drift check ran clean; the `<small>` line matched this plan's excerpt exactly) |
+| Diff | 1 file, 1 insertion, 1 deletion — `settings.php:130` only |
+
+The change that landed:
+
+```diff
+-          <small>Unraid notification fires when temperature reaches this value.</small>
++          <small>The Overview badge and dashboard tile turn red at or above this temperature, and amber within 10 °C of it. HBAviewer does not send notifications.</small>
+```
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+- Scope clean. `git diff --stat 0346777..HEAD` shows exactly one file. Nothing
+  outside the in-scope list; worktree had no uncommitted leftovers.
+- The new sentence is factually true, which this plan names as the only thing a
+  reviewer must check. Both backends use the same thresholds —
+  `parse/storcli_overview.sh:51-53` and `parse/hba.sh:78-80` — and
+  `view.php:8-13` confirms `alert` is `#e74c3c` (red) and `warn` is `#f39c12`
+  (amber). The 10 °C band is `-ge $(( ALERT - 10 ))` in both.
+- "HBAviewer does not send notifications" re-confirmed by sweeping the repo for
+  `notify` call sites: zero. No cron entry in `hbaviewer.plg` either.
+- Done criteria: the two greps pass, shell lint passes, `bash tests/run.sh`
+  shell half passes (parser goldens + all 14 flash tests).
+
+**Known gaps in the verification — neither blocks the change:**
+
+- `php -l` was **not run**. No `php` binary on the workstation. The edit is a
+  static string inside HTML, not PHP code, so the syntax risk is nil, but this
+  is unrun rather than passed. Re-run `bash tests/run.sh` on the Unraid box,
+  which has `php`, to close it properly.
+- `bash tests/run.sh` exits 1 overall because the PHP half falls back to Docker
+  and the daemon is not running. This is identical at the baseline commit —
+  environmental, not a regression.
+
+**Still outstanding**: merge to `dev`, and the optional visual check on the
+Settings page. Nothing else.
+
 ## Why this matters
 
 The Alert Threshold field on the Settings page tells the user "Unraid
@@ -80,7 +126,7 @@ undocumented anywhere in the UI and is worth mentioning.
 
 `README.md:171` already describes this correctly and needs no change:
 
-```
+```markdown
 | Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
 ```
 

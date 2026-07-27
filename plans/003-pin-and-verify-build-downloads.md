@@ -27,26 +27,42 @@
 
 ## Why this matters
 
-`build.sh` downloads two third-party files and packages them into the `.txz`
-that every user installs: the `lsiutil` binary, which runs **as root** on the
-user's server, and the Chart.js bundle, which runs in the administrator's
-browser. Neither download is checked against a known hash, and the `lsiutil`
-URL points at a **mutable `master` branch** rather than a pinned revision.
+`build.sh` fetches two third-party files with `curl` and packages them into the
+`.txz` that every user installs. Neither fetch is checked against a known hash,
+and the `lsiutil` URL points at a **mutable `master` branch** rather than a
+pinned revision.
 
-The release workflow (`.github/workflows/release.yml`) runs `build.sh` in CI on
-every tag push. So the exact bytes that ship to users are whatever those two
-upstream URLs happen to serve at that moment. If the upstream repository is
-compromised, or force-pushed, or simply changes the file, a different
-root-executed binary is packaged and published — and nothing in the pipeline
-would notice.
+**The two files are not equally exposed, and the difference matters** — read
+this before assuming the worst case:
 
-The MD5 in `hbaviewer.plg` does not help: it is computed *from the archive
-after it was built*, so it pins the artifact you produced, not the source you
-produced it from. It protects users against a corrupted download of your
-release; it protects no one against a changed upstream.
+- **`chart.umd.min.js` is git-ignored** (`.gitignore` line 5), so it is absent
+  from a fresh checkout. The release workflow
+  (`.github/workflows/release.yml`) checks out the repo and runs `build.sh`, and
+  `build.sh` only downloads a file when it is missing — so this one **is
+  re-downloaded, unverified, on every single release**. It runs in the
+  administrator's browser. This is the live exposure.
+- **`hbaviewer.x86_64` (lsiutil) is committed to the repository**, and
+  `.gitignore` explains why in its header comment: *"build.sh only downloads it
+  when missing, so releases don't depend on that upstream URL still being up."*
+  A CI release therefore ships the reviewed, committed binary and never touches
+  the upstream URL. Today it is effectively pinned by being in git.
+
+So the root-executed binary is **not** currently at risk, and this plan does not
+claim otherwise. What remains true for it is narrower: `build.sh`'s
+`if [ ! -f ... ]` means that the moment anyone deletes that file — a clean
+checkout gone wrong, a `git clean -x`, a contributor pruning what looks like a
+build artifact — the next build silently replaces it with whatever a mutable
+`master` serves, with no check. Pinning the revision and the hash makes that
+failure loud instead of silent.
+
+The MD5 in `hbaviewer.plg` does not help with either file: it is computed *from
+the archive after it was built*, so it pins the artifact you produced, not the
+sources you produced it from. It protects users against a corrupted download of
+your release; it protects no one against a changed upstream.
 
 After this plan, a changed upstream file fails the build loudly instead of
-shipping silently.
+shipping silently — closing the live Chart.js gap and removing the latent
+lsiutil one.
 
 ## Current state
 
@@ -209,13 +225,14 @@ has changed and this plan's assumption is broken.
 
 ### Step 2: Record the two hashes
 
-Remove any previously downloaded copies so you hash exactly what a clean build
-would fetch, then download and hash both files.
+Download both into `/tmp` and hash them there.
+
+**Do not delete `source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64`.**
+That file is **tracked in git**, not a build artifact — deleting it dirties the
+working tree and risks committing a different binary than the one that has been
+shipping. Only `chart.umd.min.js` is git-ignored and safe to remove.
 
 ```bash
-rm -f source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 \
-      source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js
-
 curl -fL "<the pinned lsiutil permalink from Step 1>" \
   -o /tmp/lsiutil.x86_64
 curl -fL "https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" \
@@ -223,6 +240,22 @@ curl -fL "https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" \
 
 sha256sum /tmp/lsiutil.x86_64 /tmp/chart.umd.min.js
 ```
+
+**Cross-check the lsiutil hash against the binary already in the repository.**
+This is the important one — it tells you whether upstream still serves the bytes
+that have been shipping to users:
+
+```bash
+sha256sum source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64
+```
+
+**Verify**: this matches the hash of `/tmp/lsiutil.x86_64`.
+
+If the two differ, **STOP and report both hashes**. It means upstream `master`
+has changed since the committed binary was fetched, and a human must decide
+which one is correct before either is pinned. Pin the hash of the **committed**
+binary, never the upstream one, if you are told to proceed — the committed file
+is the reviewed artifact that has actually been shipping.
 
 Write both 64-character hashes down. You will paste them into `build.sh` in
 Step 3.
@@ -326,16 +359,19 @@ sites; the function definition uses a different form and is not counted)
 
 A verification you have not seen fail is not a verification. Test both outcomes.
 
-**Positive** — a clean build passes:
+**Positive** — a build passes. Remove only the git-ignored Chart.js file so it
+is re-downloaded and verified; the committed lsiutil binary stays where it is
+and gets verified in place, which is exactly the path CI takes.
 
 ```bash
-rm -f source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 \
-      source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js
+rm -f source/usr/local/emhttp/plugins/hbaviewer/chart.umd.min.js
 bash build.sh 0000.00.00
 ```
 
-**Verify**: exit code 0, output includes `Checksum OK` twice, and the final line
-is `Done: releases/hbaviewer.txz`.
+**Verify**: exit code 0, output includes `Checksum OK` twice — once for the
+freshly downloaded Chart.js and once for the already-present lsiutil binary,
+which is the case that proves verification covers cached files too — and the
+final line is `Done: releases/hbaviewer.txz`.
 
 **Negative** — a tampered file fails:
 
@@ -362,10 +398,16 @@ rm -f releases/hbaviewer.txz
 git status --porcelain
 ```
 
-**Verify**: `git status --porcelain` shows only `build.sh` as modified (plus
-`plans/README.md`). If it shows the downloaded binaries or the archive as
-untracked-and-not-ignored, STOP — `.gitignore` does not cover them and you need
-to report that rather than committing a binary.
+**Verify**: `git status --porcelain` shows only `build.sh` as modified.
+
+Two specific things that must **not** appear, each a STOP:
+
+- `source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64` as **modified**.
+  That file is tracked; if a build changed it, the bytes you downloaded differ
+  from the bytes that have been shipping. Report both hashes and stop.
+- `chart.umd.min.js` or `releases/hbaviewer.txz` as **untracked-and-not-ignored**.
+  Both should be covered by `.gitignore`; if they are not, report it rather than
+  committing a binary.
 
 ## Test plan
 
@@ -390,6 +432,8 @@ Machine-checkable. ALL must hold:
 - [ ] A tampered file makes `bash build.sh 0000.00.00` print `ERROR: checksum mismatch` and exit 1
 - [ ] `bash tests/run.sh` exits 0 and prints `--- all pass ---`
 - [ ] `git status --porcelain` shows exactly one modified source file: `build.sh` (plus `plans/README.md`)
+- [ ] `source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64` is **not** listed as modified — it is a tracked file and this plan must not change its bytes
+- [ ] The hash of the committed `hbaviewer.x86_64` equals `LSIUTIL_SHA256` in `build.sh` (`sha256sum source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64`)
 - [ ] `plans/README.md` status row for 003 updated
 
 ## STOP conditions
