@@ -136,7 +136,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       <div class="lu-s-row">
         <div class="lu-s-label">
           Alert Threshold (°C)
-          <small>Unraid notification fires when temperature reaches this value.</small>
+          <small>The Overview badge and dashboard tile turn red at or above this temperature, and amber within 10 °C of it. HBAviewer does not send notifications.</small>
         </div>
         <div class="lu-s-control">
           <input type="number" name="threshold" value="<?= (int)$cfg['ALERT_THRESHOLD'] ?>" min="1" max="150">
