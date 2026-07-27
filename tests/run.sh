@@ -70,6 +70,10 @@ check events-lsiutil   get_events_lsiutil.json bash "$P/../get_event_log.sh"
 # multi-file parsers
 check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 check hba-notemp   hba_notemp.json   bash "$P/hba.sh" fixtures/hba_ioc_notemp.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+# Firmware is four packed HEX bytes: 14000700 is P20 (0x14=20), not "14.00.07.00".
+# hba-normal covers the P20 decode; this covers a genuinely old one still tripping
+# the pre-P20 flag (10000700 = P16).
+check hba-p16      hba_p16.json      bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner_p16.txt fixtures/hba_board.txt 80
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
 
 echo

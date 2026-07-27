@@ -47,11 +47,20 @@ CARD_LINE=$(echo "$BANNER" | grep -E "^\s+[0-9]+\.\s+ioc" | head -1)
 MODEL=$(echo "$CARD_LINE"     | grep -oE 'SAS[0-9]+[A-Za-z0-9]*' | head -1)
 PORT_NAME=$(echo "$CARD_LINE" | awk '{print $2}')
 
-# Firmware: "14000700" -> "14.00.07.00"
+# Firmware: the banner prints the version as four packed HEX bytes, so
+# "14000700" is 0x14.0x00.0x07.0x00 = 20.00.07.00 — a P20 card. lsiutil itself
+# confirms the decode when you pick menu option 1:
+#   "Current active firmware version is 14000700 (20.00.07)"
+#   "Firmware image's version is MPTFW-20.00.07.00-IT"
+# Splitting the digits as decimal reported that P20 card as "14.00.07.00" and
+# then falsely flagged it pre-P20 in the UI.
 FW_RAW=$(echo "$CARD_LINE" | grep -oE '[0-9a-f]{8}' | head -1)
 if [ -n "$FW_RAW" ]; then
-    FW_VER="${FW_RAW:0:2}.${FW_RAW:2:2}.${FW_RAW:4:2}.${FW_RAW:6:2}"
+    FW_MAJOR=$((16#${FW_RAW:0:2}))
+    FW_VER=$(printf '%02d.%02d.%02d.%02d' "$FW_MAJOR" \
+        "$((16#${FW_RAW:2:2}))" "$((16#${FW_RAW:4:2}))" "$((16#${FW_RAW:6:2}))")
 else
+    FW_MAJOR=""
     FW_VER="Unknown"
 fi
 
@@ -68,8 +77,9 @@ if [ -z "$TEMP_HEX" ] && [ -z "$MODEL" ] && [ -z "$BOARD_NAME" ]; then
 fi
 
 # Firmware baseline: P20 (major version 20) is the IT-mode standard for SAS2;
-# flag anything older (a known ZFS/passthrough headache on 9200s).
-FW_MAJOR="${FW_VER%%.*}"
+# flag anything older (a known ZFS/passthrough headache on 9200s). FW_MAJOR is
+# the decoded hex byte from above — not re-derived from the formatted string,
+# whose zero padding ("09") would land in test's integer parsing.
 FW_OLD="false"
 case "$FW_MAJOR" in ''|*[!0-9]*) : ;; *) [ "$FW_MAJOR" -lt 20 ] && FW_OLD="true" ;; esac
 
