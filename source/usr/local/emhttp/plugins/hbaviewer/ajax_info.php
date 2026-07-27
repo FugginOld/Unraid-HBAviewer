@@ -15,6 +15,15 @@ $type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','driv
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
+/* A collector that was killed (or whose smartctl wedged) leaves its progress
+   marker behind, and /tmp only clears on reboot — so treat a marker this stale
+   as a dead job and start a fresh collection instead of reporting progress
+   forever. The collector rewrites the marker once per drive, so a live one
+   never goes this quiet.
+   ponytail: a wall-clock timeout, not a liveness check on the PID — a PID file
+   is the upgrade path if a collector ever legitimately stalls this long. */
+const SMART_PROGRESS_TTL = 300;
+
 /* ── Performance tab: instant counter snapshot (browser computes the rates) ──
    Polled ~2s. get_metrics.sh touches only /proc + /sys + the overview cache —
    never storcli/lsiutil — so this stays fast. Its JSON is already the shape the
@@ -33,13 +42,13 @@ if ($type === 'smart_all') {
     header('Content-Type: text/html; charset=utf-8');
     $cache = '/tmp/lsiutil_smart.json';
     $prog  = $cache . '.progress';
-    if (($_GET['refresh'] ?? '') === '1') { @unlink($cache); }
+    if (($_GET['refresh'] ?? '') === '1') { @unlink($cache); @unlink($prog); }
 
     if (is_file($cache) && (time() - filemtime($cache)) < 600) {
         echo renderSmartTable(json_decode((string) file_get_contents($cache), true) ?: []);
         exit;
     }
-    if (is_file($prog)) {
+    if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
            . ' drives (you can use other tabs)</div>';
