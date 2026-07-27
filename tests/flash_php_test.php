@@ -48,5 +48,17 @@ check('block no confirm',        str_contains($err(['confirm'=>'flash']), 'Type 
 check('block locked',            str_contains($err(['locked'=>true]), 'in progress'));
 @unlink($fw);
 
+// ── flash_claim_lock: exactly one claimant wins, and a release re-arms it ────
+// This is the single-flight guarantee that stands between a double-submit and
+// two flash tools writing to the same controller at once.
+$lk = sys_get_temp_dir() . '/hbav_lock_' . getmypid() . '.lock';
+@unlink($lk);
+check('claim lock: first wins',      flash_claim_lock($lk) === true);
+check('claim lock: second refused',  flash_claim_lock($lk) === false);
+check('claim lock: third refused',   flash_claim_lock($lk) === false);
+@unlink($lk);
+check('claim lock: re-arms after release', flash_claim_lock($lk) === true);
+@unlink($lk);
+
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
