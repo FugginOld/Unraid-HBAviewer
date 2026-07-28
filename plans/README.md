@@ -22,7 +22,7 @@ commands are inlined in the plan file itself.
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | DONE — merged to `dev` (`23b9646`); **verified on hardware 2026-07-27** |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`); **verified on hardware 2026-07-27** |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
-| 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (DONE) | DONE — merged to `dev` (`beb572a`); **hardware check pending** — fails closed, so verify saving still works |
+| 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **ATTEMPTED AND REVERTED** (`584ec3a`) — failed hardware verification; approach is unsound as written. Finding stands; see plan for what a retry must do differently |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 

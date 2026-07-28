@@ -61,6 +61,83 @@
 > Anyone re-reading this and concluding "but it redirects to login, so we're
 > covered" has conflated two different controls.
 
+## ATTEMPTED AND REVERTED — 2026-07-28. Read this before trying again.
+
+This plan was executed (`650ffdc`), merged (`beb572a`), **failed hardware
+verification, and was reverted** (`584ec3a`). The finding is still real; **the
+approach specified below is not**. Do not re-run this plan as written.
+
+### What happened
+
+With the change deployed, saving on the Settings page produced
+*"Not saved. The security token was missing or expired."* — every time, including
+after a hard reload. The fail-closed design meant the settings page became
+unusable, which is worse than the vulnerability it closes.
+
+### What was established as fact on the box
+
+| Check | Result |
+|---|---|
+| `/var/local/emhttp/var.ini` readable | yes, `-rw-r--r-- root root` |
+| `parse_ini_file` parses it | `is_array=true` |
+| `csrf_token` key present | yes, **16 characters** |
+| Token changes between reads | **no** — `STABLE` over a 2s window |
+| Deployed code live | yes, both greps returned 1 |
+| `csrf_token` fields in the save form, **without** this plan applied | **1** |
+
+That last row is the important one. **Unraid appends a `csrf_token` field to
+every form on the page by itself**, via this in its own JS:
+
+```js
+$('form').append($('<input>').attr({type:'hidden', name:'csrf_token', value:csrf_token}));
+```
+
+So the token was **already being submitted before this plan touched anything**.
+It simply was not being checked. The hidden input this plan adds is therefore
+redundant, and creates a duplicate field name — PHP resolves duplicates to the
+**last** one, which is Unraid's JS-appended value, not ours.
+
+### Leading hypothesis for the failure — NOT confirmed
+
+`var.ini`'s `csrf_token` may lag the live session token that Unraid's JS holds.
+The codebase already suspected this; `hbaviewer.php:395-397` says so outright:
+
+```php
+// Unraid rejects POSTs without its CSRF token. Prefer Unraid's own fresh JS
+// global; fall back to the token we read from var.ini at render time.
+var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '...';
+```
+
+If that is right, this plan's check is structurally unsound: it compares the
+**live** token the browser submits against a **possibly stale** copy in
+`var.ini`, so it can deny a perfectly legitimate request. Note this was *not*
+proven — the observed token was stable across the window tested, and the JS
+global's value was never compared against `var.ini`'s.
+
+### What a future attempt must do differently
+
+1. **Emit no field.** Unraid already appends one. Adding ours only creates a
+   duplicate.
+2. **Do not assume `var.ini` is the source of truth** for comparison. Establish
+   first whether its `csrf_token` equals the JS global at the same instant — the
+   one measurement nobody has taken. Compare hashes, never values.
+3. **Do not fail closed on the settings page** until that comparison is
+   confirmed. A wrong assumption locks the operator out of their own
+   configuration.
+4. **Consider that this may be unfixable from inside the plugin.** If Unraid
+   exposes no reliable server-side copy of the session token, there is nothing
+   to verify against, and the honest outcome is to mark this REJECTED with that
+   rationale and correct the false comments in `flash.php` and `hbaviewer.php`
+   instead — leaving accurate documentation rather than a broken check.
+
+### The finding itself still stands
+
+Neither POST endpoint verifies CSRF. Confirmed on hardware: settings save with
+no server-side token check at all. Severity is low — it needs an authenticated
+administrator's browser pointed at a hostile page, and the realistic worst case
+is flipping `ENABLE_FLASH` on or dropping a file in `/tmp`, not a flash, which
+additionally requires the array stopped and a typed confirmation.
+
 ## Why this matters
 
 This plugin has two POST endpoints, and neither one checks a CSRF token. Both
