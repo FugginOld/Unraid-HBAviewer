@@ -30,6 +30,73 @@
   reopened, awaiting the reporter's driver diagnostic (see "The decision this
   plan feeds")
 
+## READ FIRST — the evidence changed on 2026-07-28
+
+GitHub issue #3's reporter supplied the diagnostic this plan was waiting on, and
+it **invalidates the inference this plan was originally written around**. Their
+`SAS9207-8i` box reports:
+
+```text
+/sys/module/mpt3sas/          <- only the mpt3sas MODULE is loaded; no mpt2sas dir
+== /sys/class/scsi_host/host0/
+  proc_name    mpt2sas        <- but the HOST reports mpt2sas
+  board_name   SAS9207-8i     <- and it is a SAS2 card
+  version_fw   20.00.07.00
+```
+
+**Module presence and `proc_name` disagree, and `proc_name` is the one telling
+the truth about the card.** The merged `mpt3sas` driver registers SAS2 hosts
+under the `mpt2sas` personality. So a box can have *no* `mpt2sas` module while
+its SAS2 controller still identifies as `mpt2sas` per host.
+
+Three corrections follow:
+
+1. **The original inference in "The decision this plan feeds" was wrong.** It
+   argued the reporter's card details rendered, therefore `mpt2sas` must be
+   loaded, therefore the mpt3sas-only case was rare. In fact their Overview
+   rendered because **storcli was installed** — they said so directly. With
+   storcli removed, `ov_lsiutil`'s guard fires and the Overview errors. That is
+   their third screenshot.
+2. **The issue-3 fix already shipped in 2026.07.27 does not fix their box.**
+   `settings.php` keys off `is_dir('/sys/module/mpt2sas')`, which is false there,
+   so it still falls through to *"SAS3 / SAS3.5 controller detected (mpt3sas
+   only)"* for a SAS2 card. The fix corrected the both-modules-loaded case and
+   missed this one.
+3. **This is the high-priority branch of this plan's own decision gate.**
+   mpt3sas-only is the real-world configuration, not the rare one. Any SAS2 owner
+   without storcli is currently refused.
+
+**Therefore: every detection site must switch from module presence to
+`proc_name` per SCSI host.** `/sys/module/*` answers "which driver binary is
+loaded"; `/sys/class/scsi_host/hostN/proc_name` answers "which personality
+claimed this controller", and only the second maps to SAS2-vs-SAS3.
+
+### The one question still open
+
+Whether the bundled `lsiutil` 1.70 can actually *read* a SAS2 card through the
+merged driver. It opens `/dev/mptctl`; `mpt3sas` creates `/dev/mpt3ctl`. If the
+merged driver also exposes `/dev/mptctl` for its `mpt2sas` personality — which
+the `proc_name` value hints at — then lsiutil works and the guard is simply
+wrong, and correcting the condition unlocks every affected user. If it does not,
+the guard is right in effect and the sysfs backend becomes the real fix.
+
+**The guard currently prevents anyone from finding out**, because it refuses
+before `require_binary` is ever reached.
+
+Two commands settle it, both read-only and safe on a running array:
+
+```bash
+ls -l /dev/mpt*
+/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64 -p1 -a 25,2,0,0
+```
+
+The second runs the bundled binary directly, bypassing the guard entirely. If it
+prints IOC data, lsiutil works through the merged driver and Step 2 below should
+change the guard's *condition*, not just its wording.
+
+**Until that is answered, do Step 1 and Step 3 (detection + Settings page) and
+treat Step 2's wording change as provisional.**
+
 ## Why this matters
 
 When the bundled `lsiutil` cannot reach a controller, the plugin currently tells
@@ -283,7 +350,78 @@ Neither claims a hardware generation, which is the whole point.
 `route-fallback` drives this composer with no backend available; run the suite in
 Step 5 and confirm it still passes.
 
-### Step 3: Stop the Settings page asserting SAS3 from the driver alone
+### Step 3 (REVISED 2026-07-28): Detect the generation from `proc_name`, not module presence
+
+> **This step was rewritten after issue #3's diagnostic.** The original version
+> only reworded the `elseif ($has_sas3)` branch. That is not enough: the
+> underlying `$has_sas2` / `$has_sas3` detection is itself wrong, and on the
+> reporter's box produces "SAS3 / SAS3.5 controller detected" for a SAS2
+> `SAS9207-8i`. The version below replaces the detection, not just the wording.
+
+Replace the whole detection block near the top of `settings.php` — from
+`$has_sas2 = is_dir(...)` through the closing `}` of the `if ($storcli !== '')`
+chain — with per-host detection:
+
+```php
+// Controller generation comes from each SCSI host's proc_name, NOT from which
+// driver module is loaded. The merged mpt3sas driver registers SAS2 controllers
+// under the mpt2sas personality, so a box can have no mpt2sas module at all
+// while its SAS9207-8i still reports proc_name=mpt2sas. Keying off
+// /sys/module/* called that card a SAS3 controller and demanded storcli for it.
+$hw = [];          // one entry per SAS host: [drv, board, fw]
+$has_sas2 = false; // any host on the mpt2sas personality  -> bundled lsiutil territory
+$has_sas3 = false; // any host on the mpt3sas personality  -> needs storcli
+foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
+    $drv = trim((string) @file_get_contents($h . 'proc_name'));
+    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas'], true)) continue;
+    if ($drv === 'mpt3sas') $has_sas3 = true; else $has_sas2 = true;
+    $board = trim((string) @file_get_contents($h . 'board_name'));
+    $fw    = trim((string) @file_get_contents($h . 'version_fw'));
+    $hw[]  = ($board !== '' ? $board : 'unknown board') . " ($drv"
+           . ($fw !== '' ? ", fw $fw" : '') . ')';
+}
+$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas hosts found';
+
+$storcli  = '';
+foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
+    if (is_executable($c)) { $storcli = $c; break; }
+}
+if ($storcli === '') {
+    $w = trim((string) shell_exec('command -v storcli storcli64 2>/dev/null'));
+    if ($w !== '') $storcli = strtok($w, "\n");
+}
+
+if ($storcli !== '') {
+    $backend_label = 'storcli';
+    $backend_note  = $has_sas2
+        ? 'storcli is installed and is tried first; the bundled lsiutil covers any SAS2 card it does not enumerate.'
+        : 'SAS3 / SAS3.5 controller detected.';
+} elseif ($has_sas2) {
+    $backend_label = 'lsiutil (bundled)';
+    $backend_note  = $has_sas3
+        ? 'SAS2 controller detected. A SAS3 controller is also present and needs storcli.'
+        : 'SAS2 controller detected.';
+} elseif ($has_sas3) {
+    $backend_label = 'storcli — NOT INSTALLED';
+    $backend_note  = 'A SAS3 / SAS3.5 controller was found and storcli is missing. Install it via the dkaser/unraid-storcli plugin (Community Applications).';
+} else {
+    $backend_label = 'none detected';
+    $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas) was found.';
+}
+```
+
+On the reporter's box this now yields `lsiutil (bundled)` / *"SAS2 controller
+detected."* — correct — where the shipped code says *"SAS3 / SAS3.5 controller
+detected (mpt3sas only)"*.
+
+Note `$hw_detail` is computed here rather than in a second loop; the original
+version of this step built it separately. One pass, one source of truth.
+
+**Verify**: `grep -c "is_dir('/sys/module/" source/usr/local/emhttp/plugins/hbaviewer/settings.php` → prints `0`
+
+**Verify**: `grep -c "proc_name" source/usr/local/emhttp/plugins/hbaviewer/settings.php` → prints `1`
+
+### Step 3b: Add the read-only diagnostic row
 
 In `source/usr/local/emhttp/plugins/hbaviewer/settings.php`, replace **only** the
 `elseif ($has_sas3)` branch shown in "Current state" with:
@@ -461,36 +599,38 @@ Stop and report back (do not improvise) if:
 
 ## The decision this plan feeds
 
-This plan exists partly to answer a question nobody currently has data for:
-**how many SAS2 owners are on `mpt3sas`-only boxes?**
+**This section is superseded — the evidence arrived on 2026-07-28.** It is kept
+only so the original reasoning, and its error, stay on the record. See
+"READ FIRST" at the top of this plan for what actually holds.
 
-Evidence so far is one data point, and it is inconclusive in an interesting way.
-The reporter of GitHub issue #3 has a SAS9207-8i and *did* get card details
-rendered — which is only possible if `ov_lsiutil`'s guard did not fire, which
-requires `mpt2sas` to be loaded on their box. So at least one current Unraid
-install still binds a 9200-series card to `mpt2sas`.
+The original question was *"how many SAS2 owners are on `mpt3sas`-only boxes?"*,
+and the original answer argued from one data point that the case was rare: the
+reporter's card details rendered, so `ov_lsiutil`'s guard cannot have fired, so
+`mpt2sas` must be loaded.
 
-**Issue #3 was deliberately reopened after the 2026.07.27 release** to collect
-that evidence. The firmware half is fixed and shipped; the reporter has been
-asked for the Step 1 output. Read the issue thread before starting — if they
-have answered, that answer decides the priority of this plan and of the deferred
-`sysfs` backend, and it may make Step 3's "Detected Hardware" row less urgent
-than the message fix in Step 2.
+**That inference was wrong.** Their Overview rendered because storcli was
+installed, which makes `hba_each` take the storcli backend and never reach
+`ov_lsiutil` at all. With storcli removed, the guard fires and the Overview
+errors. The diagnostic they later supplied shows `/sys/module/mpt2sas` absent
+while `proc_name` reports `mpt2sas` — so the mpt3sas-only configuration is the
+**common** case, not the rare one, and module presence was never a valid proxy
+for controller generation.
 
-Once the "Detected Hardware" row from Step 3 ships, other users can report the
-same thing without being asked. Then:
+The lesson worth keeping: *"the feature worked, therefore condition X must
+hold"* is only sound when X is the **only** path to that outcome. Here there
+were two paths, and the evidence was consistent with both.
 
-- **If 9200-series cards are on `mpt2sas`** on current Unraid, this scenario is
-  rare, the corrected message is sufficient, and no further work is needed.
-- **If they are landing on `mpt3sas`**, every SAS2 user without storcli is
-  currently locked out, and the follow-up becomes high priority: a third
-  `sysfs` backend in `hba_each`, reading `board_name`, `version_fw`,
-  `version_bios` and the existing `sas_phy` / `sas_end_device` classes the plugin
-  already parses. That would deliver model, firmware, PHY health and drives with
-  **no proprietary tool at all** — though not temperature (an IOC page read) or
-  the firmware event log.
+What remains genuinely open is narrower and is stated at the top of this plan:
+whether bundled `lsiutil` can read a SAS2 card through the merged driver. If it
+can, correcting the guard's condition is the whole fix. If it cannot, the
+deferred follow-up becomes the answer — a third `sysfs` backend in `hba_each`
+reading `board_name`, `version_fw`, `version_bios` and the existing
+`sas_phy` / `sas_end_device` classes, delivering model, firmware, PHY health and
+drives with no proprietary tool at all, though not temperature (an IOC page
+read) or the firmware event log.
 
-Do not write that follow-up until the evidence exists.
+Still do not write that follow-up until the two commands at the top of this plan
+have been run.
 
 ## Maintenance notes
 
