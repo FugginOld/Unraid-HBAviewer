@@ -16,12 +16,22 @@ PROG="$OUT.progress"
 TMP="$OUT.tmp"
 
 # HBA disks = SCSI block devices with a WWN (excludes USB sticks / no-WWN).
-total=$(lsblk -S -o NAME,WWN -n 2>/dev/null | awk '$2 ~ /^0x/' | wc -l)
+# -P (key="value" pairs) not positional columns: a drive with an empty SERIAL
+# collapses its column in the padded output, which silently shifted MODEL into
+# the serial field and left the model blank.
+kv() {   # $1 = lsblk -P line, $2 = key -> the unquoted value
+    printf '%s\n' "$1" | sed -n "s/.*\b$2=\"\([^\"]*\)\".*/\1/p"
+}
+
+total=$(lsblk -S -P -o NAME,WWN 2>/dev/null | grep -c 'WWN="0x')
 
 printf '{"drives":[' > "$TMP"
 i=0
 first=1
-lsblk -S -o NAME,WWN,SERIAL,MODEL -n 2>/dev/null | awk '$2 ~ /^0x/' | while read -r name wwn serial model; do
+lsblk -S -P -o NAME,WWN,SERIAL,MODEL 2>/dev/null | grep 'WWN="0x' | while IFS= read -r line; do
+    name=$(kv "$line" NAME)
+    serial=$(kv "$line" SERIAL)
+    model=$(kv "$line" MODEL)
     i=$(( i + 1 )); echo "$i/$total" > "$PROG"
     smart=$(bash "$DIR/read_smart.sh" "/dev/$name")
     [ -n "$smart" ] || smart='{}'
