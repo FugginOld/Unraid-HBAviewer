@@ -6,6 +6,18 @@
    loads the render functions without running any dispatch.
      php tests/ajax_render_test.php  ->  "ajax_render: all pass" (exit 0) */
 
+/* If ajax_info.php ever stops returning early under CLI, requiring it will run
+   the real dispatch and exit(0) mid-require — every assertion below would be
+   skipped and this file would report a clean pass having tested nothing. Fail
+   loudly instead. */
+$completed = false;
+register_shutdown_function(function () use (&$completed) {
+    if (!$completed) {
+        fwrite(STDERR, "ajax_render: ABORTED before assertions ran — ajax_info.php did not return early under CLI\n");
+        exit(1);
+    }
+});
+
 require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php';
 
 $fails = 0;
@@ -92,14 +104,33 @@ renderEventsTables($evStorcli, $dir);
 $archived = json_decode((string) file_get_contents("$dir/events_c0.json"), true);
 check('events dedup on repeat', count($archived) === 2);
 
+// Own archive dir: sharing $dir with the storcli case above would merge
+// lsiutil-shaped entries into a storcli-shaped archive (and vice versa),
+// producing undefined-key warnings on the foreign-shaped rows — a real
+// failure mode if a box switches backends, but not what this case tests.
+$dirLsi = sys_get_temp_dir() . '/hbav_events_lsi_' . getmypid();
+@mkdir($dirLsi, 0755, true);
+array_map('unlink', glob("$dirLsi/*.json") ?: []);
+
 $evLsi = ['backend' => 'lsiutil', 'controllers' => [['entries' => [
     ['seq'=>'7','qualifier'=>'0x02','data'=>'00 11 22','timestamp'=>'0x0001d4c0'],
 ]]]];
-$h = renderEventsTables($evLsi, $dir);
+$h = renderEventsTables($evLsi, $dirLsi);
 check('events lsiutil col set', str_contains($h, '<th>Qualifier</th>') && !str_contains($h, '<th>Description</th>'));
+
+array_map('unlink', glob("$dirLsi/*.json") ?: []);
+@rmdir($dirLsi);
+
+$dirNote = sys_get_temp_dir() . '/hbav_events_note_' . getmypid();
+@mkdir($dirNote, 0755, true);
+array_map('unlink', glob("$dirNote/*.json") ?: []);
+
 check('events note rendered', str_contains(
-    renderEventsTables(['backend'=>'storcli','controllers'=>[['note'=>'expert mode required','entries'=>[]]]], $dir),
+    renderEventsTables(['backend'=>'storcli','controllers'=>[['note'=>'expert mode required','entries'=>[]]]], $dirNote),
     'expert mode required'));
+
+array_map('unlink', glob("$dirNote/*.json") ?: []);
+@rmdir($dirNote);
 
 array_map('unlink', glob("$dir/*.json") ?: []);
 @rmdir($dir);
@@ -123,5 +154,6 @@ $t = luTable(['A & B'], [['<code>x</code>']]);
 check('luTable escapes headers', str_contains($t, 'A &amp; B'));
 check('luTable cells are html',  str_contains($t, '<code>x</code>'));
 
+$completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
