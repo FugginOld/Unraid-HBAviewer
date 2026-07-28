@@ -4,6 +4,7 @@
 
 require_once __DIR__ . '/config.php';
 $cfg   = lsi_config_read();
+$csrfToken = lsi_csrf_token();
 $saved = false;
 
 // Backend detection — driver via sysfs + storcli path lookup. Both are instant
@@ -44,7 +45,12 @@ if ($storcli !== '') {
     $backend_note  = 'No supported HBA driver (mpt2sas / mpt3sas) is loaded.';
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
+$csrfFail = false;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])
+    && !lsi_csrf_ok($csrfToken, $_POST['csrf_token'] ?? null)) {
+    $csrfFail = true;   // refuse the write; the form still renders below
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer']) && !$csrfFail) {
     // Map the form (checkbox-absent = off); config_write clamps to schema.
     lsi_config_write([
         'HBA_PORT'        => $_POST['port']      ?? 1,
@@ -105,7 +111,13 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
   <div class="lu-notice">Settings saved.</div>
   <?php endif; ?>
 
+  <?php if ($csrfFail): ?>
+  <div class="lu-danger"><strong>Not saved.</strong> The security token was missing or expired.
+  Reload this page and save again.</div>
+  <?php endif; ?>
+
   <form method="post">
+    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>">
 
     <div class="lu-s-card">
       <h3>HBA Connection</h3>

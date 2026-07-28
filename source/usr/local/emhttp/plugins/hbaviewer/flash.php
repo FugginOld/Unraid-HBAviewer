@@ -81,8 +81,18 @@ $enable = (int) $cfg['ENABLE_FLASH'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
 if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disabled.'; exit; }
-// CSRF is enforced by Unraid's platform layer (a token-less POST never reaches
-// here). The client sends Unraid's csrf_token so that layer passes it through.
+
+// Verify Unraid's CSRF token HERE rather than trusting the platform layer to
+// have done it. The client already sends it on every POST (see the flash JS in
+// hbaviewer.php); this is the server-side half that was missing. GET actions
+// (status, listall) are read-only and unaffected.
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && !lsi_csrf_ok(lsi_csrf_token(), $_POST['csrf_token'] ?? null)) {
+    http_response_code(403);
+    echo 'Invalid or missing security token. Reload the Monitor page and retry.';
+    exit;
+}
+
 @mkdir(FLASH_DIR, 0755, true);
 
 if ($action === 'upload') {
