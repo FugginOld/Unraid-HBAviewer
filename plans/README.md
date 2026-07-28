@@ -24,7 +24,7 @@ commands are inlined in the plan file itself.
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | BLOCKED — issue #3 reopened, waiting on the reporter's driver diagnostic |
-| 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | TODO — surfaced while executing 006 |
+| 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)

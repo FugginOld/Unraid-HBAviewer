@@ -23,6 +23,63 @@
 - **Category**: bug
 - **Planned at**: commit `2e79fca`, 2026-07-27
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-28, by a dispatched executor subagent in an isolated worktree |
+| Commit | `dd6b318` — "Show only event entries the active backend can render" |
+| Merged | `f47940f` into `dev` |
+| Diff | 4 files, 95 insertions, 4 deletions |
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+The data-loss guard, checked one step beyond what this plan asks for:
+
+| Check | Result |
+|---|---|
+| Entries on disk after a backend switch | **3 of 3** — nothing deleted |
+| lsiutil rows shown under the storcli renderer | no |
+| storcli row shown | yes |
+| Hidden count reported to the user | yes |
+| **Switching back to lsiutil** | **old entries reappear** |
+
+That last row was added at review and is the strongest evidence the change
+hides rather than destroys. Had the write used `$entries` instead of
+`$archived`, it would have failed and this would have been a silent data-loss
+bug.
+
+Reverting the renderer makes three named assertions fail (`no PHP warning`,
+`counts visible only`, `reports hidden`) with exit 1; restoring it returns all
+pass. Lint clean, `bash tests/run.sh` exits 0, zero warnings.
+
+### A justified deviation, and a defect in this plan
+
+The executor hit an unexpected failure of `mixed archive: no PHP warning` and,
+rather than weakening the assertion, diagnosed it. All three of its claims were
+verified independently at review:
+
+1. `@mkdir()` on an **existing** directory raises `"mkdir(): File exists"`.
+2. `set_error_handler` still fires for `@`-suppressed diagnostics unless the
+   handler checks `error_reporting()` — **and this plan's handler did not**. So
+   the new test caught a warning the `@` operator was deliberately hiding, in
+   `event_store_write()`, entirely unrelated to entry shapes.
+3. Guarding with `if (!is_dir(dirname($file)))` is behaviour-preserving:
+   still creates a missing directory, no-ops on the second call.
+
+The executor fixed the source rather than the test — the right call, since the
+warning was genuine sloppiness that `@` had been masking, and the file was
+already in scope.
+
+**Consequence to know about, deliberately left as-is**: because the handler does
+not check `error_reporting()`, `mixed archive: no PHP warning` asserts "no
+diagnostics at all from this path", which is stricter than its name suggests. It
+just caught a real defect, so the strictness earns its keep — but anyone adding a
+legitimate `@`-suppressed call inside `renderEventsTables()` will see this test
+fail and should understand why before changing it.
+
 ## Why this matters
 
 The event archive is per-controller: `events_c0.json`, `events_c1.json`. But the
