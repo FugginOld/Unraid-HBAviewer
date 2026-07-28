@@ -61,6 +61,18 @@ function flash_preflight(array $in): array {
     return ['ok' => true, 'error' => ''];
 }
 
+/* Claim the single-flight lock ATOMICALLY. 'x' fails when the file already
+   exists, so of two concurrent requests exactly one can win — unlike
+   is_file()-then-touch(), which let both pass the gate and launch a flash at
+   the same controller. Returns true if THIS caller now owns the lock, in which
+   case it must release it on any subsequent refusal. */
+function flash_claim_lock(string $lock): bool {
+    $fh = @fopen($lock, 'x');
+    if ($fh === false) return false;
+    fclose($fh);
+    return true;
+}
+
 /* ── HTTP dispatch (served only; skipped under the CLI test runner) ─────────── */
 if (PHP_SAPI === 'cli') return;
 
@@ -118,20 +130,28 @@ if ($action === 'flash') {
     $fw     = $fwName !== null ? FLASH_DIR . '/' . $fwName : '';
     $lock   = FLASH_DIR . '/flash.lock';
 
+    // Claim single-flight BEFORE the gate, so the check and the claim can't be
+    // interleaved by a second request. Any refusal below hands the lock back.
+    $owned = flash_claim_lock($lock);
+
     $pf = flash_preflight([
         'enable'  => $enable,
         'stopped' => flash_array_stopped(),
         'ctl'     => $ctl,
         'fw'      => $fw,
         'confirm' => $_POST['confirm'] ?? '',
-        'locked'  => is_file($lock),
+        'locked'  => !$owned,
     ]);
-    if (!$pf['ok'])   { echo json_encode(['error' => $pf['error']]); exit; }
-    if ($chip === '') { echo json_encode(['error' => 'Missing controller chip.']); exit; }
+    if (!$pf['ok'] || $chip === '') {
+        // Only release a lock we actually own — if $owned is false another
+        // request holds it and unlinking would break ITS single-flight.
+        if ($owned) @unlink($lock);
+        echo json_encode(['error' => $pf['ok'] ? 'Missing controller chip.' : $pf['error']]);
+        exit;
+    }
 
-    // Single-flight: claim the lock, clear prior artifacts, launch ONE detached
-    // job that captures stdout+stderr and records its exit code. Never auto-relaunched.
-    @touch($lock);
+    // Single-flight lock is held. Clear prior artifacts, launch ONE detached job
+    // that captures stdout+stderr and records its exit code. Never auto-relaunched.
     @unlink(FLASH_DIR . '/flash.log');
     @unlink(FLASH_DIR . '/flash.status');
     $bios = ($biosNm !== null && is_file(FLASH_DIR . '/' . $biosNm)) ? FLASH_DIR . '/' . $biosNm : '';
