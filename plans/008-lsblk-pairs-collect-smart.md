@@ -342,7 +342,14 @@ Machine-checkable. ALL must hold:
 - [ ] `grep -c 'lsblk -S -P' source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `2`
 - [ ] `grep -c 'read -r name wwn serial model' source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `0`
 - [ ] `grep -c 'IFS= read -r line' source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `1`
-- [ ] `grep -c "WWN=\\\\\"0x" source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `2` (the count and the filter — both keep the USB exclusion)
+- [ ] `grep -c 'WWN="0x' source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `2` (the count and the filter — both keep the USB exclusion)
+
+> **Corrected before execution.** This criterion was originally written with
+> double quotes and backslash escapes (`grep -c "WWN=\\\\\"0x"`), which the shell
+> unescapes into a pattern containing a literal backslash — it matches nothing
+> and always prints `0`. **Use single quotes**, as above: the pattern contains a
+> double quote and no backslash, so single-quoting it needs no escaping at all.
+> Verified against a simulated post-fix file: the single-quoted form prints `2`.
 - [ ] `grep -c 'ponytail:' source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` prints `1` — the JSON-escaping deferral note is still there
 - [ ] Step 3 produced exactly the three expected lines
 - [ ] `bash -n source/usr/local/emhttp/plugins/hbaviewer/scripts/collect_smart.sh` exits 0
