@@ -19,11 +19,12 @@ commands are inlined in the plan file itself.
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | DONE — merged to `dev` (`e9409ed`, from `41d3d03`); ships in the next release |
 | 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | DONE — `f3ebea5`, released in 2026.07.27, closed issue #2 (hardware check still outstanding) |
 | 005 | Claim the flash single-flight lock atomically | P1 | S | — | DONE — merged to `dev` (`dfd613d`, from `1919ca8`); ships in the next release |
-| 006 | Make the AJAX render layer testable, and test it | P2 | M | — | TODO |
+| 006 | Make the AJAX render layer testable, and test it | P2 | M | — | DONE — merged to `dev` (`23b9646`); unblocks 007 |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | TODO |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | TODO |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | BLOCKED — issue #3 reopened, waiting on the reporter's driver diagnostic |
+| 011 | Event archive mixes entry shapes when a box changes backend | P3 | S | — | NOT WRITTEN — finding recorded below, surfaced while executing 006 |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -228,6 +229,33 @@ Confirmed by running it, so executors can tell their failures from pre-existing 
 - CI (`.github/workflows/php.yml`) lints every `.php` with `php -l` and every
   `.sh` under `source`/`tests` with `bash -n`, then runs the full suite.
   `build.sh` at the repo root is **not** linted by CI — plan 003 notes this.
+
+## Open finding — 011, not yet written up
+
+**The event archive mixes entry shapes when a box changes backend.**
+Surfaced 2026-07-27 while executing plan 006, by the executor rather than the
+audit.
+
+`event_merge` dedups by `seq|time` and has no notion of entry *shape*. The
+storcli backend emits entries keyed `seq / time / code / description`; the
+lsiutil backend emits `seq / qualifier / data / timestamp`. Both are archived to
+the same `events_c{i}.json`. A box that changes backend over its lifetime — most
+plausibly a SAS2 system where the user installs storcli — therefore accumulates
+both shapes in one file, and whichever branch renders next hits
+undefined-array-key warnings on the foreign-shaped rows.
+
+Reproduced during 006's review: pointing the storcli and lsiutil test cases at
+one archive directory produced exactly those warnings; giving each its own
+directory removed them.
+
+Not hypothetical for this project — issue #3's reporter runs lsiutil today and
+has been advised about storcli, so their archive already holds lsiutil-shaped
+entries.
+
+The right fix is probably in `event_archive.php`'s merge/store contract, not the
+renderer: either stamp entries with their backend and filter on read, or key the
+archive file by backend. P3 — cosmetic warnings, no data loss, and it needs a
+backend switch to trigger.
 
 ## Findings considered and rejected
 

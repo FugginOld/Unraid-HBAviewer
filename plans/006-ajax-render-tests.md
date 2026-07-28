@@ -32,6 +32,72 @@
 - **Category**: tests
 - **Planned at**: commit `0346777`, 2026-07-26; **re-baselined to `7d8d4d7`, 2026-07-27**
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent in an isolated worktree |
+| Commits | `ddc6392` extract → `aa99798` tests → `43c53c5` revision |
+| Merged | `23b9646` into `dev` |
+| Diff | 3 files, 185 insertions, 12 deletions |
+| Review | Two rounds — REVISE then APPROVE |
+
+**Dispatch note**: the executor was told to branch off `dev`, not accept the
+default `main`-based worktree. That mattered here — `main` predates plan 002's
+change to `ajax_info.php`, so a `main`-based extraction would have been taken
+from the wrong file. Branching off `dev` also made `plans/` readable in the
+worktree, so the plan did not need inlining.
+
+**The refactor is inert**, which is this plan's entire claim. A
+whitespace-insensitive diff of `ajax_info.php` shows only: the CLI guard block,
+three `if ($type === 'x') {` → `function renderXTables(...)` swaps, three
+`echo $out; exit;` → `return $out;` swaps, three one-line dispatch statements,
+and the `$dir` parameter with its doc comment. No markup, logic or escaping
+changed.
+
+### Round one found a hole worth recording
+
+The test file as originally specified **could report a clean pass having run
+zero assertions.** Reverting `ajax_info.php` to its pre-refactor state and
+running the tests produced no output and **exit 0**.
+
+Cause: without the CLI guard, `require_once` executes the real dispatch, hits
+the `overview` branch, echoes an error and calls `exit;` — terminating the
+process mid-require, before the first `check()`. A bare `exit` is status 0, and
+`run_php.sh` chains with `&&`, so it propagates as success to
+`--- all pass ---`. The guarantee this plan exists to create was silently
+voidable by anyone who moved or removed the guard.
+
+Fixed with a `register_shutdown_function` before the require that fails loudly
+if the file aborted early — detection from outside the require's control flow,
+since nothing after it would run. **This was a defect in the plan, not in the
+executor's work**; the test file followed the plan verbatim.
+
+Verified at review, both directions:
+
+| Check | Result |
+|---|---|
+| Guard reverted → must fail loudly | `ajax_render: ABORTED before assertions ran`, exit 1 |
+| Guard restored → must pass | `ajax_render: all pass`, exit 0 |
+| Assertions actually executing | 37 PASS lines |
+| Archive cross-contamination warnings | 0 |
+
+Round one also split the event-archive temp directories per backend. Sharing one
+directory merged storcli- and lsiutil-shaped entries, and whichever branch
+rendered next hit undefined-array-key warnings on the foreign rows.
+
+### A finding this surfaced (not fixed here)
+
+That cross-contamination is **not** purely a test artifact. A box that changes
+backends over its lifetime — a SAS2 system where the user later installs
+storcli — accumulates both entry shapes in the same `events_c{i}.json`, and the
+renderer warns on the foreign-shaped rows. The executor's diagnosis is the
+sharper one: this belongs to `event_archive.php`'s merge/store contract rather
+than the renderer, since `event_merge` dedups by `seq|time` with no notion of
+entry shape. Tracked as plan 011.
+
 ## Why this matters
 
 This repository has genuinely good test discipline: golden-file tests for every
