@@ -154,6 +154,59 @@ $t = luTable(['A & B'], [['<code>x</code>']]);
 check('luTable escapes headers', str_contains($t, 'A &amp; B'));
 check('luTable cells are html',  str_contains($t, '<code>x</code>'));
 
+/* ── Hostile-ish hardware strings must not reach the page as markup ────────
+   Every value below arrives from HBA firmware, storcli text, or sysfs. None of
+   it is attacker-controlled in any realistic scenario — but a drive model
+   containing < or & is a plain correctness problem, and consistency here is
+   what stops the next person guessing which convention this file follows. */
+$X   = '<img src=x onerror=alert(1)>';
+$ESC = '&lt;img src=x onerror=alert(1)&gt;';
+
+$h = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
+    ['phy'=>$X,'link'=>'up','speed'=>$X,'sas_addr'=>$X,'inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]]);
+check('phy storcli escapes phy',   !str_contains($h, $X));
+check('phy storcli escapes sas',   str_contains($h, strtoupper($ESC)) || str_contains($h, $ESC));
+
+$h = renderPhyTables(['backend'=>'lsiutil','controllers'=>[['phys'=>[
+    ['phy'=>$X,'link'=>'up','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]]);
+check('phy lsiutil escapes phy', !str_contains($h, $X));
+
+$h = renderDrivesTables(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['slot'=>'8/0','port'=>'14','model'=>$X,'serial'=>'S1','state'=>'JBOD',
+     'size'=>'8 TB','sas_address'=>$X,'link'=>'12.0Gb/s','firmware'=>'SN02'],
+]]]]);
+check('drives storcli escapes model', !str_contains($h, $X));
+check('drives storcli escapes sas',   !str_contains($h, strtoupper($X)));
+
+$h = renderDrivesTables(['backend'=>'lsiutil','controllers'=>[['drives'=>[
+    ['bus'=>$X,'target'=>'3','phy'=>$X,'sas_address'=>$X,'os_name'=>$X],
+]]]]);
+check('drives lsiutil escapes os_name', !str_contains($h, $X));
+check('drives lsiutil escapes bus',     !str_contains($h, $X));
+check('drives lsiutil escapes sas',     !str_contains($h, strtoupper($X)));
+
+$edir = sys_get_temp_dir() . '/hbav_esc_' . getmypid();
+@mkdir($edir, 0755, true);
+$h = renderEventsTables(['backend'=>'lsiutil','controllers'=>[['entries'=>[
+    ['seq'=>$X,'qualifier'=>$X,'data'=>$X,'timestamp'=>$X],
+]]]], $edir);
+check('events lsiutil escapes seq',       !str_contains($h, $X));
+check('events lsiutil escapes qualifier', !str_contains($h, $X));
+check('events lsiutil escapes timestamp', !str_contains($h, $X));
+array_map('unlink', glob("$edir/*.json") ?: []);
+@rmdir($edir);
+
+// The already-correct branches stay correct — guard against a regression that
+// "fixes" escaping by moving it into luTable and double-escaping everything.
+$h = renderDrivesTables(['backend'=>'storcli','controllers'=>[[
+    'enclosures'=>[['eid'=>'8','product'=>'VirtualSES','vendor'=>'LSI','slots'=>'8','drives'=>'4','direct'=>1]],
+    'drives'=>[['slot'=>'8/0','port'=>'14','model'=>'A & B','serial'=>'S1','state'=>'JBOD',
+                'size'=>'8 TB','sas_address'=>'5000c5','link'=>'12.0Gb/s','firmware'=>'SN02']],
+]]]);
+check('no double escaping', str_contains($h, 'A &amp; B') && !str_contains($h, 'A &amp;amp; B'));
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
