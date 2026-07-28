@@ -284,13 +284,14 @@ function renderPhyTables(array $data): string {
             foreach ($phys as $p) {
                 $hasErr = (($p['inv'] ?? 0) + ($p['disp'] ?? 0) + ($p['sync'] ?? 0) + ($p['reset'] ?? 0)) > 0;
                 $ec = function ($v) use ($hasErr) {
-                    return $hasErr && $v > 0 ? '<span class="lu-err-val">' . $v . '</span>' : $v;
+                    $s = htmlspecialchars((string) $v);
+                    return $hasErr && $v > 0 ? '<span class="lu-err-val">' . $s . '</span>' : $s;
                 };
                 $rows[] = [
-                    $p['phy'],
+                    htmlspecialchars((string) $p['phy']),
                     luLinkBadge($p['link']),
                     htmlspecialchars($p['speed']),
-                    !empty($p['sas_addr']) ? '<code>' . strtoupper($p['sas_addr']) . '</code>' : '<span class="lu-muted">—</span>',
+                    !empty($p['sas_addr']) ? '<code>' . htmlspecialchars(strtoupper($p['sas_addr'])) . '</code>' : '<span class="lu-muted">—</span>',
                     $ec($p['inv'] ?? 0),
                     $ec($p['disp'] ?? 0),
                     $ec($p['sync'] ?? 0),
@@ -303,13 +304,14 @@ function renderPhyTables(array $data): string {
             $rows = [];
             foreach ($phys as $p) {
                 $hasErr = ($p['inv'] + $p['disp'] + $p['sync'] + $p['reset']) > 0;
+                $ev = fn($v) => htmlspecialchars((string) $v);
                 $rows[] = [
-                    $p['phy'],
+                    htmlspecialchars((string) $p['phy']),
                     luLinkBadge($p['link']),
-                    $hasErr ? '<span class="lu-err-val">'.$p['inv'].'</span>'   : $p['inv'],
-                    $hasErr ? '<span class="lu-err-val">'.$p['disp'].'</span>'  : $p['disp'],
-                    $hasErr ? '<span class="lu-err-val">'.$p['sync'].'</span>'  : $p['sync'],
-                    $hasErr ? '<span class="lu-err-val">'.$p['reset'].'</span>' : $p['reset'],
+                    $hasErr ? '<span class="lu-err-val">'.$ev($p['inv']).'</span>'   : $ev($p['inv']),
+                    $hasErr ? '<span class="lu-err-val">'.$ev($p['disp']).'</span>'  : $ev($p['disp']),
+                    $hasErr ? '<span class="lu-err-val">'.$ev($p['sync']).'</span>'  : $ev($p['sync']),
+                    $hasErr ? '<span class="lu-err-val">'.$ev($p['reset']).'</span>' : $ev($p['reset']),
                 ];
             }
             $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
@@ -358,7 +360,7 @@ function renderDrivesTables(array $data): string {
                     $serial !== '' ? '<code>' . htmlspecialchars($serial) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['state'] ?? ''),
                     htmlspecialchars($d['size']),
-                    !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>',
+                    !empty($d['sas_address']) ? '<code>' . htmlspecialchars(strtoupper($d['sas_address'])) . '</code>' : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['link']),
                     htmlspecialchars($d['firmware']),
                     $smart,
@@ -369,10 +371,13 @@ function renderDrivesTables(array $data): string {
             // lsiutil backend: bus:target, port, SAS address, OS device
             $rows = [];
             foreach ($drives as $d) {
-                $os  = !empty($d['os_name'])     ? '<code>' . $d['os_name'] . '</code>'                : '<span class="lu-muted">—</span>';
-                $sas = !empty($d['sas_address']) ? '<code>' . strtoupper($d['sas_address']) . '</code>' : '<span class="lu-muted">—</span>';
-                $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . $d['phy']                        : '<span class="lu-muted">—</span>';
-                $rows[] = [$d['bus'] . ':' . $d['target'], $phy, $sas, $os];
+                $os  = !empty($d['os_name'])     ? '<code>' . htmlspecialchars($d['os_name']) . '</code>'                : '<span class="lu-muted">—</span>';
+                $sas = !empty($d['sas_address']) ? '<code>' . htmlspecialchars(strtoupper($d['sas_address'])) . '</code>' : '<span class="lu-muted">—</span>';
+                $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . htmlspecialchars((string) $d['phy'])              : '<span class="lu-muted">—</span>';
+                $rows[] = [
+                    htmlspecialchars((string) $d['bus']) . ':' . htmlspecialchars((string) $d['target']),
+                    $phy, $sas, $os,
+                ];
             }
             $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
         }
@@ -420,10 +425,10 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
             $rows = [];
             foreach (array_reverse($entries) as $e) {
                 $rows[] = [
-                    $e['seq'],
-                    '<code>' . $e['qualifier'] . '</code>',
+                    htmlspecialchars((string) $e['seq']),
+                    '<code>' . htmlspecialchars((string) $e['qualifier']) . '</code>',
                     '<code>' . htmlspecialchars($e['data']) . '</code>',
-                    '<code>' . $e['timestamp'] . '</code>',
+                    '<code>' . htmlspecialchars((string) $e['timestamp']) . '</code>',
                 ];
             }
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
