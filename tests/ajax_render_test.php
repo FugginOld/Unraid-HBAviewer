@@ -207,6 +207,42 @@ $h = renderDrivesTables(['backend'=>'storcli','controllers'=>[[
 ]]]);
 check('no double escaping', str_contains($h, 'A &amp; B') && !str_contains($h, 'A &amp;amp; B'));
 
+/* ── Mixed-shape archive: a box that changed backend ──────────────────────────
+   storcli and lsiutil emit different event records into the same per-controller
+   archive. Before this was handled, the active renderer hit undefined keys on
+   the foreign-shaped rows and emitted PHP warnings. */
+$dirMix = sys_get_temp_dir() . '/hbav_events_mix_' . getmypid();
+@mkdir($dirMix, 0755, true);
+array_map('unlink', glob("$dirMix/*.json") ?: []);
+
+// Seed the archive with lsiutil history, as a SAS2 box would have.
+renderEventsTables(['backend'=>'lsiutil','controllers'=>[['entries'=>[
+    ['seq'=>1,'qualifier'=>'0x0001','data'=>'00000000','timestamp'=>'00000000:000012ab'],
+    ['seq'=>2,'qualifier'=>'0x0002','data'=>'deadbeef','timestamp'=>'00000000:000012ac'],
+]]]], $dirMix);
+
+// Now the user installs storcli: same controller, same archive, new shape.
+$warned = false;
+set_error_handler(function () use (&$warned) { $warned = true; return true; });
+$h = renderEventsTables(['backend'=>'storcli','controllers'=>[['entries'=>[
+    ['seq'=>'0x01','time'=>'2026-07-01 10:00:00','code'=>'0x0113','description'=>'Drive inserted'],
+]]]], $dirMix);
+restore_error_handler();
+
+check('mixed archive: no PHP warning',   $warned === false);
+check('mixed archive: storcli row shown', str_contains($h, 'Drive inserted'));
+check('mixed archive: lsiutil rows hidden', !str_contains($h, 'deadbeef'));
+check('mixed archive: storcli columns',  str_contains($h, '<th>Description</th>'));
+check('mixed archive: counts visible only', str_contains($h, '1 entries'));
+check('mixed archive: reports hidden',   str_contains($h, '2 from a previous backend not shown'));
+
+// The archive on disk must still hold every entry — nothing is deleted.
+$onDisk = json_decode((string) file_get_contents("$dirMix/events_c0.json"), true);
+check('mixed archive: history preserved on disk', count($onDisk) === 3);
+
+array_map('unlink', glob("$dirMix/*.json") ?: []);
+@rmdir($dirMix);
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

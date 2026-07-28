@@ -37,6 +37,33 @@ function event_store_read(string $file): array {
 }
 
 function event_store_write(string $file, array $entries): void {
-    @mkdir(dirname($file), 0755, true);
+    if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
     @file_put_contents($file, json_encode($entries));
+}
+
+/* ── Entry shape ─────────────────────────────────────────────────────────────
+   The two backends emit structurally different event records — storcli gives
+   seq/time/code/description, lsiutil gives seq/qualifier/data/timestamp — and
+   both are archived to the same per-controller file. A box that changes backend
+   (a SAS2 system where the user later installs storcli) therefore accumulates
+   both shapes, and a renderer built for one shape hits undefined keys on the
+   other. These two helpers let the caller show only what it can format. */
+
+/* Which backend produced this entry: 'storcli' | 'lsiutil' | '' when unknown. */
+function event_shape(array $entry): string {
+    if (isset($entry['description'])) return 'storcli';
+    if (isset($entry['qualifier']))   return 'lsiutil';
+    return '';
+}
+
+/* The entries $backend's table can actually render. Nothing is deleted — the
+   archive on disk keeps every entry; this only decides what is displayed.
+   An empty $backend falls back to the shape of the first entry, matching the
+   renderer's own pre-rollout key-sniff.
+   ponytail: hide foreign entries rather than render a second table for them.
+   If anyone asks to see pre-switch history, render both tables instead. */
+function event_visible(array $entries, string $backend): array {
+    if ($backend === '') $backend = event_shape($entries[0] ?? []);
+    if ($backend === '') return $entries;
+    return array_values(array_filter($entries, fn($e) => event_shape($e) === $backend));
 }
