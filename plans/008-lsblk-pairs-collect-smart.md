@@ -58,14 +58,23 @@ a pattern containing a literal backslash — it matches nothing and always print
 corrected in `a026440` before the executor ran. The four preceding plans each
 surfaced a bad criterion only at execution time; this one cost nothing.
 
-**Two limits on the verification:**
+**Hardware-verified 2026-07-27**, on a 27-device Unraid box:
 
-- **Not tested against real `lsblk` output.** The `-P` format used in the fixture
-  is reconstructed. Running `lsblk -S -P -o NAME,WWN,SERIAL,MODEL` on an Unraid
-  box would confirm it in seconds.
-- **The original bug may not be reproducible on a given machine** — it needs a
-  drive that reports a blank serial. Without one you can confirm the rewrite
-  still works, but not that it fixed anything observable.
+- **The reconstructed `-P` format was correct.** Real output is exactly
+  `NAME="sda" WWN="0x…" SERIAL="…" MODEL="…"`, matching the fixture. The shipped
+  `kv()` was run against the real output and parsed every row correctly,
+  including a two-letter device name (`sdaa`) and models containing spaces.
+- **24 WWN-bearing drives parsed correctly**; the SMART table showed exactly
+  those 24, serials matching `lsblk` row for row, no model in a serial column.
+- **Three WWN-less devices correctly excluded** — a USB flash drive and two
+  SATA SSDs. Note for future readers: the WWN filter is a proxy for
+  "attached to the HBA", so a motherboard-SATA SSD reporting no WWN is
+  legitimately absent from the SMART tab. That is pre-existing behaviour, not
+  introduced here.
+- **The original bug was NOT reproducible on that box** — every device reported a
+  serial, so no row could exercise the blank-`SERIAL` shift. The verification
+  therefore confirms the rewrite is correct and non-regressive, not that it fixed
+  an observable symptom on that particular machine.
 
 ## Why this matters
 
