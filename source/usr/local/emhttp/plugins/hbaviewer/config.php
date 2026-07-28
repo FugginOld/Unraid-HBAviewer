@@ -53,27 +53,3 @@ function lsi_config_write(array $raw, ?string $path = null): void {
     @mkdir(dirname($path), 0755, true);
     file_put_contents($path, implode("\n", $lines) . "\n");
 }
-
-/* ── CSRF ────────────────────────────────────────────────────────────────────
-   Unraid issues a per-session token and its own layer is expected to reject
-   token-less POSTs. This plugin does not take that on trust: both POST surfaces
-   (settings save, firmware flash) verify the token themselves, so a change of
-   platform behaviour can't silently remove the only check standing in front of
-   them. Same fail-safe posture as flash_array_stopped(): an unreadable var.ini
-   means refuse, not allow. */
-
-/* Unraid's current CSRF token. Empty string if var.ini is missing/unreadable
-   or carries no token. $varini is injectable for tests. */
-function lsi_csrf_token(string $varini = '/var/local/emhttp/var.ini'): string {
-    if (!is_file($varini)) return '';
-    $ini = @parse_ini_file($varini);
-    return is_array($ini) ? (string) ($ini['csrf_token'] ?? '') : '';
-}
-
-/* True iff the submitted token matches. Pure over its inputs, constant-time
-   compare. Fails closed: an absent expected token, or an absent/non-string
-   submitted one, is a refusal — never a pass. */
-function lsi_csrf_ok(string $expected, $sent): bool {
-    if (!is_string($sent) || $expected === '' || $sent === '') return false;
-    return hash_equals($expected, $sent);
-}

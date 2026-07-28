@@ -38,25 +38,5 @@ check('round-trip show off',   $r['SHOW_PHY'] === 0);
 check('missing key -> default',$r['SHOW_DRIVES'] === 1);
 
 @unlink($tmp);
-
-// ── CSRF: token read + constant-time compare, both failing closed ───────────
-$vi = sys_get_temp_dir() . '/hbav_varini_csrf_' . getmypid() . '.ini';
-file_put_contents($vi, "csrf_token=\"ABC123\"\nmdState=\"STARTED\"\n");
-check('csrf token read',        lsi_csrf_token($vi) === 'ABC123');
-@unlink($vi);
-check('csrf missing file -> empty', lsi_csrf_token($vi) === '');
-file_put_contents($vi, "mdState=\"STARTED\"\n");
-check('csrf absent key -> empty',   lsi_csrf_token($vi) === '');
-@unlink($vi);
-
-check('csrf match',              lsi_csrf_ok('ABC123', 'ABC123') === true);
-check('csrf mismatch',           lsi_csrf_ok('ABC123', 'abc123') === false);
-check('csrf empty sent',         lsi_csrf_ok('ABC123', '') === false);
-check('csrf null sent',          lsi_csrf_ok('ABC123', null) === false);
-check('csrf array sent',         lsi_csrf_ok('ABC123', ['x']) === false);
-check('csrf no expected -> deny', lsi_csrf_ok('', 'anything') === false);
-check('csrf both empty -> deny',  lsi_csrf_ok('', '') === false);
-check('csrf prefix not accepted', lsi_csrf_ok('ABC123', 'ABC') === false);
-
 echo $fails === 0 ? "config: all pass\n" : "config: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
