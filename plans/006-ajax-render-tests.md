@@ -7,10 +7,16 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 0346777..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php tests/run_php.sh`
-> If either file changed since this plan was written, compare the "Current
+> `git diff --stat 7d8d4d7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php tests/run_php.sh`
+> If either file changed since this plan was re-baselined, compare the "Current
 > state" excerpts against the live code before proceeding; on a mismatch,
 > treat it as a STOP condition.
+>
+> **Re-baselined 2026-07-27 from `0346777` to `7d8d4d7`.** Plan 002 landed in
+> between and modified `ajax_info.php` (added `const SMART_PROGRESS_TTL` and an
+> age check in the `smart_all` handler), shifting every line below it by 9. All
+> line numbers in this plan have been updated to match `7d8d4d7`. **Locate code
+> by its content, not by line number** — the numbers are navigation aids only.
 >
 > **This is a refactor that must not change any output.** Every extraction here
 > is mechanical: the same code, moved into a function, returning instead of
@@ -24,7 +30,7 @@
 - **Risk**: MED
 - **Depends on**: none
 - **Category**: tests
-- **Planned at**: commit `0346777`, 2026-07-26
+- **Planned at**: commit `0346777`, 2026-07-26; **re-baselined to `7d8d4d7`, 2026-07-27**
 
 ## Why this matters
 
@@ -33,7 +39,7 @@ shell parser, injectable clocks and stores so the caching and archiving policies
 are unit-tested, a stubbed `storcli` that replays fixtures so backend routing is
 covered without hardware. Five PHP test files cover the pure helpers.
 
-None of it reaches the HTML. Roughly 250 of `ajax_info.php`'s 412 lines build
+None of it reaches the HTML. Roughly 250 of `ajax_info.php`'s 421 lines build
 the tables the user actually looks at — PHY health, attached drives, the event
 log, the SMART summary, the overview cards — and not one line of that is
 exercised by any test. It is the largest untested surface in the project and the
@@ -56,8 +62,8 @@ first test file that covers rendering.
 Files involved:
 
 - `source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php` — the AJAX endpoint.
-  412 lines. Dispatch and hardware calls at the top; three named render helpers
-  at lines 152–239; three *un-named* inline render blocks at lines 251–412.
+  421 lines. Dispatch and hardware calls at the top; three named render helpers
+  at lines 161-248; three *un-named* inline render blocks at lines 260-419.
 - `tests/run_php.sh` — the PHP test runner. Hardcodes the list of test files
   **twice**, once for local `php` and once for the Docker fallback.
 - `tests/view_test.php` — the structural exemplar for the new test file.
@@ -79,20 +85,20 @@ Everything after that either shells out to hardware or renders. Including this
 file from a test today would run the `overview` branch and call
 `shell_exec("bash $scripts/get_hba_info.sh ...")`.
 
-**Already-extracted helpers** (lines 152–239) — these need no work, they are
+**Already-extracted helpers** (lines 161-248) — these need no work, they are
 already functions and already reachable once the CLI guard is in:
 
-- `luTable(array $headers, array $rows): string` — line 152
-- `renderSmartTable(array $data): string` — line 165
-- `renderOverviewCards(array $data, array $cfg): string` — line 198
-- `luCtlHead(int $i): string` — line 242
-- `luLinkBadge(string $link): string` — line 246
+- `luTable(array $headers, array $rows): string` — line 161
+- `renderSmartTable(array $data): string` — line 174
+- `renderOverviewCards(array $data, array $cfg): string` — line 207
+- `luCtlHead(int $i): string` — line 251
+- `luLinkBadge(string $link): string` — line 255
 
 **The three inline blocks to extract.** Each is an `if ($type === '...') { ... }`
 that builds `$out` and ends with `echo $out; exit;`. Reproduced here so you can
 confirm you are looking at the right code.
 
-`ajax_info.php:251-302`, the PHY block:
+`ajax_info.php:260-309`, the PHY block:
 
 ```php
 if ($type === 'phy') {
@@ -112,8 +118,8 @@ if ($type === 'phy') {
 }
 ```
 
-`ajax_info.php:305-363`, the Drives block, same shape. `ajax_info.php:366-412`,
-the Events block, same shape — but note it has a side effect, at lines 376–378:
+`ajax_info.php:314-370`, the Drives block, same shape. `ajax_info.php:375-419`,
+the Events block, same shape — but note it has a side effect, at lines 385-387:
 
 ```php
         $file = event_store_path($i);
@@ -151,6 +157,30 @@ execution reaches them — so they remain callable even if an early `return`
 skips past their definitions. That is what lets the render functions live at the
 bottom of the file while the guard sits near the top. Step 2 verifies this
 empirically rather than asking you to take it on faith.
+
+**A consequence of that, which you must NOT try to "fix".** `const` does *not*
+behave like `function` here — a file-scope `const` is executed in sequence, so
+an early `return` skips it. `ajax_info.php` now has one, added by plan 002:
+
+```php
+$scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
+
+/* A collector that was killed (or whose smartctl wedged) leaves its progress
+   marker behind ... */
+const SMART_PROGRESS_TTL = 300;
+```
+
+That `const` sits **below** the point where this plan inserts the CLI guard, so
+under the test runner it will never be defined. **This is fine and intentional.**
+Its only use is inside the `smart_all` dispatch branch, which is also below the
+guard and equally unreachable under CLI — so nothing can reference an undefined
+constant. Do **not** move the `const` above the guard, and do **not** move the
+guard below it to "keep them together": putting the guard after `$scripts` and
+before the first dispatch branch is the whole point, and reordering to
+accommodate a constant nothing reads under CLI would defeat it.
+
+If a future test ever needs `SMART_PROGRESS_TTL`, the fix is to move that one
+`const` above the guard at that time — not now, and not speculatively.
 
 **Repo conventions that apply here:**
 
@@ -211,7 +241,7 @@ file.
   assert the fixed behaviour and lose the ability to prove the refactor changed
   nothing.
 - The `overview`, `overview_html`, `metrics`, `smart` and `smart_all` dispatch
-  branches (lines 22–133). They shell out to hardware and are not render-only.
+  branches (lines 31-142). They shell out to hardware and are not render-only.
   `renderSmartTable` and `renderOverviewCards` are already functions and **are**
   in scope for testing, but their dispatch branches are not to be restructured.
 - `source/usr/local/emhttp/plugins/hbaviewer/event_archive.php` — already has the
@@ -312,7 +342,7 @@ pattern works; find out why it did not before proceeding.
 
 ### Step 3: Extract the PHY block into a function
 
-Replace `ajax_info.php:251-302` (the whole `if ($type === 'phy') { ... }` block)
+Replace `ajax_info.php:260-309` (the whole `if ($type === 'phy') { ... }` block)
 with a function definition followed by a two-line dispatch:
 
 ```php
@@ -339,7 +369,7 @@ are the wrapper (`function renderPhyTables(array $data): string {`), the ending
 return, and whitespace:
 
 ```bash
-diff <(sed -n '251,302p' /tmp/ajax_info.before.php) \
+diff <(sed -n '260,309p' /tmp/ajax_info.before.php) \
      <(sed -n "/^function renderPhyTables/,/^}/p" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php)
 ```
 
@@ -351,7 +381,7 @@ swap, or pure indentation. **Any other difference is a bug you just introduced.*
 
 ### Step 4: Extract the Drives block
 
-Same treatment for `ajax_info.php:305-363`:
+Same treatment for `ajax_info.php:314-370`:
 
 ```php
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
@@ -363,7 +393,7 @@ function renderDrivesTables(array $data): string {
 if ($type === 'drives') { echo renderDrivesTables($data); exit; }
 ```
 
-**Verify** with the same diff technique against lines 305–363 of
+**Verify** with the same diff technique against lines 314-370 of
 `/tmp/ajax_info.before.php`, applying the same "only three kinds of change"
 rule.
 
@@ -371,7 +401,7 @@ rule.
 
 ### Step 5: Extract the Events block, with an injectable archive directory
 
-`ajax_info.php:366-412`. This one gains a parameter — the archive directory —
+`ajax_info.php:375-419`. This one gains a parameter — the archive directory —
 so tests do not write to `/boot`. The default preserves production behaviour
 exactly.
 
@@ -387,7 +417,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
 if ($type === 'events') { echo renderEventsTables($data); exit; }
 ```
 
-Inside the body, the **only** substantive change is line 376:
+Inside the body, the **only** substantive change is line 385:
 
 ```php
         $file = event_store_path($i);
