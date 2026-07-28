@@ -33,6 +33,51 @@
 - **Category**: security
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent in an isolated worktree |
+| Commit | `635f2b5` — "Escape the remaining hardware-sourced values in the AJAX tables" |
+| Merged | `30443e6` into `dev` |
+| Diff | 2 files, 74 insertions, 16 deletions |
+| Base | `c9654e5` (plan 006 merged, its test net in place) |
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+- All five sites fixed; `luTable()` untouched (`git diff | grep -c 'function luTable'` = 0).
+- **PHY error highlighting survived** — the one regression the plan warns no
+  test would catch. The `$ec` closure escapes into a local but keeps the numeric
+  comparison on the raw value. Exercised directly:
+
+  | Backend | Counter | Highlighted |
+  |---|---|---|
+  | storcli | `inv=7` | yes |
+  | storcli | `inv=0` | no |
+  | lsiutil | `inv=3` | yes |
+  | lsiutil | `inv=0` | no |
+
+  Counter values still render, so nothing was swallowed by the escaping.
+- **The new tests bite**: reverting `ajax_info.php` produces **9 named failures**
+  and exit 1 (`phy storcli escapes phy`, `drives lsiutil escapes os_name`,
+  `events lsiutil escapes qualifier`, …); restoring it returns `all pass`, exit 0.
+- **No double escaping**: `A & B` renders as `A &amp; B`, never `A &amp;amp; B`.
+  A hostile phy identifier is escaped.
+- Lint clean; `bash tests/run.sh` exits 0 with zero `Warning:`/`Deprecated:` lines.
+
+**One plan defect found by executing it** — the `strtoupper($p['sas_addr'])`
+criterion, corrected in Done criteria below. The executor caught that the
+expected `0` was unreachable because the fix wraps the expression rather than
+replacing it, checked the code to confirm no occurrence was left unwrapped, and
+reported it as a plan discrepancy rather than contorting the source to satisfy
+a bad check.
+
+**Still outstanding**: nothing on hardware. The plan notes this is Low severity —
+every value originates in HBA firmware, storcli output or sysfs — so the payoff
+is correctness and consistency rather than closing an exploitable hole.
+
 ## Why this matters
 
 The AJAX renderers escape most of what they print, and miss about a dozen
@@ -452,7 +497,18 @@ that makes them meaningful as regression tests.
 Machine-checkable. ALL must hold:
 
 - [ ] `php tests/ajax_render_test.php` exits 0 and prints `ajax_render: all pass`
-- [ ] `grep -c "strtoupper(\$p\['sas_addr'\])" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php` prints `0` (the bare, unwrapped form is gone)
+- [ ] Every `strtoupper($p['sas_addr'])` occurrence is wrapped — these two counts are **equal and non-zero**:
+      `grep -c "strtoupper(\$p\['sas_addr'\])" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php`
+      and `grep -c "htmlspecialchars(strtoupper(\$p\['sas_addr'\]))" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php`
+
+> **Corrected after execution.** This criterion originally expected the first
+> grep to print `0`. It cannot: the fix *wraps* that expression rather than
+> replacing it, so the substring survives inside
+> `htmlspecialchars(strtoupper($p['sas_addr']))`. The same applies to
+> `$d['sas_address']`. What actually matters is that no occurrence is left
+> unwrapped, which the equal-counts form above tests. The three `'<code>' . $x`
+> criteria below are unaffected — those expressions genuinely disappear, because
+> the escaping goes inside the concatenation rather than around it.
 - [ ] `grep -c "'<code>' . \$d\['os_name'\]" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php` prints `0`
 - [ ] `grep -c "'<code>' . \$e\['qualifier'\]" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php` prints `0`
 - [ ] `grep -c "'<code>' . \$e\['timestamp'\]" source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php` prints `0`
