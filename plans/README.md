@@ -18,7 +18,7 @@ commands are inlined in the plan file itself.
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | DONE — merged to `dev` (`6e19e68`, from `04b7335`); ships in the next release |
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | DONE — merged to `dev` (`e9409ed`, from `41d3d03`); ships in the next release |
 | 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | DONE — `f3ebea5`, released in 2026.07.27, closed issue #2 (hardware check still outstanding) |
-| 005 | Claim the flash single-flight lock atomically | P1 | S | — | TODO |
+| 005 | Claim the flash single-flight lock atomically | P1 | S | — | DONE — merged to `dev` (`dfd613d`, from `1919ca8`); ships in the next release |
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | TODO |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | TODO |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | TODO |

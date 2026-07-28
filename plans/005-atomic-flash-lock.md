@@ -16,6 +16,51 @@
 > front of an operation that can permanently destroy a user's hardware. The
 > change itself is small. Do not expand it.
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent in an isolated worktree |
+| Commit | `1919ca8` — "Claim the flash single-flight lock atomically" |
+| Merged | `dfd613d` into `dev` |
+| Diff | 2 files, 38 insertions, 6 deletions — `flash.php` and `tests/flash_php_test.php` |
+
+Isolation was verified before any edit this time (the executor reported its
+worktree path and branch as its first action), and the operator's checkout was
+confirmed byte-identical to its pre-dispatch snapshot afterwards.
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+- Racy pair gone; `flash_claim_lock` defined at line 69, above the CLI guard at
+  line 77, so the test runner can reach it.
+- **The behaviour, exercised against the real `flash_preflight`** rather than
+  inferred from greps — this is what the plan asks a reviewer to scrutinise:
+
+  | Scenario | Result |
+  |---|---|
+  | Two concurrent valid requests | exactly one proceeds; other refused "already in progress" |
+  | Loser's effect on the winner's lock | **does not delete it** — the `if ($owned)` guard holds |
+  | Winner refused for another reason (bad confirm) | lock released; next legitimate request proceeds |
+  | Missing chip | refused, lock released |
+  | Array running | refused, lock released |
+
+  The third row matters as much as the first. Without the release, a single typo
+  in the confirmation field would wedge the flash path until reboot — worse than
+  the race being fixed.
+- 22 flash PHP tests pass including the four new ones; `tests/flash_test.sh`
+  passes; `php -l` clean; `bash tests/run.sh` exits 0.
+
+**One plan defect found by executing it**: the `is_file($lock)` done criterion
+said `1` and should have said `0` — corrected in place below. The executor
+caught it, checked it against the actual code, and reported it as a plan
+discrepancy rather than contorting the code to satisfy a wrong criterion.
+
+**Still outstanding**: nothing on hardware. Note that the plan deliberately does
+not ask anyone to test by flashing — only the refusal paths are safe to exercise
+on a real box.
+
 ## Why this matters
 
 `flash.php` enforces a single-flight rule: only one firmware flash may run at a
@@ -351,7 +396,14 @@ Machine-checkable. ALL must hold:
 - [ ] `grep -c 'function flash_claim_lock' source/usr/local/emhttp/plugins/hbaviewer/flash.php` prints `1`
 - [ ] `grep -c "fopen(\$lock, 'x')" source/usr/local/emhttp/plugins/hbaviewer/flash.php` prints `1`
 - [ ] `grep -c '@touch($lock)' source/usr/local/emhttp/plugins/hbaviewer/flash.php` prints `0`
-- [ ] `grep -c 'is_file($lock)' source/usr/local/emhttp/plugins/hbaviewer/flash.php` prints `1` (the `status` action only)
+- [ ] `grep -c 'is_file($lock)' source/usr/local/emhttp/plugins/hbaviewer/flash.php` prints `0`
+
+> **Corrected after execution.** This criterion originally said `1`, on the
+> assumption that the `status` action's lock check would remain as a `$lock`
+> match. It does not — `status` reads the literal
+> `is_file(FLASH_DIR . '/flash.lock')`, so once the racy `is_file($lock)` is
+> removed the count is `0`. The `status` read is a plain report of whether a
+> flash is running and was never part of the race.
 - [ ] `flash_claim_lock` is defined **above** the `if (PHP_SAPI === 'cli') return;` line — confirm with `grep -n 'function flash_claim_lock\|PHP_SAPI' source/usr/local/emhttp/plugins/hbaviewer/flash.php` and check the line numbers
 - [ ] `php tests/flash_php_test.php` exits 0 and prints four new `PASS  claim lock: ...` lines
 - [ ] `bash tests/flash_test.sh` exits 0 and prints `flash: all pass`
