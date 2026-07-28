@@ -401,11 +401,17 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
         $file = event_store_path($i, $dir);
-        [$entries, $changed] = event_merge(event_store_read($file), $ctl['entries'] ?? []);
-        if ($changed) event_store_write($file, $entries);
+        [$archived, $changed] = event_merge(event_store_read($file), $ctl['entries'] ?? []);
+        if ($changed) event_store_write($file, $archived);
+        // Archive everything, display only what this backend's table can format.
+        // A box that switched backend keeps its old entries on disk; showing them
+        // through the wrong renderer produces undefined-key warnings and blank rows.
+        $entries = event_visible($archived, $data['backend'] ?? '');
+        $hidden  = count($archived) - count($entries);
         if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
-              . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)</p>';
+              . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
+              . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($entries[0]['description']))) {

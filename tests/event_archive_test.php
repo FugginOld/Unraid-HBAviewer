@@ -53,5 +53,27 @@ event_store_write($file, $kept);
 check('store round-trips', event_store_read($file) === $kept);
 @unlink($file); @rmdir($dir);
 
+// ── entry shape: the two backends emit different records into one archive ────
+$sc = ['seq'=>'0x01','time'=>'Wed Jun  3 20:33:17 2020','code'=>'0x00','description'=>'Firmware init'];
+$lu = ['seq'=>1,'qualifier'=>'0x0001','data'=>'00000000','timestamp'=>'00000000:000012ab'];
+check('shape storcli',  event_shape($sc) === 'storcli');
+check('shape lsiutil',  event_shape($lu) === 'lsiutil');
+check('shape unknown',  event_shape(['seq'=>'9']) === '');
+check('shape empty',    event_shape([]) === '');
+
+// visible: keep only what the active backend can render, drop nothing on disk
+$mixed = [$lu, $sc, $lu, $sc];
+check('visible storcli count',  count(event_visible($mixed, 'storcli')) === 2);
+check('visible lsiutil count',  count(event_visible($mixed, 'lsiutil')) === 2);
+check('visible storcli shape',  event_shape(event_visible($mixed, 'storcli')[0]) === 'storcli');
+check('visible reindexes',      array_keys(event_visible($mixed, 'storcli')) === [0, 1]);
+check('visible preserves order',
+    event_visible([$sc, $lu, $sc], 'storcli')[0]['description'] === 'Firmware init');
+// empty backend: infer from the first entry, matching the renderer's key-sniff
+check('visible infers storcli', count(event_visible([$sc, $lu], '')) === 1);
+check('visible infers lsiutil', count(event_visible([$lu, $sc], '')) === 1);
+check('visible unknown passes through', count(event_visible([['seq'=>'9']], '')) === 1);
+check('visible empty list',     event_visible([], 'storcli') === []);
+
 echo $fails === 0 ? "event_archive: all pass\n" : "event_archive: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
