@@ -7,14 +7,22 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 0346777..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php`
-> This plan expects `plans/006-ajax-render-tests.md` to have landed, which
-> itself changes that file. Confirm plan 006 is DONE in `plans/README.md`
-> before starting.
+> `git diff --stat e1ee859..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php`
+> Baseline re-pinned 2026-07-27 to `e1ee859`, at which plan 006 is DONE and
+> merged (`23b9646`) and its render-layer test net is in place. Any difference
+> from that baseline is a STOP condition.
+>
+> **Dependency**: plan 006 must be DONE. Confirm two things before starting —
+> `grep -c 'function renderPhyTables' source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php`
+> prints `1`, and `tests/ajax_render_test.php` exists and passes. Without that
+> net this plan edits the most-viewed code in the plugin with nothing to catch a
+> regression.
 >
 > **Line numbers in this plan are from commit `0346777`, before plan 006's
-> refactor moved the code into functions.** Locate each site by the code
-> snippet given, not by line number.
+> refactor moved the code into functions.** They are stale by design and are
+> navigation hints only — **locate each site by the code snippet given, never by
+> line number.** All five snippets were re-verified present and unchanged at
+> `e1ee859`; 006's refactor moved this code without altering it.
 
 ## Status
 
