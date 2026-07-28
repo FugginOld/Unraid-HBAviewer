@@ -23,7 +23,7 @@ commands are inlined in the plan file itself.
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`); **verified on hardware 2026-07-27** |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
-| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | TODO — reporter's diagnostic arrived; plan revised 2026-07-28, detection now keys off `proc_name`. One question still open (see plan) |
+| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
@@ -101,6 +101,27 @@ Three details that will otherwise waste your afternoon:
 To go back to the released version: reinstall the plugin from **Plugins →
 Install Plugin** using the URL in the README. Nothing here writes to
 `/boot/config/plugins/hbaviewer/`, so your settings and event archive survive.
+
+### Scope limit on every "verified on hardware" claim in this index
+
+**The maintainer's box is SAS3 / storcli.** So every hardware verification
+recorded here exercised the **storcli** branch of the code. The **lsiutil**
+branches — in `renderPhyTables`, `renderDrivesTables` and `renderEventsTables`,
+plus `parse/hba.sh` and the `ov_lsiutil` path in `get_hba_info.sh` — have
+**never run on real hardware**. They are covered by fixtures and golden tests
+only.
+
+That is not a gap in the testing so much as a limit of the available hardware,
+but it should be stated rather than implied by a bare "verified" label. It also
+explains why issue #3's reporter matters disproportionately: they run a
+SAS9207-8i, which is the only real-world exercise the lsiutil path has had, and
+it is how both the firmware hex-decode bug (issue #3) and the Performance-tab
+temperature bug (issue #2) were found in the first place.
+
+Practical consequence: a change touching a **shared** path (the render
+extraction in 006, the escaping in 007, the SMART collector in 008) is well
+covered by the maintainer's box. A change touching a **lsiutil-only** path is
+fixture-covered only, and worth flagging in the release notes.
 
 ### Which plans actually need the box
 
