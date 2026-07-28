@@ -21,6 +21,52 @@
 - **Category**: bug
 - **Planned at**: commit `0346777`, 2026-07-26
 
+## Execution record
+
+**Status: DONE — merged to `dev`. Ships in the next release.**
+
+| Field | Value |
+| ----- | ----- |
+| Executed | 2026-07-27, by a dispatched executor subagent in an isolated worktree |
+| Commit | `52982ee` — "Parse lsblk output by key so a blank serial can't shift the model" |
+| Merged | `a6caee5` into `dev` |
+| Diff | 1 file, 12 insertions, 2 deletions — `collect_smart.sh` only |
+
+**Review findings (verified independently, not taken from the executor's report):**
+
+The executor's environment had no `lsblk`, so the reviewer tested the **shipped
+`kv()` function** — extracted from the committed file rather than
+reimplemented — against a fixture containing the failing case:
+
+```text
+name=[sdb] serial=[ZA1ABCDE] model=[ST8000NM0055-1RM]
+name=[sdc] serial=[]         model=[WD80EFAX-68LHPN0]      <- blank serial, model intact
+name=[sde] serial=[K1234567] model=[HGST HUH721010AL4200]  <- embedded space preserved
+```
+
+Three rows; the WWN-less USB row correctly excluded, so the boot flash stays out
+of the SMART table. The same row through the **old** positional read still
+produces `serial=[WD80EFAX-68LHPN0] model=[]` — the defect this fixes.
+
+All five done criteria pass, the `ponytail:` JSON-escaping note survives above
+the hunk, `bash -n` clean across all shell files, `bash tests/run.sh` exits 0.
+
+**A done criterion was fixed *before* dispatch, not after.** The WWN filter check
+was written double-quoted with backslash escapes, which the shell unescapes into
+a pattern containing a literal backslash — it matches nothing and always prints
+`0`. Caught by pre-testing every criterion against a simulated post-fix file, and
+corrected in `a026440` before the executor ran. The four preceding plans each
+surfaced a bad criterion only at execution time; this one cost nothing.
+
+**Two limits on the verification:**
+
+- **Not tested against real `lsblk` output.** The `-P` format used in the fixture
+  is reconstructed. Running `lsblk -S -P -o NAME,WWN,SERIAL,MODEL` on an Unraid
+  box would confirm it in seconds.
+- **The original bug may not be reproducible on a given machine** — it needs a
+  drive that reports a blank serial. Without one you can confirm the rewrite
+  still works, but not that it fixed anything observable.
+
 ## Why this matters
 
 The background SMART collector reads four whitespace-separated `lsblk` columns

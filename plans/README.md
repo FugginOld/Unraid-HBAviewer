@@ -21,7 +21,7 @@ commands are inlined in the plan file itself.
 | 005 | Claim the flash single-flight lock atomically | P1 | S | — | DONE — merged to `dev` (`dfd613d`, from `1919ca8`); ships in the next release |
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | DONE — merged to `dev` (`23b9646`); unblocks 007 |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`, from `635f2b5`) |
-| 008 | Parse lsblk output by key, not by column position | P3 | S | — | TODO |
+| 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`, from `52982ee`) |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | BLOCKED — issue #3 reopened, waiting on the reporter's driver diagnostic |
 | 011 | Event archive mixes entry shapes when a box changes backend | P3 | S | — | NOT WRITTEN — finding recorded below, surfaced while executing 006 |
