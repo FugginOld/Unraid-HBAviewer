@@ -24,7 +24,7 @@ commands are inlined in the plan file itself.
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`, from `52982ee`) |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P2 | S | 005 (sequencing) | TODO |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | P2 | S | — | BLOCKED — issue #3 reopened, waiting on the reporter's driver diagnostic |
-| 011 | Event archive mixes entry shapes when a box changes backend | P3 | S | — | NOT WRITTEN — finding recorded below, surfaced while executing 006 |
+| 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | TODO — surfaced while executing 006 |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -108,6 +108,7 @@ Install Plugin** using the URL in the README. Nothing here writes to
 | 007 | Not needed | Same smoke test as 006; the tables should be visually unchanged |
 | 008 | **Yes, if you have a drive with no serial** | Run `lsblk -S -P -o NAME,WWN,SERIAL,MODEL` on the box first. If no row shows `SERIAL=""` you cannot reproduce the original bug, only confirm the rewrite still works |
 | 009 | **Yes — answers the open question** | Its Step 8. Note whether settings saving worked *before* the change on your Unraid version — that is the direct answer to whether the platform enforces CSRF |
+| 011 | Not needed | Pure display filter with unit + integration tests. Only reproducible on a box that has actually changed backend — if you install storcli on a system with lsiutil event history, the Event Log tab is where you would see it |
 
 Plans 005, 006, 007 and 009 add or depend on PHP unit tests. Your Unraid box has
 `php`, so `bash tests/run.sh` runs the full suite there even though it cannot on
@@ -230,11 +231,11 @@ Confirmed by running it, so executors can tell their failures from pre-existing 
   `.sh` under `source`/`tests` with `bash -n`, then runs the full suite.
   `build.sh` at the repo root is **not** linted by CI — plan 003 notes this.
 
-## Open finding — 011, not yet written up
+## Background to 011 — how the finding arose
 
 **The event archive mixes entry shapes when a box changes backend.**
 Surfaced 2026-07-27 while executing plan 006, by the executor rather than the
-audit.
+audit. Now written up as `plans/011-event-archive-entry-shapes.md`.
 
 `event_merge` dedups by `seq|time` and has no notion of entry *shape*. The
 storcli backend emits entries keyed `seq / time / code / description`; the
@@ -252,10 +253,16 @@ Not hypothetical for this project — issue #3's reporter runs lsiutil today and
 has been advised about storcli, so their archive already holds lsiutil-shaped
 entries.
 
-The right fix is probably in `event_archive.php`'s merge/store contract, not the
-renderer: either stamp entries with their backend and filter on read, or key the
-archive file by backend. P3 — cosmetic warnings, no data loss, and it needs a
-backend switch to trigger.
+**What plan 011 settled.** Keying the archive file by backend
+(`events_c0_storcli.json`) was rejected — it orphans every existing archive on
+upgrade, so users silently lose the history the archive exists to keep. The plan
+instead adds two pure helpers to `event_archive.php` (`event_shape`,
+`event_visible`) and filters at display time: the full merged set still reaches
+disk, and only entries the active backend's table can format are rendered, with
+a count of what was hidden so a backend switch does not look like data loss.
+
+P3 — cosmetic warnings, no data loss today, and it needs a backend switch to
+trigger at all.
 
 ## Findings considered and rejected
 
