@@ -74,7 +74,7 @@ installed copy:
 rsync -rlpv --delete \
   --exclude 'chart.umd.min.js' --exclude 'hbaviewer.x86_64' \
   source/usr/local/emhttp/plugins/hbaviewer/ \
-  root@tower:/usr/local/emhttp/plugins/hbaviewer/
+  root@192.168.2.248:/usr/local/emhttp/plugins/hbaviewer/
 ```
 
 Three details that will otherwise waste your afternoon:
@@ -94,7 +94,7 @@ Three details that will otherwise waste your afternoon:
    changed:
 
    ```bash
-   ssh root@tower 'rm -f /tmp/lsiutil_dash.json /tmp/hbav_overview.out \
+   ssh root@192.168.2.248 'rm -f /tmp/lsiutil_dash.json /tmp/hbav_overview.out \
      /tmp/lsiutil_smart.json /tmp/lsiutil_smart.json.progress'
    ```
 
