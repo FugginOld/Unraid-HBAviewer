@@ -11,6 +11,15 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/event_archive.php';
 require_once __DIR__ . '/cached_read.php';
 
+/* ── Request dispatch (served only; skipped under the CLI test runner) ───────
+   Everything below this line either shells out to the hardware-reading scripts
+   or renders a response for one request. The render functions themselves are
+   declared at file scope, so they are compiled and callable even though this
+   return skips past their definitions — which is what lets tests require this
+   file and exercise the table builders without touching a controller.
+   Same posture as flash.php. */
+if (PHP_SAPI === 'cli') return;
+
 $type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all','metrics'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
@@ -257,7 +266,7 @@ function luLinkBadge(string $link): string {
         ? '<span class="lu-link-up">UP</span>' : '<span class="lu-link-down">DOWN</span>';
 }
 
-if ($type === 'phy') {
+function renderPhyTables(array $data): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -306,12 +315,13 @@ if ($type === 'phy') {
             $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
     }
-    echo $out;
-    exit;
+    return $out;
 }
 
+if ($type === 'phy') { echo renderPhyTables($data); exit; }
+
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
-if ($type === 'drives') {
+function renderDrivesTables(array $data): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -367,12 +377,15 @@ if ($type === 'drives') {
             $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
         }
     }
-    echo $out;
-    exit;
+    return $out;
 }
 
+if ($type === 'drives') { echo renderDrivesTables($data); exit; }
+
 /* ── Event Log (per controller; persisted to /boot across reboots) ─────────── */
-if ($type === 'events') {
+/* $dir is the archive location; it is injectable so tests can point the store
+   at a temp directory instead of the boot flash. */
+function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hbaviewer'): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -382,7 +395,7 @@ if ($type === 'events') {
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
-        $file = event_store_path($i);
+        $file = event_store_path($i, $dir);
         [$entries, $changed] = event_merge(event_store_read($file), $ctl['entries'] ?? []);
         if ($changed) event_store_write($file, $entries);
         if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
@@ -416,6 +429,7 @@ if ($type === 'events') {
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
         }
     }
-    echo $out;
-    exit;
+    return $out;
 }
+
+if ($type === 'events') { echo renderEventsTables($data); exit; }
