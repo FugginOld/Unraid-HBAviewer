@@ -57,9 +57,29 @@ said `1` and should have said `0` — corrected in place below. The executor
 caught it, checked it against the actual code, and reported it as a plan
 discrepancy rather than contorting the code to satisfy a wrong criterion.
 
-**Still outstanding**: nothing on hardware. Note that the plan deliberately does
-not ask anyone to test by flashing — only the refusal paths are safe to exercise
-on a real box.
+**Hardware check deliberately declined, 2026-07-27.** Attempted and abandoned
+for good reasons, recorded here so nobody repeats the detour:
+
+- **The UI cannot exercise the server path.** The browser-side JS checks the
+  array state and refuses before sending, so clicking Flash with the array
+  running never reaches the code this plan changed
+  (`hbaviewer.php:469-501`).
+- **The CLI cannot either, by design.** `flash.php:65` returns early under CLI
+  precisely so that requiring the file can never trigger a flash. That safety
+  property also blocks command-line testing.
+- **A direct HTTP POST needs a session.** Unraid's nginx answers an
+  unauthenticated POST to `/plugins/hbaviewer/flash.php` with `302 -> /login`.
+  Carrying a session cookie was judged more effort than the test was worth.
+
+Weighed against that: the lock primitive has four unit tests, and review
+exercised all five dispatch outcomes against the real `flash_preflight`,
+including the load-bearing one — a request refused *because another holds the
+lock* must not delete the winner's lock. The marginal information from a live
+POST was small, and obtaining it meant arming a brick-capable feature on a box
+with a running array.
+
+One incidental confirmation: `/tmp/hbav_flash/` on the live box was empty, so no
+stale lock was present from any earlier session.
 
 ## Why this matters
 
