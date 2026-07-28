@@ -43,15 +43,6 @@
 >    `hbaviewer.php:395` asserting that "Unraid rejects POSTs without its CSRF
 >    token" are simply wrong, and this plan replaces that assumption with an
 >    actual check.
-> **Authentication is present; CSRF protection is not — do not confuse them.**
-> Observed 2026-07-27: an unauthenticated POST to
-> `/plugins/hbaviewer/flash.php` is answered by nginx with `302 -> /login`. That
-> is Unraid's *auth* layer and it is working. It does **nothing** against CSRF: a
-> cross-site request rides on the victim's already-authenticated session, so the
-> browser attaches the session cookie automatically and the redirect never fires.
-> Anyone re-reading this finding and concluding "but it redirects to login, so
-> we're covered" has conflated the two controls.
->
 > 2. **The fail-closed risk is lower than feared.** The worry was that adding a
 >    server-side check might lock the user out of their own settings on a
 >    platform that never issues a usable token. Since the token is present in
@@ -59,6 +50,15 @@
 >    field and verifying it should simply work. Step 8's hardware check still
 >    applies — confirm saving *still* works after the change — but it is now a
 >    regression check rather than an open question.
+>
+> **Authentication is present; CSRF protection is not — do not confuse them.**
+> Also observed 2026-07-27: an unauthenticated POST to
+> `/plugins/hbaviewer/flash.php` is answered by nginx with `302 -> /login`. That
+> is Unraid's *auth* layer and it works. It does **nothing** against CSRF — a
+> cross-site request rides on the victim's already-authenticated session, so the
+> browser attaches the session cookie automatically and the redirect never fires.
+> Anyone re-reading this and concluding "but it redirects to login, so we're
+> covered" has conflated two different controls.
 
 ## Why this matters
 
