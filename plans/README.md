@@ -29,6 +29,13 @@ commands are inlined in the plan file itself.
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
 
+## Working rules
+
+- **Do not write to the GitHub issues page.** No comments, no issue creation, no
+  edits — including the `--issues` flag on any `/improve` invocation. Findings
+  and questions for a reporter go to the maintainer, who decides what to post.
+  Reading issues is fine and often necessary; writing is not.
+
 ## Dispatching an executor — two lessons learned the hard way
 
 Both surfaced while executing 003; both cost a full dispatch.
