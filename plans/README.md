@@ -14,7 +14,7 @@ commands are inlined in the plan file itself.
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — merged to `dev` (`add8cd9`, from `6c7ac03`); ships in the next release |
+| 001 | Stop the Settings page claiming a notification that never fires | P1 | S | — | DONE — merged to `dev` (`add8cd9`); **verified on hardware 2026-07-27** |
 | 002 | Stop the SMART tab wedging forever on a dead collector's progress file | P1 | S | — | DONE — merged to `dev` (`6e19e68`, from `04b7335`); ships in the next release |
 | 003 | Pin and checksum-verify the binaries build.sh downloads | P1 | S | — | DONE — merged to `dev` (`e9409ed`, from `41d3d03`); ships in the next release |
 | 004 | Read Performance-tab temperatures per controller instead of by position | P1 | S | — | DONE — `f3ebea5`, released in 2026.07.27, closed issue #2 (hardware check still outstanding) |

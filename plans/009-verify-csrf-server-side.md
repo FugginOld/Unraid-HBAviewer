@@ -24,6 +24,33 @@
 - **Category**: security
 - **Planned at**: commit `0346777`, 2026-07-26
 
+> ## The open question is now answered — the finding is confirmed
+>
+> **Verified on real hardware, 2026-07-27.** With the stock settings form (no
+> `csrf_token` field anywhere in it), changing the Alert Threshold and saving
+> **worked, and the value persisted across a reload**.
+>
+> That settles the ambiguity this plan was written around. Of the two
+> possibilities — either Unraid enforces CSRF and the settings form has been
+> silently broken, or Unraid does not enforce it and both POST endpoints are
+> unprotected — **the second is true**. Saving works precisely *because* nothing
+> is checking for a token.
+>
+> Two consequences for the executor:
+>
+> 1. **The finding is real.** `settings.php` and `flash.php` have no CSRF
+>    protection at all, from any layer. The comments in `flash.php:72-73` and
+>    `hbaviewer.php:395` asserting that "Unraid rejects POSTs without its CSRF
+>    token" are simply wrong, and this plan replaces that assumption with an
+>    actual check.
+> 2. **The fail-closed risk is lower than feared.** The worry was that adding a
+>    server-side check might lock the user out of their own settings on a
+>    platform that never issues a usable token. Since the token is present in
+>    `var.ini` on this install and the form is what fails to send it, emitting the
+>    field and verifying it should simply work. Step 8's hardware check still
+>    applies — confirm saving *still* works after the change — but it is now a
+>    regression check rather than an open question.
+
 ## Why this matters
 
 This plugin has two POST endpoints, and neither one checks a CSRF token. Both
