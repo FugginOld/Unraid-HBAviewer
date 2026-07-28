@@ -7,22 +7,23 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 0346777..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/flash.php source/usr/local/emhttp/plugins/hbaviewer/config.php`
-> `flash.php` is also modified by `plans/005-atomic-flash-lock.md`. If 005 is
-> DONE, that diff is expected — confirm the *lock* code matches 005's target
-> shape and that the dispatch structure quoted below is otherwise intact.
+> `git diff --stat 9f2b59b..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/flash.php source/usr/local/emhttp/plugins/hbaviewer/config.php`
 >
-> **Sequencing**: land `plans/005-atomic-flash-lock.md` before this one. Both
-> edit `flash.php`; 005 is higher priority and its change is smaller.
+> **Re-baselined 2026-07-28 from `0346777` to `9f2b59b`.** Plans 001 and 005 and
+> the issue-3 fix all landed in between, shifting `settings.php` by +9 lines and
+> `flash.php` by +12. Every line number below was re-verified against `9f2b59b`
+> and the quoted excerpts confirmed byte-identical. **Locate code by content, not
+> by line number.** 005 is DONE and merged, so this plan's sequencing constraint
+> is already satisfied.
 
 ## Status
 
 - **Priority**: P2
 - **Effort**: S
 - **Risk**: MED
-- **Depends on**: `plans/005-atomic-flash-lock.md` (sequencing only, to avoid a conflict in `flash.php`)
+- **Depends on**: `plans/005-atomic-flash-lock.md` — **DONE and merged**, so satisfied
 - **Category**: security
-- **Planned at**: commit `0346777`, 2026-07-26
+- **Planned at**: commit `0346777`, 2026-07-26; **re-baselined to `9f2b59b`, 2026-07-28**
 
 > ## The open question is now answered — the finding is confirmed
 >
@@ -39,7 +40,7 @@
 > Two consequences for the executor:
 >
 > 1. **The finding is real.** `settings.php` and `flash.php` have no CSRF
->    protection at all, from any layer. The comments in `flash.php:72-73` and
+>    protection at all, from any layer. The comments in `flash.php:84-85` and
 >    `hbaviewer.php:395` asserting that "Unraid rejects POSTs without its CSRF
 >    token" are simply wrong, and this plan replaces that assumption with an
 >    actual check.
@@ -67,7 +68,7 @@ rely on the assumption that Unraid's platform layer rejects token-less POSTs
 before they arrive. The codebase states that assumption twice, in comments, and
 never verifies it.
 
-The settings form makes the contradiction visible. `flash.php:72-73` says *"CSRF
+The settings form makes the contradiction visible. `flash.php:84-85` says *"CSRF
 is enforced by Unraid's platform layer (a token-less POST never reaches here)"*,
 and `hbaviewer.php:395` says *"Unraid rejects POSTs without its CSRF token"* —
 yet `settings.php` submits a plain `<form method="post">` carrying no token at
@@ -103,7 +104,7 @@ Files involved:
   already; the client-side reference implementation.
 - `tests/config_test.php` — where the new unit tests go.
 
-**The settings form, `settings.php:38-52`** — POST handling with no token check:
+**The settings form, `settings.php:47-61`** — POST handling with no token check:
 
 ```php
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
@@ -123,13 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
 }
 ```
 
-and `settings.php:99`, the form open tag, with no hidden token field:
+and `settings.php:108`, the form open tag, with no hidden token field:
 
 ```php
   <form method="post">
 ```
 
-**The flash endpoint's assumption, `flash.php:67-74`:**
+**The flash endpoint's assumption, `flash.php:79-86`:**
 
 ```php
 $cfg    = lsi_config_read();
@@ -312,13 +313,14 @@ breaks a test instead of quietly opening a hole.
 ### Step 3: Send the token from the settings form
 
 In `source/usr/local/emhttp/plugins/hbaviewer/settings.php`, read the token near
-the top. Insert after line 6 (`$cfg = lsi_config_read();`):
+the top. Insert after line 6 (`$cfg = lsi_config_read();`) — note the file's
+detection block sits below this, so the insertion point is unchanged:
 
 ```php
 $csrfToken = lsi_csrf_token();
 ```
 
-Then replace line 99:
+Then replace line 108 (the `<form method="post">` tag):
 
 ```php
   <form method="post">
@@ -335,7 +337,7 @@ with:
 
 ### Step 4: Verify the token on settings POST
 
-Replace the opening of the POST branch, `settings.php:38`:
+Replace the opening of the POST branch, `settings.php:47`:
 
 ```php
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
@@ -382,7 +384,7 @@ no new CSS needed.
 ### Step 5: Verify the token on flash POST
 
 In `source/usr/local/emhttp/plugins/hbaviewer/flash.php`, replace the comment
-and the lines around it (`flash.php:71-74`):
+and the lines around it (`flash.php:83-86`):
 
 ```php
 if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disabled.'; exit; }
@@ -425,7 +427,7 @@ every action handler, so no action can run without a valid token.
 
 ### Step 6: Confirm the CLI test guard still holds
 
-`flash.php` returns early under CLI (`flash.php:65`) so tests can require it
+`flash.php` returns early under CLI (`flash.php:77`) so tests can require it
 without triggering dispatch. Your edit is below that line, but confirm it did
 not disturb the guard — `tests/flash_php_test.php` would start executing HTTP
 dispatch if it did.
@@ -517,7 +519,7 @@ Stop and report back (do not improvise) if:
   client is sending a token the server rejects; report the mismatch rather than
   removing the check.
 - `php tests/flash_php_test.php` prints HTTP output such as
-  `Firmware flashing is disabled.` — the CLI guard at `flash.php:65` has been
+  `Firmware flashing is disabled.` — the CLI guard at `flash.php:77` has been
   disturbed and the test file is now executing dispatch.
 - `tests/config_test.php` had failures before your change. Establish the baseline
   first.
