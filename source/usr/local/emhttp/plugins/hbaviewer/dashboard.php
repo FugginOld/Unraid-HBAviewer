@@ -80,7 +80,6 @@ echo <<<CSS
   border-top:1px solid #2a2a2a;
 }
 .lu-d-tile .lu-d-foot-row span { color:#ddd; font-weight:500; }
-.lu-d-tile .lu-d-foot-row b { color:#f5a623; font-weight:600; margin-right:4px; }
 </style>
 CSS;
 
@@ -94,7 +93,7 @@ if ($error) {
         'key'  => "{$pluginname}_err",
         'id'   => 'tblHBAviewerErr',
         'tc'   => lsi_status_color('alert'),
-        'main' => 'HBA Dashboard',
+        'main' => 'HBAviewer',
         'sub'  => 'Unknown',
         'pill' => '',
         'foot' => '',
@@ -107,7 +106,7 @@ foreach ($controllers as $i => $c) {
         'key'  => "{$pluginname}_c{$i}",
         'id'   => "tblHBAviewer{$i}",
         'tc'   => lsi_status_color('alert'),
-        'main' => 'HBA Dashboard',
+        'main' => 'HBAviewer',
         'sub'  => "Controller /c{$i}",
         'pill' => '',
         'foot' => '',
@@ -135,10 +134,11 @@ foreach ($controllers as $i => $c) {
     $mode      = htmlspecialchars($v['mode']   ?? '');
     $drives    = htmlspecialchars($v['drives'] ?? '');
 
-    // Header identifies this one card, and the icon/pill carry its own status.
-    $t['tc']   = $col;
-    $t['main'] = $model;
-    $t['sub']  = $portLabel;
+    // Title stays the plugin name; the subtitle identifies which card this tile is.
+    // $portLabel is already "Controller /cN" on storcli cards and
+    // "ioc0 (lsiutil -pN)" on lsiutil ones — both are the right thing to show.
+    $t['tc']  = $col;
+    $t['sub'] = $model . ' - ' . $portLabel;
 
     $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $col . '">'
@@ -148,13 +148,13 @@ foreach ($controllers as $i => $c) {
     // row 2 (its natural place when expanded) and again in row 1, where CSS
     // reveals it only while the tile is collapsed. Unraid hides every <tr> after
     // the first, so row 1 is the only place a collapsed tile can still show
-    // anything. The model is always included: one tile per card, so it is the
-    // only thing naming which card the collapsed strip belongs to.
+    // anything. No model here — the subtitle names which card this tile is, and
+    // it stays visible when collapsed.
     $parts = [];
     foreach ($v['pcie'] as $item) {
         $parts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
     }
-    $t['foot'] = "<div class='lu-d-foot-row'><b>{$model}</b>" . implode('', $parts) . "</div>";
+    $t['foot'] = "<div class='lu-d-foot-row'>" . implode('', $parts) . "</div>";
 
     $t['body'] = "
     <div class='lu-d-ctl'>
@@ -188,7 +188,7 @@ foreach ($tiles as $t) {
     $pill = $t['pill']; $foot = $t['foot']; $body = $t['body'];
 
     $mytiles[$t['key']]['column1'] = <<<EOT
-<tbody id="{$id}" class="lu-d-tile" title="HBA Dashboard">
+<tbody id="{$id}" class="lu-d-tile" title="HBAviewer">
   <tr>
     <td>
       <span class="tile-header">
