@@ -57,7 +57,7 @@ echo <<<CSS
 .lu-d-tile .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 .lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 .lu-d-tile .lu-d-pill {
-  display:inline-flex; align-items:center; margin-right:8px;
+  display:none; align-items:center; margin-right:8px;
   padding:3px 11px; border-radius:20px;
   font-size:12px; font-weight:700; letter-spacing:0.03em;
   font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums;
@@ -74,6 +74,11 @@ echo <<<CSS
    when collapsed — degrade, not break. */
 .lu-d-tile .lu-d-foot-mini { display:none; padding:10px 0 2px; }
 .lu-d-tile:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-foot-mini { display:block; }
+/* The pill is redundant while expanded — the circle gauge shows the same
+   temperature far larger. Collapsed, the gauge is gone (it lives in row 2) and
+   the pill is the only place the temperature appears. Same collapse signal as
+   .lu-d-foot-mini above: Unraid's inline display:none on row 2. */
+.lu-d-tile:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-pill { display:inline-flex; }
 .lu-d-tile .lu-d-foot-row {
   display:flex; gap:16px; flex-wrap:wrap; align-items:baseline;
   font-size:12px; color:#ddd; padding-top:6px;
