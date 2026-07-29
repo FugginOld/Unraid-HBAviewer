@@ -38,18 +38,40 @@ foreach ($controllers as $c) {
 $tc = lsi_status_color($worst);
 $ts = date('H:i:s');
 
-// Header subtitle: model + temperature, one entry per controller. The header row
-// is what survives when the tile is minimised, so this line has to carry the
-// at-a-glance answer on its own — "9400-16i 72°C · 9400-8i 77°C".
-$summary = [];
+// Header subtitle: the card model, or the count when there is more than one.
+// The temperature used to live here; it now has its own colour-coded pill in the
+// header, so this line is identity only.
+$boardName = htmlspecialchars(
+    $error ? 'Unknown'
+           : (count($controllers) === 1 ? lsi_hba_view($controllers[0], $port, 0)['model']
+                                        : count($controllers) . ' controllers')
+);
+
+// Per-controller temperature pills for the header, and the PCIe footer strings.
+// The footer is built ONCE here and emitted twice — at the bottom of each card
+// (row 2, its natural place) and again inside the header row, where CSS reveals
+// it only while the tile is collapsed. Unraid hides every <tr> after the first,
+// so row 1 is the only place a collapsed tile can still show anything.
+$pills   = '';
+$footMini = '';
 foreach ($controllers as $i => $c) {
-    if (isset($c['error'])) { $summary[] = "/c{$i} error"; continue; }
-    $v = lsi_hba_view($c, $port, $i);
-    // temp is '' on cards with no onboard sensor (see parse/hba.sh) — say so
-    // rather than printing a bare 0°C.
-    $summary[] = $v['model'] . ' ' . ($v['temp'] === '' || $v['temp'] === null ? 'no sensor' : $v['temp'] . '°C');
+    if (isset($c['error'])) continue;
+    $v    = lsi_hba_view($c, $port, $i);
+    $col  = $v['color'];
+    $temp = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
+    $pills .= '<span class="lu-d-pill" style="--tc:' . $col . '">'
+            . ($temp === '' ? 'N/A' : $temp . '&deg;C') . '</span>';
+
+    $parts = [];
+    foreach ($v['pcie'] as $item) {
+        $parts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
+    }
+    if ($parts) {
+        $footMini .= '<div class="lu-d-foot-row">'
+                   . (count($controllers) > 1 ? '<b>' . htmlspecialchars($v['model']) . '</b>' : '')
+                   . implode('', $parts) . '</div>';
+    }
 }
-$boardName = htmlspecialchars($error ? 'Unknown' : implode(' · ', $summary));
 
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
@@ -84,6 +106,31 @@ echo <<<CSS
 }
 #tblHBAviewer .lu-d-pcie span { color:#ddd; font-weight:500; }
 #tblHBAviewer .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
+#tblHBAviewer .lu-d-pill {
+  display:inline-flex; align-items:center; margin-right:8px;
+  padding:3px 11px; border-radius:20px;
+  font-size:12px; font-weight:700; letter-spacing:0.03em;
+  font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums;
+  color:var(--tc,#2ecc71);
+  border:1px solid color-mix(in srgb, var(--tc,#2ecc71) 55%, transparent);
+  background:color-mix(in srgb, var(--tc,#2ecc71) 12%, transparent);
+}
+/* Collapsed-only footer. Unraid hides every <tr> after the first by setting an
+   inline display:none on it — no class, no attribute we can hook. Measured on
+   7.2: expanded style="" , collapsed style="display: none;". So this attribute
+   substring match is the collapse signal, and :has() lets row 1 react to it.
+   ponytail: CSS only, no MutationObserver. If a future Unraid stops using an
+   inline style, this rule silently stops firing and the footer just never shows
+   when collapsed — degrade, not break. */
+#tblHBAviewer .lu-d-foot-mini { display:none; padding:10px 0 2px; }
+#tblHBAviewer:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-foot-mini { display:block; }
+#tblHBAviewer .lu-d-foot-row {
+  display:flex; gap:16px; flex-wrap:wrap; align-items:baseline;
+  font-size:12px; color:#ddd; padding-top:6px;
+  border-top:1px solid #2a2a2a;
+}
+#tblHBAviewer .lu-d-foot-row span { color:#ddd; font-weight:500; }
+#tblHBAviewer .lu-d-foot-row b { color:#f5a623; font-weight:600; margin-right:4px; }
 </style>
 CSS;
 
@@ -143,7 +190,7 @@ if ($error) {
 }
 
 $mytiles[$pluginname]['column1'] = <<<EOT
-<tbody id="tblHBAviewer" title="HBA Temperature">
+<tbody id="tblHBAviewer" title="HBA Dashboard">
   <tr>
     <td>
       <span class="tile-header">
@@ -160,18 +207,20 @@ $mytiles[$pluginname]['column1'] = <<<EOT
             <path d="M40 20v4M44 20v4M48 20v4M40 40v4M44 40v4M48 40v4M32 28h4M32 32h4M32 36h4M52 28h4M52 32h4M52 36h4"/>
           </svg>
           <div class="section">
-            <h3 class="tile-header-main">HBA Temperature</h3>
+            <h3 class="tile-header-main">HBA Dashboard</h3>
             <span>{$boardName}</span>
           </div>
         </span>
         <span class="tile-header-right">
           <span class="tile-header-right-controls">
+            {$pills}
             <a href="/Tools/HBAviewer_Monitor" title="Open HBAviewer">
               <i class="fa fa-fw fa-cog control"></i>
             </a>
           </span>
         </span>
       </span>
+      <div class="lu-d-foot-mini">{$footMini}</div>
     </td>
   </tr>
   <tr>

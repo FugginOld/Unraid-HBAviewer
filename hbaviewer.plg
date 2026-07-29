@@ -7,7 +7,7 @@
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
 <!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.07.27/hbaviewer.txz">
 <!ENTITY md5       "35a4627de7d47c99fd54a6d3870b6a80">
-<!ENTITY icon      "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/icon.png">
+<!ENTITY icon      "hbaviewer.png">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
@@ -89,6 +89,14 @@ rm -rf /usr/local/emhttp/plugins/hbaviewer
 tar -xJf /boot/config/plugins/hbaviewer/hbaviewer.txz -C /
 chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64
 chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh
+# Unraid's plugin manager resolves the Plugins-page icon against
+# plugins/<name>/, where <name> is this plg's name attribute — "HBAviewer",
+# capital H — not the lowercase install directory. So the icon has to exist
+# there too. Deliberately created here rather than shipped in the repo:
+# HBAviewer/ and hbaviewer/ collide on case-insensitive filesystems, so a
+# maintainer on Windows or macOS would see a phantom deletion on every checkout.
+mkdir -p /usr/local/emhttp/plugins/HBAviewer
+cp -f /usr/local/emhttp/plugins/hbaviewer/icon.png /usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
 if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
   printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
@@ -102,6 +110,7 @@ mkdir -p /boot/config/plugins/hbaviewer/tools
 <INLINE>
 removepkg hbaviewer
 rm -rf /usr/local/emhttp/plugins/hbaviewer
+rm -rf /usr/local/emhttp/plugins/HBAviewer
 </INLINE>
 </FILE>
 
