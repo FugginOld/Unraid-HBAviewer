@@ -36,6 +36,9 @@ echo <<<CSS
 .lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
 .lu-d-tile .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
 .lu-d-tile .lu-d-overview { display:flex; align-items:center; gap:16px; }
+/* Gauge column: the circle with the status badge centred beneath it. flex-shrink:0
+   so the meta column's text never squeezes the gauge. */
+.lu-d-tile .lu-d-gauge { display:flex; flex-direction:column; align-items:center; gap:8px; flex-shrink:0; }
 .lu-d-tile .lu-d-circle {
   position:relative; width:84px; height:84px; flex-shrink:0; border-radius:50%;
   background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), #2a2a2a 0);
@@ -49,10 +52,11 @@ echo <<<CSS
 .lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
 .lu-d-tile .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
 .lu-d-tile .lu-d-badge {
-  display:inline-flex; align-items:center; gap:6px; margin-top:6px;
+  display:inline-flex; align-items:center; gap:6px;
   padding:3px 11px; border-radius:20px;
   font-size:10px; font-weight:700; letter-spacing:0.05em;
   color:var(--tc,#2ecc71); background:color-mix(in srgb, var(--tc,#2ecc71) 16%, transparent);
+  box-shadow:0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent);
 }
 .lu-d-tile .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 .lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
@@ -164,9 +168,12 @@ foreach ($controllers as $i => $c) {
     $t['body'] = "
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
-        <div class='lu-d-circle' style='--tc:{$col};--pct:{$temp}'>
-          <span class='v'>{$temp}</span>
-          <span class='u'>°C</span>
+        <div class='lu-d-gauge'>
+          <div class='lu-d-circle' style='--tc:{$col};--pct:{$temp}'>
+            <span class='v'>{$temp}</span>
+            <span class='u'>°C</span>
+          </div>
+          <span class='lu-d-badge' style='--tc:{$col}'>{$badge}</span>
         </div>
         <div class='lu-d-meta'>
           <p>Model: <span>{$model}</span></p>"
@@ -177,12 +184,11 @@ foreach ($controllers as $i => $c) {
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
           . "<p>Alert Threshold: <span>{$threshold}°C</span></p>
-          <span class='lu-d-badge' style='--tc:{$col}'>{$badge}</span>
+          <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>
     </div>"
-    . $t['foot']
-    . "<div class='lu-d-ts'>Last read: {$ts}</div>";
+    . $t['foot'];
 
     $tiles[] = $t;
 }
