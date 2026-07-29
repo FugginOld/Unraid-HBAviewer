@@ -81,20 +81,28 @@ check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # non-SAS host that must be ignored by the filter.
 mkdir -p "$SYSHOST/host0" "$SYSHOST/host9"
 printf 'ahci\n' > "$SYSHOST/host9/proc_name"
-# A SAS2 personality must NOT be refused: the guard stays silent and the composer
-# reaches require_binary, so this reuses route-fallback's expectation. Reverting the
-# guard to a /sys/module test on an mpt3sas-only box breaks exactly this.
-printf 'mpt2sas\n'    > "$SYSHOST/host0/proc_name"
-printf 'SAS9207-8i\n' > "$SYSHOST/host0/board_name"
-STORCLI=/nonexistent LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
-check route-sas2-personality route_no_backend.json bash "$P/../get_hba_info.sh"
-# mpt3sas personality only, no storcli: refuse, and name the board.
+# A host on the mpt2sas personality must reach require_binary instead of being
+# refused, so this reuses route-fallback's expectation — it fails if the
+# personality predicate (hba_has_sas3 && ! hba_has_sas2) is ever inverted or
+# dropped.
 # STORCLI must be truly EMPTY here, not /nonexistent: find_storcli() only checks
 # "-n $STORCLI" (an override honored verbatim, existence unchecked elsewhere), so
 # a non-empty-but-missing path still makes the guard's `[ -z "$(find_storcli)" ]`
-# false and the case falls through to require_binary instead. No real storcli is
-# on this sandbox's PATH, so an empty override correctly makes find_storcli find
-# nothing.
+# false regardless of personality, and the case reaches require_binary for the
+# wrong reason (storcli "found") rather than the right one. An empty override
+# falls through to find_storcli probing PATH for a real storcli, so — like the
+# case below — this assumes no real storcli is installed on the machine running
+# the suite; if one is, both of these fail for an environment reason, not a code
+# regression.
+printf 'mpt2sas\n'    > "$SYSHOST/host0/proc_name"
+printf 'SAS9207-8i\n' > "$SYSHOST/host0/board_name"
+STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
+check route-sas2-personality route_no_backend.json bash "$P/../get_hba_info.sh"
+# mpt3sas personality only, no storcli: refuse, and name the board. Same STORCLI=
+# reasoning as route-sas2-personality above (find_storcli() honors any non-empty
+# override verbatim, so /nonexistent would still short-circuit the guard) — and
+# the same PATH-fallthrough caveat: this assumes no real storcli is on the
+# suite-runner's PATH.
 printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
 printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
