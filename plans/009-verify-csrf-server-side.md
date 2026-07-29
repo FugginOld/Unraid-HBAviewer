@@ -24,6 +24,10 @@
 - **Depends on**: `plans/005-atomic-flash-lock.md` — **DONE and merged**, so satisfied
 - **Category**: security
 - **Planned at**: commit `0346777`, 2026-07-26; **re-baselined to `9f2b59b`, 2026-07-28**
+- **State**: **REJECTED 2026-07-28.** Unraid's `local_prepend.php` already does
+  this check on every POST, and its `unset($_POST['csrf_token'])` is what made
+  every settings save fail when this shipped. Reverted at `584ec3a`; do not
+  re-attempt. Full evidence in "RESOLVED" below.
 
 > ## The open question is now answered — the finding is confirmed
 >
@@ -97,7 +101,64 @@ It simply was not being checked. The hidden input this plan adds is therefore
 redundant, and creates a duplicate field name — PHP resolves duplicates to the
 **last** one, which is Unraid's JS-appended value, not ours.
 
-### Leading hypothesis for the failure — NOT confirmed
+### RESOLVED 2026-07-28 — REJECTED. Root cause proven, and the plan is redundant.
+
+Everything below this block was written before the mechanism was understood. It is
+kept for the record; **the "leading hypothesis" in the next section is wrong** and
+should not be acted on.
+
+Two greps of Unraid's own source on the box settled it.
+
+**1. The JS global and `var.ini` cannot diverge.** From
+`/usr/local/emhttp/plugins/dynamix/include/DefaultPageLayout/HeadInlineJS.php:38`:
+
+```php
+var csrf_token = "<?=_var($var,'csrf_token')?>";
+```
+
+`$var` *is* the parsed `var.ini`. The JS global is rendered from it, so the
+staleness hypothesis is dead by construction — there is no second source to drift
+from.
+
+**2. Unraid already performs this exact check, globally, before our code runs.**
+From `/usr/local/emhttp/webGui/include/local_prepend.php:40-49` — a file PHP
+auto-prepends to every request:
+
+```php
+if (!isset($var['csrf_token'])) csrf_terminate("uninitialized");
+$csrf_token = $_POST['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+if ($csrf_token === null) csrf_terminate("missing");
+if (!hash_equals($var['csrf_token'], $csrf_token)) csrf_terminate("wrong");
+unset($_POST['csrf_token']);
+```
+
+That is a constant-time comparison against `var.ini` on every POST, with a
+fail-closed terminate. **No request can reach `settings.php` without having
+already passed it.** This plan proposed to re-implement, less well, a guard that
+already exists upstream — the finding that motivated it was simply wrong about
+the code being unprotected.
+
+**3. Why every save failed.** Line 49: Unraid **`unset()`s `$_POST['csrf_token']`
+after validating it.** This plan's check, at line 428 below, reads:
+
+```php
+&& !lsi_csrf_ok($csrfToken, $_POST['csrf_token'] ?? null)) {
+```
+
+By the time plugin code runs, that key is guaranteed absent, so the argument is
+always `null`, and `lsi_csrf_ok(..., null)` returns `false` by design (line 377's
+own test asserts it). Every save was denied, deterministically — exactly the
+reported symptom. Not a token problem at all.
+
+**Lesson worth carrying**: the original audit finding asserted the settings POST
+was unauthenticated without checking whether the *platform* authenticated it.
+Before adding a security control to a plugin, establish what the host already
+does — `auto_prepend_file` means a guard can be entirely invisible in the
+plugin's own source tree.
+
+---
+
+### Leading hypothesis for the failure — SUPERSEDED, and wrong
 
 `var.ini`'s `csrf_token` may lag the live session token that Unraid's JS holds.
 The codebase already suspected this; `hbaviewer.php:395-397` says so outright:

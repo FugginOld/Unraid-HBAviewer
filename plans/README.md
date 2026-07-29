@@ -22,7 +22,7 @@ commands are inlined in the plan file itself.
 | 006 | Make the AJAX render layer testable, and test it | P2 | M | — | DONE — merged to `dev` (`23b9646`); **verified on hardware 2026-07-27** |
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`); **verified on hardware 2026-07-27** |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
-| 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **ATTEMPTED AND REVERTED** (`584ec3a`) — failed hardware verification; approach is unsound as written. Finding stands; see plan for what a retry must do differently |
+| 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **REJECTED** (reverted at `584ec3a`) — the original finding was wrong. Unraid's auto-prepended `local_prepend.php` already `hash_equals`-checks every POST against `var.ini`, then `unset()`s the field — which is exactly why our check saw `null` and denied every save. Do not re-attempt |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
@@ -137,7 +137,7 @@ fixture-covered only, and worth flagging in the release notes.
 | 006 | Not needed | Pure refactor plus tests. Cheap smoke test: open each tab and confirm the tables render identically to before |
 | 007 | Not needed | Same smoke test as 006; the tables should be visually unchanged |
 | 008 | **Yes, if you have a drive with no serial** | Run `lsblk -S -P -o NAME,WWN,SERIAL,MODEL` on the box first. If no row shows `SERIAL=""` you cannot reproduce the original bug, only confirm the rewrite still works |
-| 009 | **Yes — answers the open question** | Its Step 8. Note whether settings saving worked *before* the change on your Unraid version — that is the direct answer to whether the platform enforces CSRF |
+| 009 | **Answered — no longer needed** | The question ("does the platform enforce CSRF?") is settled: it does, in `local_prepend.php`. Plan REJECTED; nothing to test |
 | 011 | Not needed | Pure display filter with unit + integration tests. Only reproducible on a box that has actually changed backend — if you install storcli on a system with lsiutil event history, the Event Log tab is where you would see it |
 
 Plans 005, 006, 007 and 009 add or depend on PHP unit tests. Your Unraid box has
@@ -298,6 +298,17 @@ trigger at all.
 
 Recorded so they are not re-audited on the next pass:
 
+- **Settings POST is unauthenticated / needs a server-side CSRF check** (was plan
+  009) — **the finding was wrong.** Unraid auto-prepends
+  `/usr/local/emhttp/webGui/include/local_prepend.php` to every request; lines
+  40-49 `hash_equals` the submitted token against `var.ini` and `csrf_terminate()`
+  on any mismatch, so no POST reaches plugin code unvalidated. It then
+  `unset($_POST['csrf_token'])`, which is precisely why our own check read `null`
+  and denied every save. Also confirmed the JS `csrf_token` global is rendered
+  *from* `var.ini` (`HeadInlineJS.php:38`), so the two cannot drift apart.
+  **General lesson: check what the platform already enforces before adding a
+  security control — `auto_prepend_file` makes upstream guards invisible in the
+  plugin's own source tree.**
 - **Command injection in the `shell_exec` calls** — every one interpolates either
   a fixed constant or an `escapeshellarg`-wrapped value. Checked all call sites
   in `ajax_info.php`, `flash.php`, `dashboard.php`, `settings.php` and
