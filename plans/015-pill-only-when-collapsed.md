@@ -240,3 +240,66 @@ Stop and report instead of improvising if:
   edited while adding the pill's (they are adjacent and near-identical, which is
   exactly how a copy-paste ends up modifying the wrong one), and that the PHP
   emitting `{$pill}` is untouched.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-07-29, branch `advisor/015-pill-only-when-collapsed`
+- **Commit**: `0f8527e` → merged to `dev` as `8249575`
+- **Rounds**: 1 — approved as submitted, no REVISE
+- **Files changed**: `dashboard.php` only (+6/-1)
+
+### Outcome
+
+Every done criterion passed first time, and the plan's greps were all accurate —
+the second plan in a row with none defective, after 012 and 013 each shipped
+unpassable checks. Pre-testing every pattern against the live file before dispatch
+is what changed; it caught two bad criteria in this plan's own draft (see below).
+
+### The adjacency trap was avoided
+
+The new rule is near-identical to, and directly beneath, the footer's existing
+`:has()` rule — differing only in the trailing selector and the `display` value.
+That is the classic setup for a copy-paste that edits the existing rule instead of
+adding a sibling, and the failure would have been silent: the footer would just
+stop appearing on collapse, with nothing erroring.
+
+The executor anchored its edit on the footer line so that line appears as
+**unchanged context** in the diff, which is direct proof it survived byte-identical.
+Confirmed on review.
+
+### Two bad criteria caught before dispatch
+
+Both were in this plan's first draft and would have failed against a *correct*
+implementation:
+
+1. **`grep -c 'display:inline-flex; align-items:center'` → `0`** was wrong.
+   `.lu-d-badge` (the status chip) opens with the same two declarations and must
+   keep them, so the count is `1` after a correct change. Tightened to include
+   `margin-right:8px`, which is pill-specific. The executor independently
+   confirmed the qualifier is load-bearing.
+2. **`grep -c 'lu-d-circle'` → `2`** was wrong; the real count is `5` (four CSS
+   rules plus the emitted `<div>`).
+
+Worth recording what these near-misses would have cost: not a wrong
+implementation, but an executor either reporting a false failure or — worse —
+"fixing" correct code until a broken check passed.
+
+### Verified independently before merge
+
+- Full diff: exactly two hunks, both traceable to Steps 1 and 2. Footer rule
+  present as unchanged context.
+- All eight greps re-run: `1 / 0 / 2 / 1 / 1 / 3 / 1 / 5` as specified
+- `bash tests/run.sh` → `--- all pass ---`; `bash tests/run_php.sh` → exit 0
+- No golden churn
+- `{$pill}` emission and the `.lu-d-circle` gauge both untouched
+
+### Still open — needs hardware
+
+The whole behavioural claim. Expanded: no pill. Collapsed: pill appears, correctly
+coloured. On a two-HBA box, collapsing one tile must not reveal the other's pill.
+
+The executor also noted it could not judge whether the expanded header now looks
+unbalanced with one fewer element on that row — it declined to restyle, per the
+STOP condition. That is a look-at-it-on-hardware question.

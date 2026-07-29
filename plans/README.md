@@ -28,7 +28,7 @@ commands are inlined in the plan file itself.
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
 | 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
 | 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | DONE — merged to `dev` (`76d8666`, from `93776c7`); awaiting hardware verification |
-| 015 | Show the temperature pill only while the tile is collapsed | P3 | S | 014 (DONE) | TODO |
+| 015 | Show the temperature pill only while the tile is collapsed | P3 | S | 014 (DONE) | DONE — merged to `dev` (`8249575`, from `0f8527e`); awaiting hardware verification |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
