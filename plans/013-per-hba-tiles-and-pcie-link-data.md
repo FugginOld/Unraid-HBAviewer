@@ -403,27 +403,46 @@ address:
 grep -m1 'PCI Address' tests/fixtures/storcli/overview_c0.txt
 ```
 
-Convert it per Step 1's rule and create the tree — for example, if it reports
-`00:c1:00:00`:
+**Do NOT commit this tree.** The directory names contain colons, and Windows
+cannot store `:` in a filename — the MSYS layer silently substitutes **U+F03A**,
+a Private Use Area lookalike, so git receives `0000<ef 80 ba>c1...` instead of
+`0000:c1...`. That resolves fine on Windows (the mapping applies on read as well
+as write) and **misses on Linux**, where `:` is legal and the directory is
+genuinely named with the lookalike. The result is a suite that is green on the
+maintainer's machine and red on CI. This is not hypothetical — it is what the
+first attempt at this plan did.
+
+Instead, build the tree at runtime in `tests/run.sh`, above the stubbed-backend
+block. `mkdir` with a literal colon works on both platforms, and nothing
+colon-named ever reaches the index:
 
 ```bash
-mkdir -p tests/fixtures/sys_pci/0000:c1:00.0
-printf '8\n'             > tests/fixtures/sys_pci/0000:c1:00.0/current_link_width
-printf '8.0 GT/s PCIe\n' > tests/fixtures/sys_pci/0000:c1:00.0/current_link_speed
-printf 'D0\n'            > tests/fixtures/sys_pci/0000:c1:00.0/power_state
+# Fake sysfs PCI tree for the storcli composer. Built here rather than committed:
+# the directory names contain colons, which Windows cannot store — git would
+# receive a U+F03A lookalike and the lookup would silently miss on Linux.
+# c0 is x8 and c1 is x4 on purpose: the asymmetry catches one card's link state
+# being applied to every tile.
+SYSPCI=$(mktemp -d)
+trap 'rm -rf "$SYSPCI"' EXIT
+for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
+    set -- $spec
+    mkdir -p "$SYSPCI/$1"
+    printf '%s\n' "$2"          > "$SYSPCI/$1/current_link_width"
+    printf '8.0 GT/s PCIe\n'    > "$SYSPCI/$1/current_link_speed"
+    printf 'D0\n'               > "$SYSPCI/$1/power_state"
+done
 ```
 
-Both fixture controllers need a directory or the multi-controller golden will
-only be half-populated. Their addresses are given in the table under
-"Current state" — `0000:c1:00.0` and `0000:65:00.0`. Give the second one
-different values from the first (for example `x4` / Gen3), so the test would
-actually catch the composer applying controller 0's link state to every card.
+Check for an existing `trap` in `run.sh` before adding this one, and chain rather
+than clobber if one is present. (At the time of writing there is none.)
 
-Then set `SYS_PCI_ROOT` for the stubbed-backend block in `tests/run.sh`. It goes
-on the existing export line around line 55:
+Note `set -- $spec` overwrites the script's positional parameters. Harmless —
+`run.sh` takes no arguments — but worth knowing if it ever grows a `"$@"`.
+
+Then point `SYS_PCI_ROOT` at it on the existing export line around line 55:
 
 ```bash
-export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null SYS_PCI_ROOT="$PWD/fixtures/sys_pci"
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null SYS_PCI_ROOT="$SYSPCI"
 ```
 
 The existing `route-storcli` check now exercises the whole composer path, so
@@ -561,7 +580,9 @@ Machine-checkable. ALL must hold:
 - [ ] `grep -c 'current_link_width' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
 - [ ] `grep -c 'current_link_speed' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
 - [ ] `grep -c 'power_state' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
-- [ ] `grep -c 'SYS_PCI_ROOT' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
+- [ ] `grep -c 'SYS_PCI_ROOT' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `2` (the comment and the assignment — do not delete the comment to make this `1`)
+- [ ] `git ls-files -z | tr '\0' '\n' | xxd | grep -c 'ef80ba'` prints `0` — no Windows PUA lookalike smuggled into a path
+- [ ] `git ls-files | grep -c 'sys_pci'` prints `0` — the fake sysfs tree is generated, never committed
 - [ ] `grep -c 'current_link_width\|current_link_speed\|power_state' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `0` — the filter stays pure
 - [ ] `grep -c '#tblHBAviewer' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `0`
 - [ ] `grep -c 'lu-d-tile:has(> tr:nth-child(2)\[style\*="display: none"\])' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `1`

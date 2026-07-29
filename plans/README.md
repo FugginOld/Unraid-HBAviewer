@@ -26,7 +26,7 @@ commands are inlined in the plan file itself.
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
-| 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | TODO |
+| 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -37,6 +37,24 @@ REJECTED (with one-line rationale)
   edits — including the `--issues` flag on any `/improve` invocation. Findings
   and questions for a reporter go to the maintainer, who decides what to post.
   Reading issues is fine and often necessary; writing is not.
+- **The target is Linux; the maintainer's checkout is Windows/NTFS. Any plan that
+  creates a path must state whether that path is legal on NTFS.** This has now
+  bitten twice, and both times the tests passed locally and would have failed on
+  Linux:
+  - **Plan 012** — `HBAviewer/` and `hbaviewer/` cannot coexist
+    (`core.ignorecase=true`). Fixed by creating the capitalised directory at
+    install time from the `.plg` instead of committing it.
+  - **Plan 013** — a fixture directory named `0000:c1:00.0`. Windows forbids `:`,
+    so MSYS silently substituted **U+F03A**, a Private Use Area lookalike; git
+    stored `0000<ef 80 ba>c1...`. Resolved on Windows via the same mapping,
+    missed on Linux. Fixed by generating the tree at runtime under `mktemp -d`.
+
+  The pattern is the same both times: the filesystem quietly does something other
+  than what the plan said, and every automated check still passes. **Prefer
+  generating awkward paths at runtime or install time over committing them.**
+  When a path must be committed, check it with
+  `git ls-files -z | tr '\0' '\n' | xxd | grep -c 'ef80ba'` (→ `0`) and a
+  case-sensitive `git ls-files | grep '<CapitalisedName>/'` (→ no output).
 
 ## Dispatching an executor — two lessons learned the hard way
 
