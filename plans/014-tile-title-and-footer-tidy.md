@@ -289,3 +289,55 @@ Stop and report instead of improvising if:
 - **What a reviewer should scrutinise**: that `$t['main']` is genuinely gone
   rather than reassigned somewhere below, and that the `:has()` collapse rule and
   the pill survived untouched — both are silent failures, not errors.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-07-29, branch `advisor/014-tile-title-and-footer-tidy`
+- **Commit**: `93776c7` → merged to `dev` as `76d8666`
+- **Rounds**: 1 — approved as submitted, no REVISE
+- **Files changed**: `dashboard.php` only (+11/-11)
+
+### Outcome
+
+Every done criterion passed on the first attempt, and — unlike plans 012 and 013 —
+**no defective grep patterns.** All nine were pre-tested against the live file
+before dispatch, which is what made the difference; the three unrunnable checks in
+013 were written without ever being executed.
+
+### Verified independently before merge
+
+- Full diff reviewed hunk by hunk: exactly the four sites the plan enumerates,
+  plus the comment fix below. Nothing out of scope.
+- `.lu-d-tile:has(> tr:nth-child(2)[style*="display: none"])` → present, intact
+- `lu-d-pill` → 2; `lu-d-foot-mini` → 3 (CSS rule, `:has()` rule, row-1 emission)
+- `HBA Dashboard` → 0
+- `bash tests/run.sh` → `--- all pass ---`; `bash tests/run_php.sh` → exit 0
+- No golden churn, as the plan required
+
+### Accepted deviation
+
+The plan enumerated four code sites but missed the comment above the footer, which
+read *"The model is always included: one tile per card, so it is the only thing
+naming which card the collapsed strip belongs to."* Step 3 makes that false. The
+executor rewrote it to point at the subtitle instead, matching this plan's own
+maintenance note. Correct call — an out-of-date comment explaining why something
+is there, immediately above code where it is no longer there, is worse than no
+comment.
+
+### STOP condition cleared
+
+`$portLabel` confirmed at `view.php:29` — `"Controller /c$idx"` when `port_name` is
+empty (storcli), `"$portName (lsiutil -p$port)"` otherwise (lsiutil). So the
+subtitle renders `HBA 9400-16i - Controller /c0` on the maintainer's SAS3 cards
+without hardcoding a storcli-shaped label that would have been wrong on SAS2
+hardware nobody can test.
+
+### Still open — needs hardware
+
+Whether the four PCIe fields actually fit on one line now that the model is gone.
+`.lu-d-foot-row` retains `flex-wrap:wrap`, so they wrap if they do not fit. Per the
+STOP condition the executor did not touch `gap`, `font-size`, or the labels —
+whether to trade legibility for a single line is the maintainer's call and needs a
+real browser at a real tile width.

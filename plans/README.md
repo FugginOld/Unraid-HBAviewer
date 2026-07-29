@@ -27,7 +27,7 @@ commands are inlined in the plan file itself.
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
 | 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
-| 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | TODO |
+| 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | DONE — merged to `dev` (`76d8666`, from `93776c7`); awaiting hardware verification |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
