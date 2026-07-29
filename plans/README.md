@@ -25,6 +25,8 @@ commands are inlined in the plan file itself.
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **ATTEMPTED AND REVERTED** (`584ec3a`) — failed hardware verification; approach is unsound as written. Finding stands; see plan for what a retry must do differently |
 | 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
+| 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
+| 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
