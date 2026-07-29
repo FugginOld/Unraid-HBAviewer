@@ -290,17 +290,28 @@ Four details that matter:
   it look more dynamic — those answer different questions and would make the two
   backends disagree about what the field means.
 
-### Step 1a: confirm the sysfs files exist before relying on them
+### Step 1a: the sysfs values are already confirmed — do not re-derive them
 
-`power_state` is present on modern kernels but is worth a one-line existence
-check on the target rather than an assumption. This was confirmed on the
-maintainer's Unraid box before this plan was dispatched; if you are running in an
-environment where you can reach a real Linux host with a PCIe device, a quick
-`ls /sys/bus/pci/devices/*/power_state` is a cheap sanity check.
+All three files were read on the maintainer's live Unraid box (2026-07-28) at the
+exact address controller 0 reports, **before** this plan was dispatched:
 
-If the file is absent, the `cat` fails silently, `power` stays empty, and the
-field simply does not render — the same graceful degradation as a card with no
-temperature sensor. **This is not a STOP condition**; do not add a fallback.
+```
+# D=/sys/bus/pci/devices/0000:c1:00.0
+# cat $D/power_state $D/current_link_width $D/current_link_speed
+D0
+8
+8.0 GT/s PCIe
+```
+
+So the address conversion, the file names, and the value formats in Step 1 are
+measured facts, not assumptions. Implement them as written. If you believe a
+different sysfs attribute would be better, that is a STOP-and-report, not a
+substitution.
+
+If a file is ever absent on some other system, the `cat` fails silently, the
+variable stays empty, and the field simply does not render — the same graceful
+degradation as a card with no temperature sensor. **That is not a STOP
+condition**; do not add a fallback.
 
 **Verify** the filter is still invoked with the storcli text on stdin:
 `grep -c 'printf .%s\\n. "$out" | bash "$DIR/parse/storcli_overview.sh"' scripts/get_hba_info.sh` → prints `1`
