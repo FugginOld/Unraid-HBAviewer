@@ -57,8 +57,9 @@ Verbatim, so the executor does not have to infer it:
 > temp pill at the top and the HBA model number, PCIe link speed, PCIe link
 > width, and PCI location.
 
-Note **Power Mode is not in that list**. Do not add work to source it for
-storcli — see "Out of scope".
+Power Mode was not in that list, but the maintainer asked for it afterwards, so
+**all four footer fields are in scope** — see Step 1a for how it is sourced and
+why it is low-information on this path.
 
 ## Current state
 
@@ -146,12 +147,20 @@ The lsiutil backend already emits these fields, and both backends must agree so
 | `pcie_width` | `x` + lane count | `x1` `x2` `x4` `x8` `x16` |
 | `pcie_speed` | `GenN (R GT/s)` | `Gen1 (2.5 GT/s)` `Gen2 (5.0 GT/s)` `Gen3 (8.0 GT/s)` |
 
-Linux exposes both directly in sysfs — no `lspci` dependency, no output parsing:
+Power Mode's lsiutil values come from the IOC's own firmware page:
+
+| Field | Format | Examples |
+|---|---|---|
+| `power_mode` | word | `Full` `Reduced` `Standby` |
+
+Linux exposes all three directly in sysfs — no `lspci` dependency, no output
+parsing:
 
 | sysfs file | Example contents |
 |---|---|
 | `/sys/bus/pci/devices/<addr>/current_link_width` | `8` |
 | `/sys/bus/pci/devices/<addr>/current_link_speed` | `8.0 GT/s PCIe` |
+| `/sys/bus/pci/devices/<addr>/power_state` | `D0` |
 
 **The address needs converting.** storcli reports `PCI Address = 00:c1:00:00`
 (domain:bus:device:function, each two hex digits). sysfs uses
@@ -189,9 +198,6 @@ On Windows/Git Bash, prefix docker invocations with `MSYS_NO_PATHCONV=1` or the
 
 **Out of scope** (do NOT touch):
 
-- **Power Mode for storcli.** The user did not ask for it and sysfs has no clean
-  equivalent. `power_mode` stays `""` on the storcli path. Do not invent a value
-  and do not remove the field from the JSON — the lsiutil path still uses it.
 - `scripts/parse/hba.sh` — the lsiutil backend already emits all four fields
   correctly. This plan does not change SAS2 behaviour.
 - `HBAviewer_Dashboard.page` — one `.page` emits many tiles; no change needed.
@@ -238,7 +244,7 @@ ov_storcli() {   # $1 = controller index
     # sysfs wants "0000:c1:00.0" — four-digit domain, dot before the function.
     # PCIe link state is not in storcli's output at all, so read it from sysfs;
     # SYS_PCI_ROOT is overridable so the suite can point it at a fixture tree.
-    width=""; speed=""
+    width=""; speed=""; power=""
     pci=$(printf '%s\n' "$out" | grep -m1 -E '^PCI Address[[:space:]]*=' | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//')
     if [ -n "$pci" ]; then
         IFS=: read -r dom bus dev fn <<< "$pci"
@@ -253,19 +259,48 @@ ov_storcli() {   # $1 = controller index
             16*)  speed="Gen4 (16.0 GT/s)" ;;
             32*)  speed="Gen5 (32.0 GT/s)" ;;
         esac
+        # PCI D-state, mapped onto lsiutil's vocabulary so both backends print the
+        # same words. An HBA in use is always D0, so this reads "Full" in practice
+        # — see the note below before "improving" it.
+        v=$(cat "$dir/power_state" 2>/dev/null)
+        case "$v" in
+            D0)        power="Full"    ;;
+            D1|D2)     power="Reduced" ;;
+            D3*)       power="Standby" ;;
+        esac
     fi
 
-    printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "" "$width" "$speed"
+    printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "" "$width" "$speed" "$power"
 }
 ```
 
-Three details that matter:
+Four details that matter:
 
 - **`""` is passed for `$3`.** CHIPARG keeps its position; do not renumber it.
 - **A width of `0`** means the link is down; treat it as unknown rather than
   emitting `x0`.
 - **`Gen4`/`Gen5` are included** because SAS3.5 (9500-series) cards are Gen4. The
   lsiutil map has no entries for them, which is correct — no SAS2 card is Gen4.
+- **Power Mode is genuinely low-information on this path, and that is expected.**
+  lsiutil reads the IOC's own firmware power page, which can legitimately report
+  `Reduced` or `Standby`. The PCI D-state is a different measurement that happens
+  to share the vocabulary: a card the kernel is actively driving sits in D0, so
+  this will read `Full` on any working system. It is accurate, not a placeholder.
+  Do not substitute ASPM state, `power/runtime_status`, or `power/control` to make
+  it look more dynamic — those answer different questions and would make the two
+  backends disagree about what the field means.
+
+### Step 1a: confirm the sysfs files exist before relying on them
+
+`power_state` is present on modern kernels but is worth a one-line existence
+check on the target rather than an assumption. This was confirmed on the
+maintainer's Unraid box before this plan was dispatched; if you are running in an
+environment where you can reach a real Linux host with a PCIe device, a quick
+`ls /sys/bus/pci/devices/*/power_state` is a cheap sanity check.
+
+If the file is absent, the `cat` fails silently, `power` stays empty, and the
+field simply does not render — the same graceful degradation as a card with no
+temperature sensor. **This is not a STOP condition**; do not add a fallback.
 
 **Verify** the filter is still invoked with the storcli text on stdin:
 `grep -c 'printf .%s\\n. "$out" | bash "$DIR/parse/storcli_overview.sh"' scripts/get_hba_info.sh` → prints `1`
@@ -284,6 +319,7 @@ PHYERR="${2:-0}"    # total sysfs phy error counters for this controller (from c
 CHIPARG="${3:-}"    # chip name from storcli AdapterType (covers every chipset; no ID map)
 PCIEW="${4:-}"      # PCIe link width  (e.g. "x8") — sysfs, read by the composer
 PCIES="${5:-}"      # PCIe link speed  (e.g. "Gen3 (8.0 GT/s)") — sysfs, read by the composer
+PWRM="${6:-}"       # power mode       (e.g. "Full") — sysfs PCI D-state, ditto
 ```
 
 Replace the stale header comment on lines 4-5:
@@ -296,22 +332,24 @@ Replace the stale header comment on lines 4-5:
 with:
 
 ```bash
-# storcli reports no PCIe link state, so width/speed arrive as $4/$5 — the
-# composer reads them from sysfs, which keeps this a pure stdin filter.
-# power_mode stays empty on this path; sysfs has no equivalent and the SAS3
-# cards don't report one.
+# storcli reports no PCIe link or power state, so width/speed/power arrive as
+# $4/$5/$6 — the composer reads them from sysfs, which keeps this a pure stdin
+# filter with no hardware access.
 ```
 
-And in the output line, substitute the two variables:
+And in the output line, substitute the three variables:
 
 ```bash
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"","alert_threshold":$ALERT,"status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"status":"$STATUS"}
 ```
 
-Defaulting both to empty means every existing test — which passes at most two
-arguments — produces byte-identical output and all current goldens still pass.
+Defaulting all three to empty means every existing test — which passes at most
+two arguments — produces byte-identical output and all current goldens still
+pass.
 
 **Verify**: `grep -c 'pcie_width":"${PCIEW}"' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` → prints `1`
+
+**Verify**: `grep -c 'power_mode":"${PWRM}"' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` → prints `1`
 
 **Verify**: `grep -c 'lspci' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` → prints `0`
 
@@ -325,25 +363,25 @@ Two new cases.
 after the existing `storcli-overview` line:
 
 ```bash
-# PCIe link state arrives as $4/$5 from the composer (sysfs); storcli reports none
-check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview.sh" 80 0 "" "x8" "Gen3 (8.0 GT/s)" < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
+# PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
+check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview.sh" 80 0 "" "x8" "Gen3 (8.0 GT/s)" "Full" < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 ```
 
 Create `tests/expected/storcli_overview_pcie.json` by copying
-`tests/expected/storcli_overview.json` and setting the two fields. **Match the
+`tests/expected/storcli_overview.json` and setting the three fields. **Match the
 existing goldens' trailing-newline convention exactly** — `check()` compares with
 `printf '%s'`, so a stray newline fails the diff. Generate it rather than hand-
 typing it:
 
 ```bash
-bash source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh 80 0 "" "x8" "Gen3 (8.0 GT/s)" \
+bash source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh 80 0 "" "x8" "Gen3 (8.0 GT/s)" "Full" \
   < <(cat tests/fixtures/storcli/overview_c0.txt tests/fixtures/storcli/temp_c0.txt) \
   > tests/expected/storcli_overview_pcie.json
 ```
 
-Then **read the generated file** and confirm it contains `"pcie_width":"x8"` and
-`"pcie_speed":"Gen3 (8.0 GT/s)"` before trusting it. A golden generated from
-broken code silently enshrines the bug.
+Then **read the generated file** and confirm it contains `"pcie_width":"x8"`,
+`"pcie_speed":"Gen3 (8.0 GT/s)"` and `"power_mode":"Full"` before trusting it. A
+golden generated from broken code silently enshrines the bug.
 
 **3b — the composer's sysfs read and address conversion.** This is the part most
 likely to be wrong, so test it against a fixture tree rather than real hardware.
@@ -361,11 +399,14 @@ Convert it per Step 1's rule and create the tree — for example, if it reports
 mkdir -p tests/fixtures/sys_pci/0000:c1:00.0
 printf '8\n'             > tests/fixtures/sys_pci/0000:c1:00.0/current_link_width
 printf '8.0 GT/s PCIe\n' > tests/fixtures/sys_pci/0000:c1:00.0/current_link_speed
+printf 'D0\n'            > tests/fixtures/sys_pci/0000:c1:00.0/power_state
 ```
 
-Use whatever address the fixture actually contains — do not assume `00:c1:00:00`.
-If controller `c1`'s fixture has a different address, create that directory too,
-or the multi-controller golden will only be half-populated.
+Both fixture controllers need a directory or the multi-controller golden will
+only be half-populated. Their addresses are given in the table under
+"Current state" — `0000:c1:00.0` and `0000:65:00.0`. Give the second one
+different values from the first (for example `x4` / Gen3), so the test would
+actually catch the composer applying controller 0's link state to every card.
 
 Then set `SYS_PCI_ROOT` for the stubbed-backend block in `tests/run.sh`. It goes
 on the existing export line around line 55:
@@ -491,8 +532,8 @@ read and address conversion.
    draggable and collapsible.
 2. Each tile's header shows that card's model, its own temperature pill, and its
    own status colour.
-3. Each footer shows **model, PCIe Speed, PCIe Width, PCI Location** — all four
-   populated, not just location.
+3. Each footer shows **model, PCIe Speed, PCIe Width, Power Mode, PCI Location**
+   — populated, not just location. Power Mode is expected to read `Full`.
 4. Collapse one tile: header, pill and footer remain; the card body disappears.
    The other tile is unaffected.
 5. The values are correct — cross-check against
@@ -504,17 +545,19 @@ Machine-checkable. ALL must hold:
 
 - [ ] `grep -c 'pcie_width":"${PCIEW}"' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `1`
 - [ ] `grep -c 'pcie_speed":"${PCIES}"' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `1`
-- [ ] `grep -c 'power_mode":""' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `1` — deliberately still empty
+- [ ] `grep -c 'power_mode":"${PWRM}"' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `1`
 - [ ] `grep -c 'lspci' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `0`
 - [ ] `grep -c 'current_link_width' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
 - [ ] `grep -c 'current_link_speed' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
+- [ ] `grep -c 'power_state' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
 - [ ] `grep -c 'SYS_PCI_ROOT' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` prints `1`
-- [ ] `grep -c 'current_link_width\|current_link_speed' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `0` — the filter stays pure
+- [ ] `grep -c 'current_link_width\|current_link_speed\|power_state' source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` prints `0` — the filter stays pure
 - [ ] `grep -c '#tblHBAviewer' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `0`
 - [ ] `grep -c 'lu-d-tile:has(> tr:nth-child(2)\[style\*="display: none"\])' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `1`
 - [ ] `grep -c '_c{$i}' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `1`
 - [ ] `grep -c "count(\$controllers) > 1" source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `0`
 - [ ] `grep -c '"pcie_width":"x8"' tests/expected/storcli_overview_pcie.json` prints `1`
+- [ ] `grep -c '"power_mode":"Full"' tests/expected/storcli_overview_pcie.json` prints `1`
 - [ ] `bash tests/run.sh` ends `--- all pass ---`
 - [ ] `bash tests/run_php.sh` exits 0
 - [ ] `php -l` on `dashboard.php` reports no syntax errors
@@ -526,8 +569,8 @@ Machine-checkable. ALL must hold:
 Stop and report instead of improvising if:
 
 - **The regenerated `storcli_multi.json` differs in any field other than
-  `pcie_width` and `pcie_speed`.** That means Step 1 altered what reaches the
-  filter on stdin — a real regression, not a golden to bless.
+  `pcie_width`, `pcie_speed` and `power_mode`.** That means Step 1 altered what
+  reaches the filter on stdin — a real regression, not a golden to bless.
 - **`tests/fixtures/storcli/overview_c0.txt` has no `PCI Address` line.** The
   whole sysfs lookup hangs off it. Report what the fixture does contain.
 - **Any existing golden fails after Step 2.** The new arguments default to empty
@@ -537,8 +580,6 @@ Stop and report instead of improvising if:
   the key is free-form based on `DashStats.page` simply echoing each entry. If
   you find contrary evidence in Unraid's source, report it — the fallback is one
   tile with per-card sections, i.e. today's behaviour.
-- You are tempted to source Power Mode for storcli. It is explicitly out of
-  scope.
 - You are tempted to change `scripts/parse/hba.sh`. The SAS2 path is correct and
   **cannot be hardware-tested** — the maintainer has no SAS2 card, so a
   regression there would ship unnoticed.
@@ -550,9 +591,14 @@ Stop and report instead of improvising if:
   will correctly report `x4`. `max_link_*` sits alongside them if a
   "negotiated vs capable" comparison is ever wanted — that is the natural place
   to surface "your HBA is in the wrong slot", which is a common Unraid problem.
-- **The two backends must keep emitting identical formats.** `x8` and
-  `Gen3 (8.0 GT/s)` are set by `parse/hba.sh`; if either side's format changes,
-  change both and update both goldens.
+- **The two backends must keep emitting identical formats.** `x8`,
+  `Gen3 (8.0 GT/s)` and `Full` are set by `parse/hba.sh`; if either side's format
+  changes, change both and update both goldens.
+- **`power_mode` means different things on the two backends.** lsiutil reads the
+  IOC firmware's own power page; storcli has no such field, so the composer maps
+  the PCI D-state onto the same words. Both are truthful, but only the lsiutil one
+  can realistically report anything other than `Full`. If a user ever asks why
+  their SAS3 card always says `Full`, that is the answer — not a bug.
 - **`SYS_PCI_ROOT` exists for the test suite**, mirroring `LSI_CACHE` and
   `STUB_FIX`. It is not a user-facing setting and should not be documented as
   one.
