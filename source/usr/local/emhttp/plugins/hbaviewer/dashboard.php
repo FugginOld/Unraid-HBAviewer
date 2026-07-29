@@ -28,85 +28,35 @@ if (!is_array($data)) {
 $controllers = $error ? [] : lsi_controllers($data);
 if (!$error && !$controllers) $error = 'Backend unavailable';
 
-// Header icon reflects the worst controller; subtitle names the card or the count.
-$rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
-$worst = 'ok';
-foreach ($controllers as $c) {
-    $s = $c['status'] ?? 'ok';
-    if (($rank[$s] ?? 0) > $rank[$worst]) $worst = $s;
-}
-$tc = lsi_status_color($worst);
 $ts = date('H:i:s');
-
-// Header subtitle: the card model, or the count when there is more than one.
-// The temperature used to live here; it now has its own colour-coded pill in the
-// header, so this line is identity only.
-$boardName = htmlspecialchars(
-    $error ? 'Unknown'
-           : (count($controllers) === 1 ? lsi_hba_view($controllers[0], $port, 0)['model']
-                                        : count($controllers) . ' controllers')
-);
-
-// Per-controller temperature pills for the header, and the PCIe footer strings.
-// The footer is built ONCE here and emitted twice — at the bottom of each card
-// (row 2, its natural place) and again inside the header row, where CSS reveals
-// it only while the tile is collapsed. Unraid hides every <tr> after the first,
-// so row 1 is the only place a collapsed tile can still show anything.
-$pills   = '';
-$footMini = '';
-foreach ($controllers as $i => $c) {
-    if (isset($c['error'])) continue;
-    $v    = lsi_hba_view($c, $port, $i);
-    $col  = $v['color'];
-    $temp = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
-    $pills .= '<span class="lu-d-pill" style="--tc:' . $col . '">'
-            . ($temp === '' ? 'N/A' : $temp . '&deg;C') . '</span>';
-
-    $parts = [];
-    foreach ($v['pcie'] as $item) {
-        $parts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
-    }
-    if ($parts) {
-        $footMini .= '<div class="lu-d-foot-row">'
-                   . (count($controllers) > 1 ? '<b>' . htmlspecialchars($v['model']) . '</b>' : '')
-                   . implode('', $parts) . '</div>';
-    }
-}
 
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
 <style>
-#tblHBAviewer .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
-#tblHBAviewer .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
-#tblHBAviewer .lu-d-overview { display:flex; align-items:center; gap:16px; }
-#tblHBAviewer .lu-d-circle {
+.lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
+.lu-d-tile .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
+.lu-d-tile .lu-d-overview { display:flex; align-items:center; gap:16px; }
+.lu-d-tile .lu-d-circle {
   position:relative; width:84px; height:84px; flex-shrink:0; border-radius:50%;
   background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), #2a2a2a 0);
   display:grid; place-items:center;
   filter:drop-shadow(0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent));
 }
-#tblHBAviewer .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:#1c1c1c; border:1px solid #2a2a2a; }
-#tblHBAviewer .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:#ddd; line-height:1; }
-#tblHBAviewer .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#ddd; letter-spacing:0.05em; }
-#tblHBAviewer .lu-d-meta { flex:1; }
-#tblHBAviewer .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
-#tblHBAviewer .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
-#tblHBAviewer .lu-d-badge {
+.lu-d-tile .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:#1c1c1c; border:1px solid #2a2a2a; }
+.lu-d-tile .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:#ddd; line-height:1; }
+.lu-d-tile .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#ddd; letter-spacing:0.05em; }
+.lu-d-tile .lu-d-meta { flex:1; }
+.lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
+.lu-d-tile .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
+.lu-d-tile .lu-d-badge {
   display:inline-flex; align-items:center; gap:6px; margin-top:6px;
   padding:3px 11px; border-radius:20px;
   font-size:10px; font-weight:700; letter-spacing:0.05em;
   color:var(--tc,#2ecc71); background:color-mix(in srgb, var(--tc,#2ecc71) 16%, transparent);
 }
-#tblHBAviewer .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
-#tblHBAviewer .lu-d-pcie {
-  display:flex; gap:16px; flex-wrap:wrap;
-  font-size:12px; color:#ddd;
-  padding-top:8px; margin-top:8px; margin-left:100px;
-  border-top:1px solid #2a2a2a;
-}
-#tblHBAviewer .lu-d-pcie span { color:#ddd; font-weight:500; }
-#tblHBAviewer .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
-#tblHBAviewer .lu-d-pill {
+.lu-d-tile .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
+.lu-d-tile .lu-d-pill {
   display:inline-flex; align-items:center; margin-right:8px;
   padding:3px 11px; border-radius:20px;
   font-size:12px; font-weight:700; letter-spacing:0.03em;
@@ -122,49 +72,91 @@ echo <<<CSS
    ponytail: CSS only, no MutationObserver. If a future Unraid stops using an
    inline style, this rule silently stops firing and the footer just never shows
    when collapsed — degrade, not break. */
-#tblHBAviewer .lu-d-foot-mini { display:none; padding:10px 0 2px; }
-#tblHBAviewer:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-foot-mini { display:block; }
-#tblHBAviewer .lu-d-foot-row {
+.lu-d-tile .lu-d-foot-mini { display:none; padding:10px 0 2px; }
+.lu-d-tile:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-foot-mini { display:block; }
+.lu-d-tile .lu-d-foot-row {
   display:flex; gap:16px; flex-wrap:wrap; align-items:baseline;
   font-size:12px; color:#ddd; padding-top:6px;
   border-top:1px solid #2a2a2a;
 }
-#tblHBAviewer .lu-d-foot-row span { color:#ddd; font-weight:500; }
-#tblHBAviewer .lu-d-foot-row b { color:#f5a623; font-weight:600; margin-right:4px; }
+.lu-d-tile .lu-d-foot-row span { color:#ddd; font-weight:500; }
+.lu-d-tile .lu-d-foot-row b { color:#f5a623; font-weight:600; margin-right:4px; }
 </style>
 CSS;
 
-// Tile body — one block per controller (stacked).
+// One tile per HBA. Unraid's DashStats.page simply echoes every $mytiles entry
+// and never matches the key against anything, so a single .page can emit as many
+// tiles as there are controllers — each independently positionable and collapsible.
+$tiles = [];
+
 if ($error) {
-    $body = "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>";
-} else {
-    $body = '';
-    foreach ($controllers as $i => $c) {
-        if (isset($c['error'])) {
-            $body .= "<div class='lu-d-ctl'><span style='color:#d88'>Controller {$i}: "
-                   . htmlspecialchars($c['error']) . "</span></div>";
-            continue;
-        }
-        $v         = lsi_hba_view($c, $port, $i);
-        $col       = $v['color'];
-        $temp      = (int)($c['temp'] ?? 0);
-        $model     = htmlspecialchars($v['model']);
-        $chip      = htmlspecialchars($v['chip']);
-        $firmware  = htmlspecialchars($v['firmware']);
-        $portLabel = htmlspecialchars($v['port_label']);
-        $badge     = $v['label'];
+    $tiles[] = [
+        'key'  => "{$pluginname}_err",
+        'id'   => 'tblHBAviewerErr',
+        'tc'   => lsi_status_color('alert'),
+        'main' => 'HBA Dashboard',
+        'sub'  => 'Unknown',
+        'pill' => '',
+        'foot' => '',
+        'body' => "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>",
+    ];
+}
 
-        $pcieParts = [];
-        foreach ($v['pcie'] as $item) {
-            $pcieParts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
-        }
-        $pcieRow = $pcieParts ? "<div class='lu-d-pcie'>" . implode('', $pcieParts) . "</div>" : '';
+foreach ($controllers as $i => $c) {
+    $t = [
+        'key'  => "{$pluginname}_c{$i}",
+        'id'   => "tblHBAviewer{$i}",
+        'tc'   => lsi_status_color('alert'),
+        'main' => 'HBA Dashboard',
+        'sub'  => "Controller /c{$i}",
+        'pill' => '',
+        'foot' => '',
+    ];
 
-        $bios   = htmlspecialchars($v['bios'] ?? '');
-        $mode   = htmlspecialchars($v['mode'] ?? '');
-        $drives = htmlspecialchars($v['drives'] ?? '');
+    // A controller that failed to read still gets its own tile — error text in
+    // the body, no pill. Skipping it made errored cards vanish once collapsed.
+    if (isset($c['error'])) {
+        $t['body'] = "<div class='lu-d-ctl'><span style='color:#d88'>Controller {$i}: "
+                   . htmlspecialchars($c['error']) . "</span></div>"
+                   . "<div class='lu-d-ts'>Last read: {$ts}</div>";
+        $tiles[] = $t;
+        continue;
+    }
 
-        $body .= "
+    $v         = lsi_hba_view($c, $port, $i);
+    $col       = $v['color'];
+    $temp      = (int)($c['temp'] ?? 0);
+    $model     = htmlspecialchars($v['model']);
+    $chip      = htmlspecialchars($v['chip']);
+    $firmware  = htmlspecialchars($v['firmware']);
+    $portLabel = htmlspecialchars($v['port_label']);
+    $badge     = $v['label'];
+    $bios      = htmlspecialchars($v['bios']   ?? '');
+    $mode      = htmlspecialchars($v['mode']   ?? '');
+    $drives    = htmlspecialchars($v['drives'] ?? '');
+
+    // Header identifies this one card, and the icon/pill carry its own status.
+    $t['tc']   = $col;
+    $t['main'] = $model;
+    $t['sub']  = $portLabel;
+
+    $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
+    $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $col . '">'
+               . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;C') . '</span>';
+
+    // The footer is built ONCE and emitted twice — at the bottom of the card in
+    // row 2 (its natural place when expanded) and again in row 1, where CSS
+    // reveals it only while the tile is collapsed. Unraid hides every <tr> after
+    // the first, so row 1 is the only place a collapsed tile can still show
+    // anything. The model is always included: one tile per card, so it is the
+    // only thing naming which card the collapsed strip belongs to.
+    $parts = [];
+    foreach ($v['pcie'] as $item) {
+        $parts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
+    }
+    $t['foot'] = "<div class='lu-d-foot-row'><b>{$model}</b>" . implode('', $parts) . "</div>";
+
+    $t['body'] = "
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
         <div class='lu-d-circle' style='--tc:{$col};--pct:{$temp}'>
@@ -183,14 +175,20 @@ if ($error) {
           <span class='lu-d-badge' style='--tc:{$col}'>{$badge}</span>
         </div>
       </div>
-      {$pcieRow}
-    </div>";
-    }
-    $body .= "<div class='lu-d-ts'>Last read: {$ts}</div>";
+    </div>"
+    . $t['foot']
+    . "<div class='lu-d-ts'>Last read: {$ts}</div>";
+
+    $tiles[] = $t;
 }
 
-$mytiles[$pluginname]['column1'] = <<<EOT
-<tbody id="tblHBAviewer" title="HBA Dashboard">
+foreach ($tiles as $t) {
+    $id   = $t['id'];   $tc   = $t['tc'];
+    $main = $t['main']; $sub  = $t['sub'];
+    $pill = $t['pill']; $foot = $t['foot']; $body = $t['body'];
+
+    $mytiles[$t['key']]['column1'] = <<<EOT
+<tbody id="{$id}" class="lu-d-tile" title="HBA Dashboard">
   <tr>
     <td>
       <span class="tile-header">
@@ -207,20 +205,20 @@ $mytiles[$pluginname]['column1'] = <<<EOT
             <path d="M40 20v4M44 20v4M48 20v4M40 40v4M44 40v4M48 40v4M32 28h4M32 32h4M32 36h4M52 28h4M52 32h4M52 36h4"/>
           </svg>
           <div class="section">
-            <h3 class="tile-header-main">HBA Dashboard</h3>
-            <span>{$boardName}</span>
+            <h3 class="tile-header-main">{$main}</h3>
+            <span>{$sub}</span>
           </div>
         </span>
         <span class="tile-header-right">
           <span class="tile-header-right-controls">
-            {$pills}
+            {$pill}
             <a href="/Tools/HBAviewer_Monitor" title="Open HBAviewer">
               <i class="fa fa-fw fa-cog control"></i>
             </a>
           </span>
         </span>
       </span>
-      <div class="lu-d-foot-mini">{$footMini}</div>
+      <div class="lu-d-foot-mini">{$foot}</div>
     </td>
   </tr>
   <tr>
@@ -230,3 +228,4 @@ $mytiles[$pluginname]['column1'] = <<<EOT
   </tr>
 </tbody>
 EOT;
+}

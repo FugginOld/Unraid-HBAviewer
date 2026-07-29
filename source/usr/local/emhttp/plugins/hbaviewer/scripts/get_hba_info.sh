@@ -36,15 +36,46 @@ fi
 # ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
 # SAS correlation, this cheaper host index is only for the rollup.
 ov_storcli() {   # $1 = controller index
-    local perr=0 p f v
+    local perr=0 p f v out pci dom bus dev fn dir width speed power
     for p in /sys/class/sas_phy/phy-"${1}":*/; do
         [ -d "$p" ] || continue
         for f in invalid_dword_count running_disparity_error_count loss_of_dword_sync_count phy_reset_problem_count; do
             v=$(cat "$p/$f" 2>/dev/null); perr=$(( perr + ${v:-0} ))
         done
     done
-    { "$STORCLI" /c"$1" show; "$STORCLI" /c"$1" show temperature; } 2>/dev/null \
-        | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr"
+
+    out=$({ "$STORCLI" /c"$1" show; "$STORCLI" /c"$1" show temperature; } 2>/dev/null)
+
+    # storcli reports "PCI Address = 00:c1:00:00" (domain:bus:device:function).
+    # sysfs wants "0000:c1:00.0" — four-digit domain, dot before the function.
+    # PCIe link state is not in storcli's output at all, so read it from sysfs;
+    # SYS_PCI_ROOT is overridable so the suite can point it at a fixture tree.
+    width=""; speed=""; power=""
+    pci=$(printf '%s\n' "$out" | grep -m1 -E '^PCI Address[[:space:]]*=' | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//')
+    if [ -n "$pci" ]; then
+        IFS=: read -r dom bus dev fn <<< "$pci"
+        dir="${SYS_PCI_ROOT:-/sys/bus/pci/devices}/$(printf '%04x:%s:%s.%d' "0x${dom:-0}" "$bus" "$dev" "0x${fn:-0}")"
+        v=$(cat "$dir/current_link_width" 2>/dev/null)
+        [ -n "$v" ] && [ "$v" != "0" ] && width="x$v"
+        v=$(cat "$dir/current_link_speed" 2>/dev/null)
+        case "$v" in
+            2.5*) speed="Gen1 (2.5 GT/s)"  ;;
+            5.0*|5*) speed="Gen2 (5.0 GT/s)"  ;;
+            8.0*|8*) speed="Gen3 (8.0 GT/s)"  ;;
+            16*)  speed="Gen4 (16.0 GT/s)" ;;
+            32*)  speed="Gen5 (32.0 GT/s)" ;;
+        esac
+        # PCI D-state, mapped onto lsiutil's vocabulary so both backends print the
+        # same words. An HBA in use is always D0, so this reads "Full" in practice.
+        v=$(cat "$dir/power_state" 2>/dev/null)
+        case "$v" in
+            D0)        power="Full"    ;;
+            D1|D2)     power="Reduced" ;;
+            D3*)       power="Standby" ;;
+        esac
+    fi
+
+    printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "" "$width" "$speed" "$power"
 }
 
 ov_lsiutil() {
