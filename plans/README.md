@@ -29,7 +29,7 @@ commands are inlined in the plan file itself.
 | 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
 | 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | DONE — merged to `dev` (`76d8666`, from `93776c7`); awaiting hardware verification |
 | 015 | Show the temperature pill only while the tile is collapsed | P3 | S | 014 (DONE) | DONE — merged to `dev` (`8249575`, from `0f8527e`); awaiting hardware verification |
-| 016 | "Last read" into the meta list, badge centred under the gauge with a glow | P3 | S | 015 (DONE) | TODO |
+| 016 | "Last read" into the meta list, badge centred under the gauge with a glow | P3 | S | 015 (DONE) | DONE — merged to `dev` (`bf7886a`, from `5defd05`); awaiting hardware verification |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)

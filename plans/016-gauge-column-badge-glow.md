@@ -377,3 +377,66 @@ Stop and report instead of improvising if:
   rather than being duplicated — a copy-paste leaving one in the meta list and one
   under the gauge would render two badges and pass a naive `grep -c 'lu-d-badge'`
   of `4` rather than `3`.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-07-29, branch `advisor/016-gauge-column-badge-glow`
+- **Commit**: `5defd05` → merged to `dev` as `bf7886a`
+- **Rounds**: 1 — approved as submitted, no REVISE
+- **Files changed**: `dashboard.php` only (+13/-7)
+- **Deviations**: none
+
+### Outcome
+
+Every done criterion passed first time, and all eleven grep patterns were accurate
+— the third plan in a row with none defective, after 012 and 013 each shipped
+unpassable checks. Pre-testing patterns against the live file before dispatch is
+now standard for this series.
+
+### All three traps cleared, verified independently
+
+1. **`.lu-d-ts` kept at exactly 2** — the CSS rule and the error tile. Confirmed the
+   error tile still carries `<div class='lu-d-ts'>Last read:` (count 1). Had the
+   executor "cleaned up" the seemingly-dead rule, error tiles would have shown an
+   unstyled timestamp, and error tiles are hard to exercise so it would have
+   shipped unnoticed.
+2. **Badge moved, not copied** — the diff shows it removed from `.lu-d-meta` and
+   added under the circle in the same hunk pair. `grep -c 'lu-d-badge'` is `3`; a
+   duplicate would have shown `4` and rendered two badges.
+3. **`.lu-d-pill` untouched at 3** — the temperature pill from plan 015 is
+   unaffected, despite the request having called the badge a "pill".
+
+### Verified independently before merge
+
+- Full diff read hunk by hunk: four hunks, each traceable to Steps 1-3. `.lu-d-ts`
+  appears as an unchanged context line, proving the rule survived.
+- All eleven greps re-run: `2 / 1 / 0 / 1 / 1 / 2 / 3 / 3 / 2 / 0 / 1`
+- `bash tests/run.sh` → `--- all pass ---`; `bash tests/run_php.sh` → exit 0
+- No golden churn
+
+### Known consequence, deliberately not addressed
+
+The executor flagged this from static reasoning and correctly left it alone, since
+the plan puts it out of scope:
+
+The gauge column is now taller than before — 84px circle + 8px gap + ~19px badge
+≈ 111px — while `.lu-d-overview` still has `align-items:center`. On a card with few
+info rows, the meta list is vertically centred against that taller column, so
+"Model" may begin lower than the top of the gauge rather than aligning with it.
+
+Whether that reads as wrong is a look-at-it question, not something to fix
+speculatively. If it does, the fix is `align-items:flex-start` on `.lu-d-overview`
+— but that would also un-centre the gauge on cards with *many* rows, so it is a
+trade, not a correction.
+
+### Still open — needs hardware
+
+1. "Last read" as the final row of the info list, right-aligned, monospace.
+2. Badge centred under the gauge, not in the info list.
+3. **The glow** — amber on a warning card, green on a healthy one. The values match
+   the gauge's exactly (`0 0 8px`, `30%`), so they should read as one design, but
+   only a real amber card confirms it.
+4. Nothing stray left after the PCIe footer.
+5. Collapse still leaves header, temperature pill and footer visible.
