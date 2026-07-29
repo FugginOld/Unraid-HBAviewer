@@ -1,8 +1,9 @@
 #!/bin/bash
 # Pure filter: `storcli /cN show all` text on stdin -> overview JSON, same shape
 # as the lsiutil backend (parse/hba.sh). $1 = alert threshold.
-# PCIe width/speed/power are left empty — storcli doesn't report them; source
-# those from lspci if that panel is wanted on SAS3/3.5 cards.
+# storcli reports no PCIe link or power state, so width/speed/power arrive as
+# $4/$5/$6 — the composer reads them from sysfs, which keeps this a pure stdin
+# filter with no hardware access.
 #
 # Feed a captured `storcli /cN show all` to test — no hardware needed.
 
@@ -10,6 +11,9 @@ input=$(cat)
 ALERT="${1:-80}"
 PHYERR="${2:-0}"    # total sysfs phy error counters for this controller (from composer)
 CHIPARG="${3:-}"    # chip name from storcli AdapterType (covers every chipset; no ID map)
+PCIEW="${4:-}"      # PCIe link width  (e.g. "x8") — sysfs, read by the composer
+PCIES="${5:-}"      # PCIe link speed  (e.g. "Gen3 (8.0 GT/s)") — sysfs, read by the composer
+PWRM="${6:-}"       # power mode       (e.g. "Full") — sysfs PCI D-state, ditto
 
 # First "Key = Value" line for an exact key (anchored, so "Model" != "Model Number")
 val() { printf '%s\n' "$input" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -68,5 +72,5 @@ if [ "${PHYERR:-0}" -gt 0 ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
 case "$RANK" in 2) STATUS="alert" ;; 1) STATUS="warn" ;; *) STATUS="ok" ;; esac
 
 cat <<EOF
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"","pcie_speed":"","power_mode":"","alert_threshold":$ALERT,"status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"status":"$STATUS"}
 EOF

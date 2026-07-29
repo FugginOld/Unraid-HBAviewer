@@ -31,6 +31,8 @@ check events-entries   events_entries.json   bash "$P/events.sh"       < fixture
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_hbaviewer.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
+# PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
+check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview.sh" 80 0 "" "x8" "Gen3 (8.0 GT/s)" "Full" < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # health rollup: failed drive -> alert (even at 50C); PHY errors -> warn
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
@@ -50,9 +52,24 @@ check cache-temps-storcli cache_temps_storcli.txt bash "$P/cache_temps.sh" < fix
 check cache-temps-lsiutil cache_temps_lsiutil.txt bash "$P/cache_temps.sh" < fixtures/cache_lsiutil_notemp.json
 check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fixtures/cache_mixed_error.json
 
+# Fake sysfs PCI tree for the storcli composer. Built here rather than committed:
+# the directory names contain colons, which Windows cannot store — git would
+# receive a U+F03A lookalike and the lookup would silently miss on Linux.
+# c0 is x8 and c1 is x4 on purpose: the asymmetry catches one card's link state
+# being applied to every tile.
+SYSPCI=$(mktemp -d)
+trap 'rm -rf "$SYSPCI"' EXIT
+for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
+    set -- $spec
+    mkdir -p "$SYSPCI/$1"
+    printf '%s\n' "$2"          > "$SYSPCI/$1/current_link_width"
+    printf '8.0 GT/s PCIe\n'    > "$SYSPCI/$1/current_link_speed"
+    printf 'D0\n'               > "$SYSPCI/$1/power_state"
+done
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
-export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null SYS_PCI_ROOT="$SYSPCI"
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
