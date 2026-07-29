@@ -621,3 +621,85 @@ Stop and report instead of improvising if:
   reads, and that the `:has()` selector survived the id-to-class rename — that
   last one silently degrades rather than erroring, so the footer would just stop
   appearing when collapsed.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-07-28, branch `advisor/013-per-hba-tiles-and-pcie-link-data`
+- **Commit**: `9b40d07` (amended from `9e744ab`) → merged to `dev` as `3e1b97f`
+- **Rounds**: 2 (one REVISE)
+- **Files changed**: `dashboard.php` (+217/-118 rewrite), `get_hba_info.sh` (+37),
+  `storcli_overview.sh` (+10), `tests/run.sh` (+19), two goldens. No new fixtures.
+
+### Round 1 — REVISE: committed fixture paths contained a fake colon
+
+Step 3b told the executor to commit a fake sysfs tree at
+`tests/fixtures/sys_pci/0000:c1:00.0/`. Windows forbids `:` in filenames, so the
+MSYS layer silently substituted **U+F03A**, a Private Use Area lookalike. The
+tracked path bytes were `0000<ef 80 ba>c1...`, not `0000:c1...`.
+
+It passed locally because MSYS maps `:` ↔ U+F03A transparently on read *and*
+write. On Linux `:` is a legal filename character, so the directory would be
+genuinely named with U+F03A, the composer's lookup for `0000:c1:00.0` would miss,
+the PCIe fields would come back empty, and `route-storcli` would fail against the
+golden that had just been regenerated. Green on Windows, red on CI.
+
+Caught by inspecting the raw index bytes after the merge printed escaped octal in
+its file list — not by any test, because no test could have caught it on this
+platform.
+
+**Fix**: generate the tree at runtime in `tests/run.sh` via `mktemp -d` with a
+`trap ... EXIT` cleanup. `mkdir` with a literal colon works on both platforms —
+on Windows through the same MSYS mapping — so nothing colon-named ever reaches
+git. Step 3b above was rewritten accordingly.
+
+### Three plan defects the executor found, all confirmed
+
+1. **`grep -c 'SYS_PCI_ROOT' get_hba_info.sh` → `1` is unsatisfiable.** Step 1's
+   own code block contains the string twice (comment + assignment). Actual: `2`.
+   The executor refused to delete the comment to make the check pass, which was
+   the right call.
+2. **Two Step 1 verify commands cannot run.** `grep -c '... 2>/dev/null \'` dies
+   with `grep: Trailing backslash`; the `\n` pattern doesn't survive the shell
+   layer. Confirmed both by direct repro.
+3. **"Goldens have no trailing newline" is false.** `check()` compares
+   `"$got"` against `"$(cat ...)"` — both command substitutions strip trailing
+   newlines, so it never mattered. `storcli_overview.json` does end `0a`.
+
+### Verified independently before merge
+
+- No PUA bytes anywhere in the index (`git ls-files -z | xxd | grep -c 'ef80ba'` → 0)
+- `git show --stat HEAD` → exactly six files, no fixtures
+- `bash tests/run.sh` → `--- all pass ---`; `bash tests/run_php.sh` → exit 0
+- **Negative control**: with `SYS_PCI_ROOT=/nonexistent` the composer emits
+  `"pcie_width":""` for both controllers — proving `route-storcli` genuinely
+  depends on the generated tree resolving and is not passing vacuously. Also
+  demonstrates the intended graceful degradation when sysfs is unreadable.
+- The regenerated `storcli_multi.json` differs from its predecessor in exactly
+  three fields, and c0/c1 got **different** widths (`x8` / `x4`) — the asymmetry
+  that catches one card's link state being applied to every tile
+- `.lu-d-tile:has(> tr:nth-child(2)[style*="display: none"])` present and intact
+  after the id-to-class rename; `.lu-d-foot-mini` emitted inside row 1's `<td>`
+- `.lu-d-pcie` emitted nowhere, so deleting its CSS was correct cleanup
+
+### Accepted deviations
+
+- `local power` added to `ov_storcli()` — the plan's snippet declared the other
+  locals but left `power` global.
+- Dead `.lu-d-pcie` CSS deleted. Visible effect: the expanded footer is now
+  full-width with a top border rather than indented under the meta column,
+  matching the collapsed strip.
+- Tile markup built as a `$tiles` array plus one emit loop rather than three
+  inlined heredocs — avoids three copies of the 10-line SVG.
+
+### Known property, flagged not fixed
+
+`set -- $spec` in the new `tests/run.sh` block overwrites the script's positional
+parameters. Harmless today — `run.sh` takes no arguments — but it would bite if
+the script ever grows a `"$@"`.
+
+### Not verified on hardware yet
+
+Everything above is fixture-level. The per-tile rendering, independent collapse,
+and the real PCIe values still need a run on the maintainer's box.
