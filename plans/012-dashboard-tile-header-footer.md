@@ -21,6 +21,7 @@
 - **Depends on**: none
 - **Category**: direction (user-requested UI change) + bug (plugin listing icon)
 - **Planned at**: commit `021bcc3`, 2026-07-28
+- **State**: MERGED to `dev` (`761b18f`) — awaiting hardware verification
 
 ## Why this matters
 
@@ -230,8 +231,12 @@ change. Verification is the browser, and that is the operator's step.
 **In scope**:
 
 - `source/usr/local/emhttp/plugins/hbaviewer/dashboard.php`
-- `hbaviewer.plg` (the `icon` entity only)
-- `source/usr/local/emhttp/plugins/HBAviewer/hbaviewer.png` (create by copying the existing `icon.png` — note the capitalised directory)
+- `hbaviewer.plg` — the `icon` entity, the install block (two lines creating the
+  capitalised icon path), and the remove block (one cleanup line)
+
+**No new files.** In particular, do not create
+`source/usr/local/emhttp/plugins/HBAviewer/` in the repo — see Step 5 for why the
+capitalised path is created at install time instead of being tracked.
 
 **Out of scope** (do NOT touch):
 
@@ -413,12 +418,26 @@ them:**
 **The fix**: ship the icon at the capitalised path as well. A directory holding
 only a PNG contains no `.page` files, so it cannot duplicate any menu.
 
-Create it by copying the tracked icon — **do not author or edit an image**:
+**Create it at install time, not in the repo.** An earlier draft of this plan had
+the capitalised directory committed as a tracked file. That was wrong: this repo
+has `core.ignorecase=true`, and `HBAviewer/` and `hbaviewer/` cannot coexist on a
+case-insensitive filesystem. A tracked capitalised path gives every maintainer on
+Windows or macOS a permanent phantom deletion in `git status` after each checkout.
+`git update-index --skip-worktree` hides it locally but is per-clone and does not
+survive a fresh one.
+
+So the copy belongs in the `.plg`'s existing `<FILE Run="/bin/bash">` install
+block, which runs as root on the target's real case-sensitive Linux filesystem.
+After the two `chmod +x` lines, add:
 
 ```bash
-mkdir -p source/usr/local/emhttp/plugins/HBAviewer
-cp source/usr/local/emhttp/plugins/hbaviewer/icon.png    source/usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
+mkdir -p /usr/local/emhttp/plugins/HBAviewer
+cp -f /usr/local/emhttp/plugins/hbaviewer/icon.png /usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
 ```
+
+The icon ships in the `.txz` at `hbaviewer/icon.png` (already tracked), so it is
+on disk by the time this line runs — the `tar -xJf` immediately above it puts it
+there. The repo stays lowercase-only and no case collision is possible anywhere.
 
 Then in `hbaviewer.plg`, change the icon entity from the URL to a bare filename:
 
@@ -442,17 +461,20 @@ rm -rf /usr/local/emhttp/plugins/hbaviewer
 rm -rf /usr/local/emhttp/plugins/HBAviewer
 ```
 
-**Verify**: `cmp source/usr/local/emhttp/plugins/hbaviewer/icon.png source/usr/local/emhttp/plugins/HBAviewer/hbaviewer.png` → exit 0, no output
-
 **Verify**: `grep -c 'ENTITY icon      "hbaviewer.png"' hbaviewer.plg` → prints `1`
 
 **Verify**: `grep -c 'raw.githubusercontent.*icon.png' hbaviewer.plg` → prints `0`
 
+**Verify**: `grep -c 'mkdir -p /usr/local/emhttp/plugins/HBAviewer' hbaviewer.plg` → prints `1`
+
+**Verify**: `grep -c 'cp -f /usr/local/emhttp/plugins/hbaviewer/icon.png' hbaviewer.plg` → prints `1`
+
 **Verify**: `grep -c 'rm -rf /usr/local/emhttp/plugins/HBAviewer' hbaviewer.plg` → prints `1`
 
-**Verify** the capitalised directory holds nothing but the icon — no `.page` file
-can be allowed in there:
-`ls source/usr/local/emhttp/plugins/HBAviewer/` → prints only `hbaviewer.png`
+**Verify no case-colliding path was committed.** Use a case-*sensitive* grep —
+`grep -i 'HBAviewer/'` matches every ordinary lowercase path and so always
+"passes", which makes it useless as a check:
+`git ls-files | grep 'HBAviewer/'` → no output, exit 1
 
 **Verify** CA's icons are untouched:
 `grep -c 'raw.githubusercontent.*icon.png' plugins/hbaviewer.xml ca_profile.xml` → prints `1` for each
@@ -499,8 +521,9 @@ Machine-checkable. ALL must hold:
 - [ ] `grep -c '{$footMini}' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `1`
 - [ ] `grep -c 'tr:nth-child(2)\[style\*="display: none"\]' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `1`
 - [ ] `grep -c 'no sensor' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` prints `0`
-- [ ] `cmp source/usr/local/emhttp/plugins/hbaviewer/icon.png source/usr/local/emhttp/plugins/HBAviewer/hbaviewer.png` exits 0
-- [ ] `ls source/usr/local/emhttp/plugins/HBAviewer/` lists **only** `hbaviewer.png` — a `.page` file there would duplicate every menu
+- [ ] `git ls-files | grep 'HBAviewer/'` prints nothing (case-sensitive grep — `-i` matches every lowercase path and always passes)
+- [ ] `grep -c 'mkdir -p /usr/local/emhttp/plugins/HBAviewer' hbaviewer.plg` prints `1`
+- [ ] `grep -c 'cp -f /usr/local/emhttp/plugins/hbaviewer/icon.png' hbaviewer.plg` prints `1`
 - [ ] `grep -c 'rm -rf /usr/local/emhttp/plugins/HBAviewer' hbaviewer.plg` prints `1`
 - [ ] `grep -c 'ENTITY icon      "hbaviewer.png"' hbaviewer.plg` prints `1`
 - [ ] `grep -c 'raw.githubusercontent.*icon.png' plugins/hbaviewer.xml` prints `1` — CA untouched
@@ -557,3 +580,65 @@ Stop and report back (do not improvise) if:
   measured markup character for character, and that `$footMini` is emitted inside
   row 1's `<td>` — if it lands in row 2 it disappears on collapse, which is the
   exact bug this plan exists to avoid.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-07-28, branch `advisor/012-dashboard-tile-header-footer`
+- **Commit**: `2479733` → merged to `dev` as `761b18f`
+- **Rounds**: 2 (one REVISE)
+- **Files changed**: `dashboard.php` (+73/-13), `hbaviewer.plg` (+11/-1). No new files.
+
+### Round 1 — REVISE: the icon fix was specified wrong
+
+The plan as written told the executor to commit
+`source/usr/local/emhttp/plugins/HBAviewer/hbaviewer.png`. On this repo
+(`core.ignorecase=true`) that path cannot exist alongside `hbaviewer/`. The
+executor's literal `mkdir -p && cp` silently resolved into the *lowercase*
+directory, dropping a stray `hbaviewer.png` among the real plugin files. It
+caught that before committing, removed the stray, and worked around the
+filesystem with git plumbing — `git hash-object -w` plus
+`git update-index --add --cacheinfo` to stage the blob at the capitalised path
+without materialising it, then `--skip-worktree` to silence the resulting
+phantom deletion.
+
+That produced a technically correct commit that would have materialised fine on
+Linux. It was still rejected: `--skip-worktree` is per-clone and does not survive
+a fresh one, so the maintainer — who works on Windows — would get a permanent
+phantom deletion in `git status` after every checkout, as would anyone on macOS.
+
+The collision was the plan being wrong, not the environment. Fix: create the
+capitalised path in the `.plg` install block instead. Steps 5, Scope, and the
+done criteria were rewritten accordingly.
+
+### Executor correction accepted
+
+The REVISE included the check `git ls-files | grep -i 'HBAviewer/'` → no output.
+The executor pushed back: `-i` also matches every ordinary lowercase
+`hbaviewer/` path, so that check can never pass on this repo and is useless as a
+signal. It ran the case-sensitive form instead. Correct, and the done criteria
+now say so explicitly.
+
+### Verified independently before merge
+
+- `git ls-files | grep 'HBAviewer/'` → no output, exit 1
+- tracked PNGs: only `icon.png` and `hbaviewer/icon.png`
+- `git show --stat HEAD` → exactly two files
+- `git status --porcelain` → empty; `git ls-files -v` → no `skip-worktree` flags
+- `bash tests/run.sh` → `--- all pass ---`
+- `php -l dashboard.php` (docker `php:8.2-cli`) → no syntax errors
+- `lsi_hba_view()` confirmed to return both `color` and `pcie`, the two keys the
+  new pill/footer code reads
+
+### Known behaviour change, accepted
+
+A controller in a per-controller error state (`$c['error']` set, but the
+top-level `$error` unset) no longer contributes to the header. The pill loop
+`continue`s past it, and `$boardName` resolves through `lsi_hba_view()` to
+`'Unknown'`. Previously the subtitle read `/c0 error`.
+
+The card body still renders the error text in full, so nothing is lost while the
+tile is expanded — but **while collapsed, an errored controller is now
+invisible**. Minor, and not worth blocking the merge; noted here because it is
+the one case the tile most exists to surface. Revisit if a user reports it.
