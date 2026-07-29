@@ -79,10 +79,22 @@ ov_storcli() {   # $1 = controller index
 }
 
 ov_lsiutil() {
-    # A pure SAS3/3.5 box (mpt3sas, no mpt2sas) with no storcli: the bundled
-    # lsiutil 1.70 can't reliably read it — point the user at the storcli plugin.
-    if [ -z "$(find_storcli)" ] && [ -d /sys/module/mpt3sas ] && [ ! -d /sys/module/mpt2sas ]; then
-        echo '{"error":"storcli not found. This looks like a SAS3/SAS3.5 (mpt3sas) controller — install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}'
+    # No storcli, and EVERY controller is on the mpt3sas personality: genuine
+    # SAS3/3.5 hardware that the bundled lsiutil 1.70 cannot read. Keyed off
+    # proc_name, not /sys/module — the merged driver reports proc_name=mpt2sas for
+    # SAS2 cards even when only the mpt3sas module is loaded, and lsiutil reads
+    # those fine (issue #3: /dev/mptctl present, IOC temperature returned). The
+    # old /sys/module test refused those cards outright. hba_has_sas3 also keeps a
+    # box with no HBA at all falling through to require_binary's clearer error.
+    if [ -z "$(find_storcli)" ] && hba_has_sas3 && ! hba_has_sas2; then
+        local h board=""
+        for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+            case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
+            board=$(tr -d '\n' < "${h}board_name" 2>/dev/null)
+            [ -n "$board" ] && break
+        done
+        printf '{"error":"%s is on the mpt3sas driver and the bundled lsiutil cannot read through it. Install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}' \
+            "${board:-This controller}"
         return 1
     fi
     require_binary || return 1

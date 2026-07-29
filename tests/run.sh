@@ -58,7 +58,8 @@ check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fix
 # c0 is x8 and c1 is x4 on purpose: the asymmetry catches one card's link state
 # being applied to every tile.
 SYSPCI=$(mktemp -d)
-trap 'rm -rf "$SYSPCI"' EXIT
+SYSHOST=$(mktemp -d)
+trap 'rm -rf "$SYSPCI" "$SYSHOST"' EXIT
 for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
     set -- $spec
     mkdir -p "$SYSPCI/$1"
@@ -75,6 +76,29 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
+# Controller generation comes from proc_name, never from /sys/module — the merged
+# mpt3sas driver reports proc_name=mpt2sas for SAS2 cards (issue #3). host9 is a
+# non-SAS host that must be ignored by the filter.
+mkdir -p "$SYSHOST/host0" "$SYSHOST/host9"
+printf 'ahci\n' > "$SYSHOST/host9/proc_name"
+# A SAS2 personality must NOT be refused: the guard stays silent and the composer
+# reaches require_binary, so this reuses route-fallback's expectation. Reverting the
+# guard to a /sys/module test on an mpt3sas-only box breaks exactly this.
+printf 'mpt2sas\n'    > "$SYSHOST/host0/proc_name"
+printf 'SAS9207-8i\n' > "$SYSHOST/host0/board_name"
+STORCLI=/nonexistent LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
+check route-sas2-personality route_no_backend.json bash "$P/../get_hba_info.sh"
+# mpt3sas personality only, no storcli: refuse, and name the board.
+# STORCLI must be truly EMPTY here, not /nonexistent: find_storcli() only checks
+# "-n $STORCLI" (an override honored verbatim, existence unchecked elsewhere), so
+# a non-empty-but-missing path still makes the guard's `[ -z "$(find_storcli)" ]`
+# false and the case falls through to require_binary instead. No real storcli is
+# on this sandbox's PATH, so an empty override correctly makes find_storcli find
+# nothing.
+printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
+printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
+STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
+check route-sas3-no-storcli route_sas3_no_storcli.json bash "$P/../get_hba_info.sh"
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"

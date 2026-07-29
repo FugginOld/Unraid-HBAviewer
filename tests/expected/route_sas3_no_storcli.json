@@ -1,0 +1,1 @@
+{"error":"SAS9300-8i is on the mpt3sas driver and the bundled lsiutil cannot read through it. Install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}
