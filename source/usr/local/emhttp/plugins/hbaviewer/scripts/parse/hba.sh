@@ -84,13 +84,32 @@ FW_OLD="false"
 case "$FW_MAJOR" in ''|*[!0-9]*) : ;; *) [ "$FW_MAJOR" -lt 20 ] && FW_OLD="true" ;; esac
 
 # ── 4. Status (temp-based when a sensor exists; otherwise ok — no false alarm) ─
+# Five fixed bands. ALERT no longer means "the temperature that is bad"; it names
+# the first band at which the badge complains (see the twin copy in
+# parse/storcli_overview.sh — keep both copies identical). Cut-points are the
+# card-independent ones the maintainer specified; per-card limits are not worth
+# a config knob.
+#   normal <=65 | elevated 66-75 | warning 76-85 | alert 86-95 | critical >=96
+band_of() {   # $1 = temperature in C -> band name
+    if   [ "$1" -le 65 ]; then echo normal
+    elif [ "$1" -le 75 ]; then echo elevated
+    elif [ "$1" -le 85 ]; then echo warning
+    elif [ "$1" -le 95 ]; then echo alert
+    else echo critical; fi
+}
+band_index() { case "$1" in normal) echo 0;; elevated) echo 1;; warning) echo 2;; alert) echo 3;; *) echo 4;; esac; }
+
 if [ -n "$TEMP" ]; then
-    if   [ "$TEMP" -ge "$ALERT" ];          then STATUS="alert"
-    elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then STATUS="warn"
+    TEMP_BAND=$(band_of "$TEMP")
+    CFG_BAND=$(band_of "$ALERT")
+    ti=$(band_index "$TEMP_BAND"); ci=$(band_index "$CFG_BAND")
+    if   [ "$ti" -gt "$ci" ]; then STATUS="alert"
+    elif [ "$ti" -eq "$ci" ]; then STATUS="warn"
     else STATUS="ok"; fi
     TEMPJSON="$TEMP"
 else
-    STATUS="ok"; TEMPJSON='""'
+    # No sensor (many SAS2008/9211 cards): no band, and never a false alarm.
+    STATUS="ok"; TEMPJSON='""'; TEMP_BAND=""
 fi
 
 cat <<EOF
@@ -106,6 +125,7 @@ cat <<EOF
   "pcie_speed": "${PCIE_SPEED}",
   "power_mode": "${POWER_MODE}",
   "alert_threshold": $ALERT,
+  "temp_band": "${TEMP_BAND}",
   "status": "$STATUS"
 }
 EOF

@@ -50,10 +50,31 @@ if   printf '%s\n' "$input" | grep -qE '\bJBOD\b';          then MODE="IT"
 elif printf '%s\n' "$input" | grep -qE '\b(Onln|Optl|RAID)\b'; then MODE="IR"
 else MODE=""; fi
 
-# ── Health rollup: worst of temperature, drive states, and PHY errors ────────
-# 0=ok 1=warn 2=alert
-if   [ "$TEMP" -ge "$ALERT" ];          then RANK=2
-elif [ "$TEMP" -ge $(( ALERT - 10 )) ]; then RANK=1
+# ── Temperature band (absolute, NOT derived from the setting) ────────────────
+# Five fixed bands. ALERT no longer means "the temperature that is bad"; it names
+# the first band at which the badge complains (see the twin copy in
+# parse/hba.sh — keep both copies identical). Cut-points are the card-independent
+# ones the maintainer specified; per-card limits are not worth a config knob.
+#   normal <=65 | elevated 66-75 | warning 76-85 | alert 86-95 | critical >=96
+band_of() {   # $1 = temperature in C -> band name
+    if   [ "$1" -le 65 ]; then echo normal
+    elif [ "$1" -le 75 ]; then echo elevated
+    elif [ "$1" -le 85 ]; then echo warning
+    elif [ "$1" -le 95 ]; then echo alert
+    else echo critical; fi
+}
+band_index() { case "$1" in normal) echo 0;; elevated) echo 1;; warning) echo 2;; alert) echo 3;; *) echo 4;; esac; }
+
+TEMP_BAND=$(band_of "$TEMP")
+# The configured band = whichever band contains the stored ALERT value. Storing a
+# band floor (66/76/86/96) is the normal case; any legacy value (e.g. 80) still
+# lands in a sensible band, so no config migration is needed.
+CFG_BAND=$(band_of "$ALERT")
+
+# Badge rank: below the configured band = ok, at it = warn, above it = alert.
+ti=$(band_index "$TEMP_BAND"); ci=$(band_index "$CFG_BAND")
+if   [ "$ti" -gt "$ci" ]; then RANK=2
+elif [ "$ti" -eq "$ci" ]; then RANK=1
 else RANK=0; fi
 
 # Drive states from the drive-summary table's State column ONLY ($3 of rows like
@@ -66,11 +87,18 @@ elif printf '%s\n' "$DSTATES" | grep -qiE '^(Rbld|Rebuild|Copyback)$'; then
     [ "$RANK" -lt 1 ] && RANK=1
 fi
 
-# Any PHY error counter on this controller is an early warning.
-if [ "${PHYERR:-0}" -gt 0 ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
+# PHY error counters are CUMULATIVE SINCE BOOT and never reset, so ">0" flagged
+# every card that had ever seen a transient — a cable reseat months ago pinned a
+# healthy controller to amber forever (issue #8: 8 errors on one phy out of 21).
+# A failing link produces counts in the thousands to millions, so a floor
+# separates the two cases cheaply.
+# ponytail: static floor. The honest signal is the RATE of change, which needs
+# per-read history we don't keep; add that if a real fault ever slips under 100.
+PHYERR_FLOOR=100
+if [ "${PHYERR:-0}" -ge "$PHYERR_FLOOR" ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
 
 case "$RANK" in 2) STATUS="alert" ;; 1) STATUS="warn" ;; *) STATUS="ok" ;; esac
 
 cat <<EOF
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"temp_band":"$TEMP_BAND","status":"$STATUS"}
 EOF
