@@ -23,7 +23,7 @@ commands are inlined in the plan file itself.
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`); **verified on hardware 2026-07-27** |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **REJECTED** (reverted at `584ec3a`) — the original finding was wrong. Unraid's auto-prepended `local_prepend.php` already `hash_equals`-checks every POST against `var.ini`, then `unset()`s the field — which is exactly why our check saw `null` and denied every save. Do not re-attempt |
-| 010 | Stop misdiagnosing SAS2 cards that sit on the mpt3sas driver | **P1** | S | — | BLOCKED — plan revised 2026-07-28 (detection now keys off `proc_name`). Waiting on issue #3's reporter: can bundled lsiutil read through the merged driver? Maintainer has no SAS2 card to answer it |
+| 010 | Detect controller generation from `proc_name`, not from which driver module is loaded | **P1** | S | — | **MERGED to `dev` (`e022ebf`, from `d304291`) but BLOCKED again** — code is in, suite green, both new goldens mutation-verified. Blocked on the one thing no test here can supply: issue #3's reporter confirming on real SAS2 hardware with storcli uninstalled. **Do not release or close #3 until that lands.** Patch-in-place instructions posted to the issue; branch `advisor/010-mpt3sas-sas2-diagnosis` kept for them to pull from |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
 | 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
@@ -176,9 +176,11 @@ a workstation without `php` or Docker.
   depends on the other's behaviour.
 - **001–005, 008 and 010 are fully independent** of each other and of everything
   else. They can be done in any order, or in parallel by different executors.
-- **010 is gated on evidence, not on another plan.** It deliberately stops short
-  of building a `sysfs` backend; its own "The decision this plan feeds" section
-  explains what to measure first and what would justify writing 011.
+- **010 is no longer gated.** The evidence it was waiting on arrived on
+  2026-07-28 and is quoted in the plan's "READ FIRST": bundled lsiutil *can* read
+  a SAS2 card through the merged `mpt3sas` driver, so the plugin's refusal is the
+  bug and the `sysfs` backend it deferred is cancelled outright. Its "History"
+  section records both earlier revisions and where they went wrong.
 
 ## Execution log
 
@@ -250,7 +252,65 @@ Issue #2 is closed. **Issue #3 was reopened deliberately**: its firmware half
 shipped, but the `mpt3sas`-only case remains, and the reporter has been asked
 for the driver diagnostic that decides how common it is. Note that the
 `Fixes #3` trailer in `eb7ccce` auto-closed it on push — reopening was manual.
-Plan 010 covers the remainder and is BLOCKED on that answer.
+Plan 010 covers the remainder.
+
+**Issue #3 evidence completed, 2026-07-28/29.** The reporter posted both
+diagnostics. The `mpt3sas`-only case is the **common** configuration, not the rare
+one, and running the bundled binary directly (`hbaviewer.x86_64 -p1 -a 25,2,0,0`)
+returned `IOCTemperature: 0x002F` on their `SAS2308` — so lsiutil reads a SAS2
+card through the merged driver, and `ov_lsiutil`'s guard has been refusing
+hardware it could have read. Plan 010 revised to v3 and unblocked: the fix is the
+guard's *condition*, keyed off `proc_name`. The `sysfs`-backend follow-up that
+v1/v2 deferred is **cancelled** — there is nothing to work around. A latent
+`IOCTemperature` units bug surfaced by the same output is logged under 010's
+"Follow-ups this plan does not do", deliberately not folded in.
+
+**010 — executed, reviewed, merged, then re-blocked, 2026-07-29.** Executor branch
+`advisor/010-mpt3sas-sas2-diagnosis`, two commits (`b97be61` implementation,
+`d304291` test fix after review), merged to `dev` as `e022ebf`. Suite re-run green
+on `dev` after the merge.
+
+**Merged but still BLOCKED, deliberately.** The review recommended holding the
+merge until hardware confirmation; the maintainer chose to merge and keep the plan
+blocked instead. Both roads lead to the same gate — the change is only *provably*
+correct once issue #3's reporter runs it on a real SAS2 card with storcli
+uninstalled — but merging first means the blocker now guards the **release**, not
+the branch. So: `dev` carries the fix, and nothing ships and #3 stays open until
+that data arrives. If it comes back wrong, the revert target is `e022ebf`.
+
+The branch is intentionally left un-deleted: the issue comment points the reporter
+at its raw file URLs for the patch-in-place test.
+
+Verified independently in the worktree rather than from the executor's report:
+scope is exactly the five in-scope files with no golden re-blessed; every done
+criterion re-run; `bash tests/run.sh` green; `settings.php` and all other PHP lint
+clean via the `php:8.2-cli` fallback; the Step 6 detection logic reproduces both
+expected outputs exactly.
+
+Two things worth keeping on the record, both about *tests*, not the fix:
+
+- **The first round's `route-sas2-personality` golden was vacuous** and had to be
+  revised. `find_storcli()` echoes any non-empty `$STORCLI` verbatim without
+  checking that it exists, so the `STORCLI=/nonexistent` idiom copied from
+  `route-fallback` made the guard's first clause false, short-circuiting the
+  personality predicate entirely. The case passed because storcli "existed", and
+  would have passed with `hba_has_sas2` deleted. Fixed to `STORCLI=` (empty), the
+  only way to express "no storcli" to that helper. Both cases are now
+  **mutation-verified in isolation**: breaking the predicate to
+  `hba_has_sas3 || hba_has_sas2` fails `route-sas2-personality` alone, and
+  neutering the guard fails `route-sas3-no-storcli` alone. Plan Step 3 updated so
+  a re-run does not rediscover this.
+- **A done criterion in the plan was unsatisfiable** (`grep -c '/sys/module' →
+  0`): the plan's own replacement comments mention the string twice. The executor
+  flagged it instead of gaming it or silently declaring it passed, which is the
+  behaviour worth rewarding. Criterion corrected to count non-comment lines.
+
+The lesson for future plans in this repo: **a golden that reuses another case's
+env-var idiom inherits that case's short-circuit behaviour.** `route-fallback`
+routes through `use_storcli` (which runs the binary and fails), so a bogus path is
+correct there; `ov_lsiutil`'s guard tests `find_storcli` emptiness, so a bogus path
+is silently wrong. Same-looking line, opposite meaning. Mutation-test any new
+golden that guards a boolean.
 
 ## Where the risk is
 
