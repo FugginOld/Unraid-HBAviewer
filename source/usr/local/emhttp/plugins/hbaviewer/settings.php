@@ -155,11 +155,23 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 
       <div class="lu-s-row">
         <div class="lu-s-label">
-          Alert Threshold (°C)
-          <small>The Overview badge and dashboard tile turn red at or above this temperature, and amber within 10 °C of it. HBAviewer does not send notifications.</small>
+          Badge Sensitivity
+          <small>Temperature colours are fixed (Normal &le;65, Elevated 66&ndash;75, Warning 76&ndash;85, Alert 86&ndash;95, Critical &gt;95 &deg;C). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem. HBAviewer does not send notifications.</small>
         </div>
         <div class="lu-s-control">
-          <input type="number" name="threshold" value="<?= (int)$cfg['ALERT_THRESHOLD'] ?>" min="1" max="150">
+          <select name="threshold">
+<?php
+$bands = [66 => 'Elevated (66 °C and above)', 76 => 'Warning (76 °C and above)',
+          86 => 'Alert (86 °C and above)',    96 => 'Critical (above 95 °C)'];
+// Select the band containing the stored value, so a legacy 80 shows "Warning".
+$curr = (int) $cfg['ALERT_THRESHOLD'];
+$sel  = 96; foreach (array_keys($bands) as $floor) { if ($curr < $floor) { break; } $sel = $floor; }
+if ($curr < 66) $sel = 66;
+foreach ($bands as $floor => $label) {
+    printf('<option value="%d"%s>%s</option>', $floor, $floor === $sel ? ' selected' : '', htmlspecialchars($label));
+}
+?>
+          </select>
         </div>
       </div>
     </div>

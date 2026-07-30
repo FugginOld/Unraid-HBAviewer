@@ -9,7 +9,11 @@ const LSI_CFG = '/boot/config/plugins/hbaviewer/hbaviewer.cfg';
 // key => [default, min, max]   (SHOW_* are booleans expressed as 0/1)
 const LSI_SCHEMA = [
     'HBA_PORT'        => [1,  1, 8],
-    'ALERT_THRESHOLD' => [80, 1, 150],
+    // Not a temperature any more: the FIRST BAND at which the badge complains,
+    // stored as that band's floor (66 elevated / 76 warning / 86 alert / 96
+    // critical). Kept as an int with the old key and clamp so existing configs
+    // need no migration — any legacy value maps to whichever band contains it.
+    'ALERT_THRESHOLD' => [76, 1, 150],
     'SHOW_PCIE'       => [1,  0, 1],
     'SHOW_PHY'        => [1,  0, 1],
     'SHOW_DRIVES'     => [1,  0, 1],
