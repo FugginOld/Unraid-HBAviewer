@@ -95,7 +95,7 @@ if ($enableFlash) {
 .lu-badge {
     display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
     padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
-    color: var(--tc, var(--good)); background: color-mix(in srgb, var(--tc, var(--good)) 15%, transparent);
+    color: var(--sc, var(--good)); background: color-mix(in srgb, var(--sc, var(--good)) 15%, transparent);
     transition: color 0.4s, background 0.4s;
 }
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
