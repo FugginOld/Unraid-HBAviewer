@@ -6,11 +6,28 @@ require_once __DIR__ . '/config.php';
 $cfg   = lsi_config_read();
 $saved = false;
 
-// Backend detection — driver via sysfs + storcli path lookup. Both are instant
-// (no hardware enumeration), so the page never lags. SAS2 (6 Gb) cards use the
-// mpt2sas driver + bundled lsiutil; SAS3/3.5 use mpt3sas + system storcli.
-$has_sas2 = is_dir('/sys/module/mpt2sas');
-$has_sas3 = is_dir('/sys/module/mpt3sas');
+// Backend detection — controller generation via sysfs + storcli path lookup. Both
+// are instant (no hardware enumeration), so the page never lags.
+//
+// Generation comes from each SCSI host's proc_name, NOT from which driver module
+// is loaded, and this must stay in step with scripts/lib.sh hba_has_sas2/3. The
+// merged mpt3sas driver registers SAS2 controllers under the mpt2sas personality,
+// so issue #3's box has no mpt2sas module while its SAS9207-8i reports
+// proc_name=mpt2sas. Keying off /sys/module called that card a SAS3 controller,
+// demanded storcli for it, and hid the lsiutil Port row it actually needs.
+$hw = [];          // one entry per SAS host, for the read-only diagnostic row
+$has_sas2 = false; // any host on the mpt2sas/mptsas personality -> bundled lsiutil
+$has_sas3 = false; // any host on the mpt3sas personality        -> needs storcli
+foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
+    $drv = trim((string) @file_get_contents($h . 'proc_name'));
+    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas'], true)) continue;
+    if ($drv === 'mpt3sas') { $has_sas3 = true; } else { $has_sas2 = true; }
+    $board = trim((string) @file_get_contents($h . 'board_name'));
+    $fw    = trim((string) @file_get_contents($h . 'version_fw'));
+    $hw[]  = ($board !== '' ? $board : 'unknown board') . " ($drv"
+           . ($fw !== '' ? ", fw $fw" : '') . ')';
+}
+$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas hosts found';
 $storcli  = '';
 foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
     if (is_executable($c)) { $storcli = $c; break; }
@@ -19,29 +36,22 @@ if ($storcli === '') {
     $w = trim((string) shell_exec('command -v storcli storcli64 2>/dev/null'));
     if ($w !== '') $storcli = strtok($w, "\n");
 }
-// Mirror what scripts/lib.sh hba_each ACTUALLY does at read time: try storcli
-// first, otherwise fall back to the bundled lsiutil. Driver modules are not
-// evidence of controller generation — a modern kernel loads mpt3sas for SAS2
-// hardware, and a box can have both modules loaded at once. Keying the warning
-// off "mpt3sas is present" told SAS2-only owners to install storcli they do not
-// need, and disagreed with get_hba_info.sh, which only refuses when mpt3sas is
-// loaded and mpt2sas is not.
 if ($storcli !== '') {
     $backend_label = 'storcli';
     $backend_note  = $has_sas2
         ? 'storcli is installed and is tried first; the bundled lsiutil covers any SAS2 card it does not enumerate.'
-        : 'SAS3 / SAS3.5 controller detected (mpt3sas driver).';
+        : 'SAS3 / SAS3.5 controller detected.';
 } elseif ($has_sas2) {
     $backend_label = 'lsiutil (bundled)';
     $backend_note  = $has_sas3
-        ? 'SAS2 controller detected (mpt2sas driver). mpt3sas is also loaded, but nothing here needs storcli unless a card fails to read.'
-        : 'SAS2 controller detected (mpt2sas driver).';
+        ? 'SAS2 controller detected. A SAS3 controller is also present and needs storcli.'
+        : 'SAS2 controller detected.';
 } elseif ($has_sas3) {
     $backend_label = 'storcli — NOT INSTALLED';
-    $backend_note  = 'SAS3 / SAS3.5 controller detected (mpt3sas only), but storcli is missing. Install it via the dkaser/unraid-storcli plugin (Community Applications).';
+    $backend_note  = 'A controller was found on the mpt3sas driver, which the bundled lsiutil cannot read through. Install storcli via the dkaser/unraid-storcli plugin (Community Applications).';
 } else {
     $backend_label = 'none detected';
-    $backend_note  = 'No supported HBA driver (mpt2sas / mpt3sas) is loaded.';
+    $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas) was found.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
@@ -118,6 +128,16 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         <div class="lu-s-control" style="padding-top:8px">
           <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
           <small style="display:block;color:var(--text);margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
+        </div>
+      </div>
+
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Detected Hardware
+          <small>Read-only. Quote this when reporting an issue.</small>
+        </div>
+        <div class="lu-s-control" style="padding-top:8px">
+          <span style="font-family:var(--mono);font-size:12px"><?= htmlspecialchars($hw_detail) ?></span>
         </div>
       </div>
 

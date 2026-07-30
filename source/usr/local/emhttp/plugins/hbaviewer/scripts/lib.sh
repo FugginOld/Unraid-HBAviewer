@@ -83,6 +83,28 @@ hba_driver() {
     fi
 }
 
+# Which mpt personality claimed each controller — one line per SAS host, empty if
+# there is no LSI HBA. This, NOT /sys/module/*, is the honest SAS2-vs-SAS3 signal:
+# the merged mpt3sas driver registers SAS2 cards under the mpt2sas personality, so
+# issue #3's SAS9207-8i has no mpt2sas module at all yet reports proc_name=mpt2sas.
+# SYS_SCSI_HOST is overridable so the suite can point it at a fixture tree.
+hba_personalities() {
+    local h p
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        p=$(cat "${h}proc_name" 2>/dev/null)
+        case "$p" in mpt3sas|mpt2sas|mptsas) echo "$p" ;; esac
+    done
+}
+
+# True iff any controller is on the mpt2sas/mptsas personality — i.e. the bundled
+# lsiutil 1.70 has a card it can reach. Verified on issue #3's mpt3sas-only box:
+# /dev/mptctl exists there and lsiutil read the IOC temperature fine.
+hba_has_sas2() { case "$(hba_personalities)" in *mpt2sas*|*mptsas*) return 0 ;; esac; return 1; }
+
+# True iff any controller is on the mpt3sas personality — genuine SAS3/3.5, needs
+# storcli. Both can be true on a box with one card of each generation.
+hba_has_sas3() { case "$(hba_personalities)" in *mpt3sas*) return 0 ;; esac; return 1; }
+
 # The backend seam. Chooses storcli-vs-lsiutil ONCE, owns controller
 # enumeration and the {"backend","driver","controllers":[...]} wrapper, so a
 # composer only declares *what to run per controller*.
