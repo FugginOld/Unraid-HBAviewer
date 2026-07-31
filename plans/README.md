@@ -23,13 +23,17 @@ commands are inlined in the plan file itself.
 | 007 | Escape every hardware-sourced value in the AJAX renderers | P2 | S | 006 | DONE — merged to `dev` (`30443e6`); **verified on hardware 2026-07-27** |
 | 008 | Parse lsblk output by key, not by column position | P3 | S | — | DONE — merged to `dev` (`a6caee5`); **verified on hardware 2026-07-27** |
 | 009 | Verify Unraid's CSRF token server-side instead of assuming the platform did | P3 | S | 005 (DONE) | **REJECTED** (reverted at `584ec3a`) — the original finding was wrong. Unraid's auto-prepended `local_prepend.php` already `hash_equals`-checks every POST against `var.ini`, then `unset()`s the field — which is exactly why our check saw `null` and denied every save. Do not re-attempt |
-| 010 | Detect controller generation from `proc_name`, not from which driver module is loaded | **P1** | S | — | **MERGED to `dev` (`e022ebf`, from `d304291`) but BLOCKED again** — code is in, suite green, both new goldens mutation-verified. Blocked on the one thing no test here can supply: issue #3's reporter confirming on real SAS2 hardware with storcli uninstalled. **Do not release or close #3 until that lands.** Patch-in-place instructions posted to the issue; branch `advisor/010-mpt3sas-sas2-diagnosis` kept for them to pull from |
+| 010 | Detect controller generation from `proc_name`, not from which driver module is loaded | **P1** | S | — | DONE — merged to `dev` (`e022ebf`, from `d304291`); **verified on real SAS2 hardware 2026-07-30**. Issue #3's reporter ran the patched files with storcli uninstalled: the Overview read the card (`backend:lsiutil`, `SAS9207-8i`, 52 °C, `status:ok`) where it previously refused. **Unblocked — releasable.** Close #3 on release |
 | 011 | Stop the event log rendering entries from a different backend | P3 | S | 006 (DONE) | DONE — merged to `dev` (`f47940f`, from `dd6b318`) |
 | 012 | Dashboard tile: status pill, footer, collapse, Plugins-page icon | P2 | M | none | DONE — merged to `dev` (`761b18f`, from `2479733`); pill + collapse verified on hardware |
 | 013 | One tile per HBA, and real PCIe link data on storcli cards | P2 | M | 012 (DONE) | DONE — merged to `dev` (`3e1b97f`, from `9b40d07`); awaiting hardware verification |
 | 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | DONE — merged to `dev` (`76d8666`, from `93776c7`); awaiting hardware verification |
 | 015 | Show the temperature pill only while the tile is collapsed | P3 | S | 014 (DONE) | DONE — merged to `dev` (`8249575`, from `0f8527e`); awaiting hardware verification |
 | 016 | "Last read" into the meta list, badge centred under the gauge with a glow | P3 | S | 015 (DONE) | DONE — merged to `dev` (`bf7886a`, from `5defd05`); awaiting hardware verification |
+| 017 | Enumerate storcli drives on controllers that report no enclosure | **P1** | M | — | NOT WRITTEN — root cause **confirmed on three boxes** (issue #6 SAS3416, issue #5 SAS3224 ×2): blank `EID` ⇒ `/cN/eall/sall` finds nothing. Independent of IT-vs-IR firmware — one reporter is IT (`JBOD`), another IR (`UGood`), same symptom. Four breakages now: the query, the `Drive /cN/sN` header regex, the `^EID:Slt` state scrape, and IT/IR mode detection (`UGood` matches neither branch ⇒ blank mode). Verified fix for the scrape: widen to `^[ \t]*[0-9]*:[0-9]+[ \t]`, which leaves `$3` as the state. **Still waiting on one `/c0/sall show all` paste** for the parser and its fixture |
+| 018 | Five fixed temperature bands, and stop the rollup colouring the thermometer | P2 | M | — | DONE — merged to `dev` (`5941c97`, from `0ba3677`); **verified on hardware 2026-07-30**: c0 at 72 °C with 8 PHY errors now reads `elevated`/`ok` (was amber at any temperature), c1 at 78 °C reads `warning`/`warn`. Fixes issue #8 |
+| 019 | Overview and dashboard-tile layout — band under the gauge, health pill up top, system time format | P3 | M | 018 (DONE) | DONE (reviewed, **not merged**) — branch `advisor/019-overview-and-tile-layout`, `0dfacb9`. Suite green, lints clean, all 19 re-blessed goldens proven to differ by `cfg_band` alone. **Three defects found only by testing on hardware** and fixed in `fd2e5e7`/`0dfacb9` — see the note below. Second hardware pass outstanding |
+| 020 | HBA Health tab — five sub-indicators with worst-of rollup | — | L | 019 | NOT WRITTEN — spec supplied by the maintainer (see "Plan 020 notes" below). Needs a persistence layer this plugin does not have; scope questions still open |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
@@ -281,6 +285,64 @@ that data arrives. If it comes back wrong, the revert target is `e022ebf`.
 The branch is intentionally left un-deleted: the issue comment points the reporter
 at its raw file URLs for the patch-in-place test.
 
+**010 — VERIFIED ON HARDWARE, 2026-07-30.** Issue #3's reporter patched the three
+files in place with **storcli uninstalled** — the configuration that previously
+errored — and the Overview read the card:
+
+```json
+{"backend":"lsiutil","driver":"mpt3sas 54.100.00.00","controllers":[{
+  "temp": 52, "model": "SAS2308", "firmware": "20.00.07.00",
+  "board_name": "SAS9207-8i", "pcie_width": "x4", "pcie_speed": "Gen2 (5.0 GT/s)",
+  "status": "ok" }]}
+```
+
+with `proc_name=mpt2sas` on a box whose only loaded module is `mpt3sas`. Every
+prediction in the plan held, including two the plan argued for explicitly:
+
+- The guard no longer fires, `require_binary` is reached, and bundled lsiutil
+  reads a SAS2 card through the merged driver — the premise the first two
+  revisions never tested.
+- `driver` reports `mpt3sas 54.100.00.00`, which is why `hba_driver()` was left
+  alone. It names the loaded module, and that is the truth; only *inferring
+  generation from it* was ever wrong.
+
+010 is unblocked and releasable. Close #3 when the release ships — by hand, since
+the `Fixes #3` trailer already auto-closed it once.
+
+**018 — executed and reviewed, 2026-07-30.** Executor branch
+`advisor/018-temperature-bands`, three commits (`d25928b` parsers + goldens,
+`1f0a63a` PHP/UI, `0ba3677` a reviewer-granted scope amendment). Suite green,
+both lints clean, 10 new goldens.
+
+Verified independently rather than from the executor's report: scope, every done
+criterion, `band_of`/`band_index` byte-identical across the two parsers, and a
+**mutation test on the new goldens** — shifting the 65/66 cut-point fails only
+`band-66`, and reverting the PHY floor to `>0` fails only `phy-under-floor`. They
+fail surgically at the boundary being broken, which is what makes them a real
+regression net for issue #8.
+
+**Two defects in the plan, both caught by the executor, neither by me:**
+
+- **The scope list was wrong.** It named `ajax_info.php` (the Monitor page's
+  markup) but not `hbaviewer.php` (its CSS). `.lu-badge` reads `var(--tc)`, which
+  *was* the status colour and becomes the temperature colour under this plan — so
+  the change as scoped would have inverted the Monitor badge, showing heat where
+  rollup belongs. The executor stopped at the scope boundary and flagged it
+  instead of fixing it silently; the amendment was granted and is `0ba3677`.
+- **A verification command was wrong.** `grep -c` counts matching *lines*, and
+  both CSS variables sit on one line, so it reports `1` and reads as a failure.
+  The executor spotted the discrepancy, checked the real intent with `grep -o | wc -l`,
+  and said so plainly rather than reporting a pass it couldn't support.
+
+The lesson for future plans here: **the two pages keep their CSS in different
+files.** The dashboard tile styles inline in `dashboard.php`; the Monitor page
+styles in `hbaviewer.php` while its markup is built in `ajax_info.php`. Any change
+to what a CSS variable *means* has to be greped across all three.
+
+Not merged. The bands and the PHY floor are fixture-proven, but nothing here can
+show that the thermometer and the badge read correctly as two colours on a real
+tile — that wants eyes on hardware before release.
+
 Verified independently in the worktree rather than from the executor's report:
 scope is exactly the five in-scope files with no golden re-blessed; every done
 criterion re-run; `bash tests/run.sh` green; `settings.php` and all other PHP lint
@@ -311,6 +373,57 @@ routes through `use_storcli` (which runs the binary and fails), so a bogus path 
 correct there; `ov_lsiutil`'s guard tests `find_storcli` emptiness, so a bogus path
 is silently wrong. Same-looking line, opposite meaning. Mutation-test any new
 golden that guards a boolean.
+
+## Plan 020 notes — HBA Health indicator spec, as received
+
+The maintainer supplied a design spec ("HBA health indicator — design spec") on
+2026-07-30. Recorded here so 020 can be written against it without re-deriving.
+
+**It targets a different codebase.** The spec is a handoff for *FugginNAS* —
+FastAPI backend, SvelteKit frontend, existing **SQLite PHY telemetry**, and a
+polling collector. HBAviewer is bash + PHP on Unraid with **no database, no
+scheduler, and no persistence beyond a 60-second `/tmp` cache**. The state model,
+thresholds and UI translate directly; the storage and polling assumptions do not,
+and that gap is the bulk of the work.
+
+**Already resolved by 018 — do not re-do:**
+
+- **IOC die temp bands.** The spec gives ok ≤65 / watch 66–75 / warning 76–85 /
+  critical >85. Shipped 018 splits that tail: `normal` ≤65, `elevated` 66–75,
+  `warning` 76–85, `alert` 86–95, `critical` >95. The five-band version is the
+  maintainer's own refinement and wins.
+- **"Absolute PHY counters are meaningless."** Agreed and already acted on — 018
+  replaced the `>0` rule with `PHYERR_FLOOR=100`, whose `ponytail:` comment names
+  rate-of-change as the honest signal and this work as the upgrade path.
+
+**Genuinely new, in the spec's own build order:**
+
+1. **Collection timestamps + an `unknown` state.** Highest value, smallest change:
+   a collector that times out or a card that is pulled must go **grey, not stay
+   green**. Nothing in the plugin does this today.
+2. **Rate deltas with uptime-decrease baseline reset** — without the reset, the
+   first post-reboot delta is hugely negative.
+3. **Five sub-indicators** (`thermal`, `link_integrity`, `topology`, `host_link`,
+   `controller`) with a **worst-of** rollup, never an average, and a reason string
+   naming the worst indicator and the offending PHY index.
+4. **Flap suppression** — 2–3 poll dwell, 3–5 °C deadband, upgrade fast / downgrade
+   lazily.
+5. **UI** — a horizontal segmented band meter for thermal only, four discrete rows
+   for the rest.
+
+**Open questions blocking 020:**
+
+- **Where does history live?** No SQLite here. `/tmp` is RAM (trend dies at
+  reboot, zero flash wear); `/boot` is the flash drive (survives, but Unraid users
+  watch write cycles).
+- **What drives the cadence?** Rates need regular samples, but the plugin only
+  reads on page load behind a 60-second cache. A rate computed from irregular
+  samples is not a rate.
+- **Inlet temperature has no source.** The plugin reads no motherboard or IPMI
+  sensor, so `Δ over inlet` — which the spec calls the earliest airflow signal —
+  cannot be computed today.
+- **`devices present vs baseline`** needs a persisted baseline, i.e. the same
+  storage decision as the rates.
 
 ## Where the risk is
 

@@ -11,3 +11,7 @@ releases/
 # Raw storcli captures from the box — contain real drive serials, SAS addresses,
 # WWNs. Sanitized fixtures live under tests/fixtures/storcli/ instead.
 /storcli/
+
+# Claude Code local state: agent worktrees (git worktrees, not repo content)
+# and machine-local settings. Never committed.
+.claude/
