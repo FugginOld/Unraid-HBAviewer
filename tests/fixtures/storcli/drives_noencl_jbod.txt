@@ -1,0 +1,42 @@
+Drive /c0/s0 :
+============
+
+----------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model                Sp 
+----------------------------------------------------------------------------
+ :0       1 JBOD  -  23.647 TB SATA HDD -   -  512B ST26000NM000C-3WE103 -  
+----------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s0 - Detailed Information :
+===================================
+
+Drive /c0/s0 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+
+Drive /c0/s0 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST26000NM000C-3WE103
+NAND Vendor = NA
+SN =             XXXXXXXX
+WWN = XXXXXXXXXXXXXXXXX
+Firmware Revision = SN02    
+Raw size = 23.647 TB [0xbd2dfffff Sectors]
+Device Speed = 6.0Gb/s
+Link Speed = 12.0Gb/s
+Sector Size = 512B
+Connector Name = C0   & C1   x8
+
+Drive /c0/s0 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 8(path0) 
+Sequence Number = 0

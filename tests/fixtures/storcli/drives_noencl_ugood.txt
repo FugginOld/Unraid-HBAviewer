@@ -1,0 +1,42 @@
+Drive /c0/s0 :
+============
+
+-------------------------------------------------------------------------
+EID:Slt DID State DG     Size Intf Med SED PI SeSz Model              Sp 
+-------------------------------------------------------------------------
+ :0       0 UGood -  3.638 TB SATA HDD -   N  512B ST4000VN008-2DR166 -  
+-------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s0 - Detailed Information :
+===================================
+
+Drive /c0/s0 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+
+Drive /c0/s0 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST4000VN008-2DR166
+NAND Vendor = NA
+SN =             XXXXXXXXX
+WWN = XXXXXXXXXXXXX
+Firmware Revision = SC60    
+Raw size = 3.638 TB [0x1d1c0beaf Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+Sector Size = 512B
+Connector Name = N/A
+
+Drive /c0/s0 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 0 
+Sequence Number = 0
