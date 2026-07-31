@@ -82,6 +82,38 @@ check('controller unknown when stale', $indStale['controller']['state'] === 'unk
 $indFailed = health_indicators([sample(1000, 100, 0, 0, 0, 0, ['read_ok' => false])], [], 1000);
 check('controller unknown on read_ok=false', $indFailed['controller']['state'] === 'unknown');
 
+// ── topology: drive count vs the ring's own baseline ONLY. The per-PHY
+//    downtrain check that used to live here was removed — real hardware (a
+//    9400-16i and a 9400-8i) showed every LSI card carries a virtual SES PHY
+//    that negotiates 3.0 Gbit permanently, one index past the last data port,
+//    which made that rule warn forever. These three cases are what shipped
+//    broken; the third is the regression test for the bug itself.
+$indTopoOk = health_indicators([sample(1000, 100, 0)], [], 1000);
+check('topology ok when drives match baseline', $indTopoOk['topology']['state'] === 'ok');
+check('topology value is the drive count',       $indTopoOk['topology']['value'] === '16 drives');
+
+$ringMissing = [
+    sample(1000, 100, 0, 0, 0, 0, ['drives' => 16]),
+    sample(2000, 200, 0, 0, 0, 0, ['drives' => 8]),
+];
+$indTopoMissing = health_indicators($ringMissing, [], 2000);
+check('topology critical when a drive is missing', $indTopoMissing['topology']['state'] === 'critical');
+check('topology reason names both counts',
+    str_contains($indTopoMissing['topology']['reason'], '8') && str_contains($indTopoMissing['topology']['reason'], '16'));
+
+// Regression: a virtual SES PHY negotiating at 3.0 Gbit alongside 12.0 Gbit
+// data PHYs must NOT flag topology. This must fail if the downshift rule is
+// ever re-added without attached-device-type correlation.
+$ringVirtualSes = [sample(1000, 100, 0, 0, 0, 0, [
+    'drives' => 16,
+    'phys' => [
+        ['idx' => 0,  'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit'],
+        ['idx' => 16, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '3.0_Gbit'],
+    ],
+])];
+$indTopoSes = health_indicators($ringVirtualSes, [], 1000);
+check('topology ignores a slow virtual-SES PHY', $indTopoSes['topology']['state'] === 'ok');
+
 // ── 8. Worst-of rollup: four ok, one critical -> critical, reason is its own ─
 $indicators8 = [
     'a' => ['state' => 'ok', 'reason' => 'a-ok'],

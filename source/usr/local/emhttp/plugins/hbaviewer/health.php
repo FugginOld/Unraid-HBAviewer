@@ -169,31 +169,20 @@ function health_indicators(array $ring, array $rates, int $now): array {
         $link_integrity = ['state' => $worstState, 'reason' => $worstReason, 'value' => $worstValue];
     }
 
-    // ── topology: drive count vs the ring's own baseline, PHY negotiated rate ──
+    // ── topology: drive count vs the ring's own baseline ───────────────────────
+    /* ponytail: drive count only. Per-PHY downshift detection was removed after real
+       hardware showed every LSI card carries a virtual SES PHY negotiating at
+       3.0 Gbit one index past its last data port — indistinguishable by rate from a
+       genuinely downtrained SATA link, so the check produced a permanent false
+       warning. Re-adding it needs attached-device-type correlation (is there a block
+       device behind this PHY?), not a rate comparison. Per-PHY rates are already
+       visible on the PHY Health tab. */
     $drivesSeen     = array_column($ring, 'drives');
     $baselineDrives = $drivesSeen ? max($drivesSeen) : 0;
     $curDrives      = $newest['drives'] ?? 0;
-    $rateByIdx = [];
-    foreach ($newest['phys'] ?? [] as $p) {
-        $n = health_rate_number((string) ($p['rate'] ?? ''));
-        if ($n !== null) $rateByIdx[$p['idx']] = $n;
-    }
-    if ($curDrives < $baselineDrives) {
-        $topology = [
-            'state'  => 'critical',
-            'reason' => "Drive missing ({$curDrives} of {$baselineDrives})",
-            'value'  => "{$curDrives}/{$baselineDrives}",
-        ];
-    } elseif ($rateByIdx) {
-        $fastest = max($rateByIdx);
-        $slowIdx = null;
-        foreach ($rateByIdx as $idx => $n) { if ($n < $fastest) { $slowIdx = $idx; break; } }
-        $topology = $slowIdx !== null
-            ? ['state' => 'warning', 'reason' => "PHY {$slowIdx} downtrained below the fastest observed link", 'value' => "PHY {$slowIdx} slow"]
-            : ['state' => 'ok', 'reason' => 'All PHYs at the fastest observed link rate', 'value' => "{$curDrives} drives"];
-    } else {
-        $topology = ['state' => 'ok', 'reason' => 'OK', 'value' => "{$curDrives} drives"];
-    }
+    $topology = $curDrives < $baselineDrives
+        ? ['state' => 'critical', 'reason' => "Drive missing ({$curDrives} of {$baselineDrives})", 'value' => "{$curDrives}/{$baselineDrives}"]
+        : ['state' => 'ok', 'reason' => 'All drives present', 'value' => "{$curDrives} drives"];
 
     // ── host_link: current PCIe width/speed vs this slot's capability ──────────
     $link = $newest['link'] ?? [];

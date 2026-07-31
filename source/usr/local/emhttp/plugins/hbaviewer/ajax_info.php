@@ -521,7 +521,10 @@ function renderHealthTables(array $data): string {
 
         // Only thermal earns a gauge: it is the one continuous metric with
         // meaningful bands. Scaled 0-110C with segment boundaries at the
-        // plan-018 band cut-points (65/75/85/95).
+        // plan-018 band cut-points (65/75/85/95): each label's inline `left`
+        // below is that boundary's true percentage of 110 — NOT evenly spaced
+        // — and must stay in step with the .lu-band-seg flex weights in
+        // hbaviewer.php; both encode the same band edges, just in different files.
         $temp = $ctl['temp'] ?? null;
         if ($temp !== null && $temp !== '') {
             $pct = max(0, min(100, ((float) $temp / 110) * 100));
@@ -529,7 +532,10 @@ function renderHealthTables(array $data): string {
                   . '<span class="lu-band-seg s0"></span><span class="lu-band-seg s1"></span>'
                   . '<span class="lu-band-seg s2"></span><span class="lu-band-seg s3"></span><span class="lu-band-seg s4"></span>'
                   . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars((string) $temp) . '&deg;C"></span>'
-                  . '</div><div class="lu-band-labels"><span>0</span><span>65</span><span>75</span><span>85</span><span>95</span><span>110</span></div></div>';
+                  . '</div><div class="lu-band-labels">'
+                  . '<span style="left:0%">0</span><span style="left:59.09%">65</span>'
+                  . '<span style="left:68.18%">75</span><span style="left:77.27%">85</span>'
+                  . '<span style="left:86.36%">95</span><span style="left:100%">110</span></div></div>';
         }
 
         $out .= '<div class="lu-indicator-rows">';

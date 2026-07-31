@@ -205,7 +205,15 @@ if ($enableFlash) {
     position: absolute; top: -3px; width: 2px; height: 16px; background: #fff;
     box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translateX(-1px);
 }
-.lu-band-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+/* Labels sit at their TRUE percentage of the 0-110 scale (set inline per-span
+   by the renderer), not spread evenly — six evenly-spaced labels over
+   unevenly-sized segments put "85" under the 65 boundary. These percentages
+   must stay in step with the `flex` weights on .lu-band-seg above; both
+   encode the same band edges (65/75/85/95), just in different files. */
+.lu-band-labels { position: relative; height: 12px; font-size: 10px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+.lu-band-labels span { position: absolute; transform: translateX(-50%); }
+.lu-band-labels span:first-child { transform: none; }             /* 0 flush left */
+.lu-band-labels span:last-child  { transform: translateX(-100%); } /* 110 flush right */
 .lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
 .lu-indicator-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
 .lu-indicator-row:last-child { border-bottom: none; }
