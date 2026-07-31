@@ -25,6 +25,11 @@ if ($enableFlash) {
 
 <style>
 /* ── Design tokens: original HBAviewer palette in the new component format ── */
+/* fit-content, not a fixed width: the panel hugs whatever the active tab
+   contains, so Overview shrinks to the HBA cards instead of leaving dead space
+   either side. Consequence: the panel's width now differs per tab, since hidden
+   tabs contribute nothing to max-content. max-width caps it on a wide screen and
+   margin:auto re-centres it once shrunk. */
 #lu-wrap {
     --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
     --border:#333333; --border-soft:#2a2a2a;
@@ -33,7 +38,7 @@ if ($enableFlash) {
     --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
-    font-family: inherit; max-width: 1560px; margin: 20px auto;
+    font-family: inherit; width: fit-content; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
         radial-gradient(900px 350px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%),
@@ -77,10 +82,6 @@ if ($enableFlash) {
 
 /* ── Overview + temperature ring ─────────────────────────────────────────── */
 .lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-/* Wider cards: four PCIe fields (Width, Speed, Power Mode, PCI Location) fit on
-   one row at this width and wrapped at the old 640px. flex-basis rises with it so
-   two cards still sit side by side on a wide screen, and flex-wrap keeps the
-   narrow case working. */
 /* Cards size to their own widest row — in practice the PCIe row, since the four
    fields are one unwrapped line — instead of a guessed fixed maximum. fit-content
    resolves to min(max-content, available), so a card takes exactly the width its
