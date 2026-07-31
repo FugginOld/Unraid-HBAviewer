@@ -55,8 +55,8 @@ echo <<<CSS
   display:inline-flex; align-items:center; gap:6px;
   padding:3px 11px; border-radius:20px;
   font-size:10px; font-weight:700; letter-spacing:0.05em;
-  color:var(--tc,#2ecc71); background:color-mix(in srgb, var(--tc,#2ecc71) 16%, transparent);
-  box-shadow:0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent);
+  color:var(--sc,#2ecc71); background:color-mix(in srgb, var(--sc,#2ecc71) 16%, transparent);
+  box-shadow:0 0 8px color-mix(in srgb, var(--sc,#2ecc71) 30%, transparent);
 }
 .lu-d-tile .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 .lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
@@ -132,7 +132,8 @@ foreach ($controllers as $i => $c) {
     }
 
     $v         = lsi_hba_view($c, $port, $i);
-    $col       = $v['color'];
+    $col       = $v['color'];       // rollup status -> badge
+    $tempCol   = $v['temp_stroke']; // temperature band -> gauge/glow/pill
     $temp      = (int)($c['temp'] ?? 0);
     $model     = htmlspecialchars($v['model']);
     $chip      = htmlspecialchars($v['chip']);
@@ -143,6 +144,13 @@ foreach ($controllers as $i => $c) {
     $mode      = htmlspecialchars($v['mode']   ?? '');
     $drives    = htmlspecialchars($v['drives'] ?? '');
 
+    // Critical renders as an inverted chip (white on solid fill) — #922b21 measures
+    // 1.94:1 as plain text on a dark card and is unreadable there.
+    $isCrit    = ($v['temp_band'] ?? '') === 'critical';
+    $tempChip  = $isCrit
+        ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
+        : '<span style="color:' . $v['temp_stroke'] . '">' . htmlspecialchars($v['temp_label']) . '</span>';
+
     // Title stays the plugin name; the subtitle identifies which card this tile is.
     // $portLabel is already "Controller /cN" on storcli cards and
     // "ioc0 (lsiutil -pN)" on lsiutil ones — both are the right thing to show.
@@ -150,7 +158,7 @@ foreach ($controllers as $i => $c) {
     $t['sub'] = $model . ' - ' . $portLabel;
 
     $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
-    $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $col . '">'
+    $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'
                . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;C') . '</span>';
 
     // The footer is built ONCE and emitted twice — at the bottom of the card in
@@ -169,11 +177,11 @@ foreach ($controllers as $i => $c) {
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
         <div class='lu-d-gauge'>
-          <div class='lu-d-circle' style='--tc:{$col};--pct:{$temp}'>
+          <div class='lu-d-circle' style='--tc:{$tempCol};--pct:{$temp}'>
             <span class='v'>{$temp}</span>
             <span class='u'>°C</span>
           </div>
-          <span class='lu-d-badge' style='--tc:{$col}'>{$badge}</span>
+          <span class='lu-d-badge' style='--sc:{$col}'>{$badge}</span>
         </div>
         <div class='lu-d-meta'>
           <p>Model: <span>{$model}</span></p>"
@@ -183,7 +191,8 @@ foreach ($controllers as $i => $c) {
           . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
-          . "<p>Alert Threshold: <span>{$threshold}°C</span></p>
+          . "<p>Temp Band: {$tempChip}</p>
+          <p>Alert Threshold: <span>{$threshold}°C</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>

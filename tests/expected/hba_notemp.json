@@ -10,5 +10,6 @@
   "pcie_speed": "Gen2 (5.0 GT/s)",
   "power_mode": "Full",
   "alert_threshold": 80,
+  "temp_band": "",
   "status": "ok"
 }

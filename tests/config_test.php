@@ -26,7 +26,7 @@ $tmp = sys_get_temp_dir() . '/lsi_cfg_test_' . getmypid() . '.cfg';
 // missing file -> defaults, typed int
 $d = lsi_config_read($tmp);
 check('defaults port',      $d['HBA_PORT'] === 1);
-check('defaults threshold', $d['ALERT_THRESHOLD'] === 80);
+check('defaults threshold', $d['ALERT_THRESHOLD'] === 76);
 check('defaults are int',   is_int($d['SHOW_PCIE']));
 
 // write clamps out-of-range input, read returns clamped values

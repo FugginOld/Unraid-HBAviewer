@@ -226,7 +226,13 @@ function renderOverviewCards(array $data, array $cfg): string {
             continue;
         }
         $v = lsi_hba_view($c, $port, $i);
-        $out .= '<div class="lu-card first" style="--tc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
+        // Critical renders as an inverted chip (white on solid fill) — #922b21
+        // measures 1.94:1 as plain text on a dark card and is unreadable there.
+        $isCrit   = ($v['temp_band'] ?? '') === 'critical';
+        $tempChip = $isCrit
+            ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
+            : '<span style="color:' . $v['temp_stroke'] . '">' . htmlspecialchars($v['temp_label']) . '</span>';
+        $out .= '<div class="lu-card first" style="--tc:' . $v['temp_stroke'] . ';--sc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
               . '<div class="lu-overview-row">'
               . '<div class="lu-circle" id="lu-circle-' . $i . '">'
               . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
@@ -241,6 +247,7 @@ function renderOverviewCards(array $data, array $cfg): string {
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
               . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
               . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
+              . '<p>Temp Band: ' . $tempChip . '</p>'
               . '<p>Alert Threshold: <span>' . $threshold . '&deg;C</span></p>'
               . '<span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span>'
               . '</div></div>';

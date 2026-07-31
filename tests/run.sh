@@ -37,6 +37,17 @@ check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
 check rollup-healthy   rollup_healthy.json   bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_healthy.txt
+
+# Band cut-points are the whole feature of plan 018 — one golden per boundary, so
+# an off-by-one in either direction fails loudly. 76 = "complain from Warning".
+for t in 65 66 75 76 85 86 95 96; do
+    check "band-$t" "band_$t.json" bash -c \
+      "sed 's/^ROC temperature(Degree Celsius).*/ROC temperature(Degree Celsius) $t/' fixtures/storcli/rollup_healthy.txt | bash '$P/storcli_overview.sh' 76 0"
+done
+# PHY floor: 8 errors (the real-world case from issue #8) must NOT warn; 100 must.
+check phy-under-floor phy_under_floor.json bash -c "bash '$P/storcli_overview.sh' 76 8   < fixtures/storcli/rollup_healthy.txt"
+check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh' 76 100 < fixtures/storcli/rollup_healthy.txt"
+
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt

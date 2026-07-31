@@ -12,6 +12,34 @@ function lsi_status_label(string $s): string {
     return match ($s) { 'alert' => 'ALERT', 'warn' => 'WARNING', default => 'NORMAL' };
 }
 
+/* Temperature band -> colour. SEPARATE from lsi_status_color on purpose: the
+   thermometer shows heat, the badge shows the whole-controller rollup (which also
+   reflects drive and PHY problems). Conflating them is what made issue #8 read as
+   a false temperature warning. Hexes are contrast-measured against the plugin's
+   own card surfaces (#232323 / #1c1c1c / #2a2a2a); all clear 3:1.
+   'critical' is a FILL behind white text, not a foreground — #922b21 measures
+   1.94:1 as a stroke on a dark card and is unreadable. Do not "promote" it. */
+function lsi_temp_color(string $band): string {
+    return match ($band) {
+        'critical' => '#922b21',
+        'alert'    => '#e74c3c',
+        'warning'  => '#e67e22',
+        'elevated' => '#f1c40f',
+        default    => '#2ecc71',
+    };
+}
+/* Where a band must be drawn as a stroke or glow rather than a fill, critical
+   needs a lighter red to stay legible (4.93:1 vs 1.94:1). */
+function lsi_temp_stroke(string $band): string {
+    return $band === 'critical' ? '#ff5252' : lsi_temp_color($band);
+}
+function lsi_band_label(string $band): string {
+    return match ($band) {
+        'critical' => 'CRITICAL', 'alert' => 'ALERT', 'warning' => 'WARNING',
+        'elevated' => 'ELEVATED', default => 'NORMAL',
+    };
+}
+
 /* Controllers from a decoded backend payload. Accepts the multi-controller
    contract {"controllers":[...]} and (defensively) a legacy flat single object,
    so consumers can loop uniformly regardless of backend or contract version. */
@@ -43,6 +71,10 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
         'status'     => $status,
         'color'      => lsi_status_color($status),
         'label'      => lsi_status_label($status),
+        'temp_band'   => $data['temp_band'] ?? '',
+        'temp_color'  => lsi_temp_color($data['temp_band'] ?? ''),
+        'temp_stroke' => lsi_temp_stroke($data['temp_band'] ?? ''),
+        'temp_label'  => lsi_band_label($data['temp_band'] ?? ''),
         'model'      => !empty($data['board_name']) ? $data['board_name'] : ($data['model'] ?? 'Unknown'),
         'chip'       => $data['model']     ?? 'Unknown',
         'firmware'   => $data['firmware']  ?? 'Unknown',
