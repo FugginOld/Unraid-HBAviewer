@@ -12,6 +12,18 @@ function lsi_status_label(string $s): string {
     return match ($s) { 'alert' => 'ALERT', 'warn' => 'WARNING', default => 'NORMAL' };
 }
 
+/* HBA Health tab's five-indicator palette (plan 020). Reuses lsi_status_color's
+   ok/warning/critical hexes, extended with the two states it lacks: `watch`
+   sits between ok and warning; `unknown` is grey and must NEVER read as
+   healthy — a card that cannot be read is not a card that is fine. */
+function lsi_health_color(string $s): string {
+    return match ($s) {
+        'critical' => '#e74c3c', 'warning' => '#e67e22',
+        'watch'    => '#f1c40f', 'unknown' => '#7c807c',
+        default    => '#2ecc71',
+    };
+}
+
 /* Temperature band -> colour. SEPARATE from lsi_status_color on purpose: the
    thermometer shows heat, the badge shows the whole-controller rollup (which also
    reflects drive and PHY problems). Conflating them is what made issue #8 read as

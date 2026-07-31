@@ -10,6 +10,7 @@ require_once __DIR__ . '/view.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/event_archive.php';
 require_once __DIR__ . '/cached_read.php';
+require_once __DIR__ . '/health.php';
 
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
@@ -20,7 +21,7 @@ require_once __DIR__ . '/cached_read.php';
    Same posture as flash.php. */
 if (PHP_SAPI === 'cli') return;
 
-$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all','metrics'])
+$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all','metrics','health'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
@@ -147,6 +148,23 @@ if ($type === 'overview') {
     }
     unset($c);
     echo json_encode(['controllers' => $ctls]);
+    exit;
+}
+
+/* ── HBA Health tab: five sub-indicators + a worst-of rollup (plan 020) ─────
+   get_hba_health.sh emits a stateless SAMPLE per controller; this handler is
+   the only place that touches the /tmp ring — persistence is PHP's job,
+   never the shell's (see health.php's header). */
+if ($type === 'health') {
+    header('Content-Type: text/html; charset=utf-8');
+    $raw  = shell_exec("bash $scripts/get_hba_health.sh 2>/dev/null");
+    $data = $raw ? json_decode($raw, true) : null;
+    if (!$data || isset($data['error'])) {
+        $msg = htmlspecialchars($data['error'] ?? 'Script returned no data.');
+        echo '<div class="lu-error"><strong>Error:</strong> ' . $msg . '</div>';
+        exit;
+    }
+    echo renderHealthTables($data);
     exit;
 }
 
@@ -454,3 +472,75 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
 }
 
 if ($type === 'events') { echo renderEventsTables($data); exit; }
+
+/* ── HBA Health (per controller; five indicator rows + a rollup pill) ──────
+   Cosmetic-only best-effort board/chip label pulled from the existing 60s
+   overview cache (get_hba_info.sh already maintains it) — get_hba_health.sh
+   itself emits no board/chip fields, since health.php's ring/rate logic
+   never needs them. Missing cache -> just the /cN label, nothing breaks. */
+function luHealthCtlMeta(int $i): array {
+    $cache = getenv('LSI_CACHE') ?: '/tmp/lsiutil_dash.json';
+    if (!is_file($cache)) return ['board' => '', 'chip' => ''];
+    $d = json_decode((string) @file_get_contents($cache), true);
+    $ctls = lsi_controllers(is_array($d) ? $d : []);
+    $c = $ctls[$i] ?? [];
+    return ['board' => $c['board_name'] ?? '', 'chip' => $c['model'] ?? ''];
+}
+
+function renderHealthTables(array $data): string {
+    $ctls  = $data['controllers'] ?? [$data];
+    $multi = count($ctls) > 1;
+    $out   = '';
+    foreach ($ctls as $i => $ctl) {
+        if ($multi) $out .= luCtlHead($i);
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+
+        // The only place that touches the /tmp ring — see health.php's header.
+        $file  = health_store_path($i);
+        $ring  = health_ingest(health_store_read($file), $ctl);
+        health_store_write($file, $ring);
+
+        $rates = health_rates($ring);
+        $ind   = health_indicators($ring, $rates, time());
+        [$state, $reason] = health_rollup($ind);
+
+        $meta  = luHealthCtlMeta($i);
+        $fw    = (string) ($ctl['fw'] ?? '');
+        $pill  = lsi_health_color($state);
+
+        $out .= '<div class="lu-health-head">'
+              . '<span class="lu-health-title">'
+              . ($meta['board'] !== '' ? htmlspecialchars($meta['board']) . ' &middot; ' : '')
+              . '/c' . $i
+              . ($meta['chip'] !== '' ? ' &middot; ' . htmlspecialchars($meta['chip']) : '')
+              . ($fw !== '' ? ' &middot; FW ' . htmlspecialchars($fw) : '')
+              . '</span>'
+              . '<span class="lu-health-pill" style="color:' . $pill . ';background:color-mix(in srgb,' . $pill . ' 15%, transparent)">'
+              . htmlspecialchars(ucfirst($state)) . ' &mdash; ' . htmlspecialchars($reason)
+              . '</span></div>';
+
+        // Only thermal earns a gauge: it is the one continuous metric with
+        // meaningful bands. Scaled 0-110C with segment boundaries at the
+        // plan-018 band cut-points (65/75/85/95).
+        $temp = $ctl['temp'] ?? null;
+        if ($temp !== null && $temp !== '') {
+            $pct = max(0, min(100, ((float) $temp / 110) * 100));
+            $out .= '<div class="lu-band-meter"><div class="lu-band-track">'
+                  . '<span class="lu-band-seg s0"></span><span class="lu-band-seg s1"></span>'
+                  . '<span class="lu-band-seg s2"></span><span class="lu-band-seg s3"></span><span class="lu-band-seg s4"></span>'
+                  . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars((string) $temp) . '&deg;C"></span>'
+                  . '</div><div class="lu-band-labels"><span>0</span><span>65</span><span>75</span><span>85</span><span>95</span><span>110</span></div></div>';
+        }
+
+        $out .= '<div class="lu-indicator-rows">';
+        foreach (['link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Controller'] as $key => $label) {
+            $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
+            $dot = lsi_health_color($row['state']);
+            $out .= '<div class="lu-indicator-row"><span class="lu-dot" style="background:' . $dot . '"></span>'
+                  . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
+                  . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
+        }
+        $out .= '</div>';
+    }
+    return $out;
+}
