@@ -28,7 +28,7 @@ if (!is_array($data)) {
 $controllers = $error ? [] : lsi_controllers($data);
 if (!$error && !$controllers) $error = 'Backend unavailable';
 
-$ts = date('H:i:s');
+$ts = lsi_time();
 
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
@@ -51,14 +51,15 @@ echo <<<CSS
 .lu-d-tile .lu-d-meta { flex:1; }
 .lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
 .lu-d-tile .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
-.lu-d-tile .lu-d-badge {
+.lu-d-tile .lu-d-health {
   display:inline-flex; align-items:center; gap:6px;
   padding:3px 11px; border-radius:20px;
   font-size:10px; font-weight:700; letter-spacing:0.05em;
   color:var(--sc,#2ecc71); background:color-mix(in srgb, var(--sc,#2ecc71) 16%, transparent);
   box-shadow:0 0 8px color-mix(in srgb, var(--sc,#2ecc71) 30%, transparent);
 }
-.lu-d-tile .lu-d-badge::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.lu-d-tile .lu-d-health::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.lu-d-tile .lu-d-temp-band { font-size:10px; font-weight:700; letter-spacing:0.06em; font-family:ui-monospace,"SF Mono",Menlo,monospace; }
 .lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 .lu-d-tile .lu-d-pill {
   display:none; align-items:center; margin-right:8px;
@@ -99,26 +100,28 @@ $tiles = [];
 
 if ($error) {
     $tiles[] = [
-        'key'  => "{$pluginname}_err",
-        'id'   => 'tblHBAviewerErr',
-        'tc'   => lsi_status_color('alert'),
-        'main' => 'HBAviewer',
-        'sub'  => 'Unknown',
-        'pill' => '',
-        'foot' => '',
-        'body' => "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>",
+        'key'    => "{$pluginname}_err",
+        'id'     => 'tblHBAviewerErr',
+        'tc'     => lsi_status_color('alert'),
+        'main'   => 'HBAviewer',
+        'sub'    => 'Unknown',
+        'pill'   => '',
+        'health' => '<span class="lu-d-health" style="--sc:' . lsi_status_color('alert') . '">UNREADABLE</span>',
+        'foot'   => '',
+        'body'   => "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>",
     ];
 }
 
 foreach ($controllers as $i => $c) {
     $t = [
-        'key'  => "{$pluginname}_c{$i}",
-        'id'   => "tblHBAviewer{$i}",
-        'tc'   => lsi_status_color('alert'),
-        'main' => 'HBAviewer',
-        'sub'  => "Controller /c{$i}",
-        'pill' => '',
-        'foot' => '',
+        'key'    => "{$pluginname}_c{$i}",
+        'id'     => "tblHBAviewer{$i}",
+        'tc'     => lsi_status_color('alert'),
+        'main'   => 'HBAviewer',
+        'sub'    => "Controller /c{$i}",
+        'pill'   => '',
+        'health' => '',
+        'foot'   => '',
     ];
 
     // A controller that failed to read still gets its own tile — error text in
@@ -143,6 +146,7 @@ foreach ($controllers as $i => $c) {
     $bios      = htmlspecialchars($v['bios']   ?? '');
     $mode      = htmlspecialchars($v['mode']   ?? '');
     $drives    = htmlspecialchars($v['drives'] ?? '');
+    $cfgBandLabel = htmlspecialchars($v['cfg_band_label'] ?? '');
 
     // Critical renders as an inverted chip (white on solid fill) — #922b21 measures
     // 1.94:1 as plain text on a dark card and is unreadable there.
@@ -160,6 +164,13 @@ foreach ($controllers as $i => $c) {
     $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'
                . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;C') . '</span>';
+
+    // Health pill lives in the tile header beside the gear, visible whether the
+    // tile is expanded or collapsed — it is the one thing worth seeing without
+    // opening the tile. The temperature pill sits to its left and, as before,
+    // only appears while collapsed (expanded, the gauge shows the same number
+    // far larger).
+    $t['health'] = '<span class="lu-d-health" style="--sc:' . $col . '">' . $badge . '</span>';
 
     // The footer is built ONCE and emitted twice — at the bottom of the card in
     // row 2 (its natural place when expanded) and again in row 1, where CSS
@@ -181,7 +192,7 @@ foreach ($controllers as $i => $c) {
             <span class='v'>{$temp}</span>
             <span class='u'>°C</span>
           </div>
-          <span class='lu-d-badge' style='--sc:{$col}'>{$badge}</span>
+          <span class='lu-d-temp-band'>{$tempChip}</span>
         </div>
         <div class='lu-d-meta'>
           <p>Model: <span>{$model}</span></p>"
@@ -191,8 +202,7 @@ foreach ($controllers as $i => $c) {
           . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
-          . "<p>Temp Band: {$tempChip}</p>
-          <p>Alert Threshold: <span>{$threshold}°C</span></p>
+          . "<p>Badge at: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>
@@ -205,7 +215,7 @@ foreach ($controllers as $i => $c) {
 foreach ($tiles as $t) {
     $id   = $t['id'];   $tc   = $t['tc'];
     $main = $t['main']; $sub  = $t['sub'];
-    $pill = $t['pill']; $foot = $t['foot']; $body = $t['body'];
+    $pill = $t['pill']; $health = $t['health']; $foot = $t['foot']; $body = $t['body'];
 
     $mytiles[$t['key']]['column1'] = <<<EOT
 <tbody id="{$id}" class="lu-d-tile" title="HBAviewer">
@@ -232,6 +242,7 @@ foreach ($tiles as $t) {
         <span class="tile-header-right">
           <span class="tile-header-right-controls">
             {$pill}
+            {$health}
             <a href="/Tools/HBAviewer_Monitor" title="Open HBAviewer">
               <i class="fa fa-fw fa-cog control"></i>
             </a>
