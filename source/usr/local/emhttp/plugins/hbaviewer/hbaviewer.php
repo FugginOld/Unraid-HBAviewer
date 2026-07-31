@@ -113,8 +113,12 @@ if ($enableFlash) {
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
-.lu-pcie-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.lu-pcie-item { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+/* Spacing matches the dashboard tile's footer row (dashboard.php .lu-d-foot-row)
+   deliberately — the same four PCIe fields appear in both places and they should
+   not read differently. Centred, not edge-justified: at the 1560px page width
+   an edge-justified row flung the four items to the card's edges. */
+.lu-pcie-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; align-items: baseline; }
+.lu-pcie-item { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
