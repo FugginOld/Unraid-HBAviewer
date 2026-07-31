@@ -25,6 +25,11 @@ if ($enableFlash) {
 
 <style>
 /* ── Design tokens: original HBAviewer palette in the new component format ── */
+/* fit-content, not a fixed width: the panel hugs whatever the active tab
+   contains, so Overview shrinks to the HBA cards instead of leaving dead space
+   either side. Consequence: the panel's width now differs per tab, since hidden
+   tabs contribute nothing to max-content. max-width caps it on a wide screen and
+   margin:auto re-centres it once shrunk. */
 #lu-wrap {
     --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
     --border:#333333; --border-soft:#2a2a2a;
@@ -33,7 +38,7 @@ if ($enableFlash) {
     --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
-    font-family: inherit; max-width: 1180px; margin: 20px auto;
+    font-family: inherit; width: fit-content; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
         radial-gradient(900px 350px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%),
@@ -77,8 +82,17 @@ if ($enableFlash) {
 
 /* ── Overview + temperature ring ─────────────────────────────────────────── */
 .lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.lu-ov-grid .lu-card { flex: 1 1 360px; max-width: 640px; margin-bottom: 0; }
+/* Cards size to their own widest row — in practice the PCIe row, since the four
+   fields are one unwrapped line — instead of a guessed fixed maximum. fit-content
+   resolves to min(max-content, available), so a card takes exactly the width its
+   content needs when there is room, and shrinks (letting .lu-pcie-row wrap) when
+   there is not. max-width:100% keeps it inside #lu-wrap on a narrow window. */
+.lu-ov-grid .lu-card { flex: 0 1 auto; width: fit-content; max-width: 100%; margin-bottom: 0; }
 .lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
+/* Gauge and its band label read as one unit — the band describes the number
+   above it, which is not what a row buried in the field list conveyed. */
+.lu-gauge { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
+.lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); }
 .lu-circle {
     position: relative; width: 108px; height: 108px; flex-shrink: 0; border-radius: 50%;
     background: conic-gradient(var(--tc, var(--good)) calc(var(--pct,0)*1%), var(--track) 0);
@@ -99,10 +113,22 @@ if ($enableFlash) {
     transition: color 0.4s, background 0.4s;
 }
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* The health pill now lives in the meta list, where `.lu-meta p span` would
+   otherwise repaint it with the field-value treatment (mono, --text) and destroy
+   the status colour. The rule below outranks that one, so restate the pill's own
+   typography and colour here. */
+.lu-meta p span.lu-badge {
+    margin-top: 0; font-family: inherit; font-weight: 700; font-size: 11px;
+    color: var(--sc, var(--good));
+}
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
-.lu-pcie-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
-.lu-pcie-item { font-size: 12.5px; color: var(--faint); }
+/* Spacing matches the dashboard tile's footer row (dashboard.php .lu-d-foot-row)
+   deliberately — the same four PCIe fields appear in both places and they should
+   not read differently. Centred, not edge-justified: at the 1560px page width
+   an edge-justified row flung the four items to the card's edges. */
+.lu-pcie-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; align-items: baseline; }
+.lu-pcie-item { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
@@ -128,7 +154,6 @@ if ($enableFlash) {
     border-radius: 8px; padding: 14px 18px; color: #e0a0a0; font-size: 13px; margin-bottom: 12px;
 }
 .lu-muted  { color: var(--faint); font-size: 13px; }
-.lu-ts     { font-size: 11px; color: var(--faint); font-family: var(--mono); text-align: right; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
 .lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .lu-refresh-btn {
