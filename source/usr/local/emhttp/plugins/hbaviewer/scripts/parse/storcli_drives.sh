@@ -9,16 +9,20 @@ function emit(){
     if (!first) printf ","
     first=0
     printf "{\"slot\":\"%s\",\"port\":\"%s\",\"model\":\"%s\",\"serial\":\"%s\",\"state\":\"%s\",\"sas_address\":\"%s\",\"size\":\"%s\",\"link\":\"%s\",\"firmware\":\"%s\"}", \
-        eid"/"slot, port, model, sn, state, wwn, size, link, fw
+        (eid == "" ? slot : eid"/"slot), port, model, sn, state, wwn, size, link, fw
 }
 BEGIN { first=1; have=0; printf "{\"drives\":[" }
-/^Drive \/c[0-9]+\/e[0-9]+\/s[0-9]+ :[ \t]*$/ {
+/^Drive \/c[0-9]+(\/e[0-9]+)?\/s[0-9]+ :[ \t]*$/ {
     if (have) emit()
-    match($0, /e([0-9]+)\/s([0-9]+)/, a); eid=a[1]; slot=a[2]
+    # Enclosure-less controllers address drives /c0/s0 with a blank EID column;
+    # enclosure-attached ones use /c0/e0/s0. Capture the two parts separately so
+    # the absent EID is an empty string rather than a failed match.
+    eid = match($0, /\/e([0-9]+)\//, a) ? a[1] : ""
+    match($0, /\/s([0-9]+)[ \t]*:/, b); slot = b[1]
     model=""; sn=""; state=""; wwn=""; size=""; link=""; fw=""; port=""; have=1
     next
 }
-have && /^[0-9]+:[0-9]+[ \t]/       { state=$3 }   # summary row: EID:Slt DID State ...
+have && /^[ \t]*[0-9]*:[0-9]+[ \t]/ { state=$3 }   # summary row: EID:Slt DID State ...
 have && /^Model Number =/           { model=val($0) }
 have && /^SN =/                     { sn=val($0) }
 have && /^WWN =/                     { wwn=val($0) }
