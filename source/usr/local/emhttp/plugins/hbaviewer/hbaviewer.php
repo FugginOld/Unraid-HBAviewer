@@ -81,7 +81,12 @@ if ($enableFlash) {
    one row at this width and wrapped at the old 640px. flex-basis rises with it so
    two cards still sit side by side on a wide screen, and flex-wrap keeps the
    narrow case working. */
-.lu-ov-grid .lu-card { flex: 1 1 520px; max-width: 820px; margin-bottom: 0; }
+/* Cards size to their own widest row — in practice the PCIe row, since the four
+   fields are one unwrapped line — instead of a guessed fixed maximum. fit-content
+   resolves to min(max-content, available), so a card takes exactly the width its
+   content needs when there is room, and shrinks (letting .lu-pcie-row wrap) when
+   there is not. max-width:100% keeps it inside #lu-wrap on a narrow window. */
+.lu-ov-grid .lu-card { flex: 0 1 auto; width: fit-content; max-width: 100%; margin-bottom: 0; }
 .lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
 /* Gauge and its band label read as one unit — the band describes the number
    above it, which is not what a row buried in the field list conveyed. */
