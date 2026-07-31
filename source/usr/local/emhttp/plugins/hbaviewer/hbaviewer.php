@@ -93,10 +93,6 @@ if ($enableFlash) {
    above it, which is not what a row buried in the field list conveyed. */
 .lu-gauge { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
 .lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); }
-/* Health pill sits top-left, above the gauge row, so the card's own state is the
-   first thing read rather than the last field in a list. */
-.lu-card-head { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 12px; }
-.lu-card-head .lu-badge { margin-top: 0; }
 .lu-circle {
     position: relative; width: 108px; height: 108px; flex-shrink: 0; border-radius: 50%;
     background: conic-gradient(var(--tc, var(--good)) calc(var(--pct,0)*1%), var(--track) 0);
@@ -117,6 +113,14 @@ if ($enableFlash) {
     transition: color 0.4s, background 0.4s;
 }
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* The health pill now lives in the meta list, where `.lu-meta p span` would
+   otherwise repaint it with the field-value treatment (mono, --text) and destroy
+   the status colour. The rule below outranks that one, so restate the pill's own
+   typography and colour here. */
+.lu-meta p span.lu-badge {
+    margin-top: 0; font-family: inherit; font-weight: 700; font-size: 11px;
+    color: var(--sc, var(--good));
+}
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
 /* Spacing matches the dashboard tile's footer row (dashboard.php .lu-d-foot-row)

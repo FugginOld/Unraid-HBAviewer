@@ -204,7 +204,7 @@ foreach ($controllers as $i => $c) {
           . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
-          . "<p>Badge at: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
+          . "<p>Badge Sensitivity: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>

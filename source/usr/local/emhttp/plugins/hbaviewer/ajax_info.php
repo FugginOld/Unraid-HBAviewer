@@ -233,9 +233,6 @@ function renderOverviewCards(array $data, array $cfg): string {
             ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
             : '<span style="color:' . $v['temp_stroke'] . '">' . htmlspecialchars($v['temp_label']) . '</span>';
         $out .= '<div class="lu-card first" style="--tc:' . $v['temp_stroke'] . ';--sc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
-              . '<div class="lu-card-head">'
-              . '<span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span>'
-              . '</div>'
               . '<div class="lu-overview-row">'
               . '<div class="lu-gauge">'
               . '<div class="lu-circle" id="lu-circle-' . $i . '">'
@@ -253,8 +250,9 @@ function renderOverviewCards(array $data, array $cfg): string {
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
               . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
               . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
-              . '<p>Badge at: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+              . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
               . '<p>Last read: <span>' . lsi_time() . '</span></p>'
+              . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
               . '</div></div>';
         if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
             $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
