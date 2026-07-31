@@ -45,9 +45,18 @@ if [ -z "$CHIP" ]; then
     esac
 fi
 
-# IT vs IR from the drive states: JBOD = passthrough (IT); RAID/Onln/Optl = IR.
-if   printf '%s\n' "$input" | grep -qE '\bJBOD\b';          then MODE="IT"
-elif printf '%s\n' "$input" | grep -qE '\b(Onln|Optl|RAID)\b'; then MODE="IR"
+# Drive states from the drive-summary table's State column ONLY ($3 of rows like
+# "0:0  15 JBOD ..." or " :0  1 UGood ..." where the controller reports no
+# enclosure ID). Scanning the whole output would false-match legend text such as
+# "UGood-Unconfigured Good|UBad-Unconfigured Bad".
+DSTATES=$(printf '%s\n' "$input" | awk '/^[ \t]*[0-9]*:[0-9]+[ \t]/ { print $3 }')
+
+# IT vs IR from those states, NOT from a whole-output grep: IT firmware reports
+# JBOD, IR firmware reports UGood/UBad for a bare disk and Onln/Optl for a
+# configured one. A grep over the raw text would match the legend line and call
+# every card IR.
+if   printf '%s\n' "$DSTATES" | grep -qiE '^JBOD$';                    then MODE="IT"
+elif printf '%s\n' "$DSTATES" | grep -qiE '^(Onln|Optl|UGood|UBad)$';  then MODE="IR"
 else MODE=""; fi
 
 # ── Temperature band (absolute, NOT derived from the setting) ────────────────
@@ -77,10 +86,6 @@ if   [ "$ti" -gt "$ci" ]; then RANK=2
 elif [ "$ti" -eq "$ci" ]; then RANK=1
 else RANK=0; fi
 
-# Drive states from the drive-summary table's State column ONLY ($3 of rows like
-# "0:0  15 JBOD ..."). Scanning the whole output would false-match legend text
-# such as "UBad-Unconfigured Bad". JBOD/Onln/Optl = healthy.
-DSTATES=$(printf '%s\n' "$input" | awk '/^[0-9]+:[0-9]+[ \t]/ { print $3 }')
 if printf '%s\n' "$DSTATES" | grep -qiE '^(Failed|Offln|Missing|UBad|Foreign)$'; then
     [ "$RANK" -lt 2 ] && RANK=2
 elif printf '%s\n' "$DSTATES" | grep -qiE '^(Rbld|Rebuild|Copyback)$'; then
