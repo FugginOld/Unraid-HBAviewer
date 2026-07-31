@@ -77,8 +77,20 @@ if ($enableFlash) {
 
 /* ── Overview + temperature ring ─────────────────────────────────────────── */
 .lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-.lu-ov-grid .lu-card { flex: 1 1 360px; max-width: 640px; margin-bottom: 0; }
+/* Wider cards: four PCIe fields (Width, Speed, Power Mode, PCI Location) fit on
+   one row at this width and wrapped at the old 640px. flex-basis rises with it so
+   two cards still sit side by side on a wide screen, and flex-wrap keeps the
+   narrow case working. */
+.lu-ov-grid .lu-card { flex: 1 1 520px; max-width: 820px; margin-bottom: 0; }
 .lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
+/* Gauge and its band label read as one unit — the band describes the number
+   above it, which is not what a row buried in the field list conveyed. */
+.lu-gauge { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
+.lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); }
+/* Health pill sits top-left, above the gauge row, so the card's own state is the
+   first thing read rather than the last field in a list. */
+.lu-card-head { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 12px; }
+.lu-card-head .lu-badge { margin-top: 0; }
 .lu-circle {
     position: relative; width: 108px; height: 108px; flex-shrink: 0; border-radius: 50%;
     background: conic-gradient(var(--tc, var(--good)) calc(var(--pct,0)*1%), var(--track) 0);
@@ -101,8 +113,8 @@ if ($enableFlash) {
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
-.lu-pcie-row { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
-.lu-pcie-item { font-size: 12.5px; color: var(--faint); }
+.lu-pcie-row { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.lu-pcie-item { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
@@ -128,7 +140,6 @@ if ($enableFlash) {
     border-radius: 8px; padding: 14px 18px; color: #e0a0a0; font-size: 13px; margin-bottom: 12px;
 }
 .lu-muted  { color: var(--faint); font-size: 13px; }
-.lu-ts     { font-size: 11px; color: var(--faint); font-family: var(--mono); text-align: right; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
 .lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
 .lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .lu-refresh-btn {
