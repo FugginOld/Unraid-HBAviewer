@@ -11,6 +11,16 @@ drv_storcli() {   # $1 = controller index
     local encl drv
     encl=$("$STORCLI" /c"$1"/eall show all      2>/dev/null | bash "$DIR/parse/storcli_enclosures.sh")
     drv=$( "$STORCLI" /c"$1"/eall/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh")
+    # Controllers whose drives carry no enclosure ID answer the eall form with
+    # "No drive found!" and address their drives /cN/sN instead. Try the flat form
+    # only when the enclosure form yielded nothing — the order matters, because on
+    # a controller WITH enclosure-attached drives it is /cN/sall that fails.
+    # Keyed on "no drives came back", never on "no enclosure exists": issue #6's
+    # box reports a VirtualSES enclosure that simply has no drives attached to it.
+    case "$drv" in
+        ''|'{"drives":[]}')
+            drv=$("$STORCLI" /c"$1"/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh") ;;
+    esac
     [ -n "$encl" ] || encl='{"enclosures":[]}'
     [ -n "$drv" ]  || drv='{"drives":[]}'
     printf '%s,%s' "${encl%\}}" "${drv#\{}"     # merge two single-key objects into one

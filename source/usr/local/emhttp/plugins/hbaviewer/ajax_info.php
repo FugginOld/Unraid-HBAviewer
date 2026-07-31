@@ -344,11 +344,16 @@ function renderDrivesTables(array $data): string {
 
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         foreach ($ctl['enclosures'] ?? [] as $e) {
-            $mode = !empty($e['direct']) ? 'direct-attach (no expander)' : 'expander / backplane';
+            $mode  = !empty($e['direct']) ? 'direct-attach (no expander)' : 'expander / backplane';
+            // Only state a slot/drive count when storcli actually reported one —
+            // an empty Properties section previously rendered as "8 slots / 0 drives"
+            // on a controller with 15 drives.
+            $counts = ($e['slots'] ?? '') !== '' && ($e['drives'] ?? '') !== ''
+                ? htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives']) . ' drives &middot; '
+                : '';
             $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Enclosure e' . htmlspecialchars($e['eid'])
                   . ': ' . htmlspecialchars($e['product']) . ' (' . htmlspecialchars($e['vendor']) . ') &middot; '
-                  . htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives'])
-                  . ' drives &middot; ' . $mode . '</p>';
+                  . $counts . $mode . '</p>';
         }
 
         $drives = $ctl['drives'] ?? [];
