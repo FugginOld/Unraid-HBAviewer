@@ -99,9 +99,9 @@ band_of() {   # $1 = temperature in C -> band name
 }
 band_index() { case "$1" in normal) echo 0;; elevated) echo 1;; warning) echo 2;; alert) echo 3;; *) echo 4;; esac; }
 
+CFG_BAND=$(band_of "$ALERT")
 if [ -n "$TEMP" ]; then
     TEMP_BAND=$(band_of "$TEMP")
-    CFG_BAND=$(band_of "$ALERT")
     ti=$(band_index "$TEMP_BAND"); ci=$(band_index "$CFG_BAND")
     if   [ "$ti" -gt "$ci" ]; then STATUS="alert"
     elif [ "$ti" -eq "$ci" ]; then STATUS="warn"
@@ -126,6 +126,7 @@ cat <<EOF
   "power_mode": "${POWER_MODE}",
   "alert_threshold": $ALERT,
   "temp_band": "${TEMP_BAND}",
+  "cfg_band": "${CFG_BAND}",
   "status": "$STATUS"
 }
 EOF

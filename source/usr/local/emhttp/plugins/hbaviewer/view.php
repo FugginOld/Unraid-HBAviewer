@@ -40,6 +40,34 @@ function lsi_band_label(string $band): string {
     };
 }
 
+/* Timestamp in the user's configured format. Unraid stores the display
+   preference in dynamix's config and also exposes $display to page scripts, so
+   try the in-memory global first and fall back to reading the file. date()
+   already renders in the system timezone — only the 12/24-hour choice needs
+   resolving here, so a missing config degrades to the previous 24-hour output
+   rather than guessing.
+   ponytail: format string used as-is. Unraid writes PHP date() formats there; if
+   a future release changes that, the guard below drops back to 24-hour. */
+function lsi_time(?int $when = null): string {
+    $when ??= time();
+    $fmt = '';
+    if (isset($GLOBALS['display']['time']) && is_string($GLOBALS['display']['time'])) {
+        $fmt = trim($GLOBALS['display']['time']);
+    }
+    if ($fmt === '') {
+        $cfg = @parse_ini_file('/boot/config/plugins/dynamix/dynamix.cfg', true);
+        if (is_array($cfg) && isset($cfg['display']['time']) && is_string($cfg['display']['time'])) {
+            $fmt = trim($cfg['display']['time']);
+        }
+    }
+    // Only accept something that looks like a date() format: short, and made of
+    // format characters. Anything else (a stray label, an empty quote) falls back.
+    if ($fmt === '' || strlen($fmt) > 20 || !preg_match('/^[A-Za-z:\.\- ]+$/', $fmt)) {
+        return date('H:i:s', $when);
+    }
+    return date($fmt, $when);
+}
+
 /* Controllers from a decoded backend payload. Accepts the multi-controller
    contract {"controllers":[...]} and (defensively) a legacy flat single object,
    so consumers can loop uniformly regardless of backend or contract version. */
@@ -75,6 +103,8 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
         'temp_color'  => lsi_temp_color($data['temp_band'] ?? ''),
         'temp_stroke' => lsi_temp_stroke($data['temp_band'] ?? ''),
         'temp_label'  => lsi_band_label($data['temp_band'] ?? ''),
+        'cfg_band'       => $data['cfg_band'] ?? '',
+        'cfg_band_label' => lsi_band_label($data['cfg_band'] ?? ''),
         'model'      => !empty($data['board_name']) ? $data['board_name'] : ($data['model'] ?? 'Unknown'),
         'chip'       => $data['model']     ?? 'Unknown',
         'firmware'   => $data['firmware']  ?? 'Unknown',

@@ -11,5 +11,6 @@
   "power_mode": "Full",
   "alert_threshold": 80,
   "temp_band": "normal",
+  "cfg_band": "warning",
   "status": "ok"
 }
