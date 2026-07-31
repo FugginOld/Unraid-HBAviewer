@@ -40,14 +40,40 @@ function lsi_band_label(string $band): string {
     };
 }
 
+/* strftime -> date() token translation. Unraid's Display Settings store the time
+   format strftime-style (e.g. "%I:%M %p"), but PHP's strftime() is deprecated in
+   8.1 and gone in 9, so translate rather than call it. Returns '' for any token
+   we don't know, which the caller treats as "fall back to 24-hour" — better a
+   plain timestamp than a mangled one. Literal letters are backslash-escaped so
+   date() cannot reinterpret them as format characters. */
+function lsi_strftime_to_date(string $f): string {
+    static $map = [
+        'H' => 'H', 'k' => 'G', 'I' => 'h', 'l' => 'g',
+        'M' => 'i', 'S' => 's', 'p' => 'A', 'P' => 'a',
+        'R' => 'H:i', 'T' => 'H:i:s', 'r' => 'h:i:s A', '%' => '\\%',
+    ];
+    $out = ''; $len = strlen($f);
+    for ($i = 0; $i < $len; $i++) {
+        if ($f[$i] === '%' && $i + 1 < $len) {
+            $tok = $f[++$i];
+            if (!isset($map[$tok])) return '';
+            $out .= $map[$tok];
+            continue;
+        }
+        $out .= ctype_alpha($f[$i]) ? '\\' . $f[$i] : $f[$i];
+    }
+    return $out;
+}
+
 /* Timestamp in the user's configured format. Unraid stores the display
    preference in dynamix's config and also exposes $display to page scripts, so
    try the in-memory global first and fall back to reading the file. date()
    already renders in the system timezone — only the 12/24-hour choice needs
    resolving here, so a missing config degrades to the previous 24-hour output
    rather than guessing.
-   ponytail: format string used as-is. Unraid writes PHP date() formats there; if
-   a future release changes that, the guard below drops back to 24-hour. */
+   ponytail: Unraid writes strftime-style formats (e.g. "%I:%M %p"), translated by
+   the helper above; a plain date() format is still accepted for the case where
+   $display carries one. Anything else drops back to 24-hour. */
 function lsi_time(?int $when = null): string {
     $when ??= time();
     $fmt = '';
@@ -60,9 +86,16 @@ function lsi_time(?int $when = null): string {
             $fmt = trim($cfg['display']['time']);
         }
     }
-    // Only accept something that looks like a date() format: short, and made of
-    // format characters. Anything else (a stray label, an empty quote) falls back.
-    if ($fmt === '' || strlen($fmt) > 20 || !preg_match('/^[A-Za-z:\.\- ]+$/', $fmt)) {
+    if ($fmt === '' || strlen($fmt) > 32) {
+        return date('H:i:s', $when);
+    }
+    // Unraid writes strftime formats; a date() format is still accepted for the
+    // case where $display carries one.
+    if (strpos($fmt, '%') !== false) {
+        $d = lsi_strftime_to_date($fmt);
+        return $d === '' ? date('H:i:s', $when) : date($d, $when);
+    }
+    if (!preg_match('/^[A-Za-z:\.\- ]+$/', $fmt)) {
         return date('H:i:s', $when);
     }
     return date($fmt, $when);
