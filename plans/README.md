@@ -30,13 +30,50 @@ commands are inlined in the plan file itself.
 | 014 | Tile title "HBAviewer", model in subtitle, drop footer duplicate model | P3 | S | 013 (DONE) | DONE — merged to `dev` (`76d8666`, from `93776c7`); awaiting hardware verification |
 | 015 | Show the temperature pill only while the tile is collapsed | P3 | S | 014 (DONE) | DONE — merged to `dev` (`8249575`, from `0f8527e`); awaiting hardware verification |
 | 016 | "Last read" into the meta list, badge centred under the gauge with a glow | P3 | S | 015 (DONE) | DONE — merged to `dev` (`bf7886a`, from `5defd05`); awaiting hardware verification |
-| 017 | Enumerate storcli drives on controllers that report no enclosure | **P1** | M | — | NOT WRITTEN — root cause **confirmed on three boxes** (issue #6 SAS3416, issue #5 SAS3224 ×2): blank `EID` ⇒ `/cN/eall/sall` finds nothing. Independent of IT-vs-IR firmware — one reporter is IT (`JBOD`), another IR (`UGood`), same symptom. Four breakages now: the query, the `Drive /cN/sN` header regex, the `^EID:Slt` state scrape, and IT/IR mode detection (`UGood` matches neither branch ⇒ blank mode). Verified fix for the scrape: widen to `^[ \t]*[0-9]*:[0-9]+[ \t]`, which leaves `$3` as the state. **Still waiting on one `/c0/sall show all` paste** for the parser and its fixture |
+| 017 | Enumerate storcli drives on controllers that report no enclosure | **P1** | M | — | DONE — merged to `dev` (`9e7a26b`, from `84b40b3`). Two verbatim hardware fixtures (SAS3416/IT `JBOD`, SAS3224/IR `UGood`), five defects fixed, suite green with no pre-existing golden touched; the issue #6 scenario reproduced end to end against a stub. **Issues #5 and #6 are NOT yet confirmed resolved** — that needs a reporter to run it on their own controller. Do not close either until then |
 | 018 | Five fixed temperature bands, and stop the rollup colouring the thermometer | P2 | M | — | DONE — merged to `dev` (`5941c97`, from `0ba3677`); **verified on hardware 2026-07-30**: c0 at 72 °C with 8 PHY errors now reads `elevated`/`ok` (was amber at any temperature), c1 at 78 °C reads `warning`/`warn`. Fixes issue #8 |
 | 019 | Overview and dashboard-tile layout — band under the gauge, health pill labelled, system time format | P3 | M | 018 (DONE) | DONE — merged to `dev` (`456c3f5`, from `9686f1f`); **verified on hardware 2026-07-30**. Nine commits: three implementing the plan, six fixing defects that only appeared on a real screen. See the note below |
-| 020 | HBA Health tab — five sub-indicators with worst-of rollup | — | L | 019 | NOT WRITTEN — spec supplied by the maintainer (see "Plan 020 notes" below). Needs a persistence layer this plugin does not have; scope questions still open |
+| 020 | HBA Health tab — five sub-indicators with worst-of rollup | P2 | L | 018, 019 (DONE) | DONE (reviewed, **not merged**) — branch `advisor/020-hba-health-tab`, `d65e505`. 705 lines across 7 files; 37 unit checks, suite green, no golden touched. **Awaiting hardware** — nothing here can render the tab |
+| 021 | Replace hardcoded panel colors with Unraid theme variables | P1 | S | — | NOT WRITTEN — external roadmap review. Closes issue #7 |
+| 022 | Per-PHY error baseline, with rate shown alongside the raw counter | P1 | M | — | NOT WRITTEN — external roadmap review. Scoped-down cousin of 020's rate work; see the plan's "Relationship to plan 020" section before starting either |
+| 023 | Notify through Unraid's `notify` on health status transitions | P1 | M | — | NOT WRITTEN — external roadmap review. First plan to add a cron/background piece to this plugin; see its "Why this is bigger than it looks" section |
+| 024 | "Locate" button — blink a drive's enclosure LED via SES | P1 | M | — | NOT WRITTEN — external roadmap review. Has one real hardware-dependent unknown (SES device mapping); see Step 1 |
+| 025 | Read-only export endpoint for Grafana / Homepage / external monitoring | P2 | S | — | NOT WRITTEN — external roadmap review |
+| 026 | One-click support bundle for bug reports | P2 | S | — | NOT WRITTEN — external roadmap review. Deliberately does not reuse `scripts/capture*.sh` — see the plan's opening correction |
+| 027 | "Top offenders" — join PHY error rate to the drive/slot it serves | P2 | M | 022 | NOT WRITTEN — external roadmap review |
+| 028 | Validate the firmware image matches the detected card before flashing | P2 | M | — | NOT WRITTEN — external roadmap review. Touches the flash path; review with the same care as 005/009 |
+| 029 | Inlet temperature and Δ — user-selected hwmon sensor | — | M | 020 | NOT WRITTEN — **renumbered from 021** when the external roadmap claimed that slot. The maintainer's box has 47 hwmon inputs, several reading `-61 °C` or `0 °C`; hwmon indices are unstable across reboots; and the sensor chosen changes the verdict (`SYSTIN` 55 °C gives Δ14 where a true intake probe gives ~44). Needs a picker keyed on `chip/label`, default off |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale)
+
+**Plans 021–028 came from an external roadmap review** (2026-07-31, against
+`8286fe7`), not from the `/improve` audit that produced 001–020. They are
+self-contained per the usual convention, but several flag hardware-dependent
+unknowns or open questions rather than asserting false certainty — read each
+plan's own notes before executing.
+
+**All eight were vetted against the codebase on 2026-07-31.** Outcome: the
+feature set is sound and mostly accurate. Corrections applied in place:
+
+| Plan | Correction |
+|---|---|
+| 021 | Rationale claimed dark "looks fine" and blamed the light themes. Issue #7 is a **dark**-theme report the maintainer cannot reproduce, from a user who had been switching themes. Rewritten; the theme-aware approach is unchanged and is the right fix either way. Now **depends on 020** — it rewrites four of the same files |
+| 022 | Described 020 as blocked on two open questions. Both were answered and 020 shipped. Reframed as complementary (rolling window vs user-set baseline), plus a new **"reset trap"** section — a `/boot` baseline outlives the counters it measured, so it needs 020's two reset signals — and a corrected file reference for `PHYERR_FLOOR` (`parse/storcli_overview.sh`, not `hbaviewer.php`) |
+| 024 | Added **"How much of the fleet can actually use this"** — of the four controllers this project has real output for, three report a synthesised `VirtualSES` with no drives attached and blank EIDs, i.e. no backplane LED to blink. A scoping note about addressable hardware, **not** a suggestion that locate was meant to fix #5/#6 — 024–028 are feature work. The feature must detect and disable itself where it cannot work |
+| 025 | Added the gap between motivation and scope: session-gated means **Prometheus still cannot scrape it**. The scope call is right; the deliverable is narrower than the motivation implies |
+| 027 | 020 now also provides per-PHY rates, so the 022 dependency is optional. Added a comparison and a "pick one deliberately" gate |
+| 023, 026, 028 | **No corrections needed** — claims verified accurate |
+
+Two findings raised during vetting were **withdrawn as reviewer error**: that
+023's citation of the README was fabricated (Direction 1, "Real alerting", does
+flag it, naming the `notify` script), and that 026's `capture*.sh` scripts do not
+exist (they are at **repo root** `scripts/`, not under the plugin tree — and
+`lib.sh:26`'s reference to them is correct, not stale).
+
+That review also renumbered a slot: what this index previously called plan 021
+(inlet temperature, deferred out of 020) is now **029**, because the roadmap set
+had already been written to files claiming 021–028.
 
 ## Working rules
 
