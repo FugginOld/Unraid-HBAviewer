@@ -85,10 +85,11 @@ echo <<<CSS
    .lu-d-foot-mini above: Unraid's inline display:none on row 2. */
 .lu-d-tile:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-pill { display:inline-flex; }
 .lu-d-tile .lu-d-foot-row {
-  display:flex; gap:16px; flex-wrap:wrap; align-items:baseline;
+  display:flex; gap:16px; flex-wrap:wrap; align-items:baseline; justify-content:center;
   font-size:12px; color:#ddd; padding-top:6px;
   border-top:1px solid #2a2a2a;
 }
+.lu-d-tile .lu-d-foot-item { white-space:nowrap; }
 .lu-d-tile .lu-d-foot-row span { color:#ddd; font-weight:500; }
 </style>
 CSS;
@@ -180,7 +181,8 @@ foreach ($controllers as $i => $c) {
     // it stays visible when collapsed.
     $parts = [];
     foreach ($v['pcie'] as $item) {
-        $parts[] = $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span>';
+        $parts[] = "<span class='lu-d-foot-item'>" . $item['label'] . ': <span>'
+                 . htmlspecialchars($item['value']) . '</span></span>';
     }
     $t['foot'] = "<div class='lu-d-foot-row'>" . implode('', $parts) . "</div>";
 

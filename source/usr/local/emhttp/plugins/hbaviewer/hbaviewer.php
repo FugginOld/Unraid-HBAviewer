@@ -33,7 +33,7 @@ if ($enableFlash) {
     --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
-    font-family: inherit; max-width: 1180px; margin: 20px auto;
+    font-family: inherit; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
         radial-gradient(900px 350px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%),
@@ -113,7 +113,7 @@ if ($enableFlash) {
 .lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
-.lu-pcie-row { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.lu-pcie-row { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .lu-pcie-item { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
