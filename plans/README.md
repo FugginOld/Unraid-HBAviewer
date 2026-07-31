@@ -32,7 +32,7 @@ commands are inlined in the plan file itself.
 | 016 | "Last read" into the meta list, badge centred under the gauge with a glow | P3 | S | 015 (DONE) | DONE — merged to `dev` (`bf7886a`, from `5defd05`); awaiting hardware verification |
 | 017 | Enumerate storcli drives on controllers that report no enclosure | **P1** | M | — | NOT WRITTEN — root cause **confirmed on three boxes** (issue #6 SAS3416, issue #5 SAS3224 ×2): blank `EID` ⇒ `/cN/eall/sall` finds nothing. Independent of IT-vs-IR firmware — one reporter is IT (`JBOD`), another IR (`UGood`), same symptom. Four breakages now: the query, the `Drive /cN/sN` header regex, the `^EID:Slt` state scrape, and IT/IR mode detection (`UGood` matches neither branch ⇒ blank mode). Verified fix for the scrape: widen to `^[ \t]*[0-9]*:[0-9]+[ \t]`, which leaves `$3` as the state. **Still waiting on one `/c0/sall show all` paste** for the parser and its fixture |
 | 018 | Five fixed temperature bands, and stop the rollup colouring the thermometer | P2 | M | — | DONE — merged to `dev` (`5941c97`, from `0ba3677`); **verified on hardware 2026-07-30**: c0 at 72 °C with 8 PHY errors now reads `elevated`/`ok` (was amber at any temperature), c1 at 78 °C reads `warning`/`warn`. Fixes issue #8 |
-| 019 | Overview and dashboard-tile layout — band under the gauge, health pill up top, system time format | P3 | M | 018 (DONE) | DONE (reviewed, **not merged**) — branch `advisor/019-overview-and-tile-layout`, `0dfacb9`. Suite green, lints clean, all 19 re-blessed goldens proven to differ by `cfg_band` alone. **Three defects found only by testing on hardware** and fixed in `fd2e5e7`/`0dfacb9` — see the note below. Second hardware pass outstanding |
+| 019 | Overview and dashboard-tile layout — band under the gauge, health pill labelled, system time format | P3 | M | 018 (DONE) | DONE — merged to `dev` (`456c3f5`, from `9686f1f`); **verified on hardware 2026-07-30**. Nine commits: three implementing the plan, six fixing defects that only appeared on a real screen. See the note below |
 | 020 | HBA Health tab — five sub-indicators with worst-of rollup | — | L | 019 | NOT WRITTEN — spec supplied by the maintainer (see "Plan 020 notes" below). Needs a persistence layer this plugin does not have; scope questions still open |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
@@ -373,6 +373,44 @@ routes through `use_storcli` (which runs the binary and fails), so a bogus path 
 correct there; `ov_lsiutil`'s guard tests `find_storcli` emptiness, so a bogus path
 is silently wrong. Same-looking line, opposite meaning. Mutation-test any new
 golden that guards a boolean.
+
+**019 — executed, reviewed, merged, 2026-07-30.** Branch
+`advisor/019-overview-and-tile-layout`, merged to `dev` as `456c3f5`. Nine
+commits: three implementing the plan as written, one reverting `UPDATE=1` churn,
+and **five fixing defects that only surfaced when the maintainer ran it on real
+hardware**. The suite was green after every one of them.
+
+What the tests could not see, and a browser could:
+
+- **`max-width: 820px` on the cards was dead code.** `#lu-wrap` capped the page at
+  1180px above it, so two cards were ~582px each and the PCIe row still wrapped.
+  The plan raised a limit that a parent had already overruled.
+- **The tile footer's gaps landed inside each field.** `.lu-d-foot-row` is
+  `display:flex; gap:16px`, and the bare label strings were *anonymous flex
+  items*, so the gap fell between "PCIe Width:" and "x8" as well as between pairs.
+  Wrapping each pair in its own element fixed it.
+- **Unraid stores strftime, not `date()`.** `time="%I:%M %p"`, so `lsi_time()`'s
+  guard correctly rejected the `%` and fell back to 24-hour every time. Fixed with
+  a token map, since PHP's `strftime` is deprecated in 8.1 and gone in 9.
+- **Fixed widths were the wrong shape of answer.** `820px` and `1560px` were both
+  guesses; `width: fit-content` on the card and the panel lets the content decide.
+- **Moving the pill into the meta list nearly killed its colour.** `.lu-meta p span`
+  (0,1,2) outranks `.lu-badge` (0,1,0) and would have repainted the pill in mono
+  `--text` — still pill-shaped, so easy to miss in review. A `span.lu-badge` rule
+  at (0,2,2) restores it.
+
+Two lessons worth carrying into 020:
+
+1. **Patch-testing a subset of files is only safe while every change is
+   self-contained.** The Event Log broke mid-testing because plan 011 changed
+   `ajax_info.php` and `event_archive.php` as a matched pair and only the first was
+   patched. The right patch list is "every file that differs from what is
+   installed" — 13 files — not "every file this plan touched".
+2. **Verification greps must be scoped to the rule, not the file.** A criterion of
+   `grep -c 'space-between'` → `0` would have destroyed `.lu-meta p`'s alignment
+   had the executor obeyed it; it reported the discrepancy instead. Twice on this
+   branch, refusing to improvise caught a defect in the instructions rather than in
+   the code.
 
 ## Plan 020 notes — HBA Health indicator spec, as received
 
