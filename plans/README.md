@@ -607,11 +607,27 @@ Recorded so they are not re-audited on the next pass:
 Surfaced by the audit but not turned into plans, because these are product
 decisions rather than defects:
 
-1. **Real alerting.** The plugin already computes a health rollup covering failed
-   drives, PHY error counters and pre-P20 firmware, and can currently tell nobody
-   about any of it. A cron script calling
-   `/usr/local/emhttp/webGui/scripts/notify` on the existing `status` field would
-   turn a dashboard into a monitor. Needs last-notified state to avoid spamming.
+1. **Real alerting.** ~~The plugin already computes a health rollup covering failed
+   drives, PHY error counters and pre-P20 firmware~~ — **this sentence was wrong,
+   corrected 2026-08-01 while executing plan 023.** What `status` actually covers,
+   verified by reading both parsers:
+   - `parse/storcli_overview.sh:83-105` (SAS3 / storcli): temperature band, plus
+     `Failed|Offln|Missing|UBad|Foreign` forcing `alert`, `Rbld|Rebuild|Copyback`
+     forcing at least `warn`, and summed sysfs PHY errors ≥ `PHYERR_FLOOR` (100)
+     forcing at least `warn`.
+   - `parse/hba.sh:102-113` (SAS2 / lsiutil): **temperature band alone.** lsiutil's
+     overview carries no drive states, and no PHY input reaches it.
+   - **Pre-P20 firmware feeds neither.** It is `fw_old`, a separate boolean, in
+     `hba.sh` only.
+
+   The consequence is a real asymmetry, now shipped by plan 023: **SAS2 boxes get
+   thermal-only alerting.** A failed drive on a 9207-8i notifies nobody. Closing
+   that gap means giving `hba.sh` the inputs `storcli_overview.sh` already has,
+   which is its own plan, not a tweak.
+
+   Implemented by **plan 023** — cron calling
+   `/usr/local/emhttp/webGui/scripts/notify` on `status`, with a last-notified
+   store so a persisting state does not re-notify.
 2. **Persist performance history.** The Performance tab is in-browser only and
    resets on reload — a deliberate no-daemon, no-flash-writes decision. But "was
    the controller saturated at 3am?" is what people open it to ask. A bounded ring
