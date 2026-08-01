@@ -1,0 +1,96 @@
+<!--
+  HBA health card — maintainer's reference mockup, supplied 2026-08-01.
+  Kept verbatim as the source of the Tabler <symbol> path data for plan 032.
+
+  NOTE: this file is a MOCKUP, not shipped code. Plan 032 takes only the five
+  <symbol> bodies from it. Its flat status-colour palette (--st-ok etc.) is
+  deliberately NOT adopted — three of those five colours fail the 3:1 contrast
+  floor on the white/azure themes, which is why the shipped dots keep the
+  gradient fill from lsi_health_gradient(). See plan 032's contrast table.
+
+  Icons are Tabler Icons (MIT licensed), inlined as an SVG sprite:
+  alert-triangle, temperature, plug-connected, server-2, topology-star-3, cpu.
+  Paths are verbatim from tabler/tabler-icons. Keep the MIT notice if you
+  redistribute the plugin.
+-->
+
+<!-- ============ icon sprite: place once per page ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="hba-i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 9v4" />
+    <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0" />
+    <path d="M12 16h.01" />
+  </symbol>
+
+  <symbol id="hba-i-thermal" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5" />
+    <path d="M10 9l4 0" />
+  </symbol>
+
+  <symbol id="hba-i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5" />
+    <path d="M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5" />
+    <path d="M3 21l2.5 -2.5" />
+    <path d="M18.5 5.5l2.5 -2.5" />
+    <path d="M10 11l-2 2" />
+    <path d="M13 14l-2 2" />
+  </symbol>
+
+  <symbol id="hba-i-topology" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2" />
+    <path d="M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2" />
+    <path d="M7 8l0 .01" />
+    <path d="M7 16l0 .01" />
+    <path d="M11 8h6" />
+    <path d="M11 16h6" />
+  </symbol>
+
+  <symbol id="hba-i-hostlink" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M18 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M10 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M6 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M18 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M14 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M22 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M6 12h4" />
+    <path d="M14 12h4" />
+    <path d="M15 7l-2 3" />
+    <path d="M9 7l2 3" />
+    <path d="M11 14l-2 3" />
+    <path d="M13 14l2 3" />
+  </symbol>
+
+  <symbol id="hba-i-controller" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 6a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -12" />
+    <path d="M9 9h6v6h-6l0 -6" />
+    <path d="M3 10h2" />
+    <path d="M3 14h2" />
+    <path d="M10 3v2" />
+    <path d="M14 3v2" />
+    <path d="M21 10h-2" />
+    <path d="M21 14h-2" />
+    <path d="M14 21v-2" />
+    <path d="M10 21v-2" />
+  </symbol>
+</svg>
+
+<!--
+  The row shape this plan reproduces: dot, icon, label, value.
+
+  <div class="hba-row">
+    <span class="hba-dot is-watch"></span>
+    <svg class="hba-icon"><use href="#hba-i-thermal" /></svg>
+    <span class="hba-name">Thermal</span>
+    <span class="hba-val">71&deg;C, +6 in 24h</span>
+  </div>
+
+  Dot sizing from the mockup: 8px square, border-radius 50%, flex:none.
+  Icon sizing from the mockup: 16px square, flex:none, colour = text-secondary.
+-->
