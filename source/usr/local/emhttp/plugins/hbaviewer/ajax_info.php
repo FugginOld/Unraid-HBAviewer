@@ -365,7 +365,10 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             $deltas[$n] = $d;
         }
         if ($stale) $deltas = array_map(fn() => null, $deltas);
-        $out .= luPhyBaselineBar((int) $i, $stale ? null : $ts, $stale);
+        // $ts is passed through even when stale: a stale baseline still EXISTS,
+        // so the button must read "Reset Baseline" — the same words the stale
+        // note tells the user to press.
+        $out .= luPhyBaselineBar((int) $i, $ts, $stale);
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {

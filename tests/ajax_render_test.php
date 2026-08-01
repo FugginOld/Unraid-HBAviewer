@@ -99,6 +99,9 @@ foreach ([
     check("phy $why shows stale note", str_contains($h, 'lu-phy-stale'));
     check("phy $why omits delta",      !str_contains($h, 'lu-phy-delta'));
     check("phy $why has no negative",  !preg_match('/&Delta;-|-\d+\/hr/', $h));
+    // The note says "press Reset Baseline"; the button must say the same words.
+    check("phy $why button matches note", str_contains($h, '>Reset Baseline</button>')
+                                       && !str_contains($h, '>Set Baseline</button>'));
 }
 
 // A stale controller must not poison a healthy one on the same card list.
