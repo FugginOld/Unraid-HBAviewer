@@ -7,9 +7,19 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8286fe7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/hba.sh source/usr/local/emhttp/plugins/hbaviewer/view.php source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/config.php hbaviewer.plg`
-> Expected output: **nothing**. Every excerpt below is quoted from `8286fe7`
-> (`dev` tip, 2026-07-30). Any difference is a STOP condition.
+> `git diff --stat cc5a66d..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/hba.sh source/usr/local/emhttp/plugins/hbaviewer/view.php source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/config.php hbaviewer.plg`
+> Expected output: **nothing**. Every excerpt below is quoted from `cc5a66d`
+> (`dev` tip, 2026-08-01). Any difference is a STOP condition.
+>
+> **Baseline re-stamped 2026-08-01.** This plan was written against `8286fe7`.
+> Since then plans 021 and 030 changed `view.php` (+150/-43) and `settings.php`
+> (+31), so the original drift check no longer passed. Both cited regions were
+> re-read and are **unchanged in substance**: `lsi_hba_view()` still opens
+> `$status = $data['status'] ?? 'ok';` (now at `view.php:193`), and
+> `settings.php:174` still carries plan 001's "HBAviewer does not send
+> notifications" sentence that this plan must update. `hba.sh` and `config.php`
+> were never touched. The drift was entirely in the temperature-gradient and
+> theme-token work, which this plan does not go near.
 
 ## Status
 
@@ -117,6 +127,19 @@ PHY baseline — is a new small JSON file under
 `/boot/config/plugins/hbaviewer/`. **If plan 022 has already shipped when
 this plan is picked up, reuse its storage module rather than writing a
 third copy of the same read/write pattern.**
+
+**Status of plan 022 as of 2026-08-01: executed on branch
+`advisor/022-phy-error-baseline`, NOT merged to `dev`** and awaiting a hardware
+check. It created `phy_baseline.php`, whose read/write half is a clean JSON
+store in exactly the directory this plan needs.
+
+Do **not** branch from 022 or import its file — an unmerged, unverified branch
+is not a dependency worth taking, and if it changes after a hardware test you
+inherit the churn. Write this plan's own small store, but keep it the *same
+shape* (`*_read(?string $path = null)` / `*_write(array $d, ?string $path = null)`,
+a `const` default path, path injectable so tests never touch `/boot`) so the two
+can be folded into one module later without a rewrite. If 022 has merged by the
+time you start, read `phy_baseline.php` and match it exactly.
 
 ## Scope
 
