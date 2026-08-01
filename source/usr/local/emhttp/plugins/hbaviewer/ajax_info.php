@@ -574,8 +574,12 @@ function renderHealthTables(array $data): string {
         foreach (['thermal' => 'Thermal', 'link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Read Health'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
             [$bDark, $bLight] = lsi_health_gradient($row['state']);
+            // Sprite ids live in hbaviewer.php's #lu-wrap. Most match $key; these
+            // two do not, and a mismatch renders an empty icon slot silently.
+            $icon = ['link_integrity' => 'link', 'host_link' => 'hostlink'][$key] ?? $key;
             $out .= '<div class="lu-indicator-row">'
-                  . '<span class="lu-ind-bar" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
+                  . '<span class="lu-ind-dot" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
+                  . '<svg class="lu-ind-icon" aria-hidden="true"><use href="#lu-i-' . $icon . '"/></svg>'
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
                   . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
         }

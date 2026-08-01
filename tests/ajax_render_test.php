@@ -267,7 +267,7 @@ $hRender = function (array $ctl, array $seed) use ($hRing): string {
 };
 $okDark  = lsi_health_gradient('ok')[0];
 $rowsOf  = fn(string $h) => substr_count($h, 'class="lu-indicator-row"');
-$greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-bar" style="--gd:' . $okDark . ';');
+$greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-dot" style="--gd:' . $okDark . ';');
 
 $now = time();
 $h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 120, 3480, '76', 'warning'));
@@ -281,6 +281,24 @@ $pos = array_map(fn($l) => strpos($h, ">$l</span>"), ['Thermal', 'Link Integrity
 $sorted = $pos; sort($sorted, SORT_NUMERIC);
 check('health rows in header order', !in_array(false, $pos, true) && $pos === $sorted);
 check('health thermal shows temp', str_contains($h, '<span class="lu-indicator-value">77°C</span>'));
+
+/* Row icons (plan 032). Two indicator keys do not match their sprite id
+   (`link_integrity` -> lu-i-link, `host_link` -> lu-i-hostlink); a mismatch
+   renders an empty icon slot silently, so assert the ids AND that every one is
+   actually defined in hbaviewer.php's sprite. */
+preg_match_all('~<use href="#(lu-i-[a-z]+)"/>~', $h, $mIco);
+check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 'lu-i-topology', 'lu-i-hostlink', 'lu-i-controller']);
+
+$shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
+preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
+check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
+// The sprite must be parsed once in the page shell, never re-emitted by the
+// per-poll Health render, which would duplicate these ids on every refresh.
+check('sprite defined once, in the shell only',
+      count($mSym[1]) === count(array_unique($mSym[1])) && !str_contains($h, '<symbol'));
+// The dot keeps lsi_health_gradient()'s --gd/--gl; the 30x9 bar is gone.
+check('no lu-ind-bar remains', !str_contains($h, 'lu-ind-bar'));
+check('dots still gradient-filled', substr_count($h, '<span class="lu-ind-dot" style="--gd:') === 5);
 
 preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
 check('health gauge reads 4 / 5',        ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
