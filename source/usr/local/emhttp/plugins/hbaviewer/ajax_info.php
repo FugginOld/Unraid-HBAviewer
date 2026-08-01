@@ -293,7 +293,9 @@ function renderOverviewCards(array $data, array $cfg): string {
 
 /* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
 function luCtlHead(int $i): string {
-    return '<h3 style="margin:18px 0 8px;color:#f5a623;font-size:12px;'
+    // No top margin: this is now the first child of its controller's card, and
+    // the card already supplies 18px of padding above it.
+    return '<h3 style="margin:0 0 10px;color:#f5a623;font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
 function luLinkBadge(string $link): string {
@@ -504,8 +506,12 @@ function renderHealthTables(array $data): string {
     $multi = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA, matching renderOverviewCards — including the error
+        // branch below, or an errored controller renders as bare text floating
+        // between two cards.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
 
         // The only place that touches the /tmp ring — see health.php's header.
         $file  = health_store_path($i);
@@ -583,7 +589,7 @@ function renderHealthTables(array $data): string {
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
                   . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
         }
-        $out .= '</div>';
+        $out .= '</div></div>';
     }
     return $out;
 }

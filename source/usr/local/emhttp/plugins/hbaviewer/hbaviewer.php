@@ -201,6 +201,10 @@ if ($enableFlash) {
 .lu-muted  { color: var(--faint); font-size: 13px; }
 .lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
 .lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+/* On the per-controller tabs the toolbar sits at pane level (the cards are one
+   per HBA, and the toolbar describes the tab, not the first HBA), so it no
+   longer inherits .lu-card's 20px inset — restate just that, not a whole card. */
+.lu-tab-pane > .lu-tab-toolbar { padding: 0 20px; }
 .lu-refresh-btn {
     background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
     font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
@@ -402,13 +406,11 @@ if ($enableFlash) {
 
 <!-- ── HBA Health tab (five sub-indicators + a worst-of rollup; no config toggle) -->
 <div id="tab-health" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
-    </div>
-    <div id="health-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
   </div>
+  <div id="health-content"><div class="lu-loading">Loading…</div></div>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
