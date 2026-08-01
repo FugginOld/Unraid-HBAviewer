@@ -416,42 +416,36 @@ if ($enableFlash) {
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
 <?php if ($showPhy): ?>
 <div id="tab-phy" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
-    </div>
-    <div id="phy-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
   </div>
+  <div id="phy-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
 <!-- ── Drives tab ────────────────────────────────────────────────────────── -->
 <?php if ($showDrives): ?>
 <div id="tab-drives" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
-    </div>
-    <div id="drives-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
   </div>
+  <div id="drives-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
 <!-- ── Event Log tab ─────────────────────────────────────────────────────── -->
 <?php if ($showEvents): ?>
 <div id="tab-events" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
-      <span>
-        <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
-        <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
-      </span>
-    </div>
-    <div id="events-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
+    <span>
+      <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
+      <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
+    </span>
   </div>
+  <div id="events-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 

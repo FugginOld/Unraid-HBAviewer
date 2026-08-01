@@ -309,10 +309,14 @@ function renderPhyTables(array $data): string {
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or PHY-less controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
         $phys = $ctl['phys'] ?? [];
-        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
+        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p></div>'; continue; }
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
@@ -353,6 +357,7 @@ function renderPhyTables(array $data): string {
             }
             $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
@@ -366,8 +371,12 @@ function renderDrivesTables(array $data): string {
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or driveless controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
 
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         foreach ($ctl['enclosures'] ?? [] as $e) {
@@ -384,7 +393,7 @@ function renderDrivesTables(array $data): string {
         }
 
         $drives = $ctl['drives'] ?? [];
-        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
+        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p></div>'; continue; }
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
@@ -423,6 +432,7 @@ function renderDrivesTables(array $data): string {
             }
             $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
@@ -438,8 +448,12 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or entry-less controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
         $file = event_store_path($i, $dir);
@@ -450,7 +464,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         // through the wrong renderer produces undefined-key warnings and blank rows.
         $entries = event_visible($archived, $data['backend'] ?? '');
         $hidden  = count($archived) - count($entries);
-        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
+        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p></div>'; continue; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
@@ -481,6 +495,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
             }
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
