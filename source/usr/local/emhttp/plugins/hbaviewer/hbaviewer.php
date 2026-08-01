@@ -183,6 +183,44 @@ if ($enableFlash) {
 .lu-fbtn.danger:hover { background: #c0392b; }
 .lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 
+/* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
+.lu-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
+.lu-health-title { font-size: 12.5px; color: var(--text); font-weight: 600; }
+.lu-health-pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
+}
+/* Band meter: thermal only — the one continuous metric with meaningful bands.
+   Segments sized to the plan-018 cut-points (65/75/85/95) over a 0-110C scale:
+   65/110, 10/110, 10/110, 10/110, 15/110 as flex-grow ratios. */
+.lu-band-meter { margin: 0 0 18px; }
+.lu-band-track { position: relative; display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--track); }
+.lu-band-seg { display: block; height: 100%; }
+.lu-band-seg.s0 { flex: 65; background: #2ecc71; }
+.lu-band-seg.s1 { flex: 10; background: #f1c40f; }
+.lu-band-seg.s2 { flex: 10; background: #e67e22; }
+.lu-band-seg.s3 { flex: 10; background: #e74c3c; }
+.lu-band-seg.s4 { flex: 15; background: #922b21; }
+.lu-band-marker {
+    position: absolute; top: -3px; width: 2px; height: 16px; background: #fff;
+    box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translateX(-1px);
+}
+/* Labels sit at their TRUE percentage of the 0-110 scale (set inline per-span
+   by the renderer), not spread evenly — six evenly-spaced labels over
+   unevenly-sized segments put "85" under the 65 boundary. These percentages
+   must stay in step with the `flex` weights on .lu-band-seg above; both
+   encode the same band edges (65/75/85/95), just in different files. */
+.lu-band-labels { position: relative; height: 12px; font-size: 10px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
+.lu-band-labels span { position: absolute; transform: translateX(-50%); }
+.lu-band-labels span:first-child { transform: none; }             /* 0 flush left */
+.lu-band-labels span:last-child  { transform: translateX(-100%); } /* 110 flush right */
+.lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
+.lu-indicator-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
+.lu-indicator-row:last-child { border-bottom: none; }
+.lu-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.lu-indicator-label { color: var(--faint); flex: 1; }
+.lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 .lu-perf-ctl { margin-bottom: 22px; }
 .lu-perf-ctl h4 { margin: 0 0 10px; color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -198,6 +236,7 @@ if ($enableFlash) {
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
 <div class="lu-tabs">
   <button class="lu-tab-btn active" data-tab="overview" onclick="luTab('overview')">Overview</button>
+  <button class="lu-tab-btn" data-tab="health" onclick="luTab('health')">HBA Health</button>
   <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
@@ -210,6 +249,17 @@ if ($enableFlash) {
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
 <div id="tab-overview" class="lu-tab-pane active">
   <div id="overview-content"><div class="lu-loading">Loading HBA information… (first read can take up to 60 seconds)</div></div>
+</div>
+
+<!-- ── HBA Health tab (five sub-indicators + a worst-of rollup; no config toggle) -->
+<div id="tab-health" class="lu-tab-pane">
+  <div class="lu-card first">
+    <div class="lu-tab-toolbar">
+      <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
+      <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
+    </div>
+    <div id="health-content"><div class="lu-loading">Loading…</div></div>
+  </div>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
