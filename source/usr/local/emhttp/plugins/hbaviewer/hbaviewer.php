@@ -46,6 +46,12 @@ if ($enableFlash) {
     --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
     --accent:#f5a623; --accent-2:#88aaff; --track: var(--border-color, #2a2a2a);
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
+    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
+       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
+       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
+    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
+    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
+    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
     font-family: inherit; width: fit-content; max-width: 1560px; margin: 20px auto;
     color: var(--text);
@@ -70,7 +76,7 @@ if ($enableFlash) {
     color: var(--text); text-decoration: none; transition: color 0.15s;
 }
 .lu-settings-link:hover { color: var(--accent); }
-.lu-tab-btn[data-tab="flash"] { color: #c98d88; }
+.lu-tab-btn[data-tab="flash"] { color: var(--crit-text); }
 .lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
 .lu-tab-pane { display: none; }
 .lu-tab-pane.active { display: block; }
@@ -160,7 +166,7 @@ if ($enableFlash) {
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .lu-error {
     background: color-mix(in srgb, var(--crit) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
-    border-radius: 8px; padding: 14px 18px; color: #e0a0a0; font-size: 13px; margin-bottom: 12px;
+    border-radius: 8px; padding: 14px 18px; color: var(--crit-text); font-size: 13px; margin-bottom: 12px;
 }
 .lu-muted  { color: var(--faint); font-size: 13px; }
 .lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
@@ -172,11 +178,11 @@ if ($enableFlash) {
 .lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
-.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: #e0a0a0; font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
-.lu-flash-warn strong { color: var(--crit); }
+.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: var(--crit-text); font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
+.lu-flash-warn strong { color: var(--crit-text); }
 .lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; margin-bottom: 16px; }
-.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: #9cc99c; }
-.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: #dba24a; }
+.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
+.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
 .lu-fc { border: 1px solid var(--border-soft); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: var(--bg); }
 .lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
@@ -532,7 +538,7 @@ if ($enableFlash) {
         var fw=document.getElementById('flash-fw-'+i).files[0];
         var bios=document.getElementById('flash-bios-'+i).files[0];
         var tool=document.getElementById('flash-tool-'+i).files[0];
-        if (!fw && !tool) { out.style.color='#e88'; out.textContent='Choose a firmware file first.'; return; }
+        if (!fw && !tool) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
         var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
         if (fw) fd.append('firmware', fw);
         if (bios) fd.append('bios', bios);
@@ -540,14 +546,14 @@ if ($enableFlash) {
         fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
           .then(function(r){ return r.json(); })
           .then(function(d){
-            if (d.error) { out.style.color='#e88'; out.textContent=d.error; return; }
+            if (d.error) { out.style.color='var(--crit-text)'; out.textContent=d.error; return; }
             var c=flashCard(i);
             if (d.firmware) c.setAttribute('data-fw', d.firmware);
             if (d.bios) c.setAttribute('data-bios', d.bios);
             out.style.color='#9c9';
             out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
           })
-          .catch(function(){ out.style.color='#e88'; out.textContent='Upload failed.'; });
+          .catch(function(){ out.style.color='var(--crit-text)'; out.textContent='Upload failed.'; });
     };
 
     window.luFlashGo = function (i) {

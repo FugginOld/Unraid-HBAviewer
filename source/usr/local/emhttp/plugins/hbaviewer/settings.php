@@ -89,7 +89,13 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     --border-soft: var(--border-color, #2a2a2a);
     /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
     --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
+    --accent:#f5a623; --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
+    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
+       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
+       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
+    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
+    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
+    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
     background: radial-gradient(700px 300px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%), var(--bg);
@@ -109,13 +115,9 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .lu-toggle span { font-size: 13px; color: var(--text); }
 .lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
-/* Text colour was a fixed green/red pastel tuned for a dark card only — 1.5-1.8:1
-   on a light theme, near-invisible. Mixed 50% toward --text-color instead, which
-   is dark on light themes and light on dark ones, so the result self-adjusts
-   toward whichever end clears 4.5:1 body-text contrast on that theme's card. */
-.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd)); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
-.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd)); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
-.lu-danger strong { color: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd)); }
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: var(--good-text); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: var(--crit-text); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: var(--crit-text); }
 .lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }

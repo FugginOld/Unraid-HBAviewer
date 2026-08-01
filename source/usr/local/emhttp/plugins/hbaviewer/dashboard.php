@@ -41,6 +41,10 @@ echo <<<CSS
   --d-bg:     var(--shade-bg-color, #1c1c1c);
   --d-border: var(--border-color, #2a2a2a);
   --d-text:   var(--text-color, #ddd);
+  /* Body-text variant of the alert colour (matches lsi_status_color('alert') /
+     view.php's #e74c3c). As TEXT the raw colour measures ~2:1 on a light theme's
+     card; mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
+  --crit-text: color-mix(in srgb, #e74c3c 50%, var(--text-color, #ddd));
 }
 .lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid var(--d-border); }
 .lu-d-tile .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
@@ -118,7 +122,7 @@ if ($error) {
         'pill'   => '',
         'health' => '<span class="lu-d-health" style="--sc:' . lsi_status_color('alert') . '">UNREADABLE</span>',
         'foot'   => '',
-        'body'   => "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>",
+        'body'   => "<span style='color:var(--crit-text)'>" . htmlspecialchars($error) . "</span>",
     ];
 }
 
@@ -137,7 +141,7 @@ foreach ($controllers as $i => $c) {
     // A controller that failed to read still gets its own tile — error text in
     // the body, no pill. Skipping it made errored cards vanish once collapsed.
     if (isset($c['error'])) {
-        $t['body'] = "<div class='lu-d-ctl'><span style='color:#d88'>Controller {$i}: "
+        $t['body'] = "<div class='lu-d-ctl'><span style='color:var(--crit-text)'>Controller {$i}: "
                    . htmlspecialchars($c['error']) . "</span></div>"
                    . "<div class='lu-d-ts'>Last read: {$ts}</div>";
         $tiles[] = $t;
