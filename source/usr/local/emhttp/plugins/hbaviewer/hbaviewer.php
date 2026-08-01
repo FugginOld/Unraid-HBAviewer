@@ -534,7 +534,7 @@ if ($enableFlash) {
     };
 
     window.luFlashUpload = function (i) {
-        var out = document.getElementById('flash-up-'+i); out.style.color='#888'; out.textContent='Uploading…';
+        var out = document.getElementById('flash-up-'+i); out.style.color='var(--muted)'; out.textContent='Uploading…';
         var fw=document.getElementById('flash-fw-'+i).files[0];
         var bios=document.getElementById('flash-bios-'+i).files[0];
         var tool=document.getElementById('flash-tool-'+i).files[0];
@@ -550,7 +550,7 @@ if ($enableFlash) {
             var c=flashCard(i);
             if (d.firmware) c.setAttribute('data-fw', d.firmware);
             if (d.bios) c.setAttribute('data-bios', d.bios);
-            out.style.color='#9c9';
+            out.style.color='var(--good-text)';
             out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
           })
           .catch(function(){ out.style.color='var(--crit-text)'; out.textContent='Upload failed.'; });
