@@ -97,11 +97,26 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
     --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
-    font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
+    /* 1000px so the two-column grid below gets ~468px per column — near the 532px
+       a section had when the page was one 580px column. It also caps the grid at
+       two tracks: a third would need 1112px of content box. */
+    font-family: inherit; max-width: 1000px; margin: 20px auto; color: var(--text);
     background: radial-gradient(700px 300px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%), var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
 }
 .lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+/* Two columns, Advanced spanning both. The span is deliberate: that section
+   unlocks firmware writes, so it must not read as a peer of the routine toggles.
+   Grid, not CSS columns — columns can break a section mid-control.
+   auto-fit + minmax collapses to one column on tablets and split screens with no
+   invented breakpoint (same idiom as .lu-perf-grid in hbaviewer.php); min() keeps
+   it from overflowing below 360px. Sits INSIDE <form> so the POST is unaffected,
+   and wraps only the cards so the Save button stays below it in normal flow.
+   NOTE: this assumes exactly three sections. A fourth must decide whether it
+   pairs with Advanced or pushes Advanced down. */
+.lu-s-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }
+.lu-s-grid > .lu-s-card { margin-bottom: 0; }
+.lu-s-grid > .lu-s-span { grid-column: 1 / -1; }
 .lu-s-card h3 { margin: 0 0 16px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 1px solid var(--border-soft); padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 .lu-s-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
 .lu-s-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
@@ -131,6 +146,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
   <?php endif; ?>
 
   <form method="post">
+
+    <div class="lu-s-grid">
 
     <div class="lu-s-card">
       <h3>HBA Connection</h3>
@@ -222,7 +239,7 @@ foreach ($bands as $floor => $label) {
       </label>
     </div>
 
-    <div class="lu-s-card">
+    <div class="lu-s-card lu-s-span">
       <h3>Advanced — Firmware Flashing</h3>
       <div class="lu-danger">
         <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
@@ -237,6 +254,8 @@ foreach ($bands as $floor => $label) {
         <small>adds a Firmware/BIOS Update tab to the Monitor</small>
       </label>
     </div>
+
+    </div><!-- /.lu-s-grid -->
 
     <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
     <?php if ($saved): ?>
