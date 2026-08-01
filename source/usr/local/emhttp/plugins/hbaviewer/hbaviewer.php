@@ -31,17 +31,23 @@ if ($enableFlash) {
    tabs contribute nothing to max-content. max-width caps it on a wide screen and
    margin:auto re-centres it once shrunk. */
 #lu-wrap {
-    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
-    --border:#333333; --border-soft:#2a2a2a;
+    /* Chrome tokens follow Unraid's theme variables (confirmed present on
+       white/black/gray/azure — see plan 021); each keeps its original literal
+       as the CSS fallback so a missing variable renders exactly as before. */
+    --bg:        var(--background-color, #161616);
+    --surface:   var(--dashboard-background-color, #1c1c1c);
+    --surface-2: var(--alt-background-color, #232323);
+    --border:      var(--border-color, #333333);
+    --border-soft: var(--alt-border-color, #2a2a2a);
     /* ponytail: one text colour; --muted/--faint kept as aliases so the ~40 call sites stay untouched */
-    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
-    --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
+    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
+    --accent:#f5a623; --accent-2:#88aaff; --track: var(--alt-border-color, #2a2a2a);
     --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
     font-family: inherit; width: fit-content; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
-        radial-gradient(900px 350px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%),
+        radial-gradient(900px 350px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%),
         var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px 26px;
 }

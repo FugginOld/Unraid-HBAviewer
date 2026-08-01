@@ -76,14 +76,20 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 <style>
 /* Original HBAviewer palette in the new component format. Matches the Monitor. */
 #lu-settings-wrap {
-    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
-    --border:#333333; --border-soft:#2a2a2a;
+    /* Chrome tokens follow Unraid's theme variables (confirmed present on
+       white/black/gray/azure — see plan 021); each keeps its original literal
+       as the CSS fallback so a missing variable renders exactly as before. */
+    --bg:        var(--background-color, #161616);
+    --surface:   var(--dashboard-background-color, #1c1c1c);
+    --surface-2: var(--alt-background-color, #232323);
+    --border:      var(--border-color, #333333);
+    --border-soft: var(--alt-border-color, #2a2a2a);
     /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
-    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
+    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
     --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
-    background: radial-gradient(700px 300px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%), var(--bg);
+    background: radial-gradient(700px 300px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%), var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
 }
 .lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
