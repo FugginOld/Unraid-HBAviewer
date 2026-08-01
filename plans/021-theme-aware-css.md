@@ -7,9 +7,9 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8286fe7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/dashboard.php source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php source/usr/local/emhttp/plugins/hbaviewer/view.php`
-> Expected output: **nothing**. Every count below is from `8286fe7` (`dev` tip,
-> 2026-07-30). Any difference is a STOP condition — re-run the grep in
+> `git diff --stat 533f010..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/dashboard.php source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php source/usr/local/emhttp/plugins/hbaviewer/view.php`
+> Expected output: **nothing**. Every count below is from `533f010` (`dev` tip
+> after plans 017/019/020 merged, 2026-07-31). Any difference is a STOP condition — re-run the grep in
 > Step 1 before continuing.
 
 ## Status
@@ -17,14 +17,11 @@
 - **Priority**: P1
 - **Effort**: S
 - **Risk**: LOW — pure CSS/PHP string substitution, no logic change
-- **Depends on**: **020 must merge first.** Not a logical dependency — a
-  collision one. Plan 020 rewrites `hbaviewer.php`, `ajax_info.php`,
-  `dashboard.php` and `view.php` on an unmerged branch, which is four of the
-  five files this plan touches. Running 021 first guarantees a conflict, and
-  worse, 021 would sweep the file *without* the HBA Health tab's CSS in it —
-  leaving a whole tab on hardcoded hexes that a later reader would assume had
-  already been converted. Re-run this plan's Step 1 grep after 020 lands; the
-  counts below will have moved.
+- **Depends on**: 020 — **satisfied**. It merged as `533f010`, so the HBA
+  Health tab's CSS is present in `hbaviewer.php` and its palette in `view.php`,
+  and this plan's sweep will cover them. This plan is re-baselined onto that
+  commit and its counts re-measured; had it run first it would have converted
+  files 020 was about to rewrite and silently skipped a whole tab.
 - **Category**: bug / UX
 - **Planned at**: `8286fe7`, 2026-07-31
 - **Requested by**: external roadmap review — closes issue
@@ -61,16 +58,35 @@ be red in every theme, that's the point of the color).
 
 ## Current state
 
-Hex-literal counts per file (`grep -oE '#[0-9a-fA-F]{3,6}' *.php *.page | sort
-| uniq -c | sort -rn`), at `8286fe7`:
+**Re-measured at `533f010`** after plans 019 and 020 merged — the first draft's
+table was taken at `8286fe7` and is superseded. 115 hex literals across the five
+files:
 
-| File | Notable literals | Likely role |
-|---|---|---|
-| `dashboard.php` | `#2ecc71` ×8, `#ddd` ×7, `#2a2a2a` ×5, `#d88` ×2 | status green, muted text, panel bg, status red |
-| `hbaviewer.php` | `#dddddd` ×3, `#e88` ×3, `#f5a623` ×2, `#e74c3c` ×2, `#e0a0a0` ×2, `#2ecc71` ×2, `#2a2a2a` ×2, `#242424` ×2 | muted text, status colors, panel bg |
-| `ajax_info.php` | `#f39c12` ×3, `#e74c3c` ×2, `#2ecc71` ×2 | status amber/red/green (renderer output, not page chrome) |
-| `settings.php` | `#dddddd` ×3, `#f5a623` ×2 | muted text, status amber |
-| `view.php` | `#e74c3c` ×2, `#922b21` ×2, plus singles: `#ff5252`, `#f39c12`, `#f1c40f`, `#e67e22`, `#2a2a2a`, `#2ecc71` | full status palette (error renderer) |
+| File | Count | Notable literals | Likely role |
+|---|---|---|---|
+| `hbaviewer.php` | 45 | `#e88` ×3, `#e74c3c` ×3, `#dddddd` ×3, `#2ecc71` ×3, `#fff` ×2, `#f5a623` ×2 | page chrome, muted text, status colours |
+| `dashboard.php` | 25 | `#2ecc71` ×8, `#ddd` ×7, `#2a2a2a` ×5, `#d88` ×2, `#922b21` ×1 | status green, muted text, panel bg |
+| `view.php` | 18 | `#e74c3c` ×3, `#2ecc71` ×3, `#f1c40f` ×2, `#e67e22` ×2, `#922b21` ×2, `#ff5252` ×1 | the full status + temperature-band palette |
+| `settings.php` | 17 | `#dddddd` ×3, `#f5a623` ×2, `#e0a0a0`, `#d9901a`, `#8ccc8c` | muted text, accent, status |
+| `ajax_info.php` | 10 | `#f39c12` ×3, `#e74c3c` ×2, `#2ecc71` ×2, `#922b21` ×1 | renderer output, not page chrome |
+
+Reproduce with:
+
+```bash
+cd source/usr/local/emhttp/plugins/hbaviewer
+for f in hbaviewer.php dashboard.php view.php settings.php ajax_info.php; do
+  printf '%-16s %s\n' "$f" "$(grep -oE '#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}\b' "$f" | wc -l)"
+done
+```
+
+**Note what 019 and 020 added, because it changes the sorting job below.**
+`view.php` is now the single home of the temperature-band palette
+(`#2ecc71`/`#f1c40f`/`#e67e22`/`#e74c3c`/`#922b21` plus the `#ff5252` stroke
+variant) and the health-state palette. Those five band colours were chosen by
+contrast measurement against the plugin's own dark card surfaces — see plan 018.
+They are **semantic**, not chrome, and converting them to theme variables would
+discard that work. `#922b21` in particular is only legible as a *fill behind
+white text*; it fails contrast as a foreground.
 
 Two categories are already visible from the counts alone:
 
