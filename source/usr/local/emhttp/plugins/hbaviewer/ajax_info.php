@@ -11,6 +11,9 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/event_archive.php';
 require_once __DIR__ . '/cached_read.php';
 require_once __DIR__ . '/health.php';
+// Read path only. phy_baseline.php's own dispatch fires solely on a POST
+// carrying reset_baseline, so requiring it here cannot mutate anything.
+require_once __DIR__ . '/phy_baseline.php';
 
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
@@ -301,10 +304,47 @@ function luLinkBadge(string $link): string {
         ? '<span class="lu-link-up">UP</span>' : '<span class="lu-link-down">DOWN</span>';
 }
 
-function renderPhyTables(array $data): string {
+/* Per-controller baseline bar (plan 022 Step 1: per-controller, not per-PHY —
+   precise enough to baseline the card whose cable you just reseated, without a
+   button on every row). Always states WHEN the baseline was taken: a baseline
+   set at install and never touched measures "errors since install", which is
+   the raw counter wearing a rate's clothes. */
+function luPhyBaselineBar(int $ctl, ?int $ts, bool $stale): string {
+    if ($stale) {
+        $note = '<span class="lu-phy-stale">Baseline reset by reboot or driver reload — press Reset Baseline to re-establish.</span>';
+    } elseif ($ts === null) {
+        $note = '<span class="lu-muted">No baseline set — counters are cumulative since the driver loaded.</span>';
+    } else {
+        $note = '<span class="lu-muted">Baseline set ' . htmlspecialchars(date('Y-m-d', $ts) . ' ' . lsi_time($ts)) . '</span>';
+    }
+    return '<div class="lu-phy-bar">' . $note
+         . '<button class="lu-refresh-btn" onclick="luPhyBaseline(' . $ctl . ', this)">'
+         . ($ts === null ? 'Set Baseline' : 'Reset Baseline') . '</button></div>';
+}
+
+/* One counter cell: the raw counter exactly as before, plus a delta-since-
+   baseline and a rate when this PHY has a usable baseline. Omitted entirely
+   when there is none — a "0" there would read as "no errors" rather than "no
+   reference point". A negative delta can never reach this: phy_baseline_delta()
+   reports a counter restart as `reset`, and the controller then renders
+   raw-only behind the bar's re-baseline prompt. */
+function luPhyCell($v, bool $err, ?array $d, string $k): string {
+    $s    = htmlspecialchars((string) $v);
+    $cell = $err ? '<span class="lu-err-val">' . $s . '</span>' : $s;
+    if ($d === null || !empty($d['reset'])) return $cell;
+    $r = $d['rate'][$k];
+    return $cell . '<div class="lu-phy-delta">&Delta;' . (int) $d['delta'][$k]
+         . ' &middot; ' . number_format($r, $r > 0 && $r < 10 ? 1 : 0) . '/hr</div>';
+}
+
+/* $baselines defaults to none, so every existing caller (and the raw-only
+   fresh install) renders exactly what it rendered before this plan. */
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
+    $now   ??= time();
+    $uptime ??= phy_baseline_uptime();
     $out   = '';
     foreach ($ctls as $i => $ctl) {
         if ($multi) $out .= luCtlHead($i);
@@ -312,41 +352,49 @@ function renderPhyTables(array $data): string {
         $phys = $ctl['phys'] ?? [];
         if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
 
+        // Resolve every PHY's delta first: a reboot or driver reload zeroes the
+        // whole controller's counters at once, so one invalidated PHY condemns
+        // the controller's baseline rather than just its own row.
+        $bl     = phy_baseline_for($baselines, (int) $i);
+        $ts     = phy_baseline_ts($baselines, (int) $i);
+        $deltas = [];
+        $stale  = false;
+        foreach ($phys as $n => $p) {
+            $d = phy_baseline_delta($bl[(int) ($p['phy'] ?? -1)] ?? null, $p, $now, $uptime);
+            if ($d !== null && !empty($d['reset'])) $stale = true;
+            $deltas[$n] = $d;
+        }
+        if ($stale) $deltas = array_map(fn() => null, $deltas);
+        $out .= luPhyBaselineBar((int) $i, $stale ? null : $ts, $stale);
+
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
             // storcli backend: link/speed/attached-SAS (storcli) + error counters (sysfs)
             $rows = [];
-            foreach ($phys as $p) {
+            foreach ($phys as $n => $p) {
                 $hasErr = (($p['inv'] ?? 0) + ($p['disp'] ?? 0) + ($p['sync'] ?? 0) + ($p['reset'] ?? 0)) > 0;
-                $ec = function ($v) use ($hasErr) {
-                    $s = htmlspecialchars((string) $v);
-                    return $hasErr && $v > 0 ? '<span class="lu-err-val">' . $s . '</span>' : $s;
-                };
+                $d  = $deltas[$n];
+                $ec = fn($k) => luPhyCell($p[$k] ?? 0, $hasErr && ($p[$k] ?? 0) > 0, $d, $k);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     luLinkBadge($p['link']),
                     htmlspecialchars($p['speed']),
                     !empty($p['sas_addr']) ? '<code>' . htmlspecialchars(strtoupper($p['sas_addr'])) . '</code>' : '<span class="lu-muted">—</span>',
-                    $ec($p['inv'] ?? 0),
-                    $ec($p['disp'] ?? 0),
-                    $ec($p['sync'] ?? 0),
-                    $ec($p['reset'] ?? 0),
+                    $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
             $out .= luTable(['PHY', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         } else {
             // lsiutil backend: SAS error counters
             $rows = [];
-            foreach ($phys as $p) {
+            foreach ($phys as $n => $p) {
                 $hasErr = ($p['inv'] + $p['disp'] + $p['sync'] + $p['reset']) > 0;
-                $ev = fn($v) => htmlspecialchars((string) $v);
+                $d  = $deltas[$n];
+                $ec = fn($k) => luPhyCell($p[$k], $hasErr, $d, $k);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     luLinkBadge($p['link']),
-                    $hasErr ? '<span class="lu-err-val">'.$ev($p['inv']).'</span>'   : $ev($p['inv']),
-                    $hasErr ? '<span class="lu-err-val">'.$ev($p['disp']).'</span>'  : $ev($p['disp']),
-                    $hasErr ? '<span class="lu-err-val">'.$ev($p['sync']).'</span>'  : $ev($p['sync']),
-                    $hasErr ? '<span class="lu-err-val">'.$ev($p['reset']).'</span>' : $ev($p['reset']),
+                    $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
             $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
@@ -355,7 +403,7 @@ function renderPhyTables(array $data): string {
     return $out;
 }
 
-if ($type === 'phy') { echo renderPhyTables($data); exit; }
+if ($type === 'phy') { echo renderPhyTables($data, phy_baseline_read()); exit; }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 function renderDrivesTables(array $data): string {

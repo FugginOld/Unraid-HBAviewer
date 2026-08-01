@@ -189,6 +189,11 @@ if ($enableFlash) {
 .lu-link-down { color: var(--crit); font-weight: 700; font-size: 11px; }
 .lu-err-val   { color: var(--warn); font-weight: 600; }
 
+/* ── PHY error baseline (plan 022) ───────────────────────────────────────── */
+.lu-phy-bar   { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 8px; }
+.lu-phy-delta { color: var(--faint); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; opacity: 0.85; }
+.lu-phy-stale { color: var(--warn-text); font-size: 13px; }
+
 /* ── Misc ────────────────────────────────────────────────────────────────── */
 .lu-error {
     background: color-mix(in srgb, var(--crit) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
@@ -458,6 +463,29 @@ if ($enableFlash) {
             .catch(function () {
                 el.innerHTML = '<div class="lu-error">Request failed.</div>';
             });
+    };
+
+    /* ── PHY tab: snapshot one controller's error counters as the baseline ────
+       Confirmed first, because it discards the previous reference point. The
+       server re-reads the hardware rather than trusting anything sent from
+       here, so this only picks the controller and reloads the tab. */
+    window.luPhyBaseline = function (ctl, btn) {
+        if (!confirm('Set the PHY error baseline for controller /c' + ctl + ' to its current counters?\n\n'
+                   + 'Everything the tab shows as Δ and /hr is measured from this moment. '
+                   + 'Any existing baseline for this controller is replaced.')) return;
+        var label = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Working…';
+        fetch('/plugins/hbaviewer/phy_baseline.php', {
+            method: 'POST',
+            body: new URLSearchParams({reset_baseline: ctl, csrf_token: flashCsrf})
+        })
+            .then(function (r) { return r.text(); })
+            .then(function (t) {
+                if (t.trim() === 'ok') { luReloadTab('phy'); return; }
+                btn.disabled = false; btn.textContent = label;
+                alert('Baseline not set: ' + t);
+            })
+            .catch(function () { btn.disabled = false; btn.textContent = label; });
     };
 
     /* ── SMART tab: poll the background collector until the cache is ready ──── */
