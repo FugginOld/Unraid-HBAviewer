@@ -327,6 +327,112 @@ preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
 check('health downtrain gauge reads 4 / 5', ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
 check('health downtrain numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
 
+/* ── One .lu-card per HBA on every per-controller tab (plan 033) ──────────────
+   The Overview has always given each controller its own card; Health, PHY,
+   Drives and Events stacked every controller inside the pane's single card.
+   The renderers now emit the card themselves, so the count must track the
+   controller count on EVERY path. The load-bearing cases are the error and
+   empty branches: they `continue` past the loop's normal close, so a missed
+   close there leaks one controller's markup into the next controller's card
+   (or renders it as bare text between cards) — which is why the div balance is
+   asserted alongside the count. Zero controllers must emit no card at all. */
+$cards  = fn(string $h) => substr_count($h, 'class="lu-card first"');
+$ctlIds = function (string $h): array {
+    preg_match_all('~data-ctl="(\d+)"~', $h, $m);
+    return $m[1];
+};
+$balanced = fn(string $h) => substr_count($h, '<div') === substr_count($h, '</div>');
+
+$hRing1 = health_store_path(1);
+$hSaved1 = is_file($hRing1) ? file_get_contents($hRing1) : null;
+$cdir = sys_get_temp_dir() . '/hbav_cards_' . getmypid();
+@mkdir($cdir, 0755, true);
+array_map('unlink', glob("$cdir/*.json") ?: []);
+
+$phyC = fn() => ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000cca0','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0]]];
+$drvC = fn() => ['drives' => [['slot'=>'8/0','port'=>'14','model'=>'ST8000NM','serial'=>'S1','state'=>'JBOD',
+                              'size'=>'8 TB','sas_address'=>'5000c5','link'=>'12.0Gb/s','firmware'=>'SN02']]];
+$evC  = fn($s) => ['entries' => [['seq'=>$s,'time'=>'2026-07-01 10:00:00','code'=>'0x0113','description'=>'Drive inserted']]];
+$err  = ['error' => 'no response from controller'];
+
+// name => [two-controller render, one-good-one-errored render, zero-controller render]
+$tabs = [
+    'health' => [
+        fn() => renderHealthTables(['controllers' => [$hs($now, 3600, '45', 'normal'), $hs($now, 3600, '45', 'normal')]]),
+        fn() => renderHealthTables(['controllers' => [$hs($now, 3600, '45', 'normal'), $err]]),
+        fn() => renderHealthTables(['controllers' => []]),
+    ],
+    'phy' => [
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), $phyC()]]),
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), $err]]),
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[]]),
+    ],
+    'drives' => [
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), $drvC()]]),
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), $err]]),
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[]]),
+    ],
+    'events' => [
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), $evC('2')]], $cdir),
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), $err]], $cdir),
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[]], $cdir),
+    ],
+];
+foreach ($tabs as $tab => [$two, $errored, $none]) {
+    $h = $two();
+    check("$tab: two controllers -> two cards", $cards($h) === 2);
+    check("$tab: two distinct data-ctl",        $ctlIds($h) === ['0', '1']);
+    check("$tab: two-card divs balanced",       $balanced($h));
+
+    $h = $errored();
+    check("$tab: errored controller still carded", $cards($h) === 2 && $ctlIds($h) === ['0', '1']);
+    // The card must close immediately after the error paragraph, not swallow
+    // whatever the next controller renders.
+    check("$tab: errored controller text inside its card",
+          str_contains($h, 'no response from controller</p></div>'));
+    check("$tab: errored divs balanced",           $balanced($h));
+
+    check("$tab: no controllers -> no card", $cards($none()) === 0);
+}
+
+// The renderers' own empty branches also `continue` — same leak risk, different line.
+check('phy: no-PHY controller still carded', (function () use ($cards, $ctlIds, $balanced, $phyC) {
+    $h = renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), []]]);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No PHY data.');
+})());
+check('drives: driveless controller still carded', (function () use ($cards, $ctlIds, $balanced, $drvC) {
+    $h = renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), []]]);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No drives detected.');
+})());
+// Its own archive dir: $cdir already holds c1 entries from the two-controller
+// case above, and event_merge would replay them, so the controller would not be
+// entry-less at all.
+$edir2 = sys_get_temp_dir() . '/hbav_cards_empty_' . getmypid();
+@mkdir($edir2, 0755, true);
+array_map('unlink', glob("$edir2/*.json") ?: []);
+check('events: entry-less controller still carded', (function () use ($cards, $ctlIds, $balanced, $evC, $edir2) {
+    $h = renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), ['entries'=>[]]]], $edir2);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No log entries.');
+})());
+array_map('unlink', glob("$edir2/*.json") ?: []);
+@rmdir($edir2);
+
+/* SMART is deliberately NOT carded: renderSmartTable takes a flat drive list
+   with no controller loop, so there is nothing to split per controller. */
+check('smart stays uncarded', !str_contains(renderSmartTable(['drives' => [
+    ['dev'=>'/dev/sdb','model'=>'ST8000NM','serial'=>'S1','smart'=>['health'=>'PASSED','temp'=>'34']],
+]]), 'lu-card'));
+
+/* The shell must no longer wrap these four panes in a card — the renderers own
+   that now, and a leftover wrapper would nest every card inside another. */
+foreach (['health', 'phy', 'drives', 'events'] as $tab) {
+    check("shell: tab-$tab pane has no card wrapper",
+          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*">\s*<div class="lu-tab-toolbar">~', $shell));
+}
+
+array_map('unlink', glob("$cdir/*.json") ?: []);
+@rmdir($cdir);
+if ($hSaved1 === null) @unlink($hRing1); else file_put_contents($hRing1, $hSaved1);
 if ($hSaved === null) @unlink($hRing); else file_put_contents($hRing, $hSaved);
 
 $completed = true;
