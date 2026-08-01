@@ -249,13 +249,20 @@ function renderOverviewCards(array $data, array $cfg): string {
         $isCrit   = ($v['temp_band'] ?? '') === 'critical';
         $tempChip = $isCrit
             ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
-            : '<span style="color:' . $v['temp_stroke'] . '">' . htmlspecialchars($v['temp_label']) . '</span>';
-        $out .= '<div class="lu-card first" style="--tc:' . $v['temp_stroke'] . ';--sc:' . $v['color'] . ';--pct:' . ($v['temp'] !== '' ? (int) $v['temp'] : 0) . '" data-ctl="' . $i . '">'
+            : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
+        // The gauge reads 0-110C. Gradient ids must not collide when several
+        // controllers render on one page, hence the index — and the Health tab
+        // lives in the same DOM, so it uses its own prefix.
+        [$gDark, $gLight] = $v['temp_grad'];
+        $frac  = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
+        $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<div class="lu-overview-row">'
-              . '<div class="lu-gauge">'
-              . '<div class="lu-circle" id="lu-circle-' . $i . '">'
+              . '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
+              . '<div class="lu-arc-wrap">'
+              . lsi_gauge_svg('lu-grad-' . $i, $frac, [$gDark, $gLight])
+              . '<div class="lu-arc-readout">'
               . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
-              . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div>'
+              . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
               . '<span class="lu-temp-band">' . $tempChip . '</span>'
               . '</div>'
               . '<div class="lu-meta">'
@@ -524,7 +531,21 @@ function renderHealthTables(array $data): string {
               . htmlspecialchars(ucfirst($state)) . ' &mdash; ' . htmlspecialchars($reason)
               . '</span></div>';
 
-        // Only thermal earns a gauge: it is the one continuous metric with
+        // Gauge + band meter share one instrument tile. The gauge reads
+        // "N / total indicators ok" — a count of what health_indicators()
+        // actually returned, NOT a 0-100 score (plan 030, option A): the
+        // indicators are categorical and a manufactured score that drifts from
+        // 89 to 87 for unexplainable reasons is worse than no number.
+        $g      = health_gauge($ind);
+        $gStops = lsi_health_gradient($state);
+        $out .= '<div class="lu-tile lu-health-tile' . (lsi_tile_is_light() ? ' light' : '')
+              . '" style="--td:' . $gStops[0] . ';--tl:' . $gStops[1] . '">'
+              . '<div class="lu-gauge"><div class="lu-arc-wrap">'
+              . lsi_gauge_svg('lu-hgrad-' . $i, $g['frac'], $gStops)
+              . '<div class="lu-arc-readout"><span class="val">' . $g['ok'] . ' / ' . $g['total'] . '</span>'
+              . '<span class="unit">indicators ok</span></div></div></div>';
+
+        // Only thermal earns a band meter: it is the one continuous metric with
         // meaningful bands. Scaled 0-110C with segment boundaries at the
         // plan-018 band cut-points (65/75/85/95): each label's inline `left`
         // below is that boundary's true percentage of 110 — NOT evenly spaced
@@ -542,12 +563,14 @@ function renderHealthTables(array $data): string {
                   . '<span style="left:68.18%">75</span><span style="left:77.27%">85</span>'
                   . '<span style="left:86.36%">95</span><span style="left:100%">110</span></div></div>';
         }
+        $out .= '</div>';
 
         $out .= '<div class="lu-indicator-rows">';
         foreach (['link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Controller'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
-            $dot = lsi_health_color($row['state']);
-            $out .= '<div class="lu-indicator-row"><span class="lu-dot" style="background:' . $dot . '"></span>'
+            [$bDark, $bLight] = lsi_health_gradient($row['state']);
+            $out .= '<div class="lu-indicator-row">'
+                  . '<span class="lu-ind-bar" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
                   . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
         }
