@@ -124,7 +124,78 @@ Two categories are already visible from the counts alone:
 
 ## Steps
 
-### Step 1: Confirm Unraid's theme variable names
+### Step 1: DONE — Unraid's theme variables, confirmed on a live box
+
+**This step was completed on the maintainer's Unraid box on 2026-07-31. Do not
+repeat it; do not substitute names other than these.**
+
+Unraid defines its palette in
+`/usr/local/emhttp/plugins/dynamix/styles/default-color-palette.css`, with
+per-theme overrides in `styles/themes/{white,black,azure,gray}.css`. The generic
+semantic variables are **redefined in all four themes**, which is what makes
+binding to them worthwhile — verified:
+
+```text
+--background-color   azure: gray-150   black: gray-900   gray: black   white: gray-100
+--text-color         azure: cyan-400   black: gray-100   gray: cyan-300 white: gray-900
+--border-color       azure: cyan-400   black: gray-600   gray: cyan-300 white: gray-200
+--dashboard-background-color  redefined in all four
+```
+
+Note `white` and `azure` set **light** backgrounds. That is the mechanism behind
+issue #7: the plugin paints `#1c1c1c` panels regardless, so on those themes its
+cards sit as dark blocks on a light page.
+
+The variables worth binding to, all confirmed present:
+
+| Role | Unraid variable |
+|---|---|
+| Page / panel background | `--background-color`, `--alt-background-color`, `--shade-bg-color` |
+| Body text | `--text-color`, `--alt-text-color`, `--disabled-text-color` |
+| Borders | `--border-color`, `--alt-border-color` |
+| Tables | `--table-background-color`, `--table-header-background-color`, `--table-border-color`, `--hover-table-row-background-color` |
+| Dashboard tile | `--dashboard-background-color`, `--dashboard-border-color` |
+| Header / footer | `--header-background-color`, `--header-text-color`, `--footer-background-color`, `--footer-text` |
+
+**Ignore the `--dynamix-*` family** (`--dynamix-jquery-ui-*`,
+`--dynamix-tablesorter-*`, `--dynamix-awesomplete-*`, `--dynamix-sb-*`,
+`--dynamix-tooltipster-*`). Those style Unraid's own widgets; the plugin renders
+none of them and binding to them would couple it to internals it does not use.
+
+### Step 1b: The change is far smaller than 115 substitutions
+
+`hbaviewer.php` **already has a token layer** — the Monitor page funnels its
+chrome through plugin-local custom properties on `#lu-wrap`:
+
+```css
+#lu-wrap {
+    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
+    --border:#333333; --border-soft:#2a2a2a;
+    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
+    --accent:#f5a623; --accent-2:#88aaff; --track:#2a2a2a;
+    --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
+```
+
+So the whole Monitor page converts by **rebinding roughly ten declarations**, not
+by rewriting every call site. Use `var(--unraid-name, #current-literal)` so the
+fallback preserves today's appearance exactly wherever a variable is missing:
+
+```css
+    --bg:        var(--background-color, #161616);
+    --surface:   var(--dashboard-background-color, #1c1c1c);
+    --border:    var(--border-color, #333333);
+    --text:      var(--text-color, #dddddd);
+```
+
+Keep `--good`/`--warn`/`--crit` **as literals** — see the semantics note in
+"Current state".
+
+`dashboard.php` is the harder half: it has no token layer and uses `#1c1c1c`,
+`#2a2a2a`, `#ddd`, `#fff` inline (its `--tc`/`--sc` variables carry *status*,
+not chrome, and must not be repurposed). Give it the same small token block
+rather than substituting each literal in place.
+
+### Step 1c (superseded — kept for context): how the names were confirmed
 
 Unraid's webGui defines root-level custom properties per theme
 (`white`/`black`/`azure`/`gray` as of recent 7.x). Before writing any
@@ -150,20 +221,38 @@ small shared `<style>` block emitted once — check whether `HBAviewer.page`,
 `HBAviewer_Dashboard.page`, `HBAviewer_Monitor.page` already share a common
 include point before duplicating). Define:
 
-```css
-:root {
-  --lu-status-ok:   #2ecc71;
-  --lu-status-warn: #f39c12; /* reconcile with #f5a623 — same role, two literals */
-  --lu-status-crit: #e74c3c; /* reconcile with #ff5252 — same role, two literals */
-}
-```
+**CORRECTED 2026-07-31 — the first draft of this step would have broken plan
+018.** It proposed "reconciling" `#ff5252` into `#e74c3c` and `#f5a623` into
+`#f39c12` as duplicate literals for one role. They are not duplicates:
 
-Then replace every status-role literal in the five files with
-`var(--lu-status-ok)` etc. This alone removes the five-way duplication
-without touching semantics.
+| Literal | Role | Why it cannot be merged |
+|---|---|---|
+| `#2ecc71` | band `normal`, status ok | — |
+| `#f1c40f` | band `elevated` | added by 018 |
+| `#e67e22` | band `warning` | added by 018 |
+| `#e74c3c` | band `alert`, status alert | — |
+| `#922b21` | band `critical` | **fill only** — 1.94:1 as a foreground, unreadable |
+| `#ff5252` | `critical` **stroke** | the gauge arc; `#922b21` fails as a stroke |
+| `#f5a623` | accent (tab underline, headings) | not a status colour at all |
 
-**Verify**: `grep -c '#2ecc71' source/usr/local/emhttp/plugins/hbaviewer/*.php` →
-`0` everywhere except the single definition file.
+Those five band values were chosen by contrast measurement against the plugin's
+own card surfaces (plan 018), and `lsi_temp_color()` / `lsi_temp_stroke()` in
+`view.php` already centralise them. **Do not merge, rename or theme any of them.**
+
+What this step should actually do is narrower: `view.php` is already the single
+definition point for the band and health palettes, so there is no five-way
+duplication left to remove there. The remaining duplication is the *chrome*
+literals in `dashboard.php`, which has no token layer — fixed by Step 3, not by
+a status-palette rewrite.
+
+If a plugin-local status variable is still wanted for the handful of inline
+`style="color:#..."` uses, define it **from** `view.php`'s existing functions
+rather than as a second source of truth, and leave the values untouched.
+
+**Verify**: `grep -c 'lsi_temp_color\|lsi_temp_stroke' source/usr/local/emhttp/plugins/hbaviewer/view.php` → unchanged from before this plan
+
+**Verify**: the six band/status literals above still appear in `view.php` with
+their current values — `grep -c '#922b21\|#ff5252\|#f1c40f\|#e67e22' source/usr/local/emhttp/plugins/hbaviewer/view.php` → `6`
 
 ### Step 3: Map chrome literals to theme variables
 
@@ -191,11 +280,15 @@ a step the executor can pass programmatically.
 
 ## Done criteria
 
-- [ ] Step 1's variable list confirmed against a real Unraid 7.2+ box (or
-      documented as unavailable, with the fallback literals kept and a
-      `ponytail:`-style comment explaining why)
-- [ ] `grep -c '#2ecc71\|#f39c12\|#f5a623\|#e74c3c\|#ff5252' source/usr/local/emhttp/plugins/hbaviewer/*.php` →
-      count equals only the single palette-definition occurrences, not five-per-file
+- [ ] Every chrome token in `#lu-wrap` reads `var(--unraid-name, #literal)` —
+      `grep -c 'var(--background-color\|var(--text-color\|var(--border-color' source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php` → at least `3`
+- [ ] `dashboard.php` has a token block and no bare chrome literals —
+      `grep -c '#1c1c1c\|#2a2a2a' source/usr/local/emhttp/plugins/hbaviewer/dashboard.php` → `0`
+      outside that block
+- [ ] **The band palette is untouched** —
+      `grep -c '#922b21\|#ff5252\|#f1c40f\|#e67e22' source/usr/local/emhttp/plugins/hbaviewer/view.php` → `6`
+- [ ] Every substitution keeps a literal fallback: no `var(--x)` without a
+      second argument in any touched file
 - [ ] `php -l` clean on all five touched files
 - [ ] `bash tests/run.sh` → `--- all pass ---`, no re-blessed goldens
 - [ ] `git status --porcelain` shows only the five touched source files
@@ -213,10 +306,13 @@ a step the executor can pass programmatically.
 
 ## Maintenance notes
 
-- **Two amber literals and two red literals already exist for the same
-  role** (`#f39c12`/`#f5a623`, `#e74c3c`/`#ff5252`). Step 2 is the one place
-  this gets reconciled — pick one canonical value per role and note the
-  other as historical drift in the commit message, not a second variable.
+- **The look-alike literals are not duplicates.** `#e74c3c` (alert band) vs
+  `#ff5252` (critical *stroke*), and `#f39c12` (legacy warn) vs `#f5a623`
+  (accent), read as accidental drift and are not. Plan 018 measured the band
+  values against the plugin's card surfaces; `#922b21` in particular is legible
+  only as a fill behind white text. Merging any pair silently undoes that.
+  `view.php`'s `lsi_temp_color()` / `lsi_temp_stroke()` are the single source of
+  truth — extend those, never a parallel palette.
 - **Keep literal fallbacks in `var(--x, #literal)` form.** Unraid users run
   a wide range of versions; a variable that doesn't exist yet must not
   render as unstyled/transparent.
