@@ -76,14 +76,29 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 <style>
 /* Original HBAviewer palette in the new component format. Matches the Monitor. */
 #lu-settings-wrap {
-    --bg:#161616; --surface:#1c1c1c; --surface-2:#232323;
-    --border:#333333; --border-soft:#2a2a2a;
+    /* Chrome tokens follow Unraid's theme variables (confirmed present on
+       white/black/gray/azure — see plan 021); each keeps its original literal
+       as the CSS fallback so a missing variable renders exactly as before. */
+    --bg:        var(--background-color, #161616);
+    --surface:   var(--shade-bg-color, #1c1c1c);
+    /* One step further from --surface than the page is — darker on dark themes,
+       lighter on light ones. No single Unraid variable expresses that, so nudge
+       --surface 8% toward the text colour, which points the right way in both. */
+    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
+    --border:      var(--border-color, #333333);
+    --border-soft: var(--border-color, #2a2a2a);
     /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
-    --text:#dddddd; --muted:#dddddd; --faint:#dddddd;
-    --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
+    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
+    --accent:#f5a623; --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
+    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
+       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
+       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
+    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
+    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
+    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     font-family: inherit; max-width: 580px; margin: 20px auto; color: var(--text);
-    background: radial-gradient(700px 300px at 85% -20%, #242424 0%, rgba(0,0,0,0) 55%), var(--bg);
+    background: radial-gradient(700px 300px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%), var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
 }
 .lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
@@ -100,9 +115,9 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .lu-toggle span { font-size: 13px; color: var(--text); }
 .lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
-.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #8ccc8c; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
-.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #e0a0a0; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
-.lu-danger strong { color: var(--crit); }
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: var(--good-text); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: var(--crit-text); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: var(--crit-text); }
 .lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }

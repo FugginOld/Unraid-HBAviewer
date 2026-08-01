@@ -33,7 +33,20 @@ $ts = lsi_time();
 // Scoped styles. Per-controller color is inline (each circle/badge can differ).
 echo <<<CSS
 <style>
-.lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid #2a2a2a; }
+/* Chrome tokens follow Unraid's theme variables (confirmed present on
+   white/black/gray/azure — see plan 021); each keeps its original literal as
+   the CSS fallback so a missing variable renders exactly as before.
+   --tc / --sc (set inline per-tile) carry STATUS, not chrome — untouched. */
+.lu-d-tile {
+  --d-bg:     var(--shade-bg-color, #1c1c1c);
+  --d-border: var(--border-color, #2a2a2a);
+  --d-text:   var(--text-color, #ddd);
+  /* Body-text variant of the alert colour (matches lsi_status_color('alert') /
+     view.php's #e74c3c). As TEXT the raw colour measures ~2:1 on a light theme's
+     card; mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
+  --crit-text: color-mix(in srgb, #e74c3c 50%, var(--text-color, #ddd));
+}
+.lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid var(--d-border); }
 .lu-d-tile .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
 .lu-d-tile .lu-d-overview { display:flex; align-items:center; gap:16px; }
 /* Gauge column: the circle with the status badge centred beneath it. flex-shrink:0
@@ -41,16 +54,16 @@ echo <<<CSS
 .lu-d-tile .lu-d-gauge { display:flex; flex-direction:column; align-items:center; gap:8px; flex-shrink:0; }
 .lu-d-tile .lu-d-circle {
   position:relative; width:84px; height:84px; flex-shrink:0; border-radius:50%;
-  background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), #2a2a2a 0);
+  background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), var(--d-border) 0);
   display:grid; place-items:center;
   filter:drop-shadow(0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent));
 }
-.lu-d-tile .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:#1c1c1c; border:1px solid #2a2a2a; }
-.lu-d-tile .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:#ddd; line-height:1; }
-.lu-d-tile .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:#ddd; letter-spacing:0.05em; }
+.lu-d-tile .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:var(--d-bg); border:1px solid var(--d-border); }
+.lu-d-tile .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--d-text); line-height:1; }
+.lu-d-tile .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:var(--d-text); letter-spacing:0.05em; }
 .lu-d-tile .lu-d-meta { flex:1; }
-.lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:#ddd; display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed #2a2a2a; padding-bottom:2px; }
-.lu-d-tile .lu-d-meta span { color:#ddd; font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
+.lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:var(--d-text); display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed var(--d-border); padding-bottom:2px; }
+.lu-d-tile .lu-d-meta span { color:var(--d-text); font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
 .lu-d-tile .lu-d-health {
   display:inline-flex; align-items:center; gap:6px;
   padding:3px 11px; border-radius:20px;
@@ -60,7 +73,7 @@ echo <<<CSS
 }
 .lu-d-tile .lu-d-health::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
 .lu-d-tile .lu-d-temp-band { font-size:10px; font-weight:700; letter-spacing:0.06em; font-family:ui-monospace,"SF Mono",Menlo,monospace; }
-.lu-d-tile .lu-d-ts { font-size:10px; color:#ddd; text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
+.lu-d-tile .lu-d-ts { font-size:10px; color:var(--d-text); text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 .lu-d-tile .lu-d-pill {
   display:none; align-items:center; margin-right:8px;
   padding:3px 11px; border-radius:20px;
@@ -86,11 +99,11 @@ echo <<<CSS
 .lu-d-tile:has(> tr:nth-child(2)[style*="display: none"]) .lu-d-pill { display:inline-flex; }
 .lu-d-tile .lu-d-foot-row {
   display:flex; gap:16px; flex-wrap:wrap; align-items:baseline; justify-content:center;
-  font-size:12px; color:#ddd; padding-top:6px;
-  border-top:1px solid #2a2a2a;
+  font-size:12px; color:var(--d-text); padding-top:6px;
+  border-top:1px solid var(--d-border);
 }
 .lu-d-tile .lu-d-foot-item { white-space:nowrap; }
-.lu-d-tile .lu-d-foot-row span { color:#ddd; font-weight:500; }
+.lu-d-tile .lu-d-foot-row span { color:var(--d-text); font-weight:500; }
 </style>
 CSS;
 
@@ -109,7 +122,7 @@ if ($error) {
         'pill'   => '',
         'health' => '<span class="lu-d-health" style="--sc:' . lsi_status_color('alert') . '">UNREADABLE</span>',
         'foot'   => '',
-        'body'   => "<span style='color:#d88'>" . htmlspecialchars($error) . "</span>",
+        'body'   => "<span style='color:var(--crit-text)'>" . htmlspecialchars($error) . "</span>",
     ];
 }
 
@@ -128,7 +141,7 @@ foreach ($controllers as $i => $c) {
     // A controller that failed to read still gets its own tile — error text in
     // the body, no pill. Skipping it made errored cards vanish once collapsed.
     if (isset($c['error'])) {
-        $t['body'] = "<div class='lu-d-ctl'><span style='color:#d88'>Controller {$i}: "
+        $t['body'] = "<div class='lu-d-ctl'><span style='color:var(--crit-text)'>Controller {$i}: "
                    . htmlspecialchars($c['error']) . "</span></div>"
                    . "<div class='lu-d-ts'>Last read: {$ts}</div>";
         $tiles[] = $t;
