@@ -144,6 +144,10 @@ if ($enableFlash) {
 }
 .lu-arc-readout .val  { font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mark); }
 .lu-arc-readout .unit { font-size: 11px; letter-spacing: 0.05em; color: var(--mark); margin-top: 5px; }
+/* The Health gauge reads "N / total" — 5+ characters against the temperature
+   readout's 2 — and the arc's inner clear space is only ~100px wide (radius 80
+   less the 14 stroke, at 138/200 scale). 30px overruns it; 19px does not. */
+.lu-arc-readout.count .val { font-size: 19px; }
 .lu-meta { flex: 1; min-width: 0; }
 .lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
 .lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }

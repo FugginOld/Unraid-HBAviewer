@@ -542,7 +542,7 @@ function renderHealthTables(array $data): string {
               . '" style="--td:' . $gStops[0] . ';--tl:' . $gStops[1] . '">'
               . '<div class="lu-gauge"><div class="lu-arc-wrap">'
               . lsi_gauge_svg('lu-hgrad-' . $i, $g['frac'], $gStops)
-              . '<div class="lu-arc-readout"><span class="val">' . $g['ok'] . ' / ' . $g['total'] . '</span>'
+              . '<div class="lu-arc-readout count"><span class="val">' . $g['ok'] . ' / ' . $g['total'] . '</span>'
               . '<span class="unit">indicators ok</span></div></div></div>';
 
         // Only thermal earns a band meter: it is the one continuous metric with
