@@ -565,8 +565,13 @@ function renderHealthTables(array $data): string {
         }
         $out .= '</div>';
 
+        // Order and labels mirror hbaviewer.php's header sentence ("Thermal, link
+        // integrity, topology, host link, and read health"), which is also
+        // health_indicators()'s return order. Every key it returns must appear
+        // here: the gauge above counts all of them, so an omitted row makes the
+        // count contradict the list beneath it (plan 031 — `thermal` was missing).
         $out .= '<div class="lu-indicator-rows">';
-        foreach (['link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Controller'] as $key => $label) {
+        foreach (['thermal' => 'Thermal', 'link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Read Health'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
             [$bDark, $bLight] = lsi_health_gradient($row['state']);
             $out .= '<div class="lu-indicator-row">'

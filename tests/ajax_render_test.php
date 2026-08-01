@@ -243,6 +243,74 @@ check('mixed archive: history preserved on disk', count($onDisk) === 3);
 array_map('unlink', glob("$dirMix/*.json") ?: []);
 @rmdir($dirMix);
 
+/* ── Health tab: the gauge and the rows must come from the same set ────────────
+   health_gauge() counts whatever health_indicators() returned; the row list was
+   a separate hardcoded literal that omitted `thermal`. Result on hardware:
+   "4 / 5 indicators ok" printed above four rows (plan 031). The load-bearing
+   assertions below are the two that reconcile the two renderings — numerator ==
+   green rows, denominator == rows rendered — not the label spellings. */
+$hRing = health_store_path(0);
+$hSaved = is_file($hRing) ? file_get_contents($hRing) : null;   // a live box's ring, if any
+
+// One controller sample, the shape scripts/get_hba_health.sh emits.
+$hs = function (int $t, int $uptime, $temp, string $band): array {
+    return ['t' => $t, 'uptime' => $uptime, 'temp' => $temp, 'temp_band' => $band,
+            'fw' => '20.00.07.00', 'drives' => 8, 'read_ok' => true,
+            'link' => ['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s'],
+            'phys' => [['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']]];
+};
+// Two samples 120s apart with flat counters: link_integrity needs >= 60s of ring
+// to be anything but `unknown`, and identical counters make it `ok`.
+$hRender = function (array $ctl, array $seed) use ($hRing): string {
+    health_store_write($hRing, [$seed]);
+    return renderHealthTables(['controllers' => [$ctl]]);
+};
+$okDark  = lsi_health_gradient('ok')[0];
+$rowsOf  = fn(string $h) => substr_count($h, 'class="lu-indicator-row"');
+$greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-bar" style="--gd:' . $okDark . ';');
+
+$now = time();
+$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 120, 3480, '76', 'warning'));
+
+check('health five rows render', $rowsOf($h) === 5);
+foreach (['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health'] as $lbl) {
+    check("health row '$lbl'", str_contains($h, '<span class="lu-indicator-label">' . $lbl . '</span>'));
+}
+// Order must match hbaviewer.php's header sentence and health_indicators()'s keys.
+$pos = array_map(fn($l) => strpos($h, ">$l</span>"), ['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health']);
+$sorted = $pos; sort($sorted, SORT_NUMERIC);
+check('health rows in header order', !in_array(false, $pos, true) && $pos === $sorted);
+check('health thermal shows temp', str_contains($h, '<span class="lu-indicator-value">77°C</span>'));
+
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health gauge reads 4 / 5',        ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
+check('health gauge numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+check('health gauge total == rows rendered',  (int) ($m[2] ?? -1) === $rowsOf($h));
+check('health warning row not green', $greenOf($h) === 4);
+
+/* No temperature sensor at all — the common SAS2008/9211 case. thermal is
+   `unknown`, which must still render a row (with an em dash) and must NOT be
+   counted as ok. */
+$h = $hRender($hs($now, 3600, null, ''), $hs($now - 120, 3480, null, ''));
+check('health unknown thermal still rows', $rowsOf($h) === 5);
+check('health unknown thermal em dash', str_contains($h, '<span class="lu-indicator-value">—</span>'));
+check('health unknown thermal not green', $greenOf($h) === 4);
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health unknown gauge numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+check('health unknown gauge total == rows rendered',  (int) ($m[2] ?? -1) === $rowsOf($h));
+
+/* Inverse of the reported case: thermal fine, something else not. Without the
+   thermal row the numerator (4) exceeds the green rows shown (3) — this is the
+   orientation where the numerator assertion, not the denominator, does the work. */
+$down = $hs($now, 3600, '45', 'normal');
+$down['link']['width'] = 4;                       // x4 in an x8 slot -> host_link warning
+$h = $hRender($down, $hs($now - 120, 3480, '45', 'normal'));
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health downtrain gauge reads 4 / 5', ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
+check('health downtrain numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+
+if ($hSaved === null) @unlink($hRing); else file_put_contents($hRing, $hSaved);
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
