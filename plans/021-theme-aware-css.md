@@ -304,6 +304,72 @@ a step the executor can pass programmatically.
   mean something different) — this plan is a pure re-plumbing of *how* a
   color is expressed, never *which* color a state gets.
 
+## Outcome, and the light/dark standard this plan established
+
+*Added 2026-08-01, after execution. This section records what shipped and the
+design standard agreed with the maintainer — it is the reference for every
+future surface, so read it before adding any card, tile or tab.*
+
+### What this plan actually changed
+
+Chrome tokens in `#lu-wrap`, `#lu-settings-wrap` and `.lu-d-tile` now derive
+from Unraid's own variables rather than literals:
+
+```css
+--bg:        var(--background-color, #161616);
+--surface:   var(--shade-bg-color, #1c1c1c);
+--surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
+--border:    var(--border-color, #333333);
+--text:      var(--text-color, #dddddd);
+```
+
+Two mapping errors were caught and corrected during execution, and both are
+traps for anyone extending this:
+
+- `--dashboard-background-color` is `gray-700` (`#303030`) in **all four**
+  themes. It looks like a surface token and is useless as one.
+- `--alt-background-color` is **not defined by any theme file**. Binding to it
+  yields transparent.
+
+`--shade-bg-color` is the one that genuinely flips (`#e8e8e8` white /
+`#212121` black). Use it.
+
+Eight hardcoded pastels were also retired in favour of three text tokens —
+`--crit-text`, `--good-text`, `--warn-text`, each `color-mix(in srgb, <role>
+50%, var(--text-color))` — because a colour lightened to sit on a dark card
+measures 1.36–2.24:1 once the card follows the theme.
+
+### The standard for every future surface
+
+| | Light themes (`white`, `azure`) | Dark themes (`black`, `gray`) |
+|---|---|---|
+| Card / tile background | theme-derived (`--shade-bg-color`) | theme-derived |
+| Instrument tile | filled `#6e6e6e`, `1px solid #5c5c5c`, inset top highlight | **transparent**, `1px solid #2e2e2e` |
+| Gauge track | `#5a5a5a` | `#3a3a3a` |
+| Gauge number, band label | white | the band's light gradient stop |
+| Status marks (bands, meters, bars) | dark→light gradient | identical gradient |
+
+The instrument tile matches the gray of Unraid's own Disk Stats tile, so the
+plugin reads as part of the platform rather than a foreign panel.
+
+### The one thing this plan broke
+
+**Making the card surfaces theme-aware invalidated plan 018's contrast
+measurement.** 018 measured the five band colours against the plugin's own
+fixed dark cards; once those cards follow the theme, the same values fall to
+**1.36:1** on `white`, and `dashboard.php` renders one of them as body text
+where the floor is 4.5:1.
+
+The resolution is **plan 030**: every band becomes a dark→light gradient, so
+each mark carries its own internal contrast and no longer depends on the
+surface behind it. That is why the table above specifies gradients rather than
+flat colours, and why a single flat palette is not an option — a colour
+readable as text on both surfaces is arithmetically impossible (it would need
+luminance ≤0.140 for the light card and ≥0.227 for the dark one).
+
+**Do not add a flat status colour to any new surface.** Use
+`lsi_temp_gradient()` once 030 lands; until then, use the three text tokens.
+
 ## Maintenance notes
 
 - **The look-alike literals are not duplicates.** `#e74c3c` (alert band) vs
