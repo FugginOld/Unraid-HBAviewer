@@ -38,8 +38,8 @@ echo <<<CSS
    the CSS fallback so a missing variable renders exactly as before.
    --tc / --sc (set inline per-tile) carry STATUS, not chrome — untouched. */
 .lu-d-tile {
-  --d-bg:     var(--dashboard-background-color, #1c1c1c);
-  --d-border: var(--alt-border-color, #2a2a2a);
+  --d-bg:     var(--shade-bg-color, #1c1c1c);
+  --d-border: var(--border-color, #2a2a2a);
   --d-text:   var(--text-color, #ddd);
 }
 .lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid var(--d-border); }

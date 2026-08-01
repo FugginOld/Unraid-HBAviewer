@@ -80,10 +80,13 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
        white/black/gray/azure — see plan 021); each keeps its original literal
        as the CSS fallback so a missing variable renders exactly as before. */
     --bg:        var(--background-color, #161616);
-    --surface:   var(--dashboard-background-color, #1c1c1c);
-    --surface-2: var(--alt-background-color, #232323);
+    --surface:   var(--shade-bg-color, #1c1c1c);
+    /* One step further from --surface than the page is — darker on dark themes,
+       lighter on light ones. No single Unraid variable expresses that, so nudge
+       --surface 8% toward the text colour, which points the right way in both. */
+    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
     --border:      var(--border-color, #333333);
-    --border-soft: var(--alt-border-color, #2a2a2a);
+    --border-soft: var(--border-color, #2a2a2a);
     /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
     --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
     --accent:#f5a623; --good:#2ecc71; --crit:#e74c3c;
