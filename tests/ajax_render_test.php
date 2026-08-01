@@ -243,6 +243,198 @@ check('mixed archive: history preserved on disk', count($onDisk) === 3);
 array_map('unlink', glob("$dirMix/*.json") ?: []);
 @rmdir($dirMix);
 
+/* ── Health tab: the gauge and the rows must come from the same set ────────────
+   health_gauge() counts whatever health_indicators() returned; the row list was
+   a separate hardcoded literal that omitted `thermal`. Result on hardware:
+   "4 / 5 indicators ok" printed above four rows (plan 031). The load-bearing
+   assertions below are the two that reconcile the two renderings — numerator ==
+   green rows, denominator == rows rendered — not the label spellings. */
+$hRing = health_store_path(0);
+$hSaved = is_file($hRing) ? file_get_contents($hRing) : null;   // a live box's ring, if any
+
+// One controller sample, the shape scripts/get_hba_health.sh emits.
+$hs = function (int $t, int $uptime, $temp, string $band): array {
+    return ['t' => $t, 'uptime' => $uptime, 'temp' => $temp, 'temp_band' => $band,
+            'fw' => '20.00.07.00', 'drives' => 8, 'read_ok' => true,
+            'link' => ['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s'],
+            'phys' => [['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']]];
+};
+// Two samples 120s apart with flat counters: link_integrity needs >= 60s of ring
+// to be anything but `unknown`, and identical counters make it `ok`.
+$hRender = function (array $ctl, array $seed) use ($hRing): string {
+    health_store_write($hRing, [$seed]);
+    return renderHealthTables(['controllers' => [$ctl]]);
+};
+$okDark  = lsi_health_gradient('ok')[0];
+$rowsOf  = fn(string $h) => substr_count($h, 'class="lu-indicator-row"');
+$greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-dot" style="--gd:' . $okDark . ';');
+
+$now = time();
+$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 120, 3480, '76', 'warning'));
+
+check('health five rows render', $rowsOf($h) === 5);
+foreach (['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health'] as $lbl) {
+    check("health row '$lbl'", str_contains($h, '<span class="lu-indicator-label">' . $lbl . '</span>'));
+}
+// Order must match hbaviewer.php's header sentence and health_indicators()'s keys.
+$pos = array_map(fn($l) => strpos($h, ">$l</span>"), ['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health']);
+$sorted = $pos; sort($sorted, SORT_NUMERIC);
+check('health rows in header order', !in_array(false, $pos, true) && $pos === $sorted);
+check('health thermal shows temp', str_contains($h, '<span class="lu-indicator-value">77°C</span>'));
+
+/* Row icons (plan 032). Two indicator keys do not match their sprite id
+   (`link_integrity` -> lu-i-link, `host_link` -> lu-i-hostlink); a mismatch
+   renders an empty icon slot silently, so assert the ids AND that every one is
+   actually defined in hbaviewer.php's sprite. */
+preg_match_all('~<use href="#(lu-i-[a-z]+)"/>~', $h, $mIco);
+check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 'lu-i-topology', 'lu-i-hostlink', 'lu-i-controller']);
+
+$shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
+preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
+check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
+// The sprite must be parsed once in the page shell, never re-emitted by the
+// per-poll Health render, which would duplicate these ids on every refresh.
+check('sprite defined once, in the shell only',
+      count($mSym[1]) === count(array_unique($mSym[1])) && !str_contains($h, '<symbol'));
+// The dot keeps lsi_health_gradient()'s --gd/--gl; the 30x9 bar is gone.
+check('no lu-ind-bar remains', !str_contains($h, 'lu-ind-bar'));
+check('dots still gradient-filled', substr_count($h, '<span class="lu-ind-dot" style="--gd:') === 5);
+
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health gauge reads 4 / 5',        ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
+check('health gauge numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+check('health gauge total == rows rendered',  (int) ($m[2] ?? -1) === $rowsOf($h));
+check('health warning row not green', $greenOf($h) === 4);
+
+/* No temperature sensor at all — the common SAS2008/9211 case. thermal is
+   `unknown`, which must still render a row (with an em dash) and must NOT be
+   counted as ok. */
+$h = $hRender($hs($now, 3600, null, ''), $hs($now - 120, 3480, null, ''));
+check('health unknown thermal still rows', $rowsOf($h) === 5);
+check('health unknown thermal em dash', str_contains($h, '<span class="lu-indicator-value">—</span>'));
+check('health unknown thermal not green', $greenOf($h) === 4);
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health unknown gauge numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+check('health unknown gauge total == rows rendered',  (int) ($m[2] ?? -1) === $rowsOf($h));
+
+/* Inverse of the reported case: thermal fine, something else not. Without the
+   thermal row the numerator (4) exceeds the green rows shown (3) — this is the
+   orientation where the numerator assertion, not the denominator, does the work. */
+$down = $hs($now, 3600, '45', 'normal');
+$down['link']['width'] = 4;                       // x4 in an x8 slot -> host_link warning
+$h = $hRender($down, $hs($now - 120, 3480, '45', 'normal'));
+preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
+check('health downtrain gauge reads 4 / 5', ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
+check('health downtrain numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
+
+/* ── One .lu-card per HBA on every per-controller tab (plan 033) ──────────────
+   The Overview has always given each controller its own card; Health, PHY,
+   Drives and Events stacked every controller inside the pane's single card.
+   The renderers now emit the card themselves, so the count must track the
+   controller count on EVERY path. The load-bearing cases are the error and
+   empty branches: they `continue` past the loop's normal close, so a missed
+   close there leaks one controller's markup into the next controller's card
+   (or renders it as bare text between cards) — which is why the div balance is
+   asserted alongside the count. Zero controllers must emit no card at all. */
+$cards  = fn(string $h) => substr_count($h, 'class="lu-card first"');
+$ctlIds = function (string $h): array {
+    preg_match_all('~data-ctl="(\d+)"~', $h, $m);
+    return $m[1];
+};
+$balanced = fn(string $h) => substr_count($h, '<div') === substr_count($h, '</div>');
+
+$hRing1 = health_store_path(1);
+$hSaved1 = is_file($hRing1) ? file_get_contents($hRing1) : null;
+$cdir = sys_get_temp_dir() . '/hbav_cards_' . getmypid();
+@mkdir($cdir, 0755, true);
+array_map('unlink', glob("$cdir/*.json") ?: []);
+
+$phyC = fn() => ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000cca0','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0]]];
+$drvC = fn() => ['drives' => [['slot'=>'8/0','port'=>'14','model'=>'ST8000NM','serial'=>'S1','state'=>'JBOD',
+                              'size'=>'8 TB','sas_address'=>'5000c5','link'=>'12.0Gb/s','firmware'=>'SN02']]];
+$evC  = fn($s) => ['entries' => [['seq'=>$s,'time'=>'2026-07-01 10:00:00','code'=>'0x0113','description'=>'Drive inserted']]];
+$err  = ['error' => 'no response from controller'];
+
+// name => [two-controller render, one-good-one-errored render, zero-controller render]
+$tabs = [
+    'health' => [
+        fn() => renderHealthTables(['controllers' => [$hs($now, 3600, '45', 'normal'), $hs($now, 3600, '45', 'normal')]]),
+        fn() => renderHealthTables(['controllers' => [$hs($now, 3600, '45', 'normal'), $err]]),
+        fn() => renderHealthTables(['controllers' => []]),
+    ],
+    'phy' => [
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), $phyC()]]),
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), $err]]),
+        fn() => renderPhyTables(['backend'=>'storcli','controllers'=>[]]),
+    ],
+    'drives' => [
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), $drvC()]]),
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), $err]]),
+        fn() => renderDrivesTables(['backend'=>'storcli','controllers'=>[]]),
+    ],
+    'events' => [
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), $evC('2')]], $cdir),
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), $err]], $cdir),
+        fn() => renderEventsTables(['backend'=>'storcli','controllers'=>[]], $cdir),
+    ],
+];
+foreach ($tabs as $tab => [$two, $errored, $none]) {
+    $h = $two();
+    check("$tab: two controllers -> two cards", $cards($h) === 2);
+    check("$tab: two distinct data-ctl",        $ctlIds($h) === ['0', '1']);
+    check("$tab: two-card divs balanced",       $balanced($h));
+
+    $h = $errored();
+    check("$tab: errored controller still carded", $cards($h) === 2 && $ctlIds($h) === ['0', '1']);
+    // The card must close immediately after the error paragraph, not swallow
+    // whatever the next controller renders.
+    check("$tab: errored controller text inside its card",
+          str_contains($h, 'no response from controller</p></div>'));
+    check("$tab: errored divs balanced",           $balanced($h));
+
+    check("$tab: no controllers -> no card", $cards($none()) === 0);
+}
+
+// The renderers' own empty branches also `continue` — same leak risk, different line.
+check('phy: no-PHY controller still carded', (function () use ($cards, $ctlIds, $balanced, $phyC) {
+    $h = renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), []]]);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No PHY data.');
+})());
+check('drives: driveless controller still carded', (function () use ($cards, $ctlIds, $balanced, $drvC) {
+    $h = renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), []]]);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No drives detected.');
+})());
+// Its own archive dir: $cdir already holds c1 entries from the two-controller
+// case above, and event_merge would replay them, so the controller would not be
+// entry-less at all.
+$edir2 = sys_get_temp_dir() . '/hbav_cards_empty_' . getmypid();
+@mkdir($edir2, 0755, true);
+array_map('unlink', glob("$edir2/*.json") ?: []);
+check('events: entry-less controller still carded', (function () use ($cards, $ctlIds, $balanced, $evC, $edir2) {
+    $h = renderEventsTables(['backend'=>'storcli','controllers'=>[$evC('1'), ['entries'=>[]]]], $edir2);
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No log entries.');
+})());
+array_map('unlink', glob("$edir2/*.json") ?: []);
+@rmdir($edir2);
+
+/* SMART is deliberately NOT carded: renderSmartTable takes a flat drive list
+   with no controller loop, so there is nothing to split per controller. */
+check('smart stays uncarded', !str_contains(renderSmartTable(['drives' => [
+    ['dev'=>'/dev/sdb','model'=>'ST8000NM','serial'=>'S1','smart'=>['health'=>'PASSED','temp'=>'34']],
+]]), 'lu-card'));
+
+/* The shell must no longer wrap these four panes in a card — the renderers own
+   that now, and a leftover wrapper would nest every card inside another. */
+foreach (['health', 'phy', 'drives', 'events'] as $tab) {
+    check("shell: tab-$tab pane has no card wrapper",
+          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*">\s*<div class="lu-tab-toolbar">~', $shell));
+}
+
+array_map('unlink', glob("$cdir/*.json") ?: []);
+@rmdir($cdir);
+if ($hSaved1 === null) @unlink($hRing1); else file_put_contents($hRing1, $hSaved1);
+if ($hSaved === null) @unlink($hRing); else file_put_contents($hRing, $hSaved);
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

@@ -144,6 +144,10 @@ if ($enableFlash) {
 }
 .lu-arc-readout .val  { font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mark); }
 .lu-arc-readout .unit { font-size: 11px; letter-spacing: 0.05em; color: var(--mark); margin-top: 5px; }
+/* The Health gauge reads "N / total" — 5+ characters against the temperature
+   readout's 2 — and the arc's inner clear space is only ~100px wide (radius 80
+   less the 14 stroke, at 138/200 scale). 30px overruns it; 19px does not. */
+.lu-arc-readout.count .val { font-size: 19px; }
 .lu-meta { flex: 1; min-width: 0; }
 .lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
 .lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -197,6 +201,10 @@ if ($enableFlash) {
 .lu-muted  { color: var(--faint); font-size: 13px; }
 .lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
 .lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+/* On the per-controller tabs the toolbar sits at pane level (the cards are one
+   per HBA, and the toolbar describes the tab, not the first HBA), so it no
+   longer inherits .lu-card's 20px inset — restate just that, not a whole card. */
+.lu-tab-pane > .lu-tab-toolbar { padding: 0 20px; }
 .lu-refresh-btn {
     background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
     font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
@@ -274,14 +282,22 @@ if ($enableFlash) {
 .lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
 .lu-indicator-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
 .lu-indicator-row:last-child { border-bottom: none; }
-/* Was a flat coloured dot; a gradient bar carries its own internal contrast and
-   is readable on any theme surface. --gd/--gl set inline per row from
-   lsi_health_gradient(). */
-.lu-ind-bar {
-    width: 30px; height: 9px; border-radius: 3px; flex: 0 0 auto;
+/* A dot again as of plan 032 — but the GRADIENT FILL IS LOAD-BEARING, not
+   decoration, so it survived the shape change. Flat status colours were measured
+   against the #e8e8e8 white-theme card and three of the five fail the 3:1 floor
+   for a small graphical object (ok #0ca30c 2.74, watch #fab219 1.50, warning
+   #ec835a 2.15). A two-layer gradient carries its own internal contrast and stays
+   legible at 8px on any theme surface. Do not "simplify" this to a solid colour.
+   --gd/--gl set inline per row from lsi_health_gradient(). */
+.lu-ind-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
     background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 55%, rgba(0,0,0,.13)),
                 linear-gradient(90deg, var(--gd), var(--gl));
 }
+/* Tabler glyph between the dot and the label. Inherits the label's ink so the
+   icon reads as part of the label, not as a second status signal — the dot is
+   the only thing that carries state. */
+.lu-ind-icon { width: 15px; height: 15px; flex: none; color: var(--faint); fill: none; stroke: currentColor; }
 .lu-indicator-label { color: var(--faint); flex: 1; }
 .lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
 
@@ -296,6 +312,79 @@ if ($enableFlash) {
 </style>
 
 <div id="lu-wrap">
+
+<!-- ── HBA Health row icons ──────────────────────────────────────────────────
+     Icons are Tabler Icons (https://tabler.io/icons), MIT licensed. Paths are
+     verbatim from tabler/tabler-icons: temperature, plug-connected, server-2,
+     topology-star-3, cpu. Keep this notice with the sprite.
+
+     Emitted HERE, once, and NOT from ajax_info.php: that file re-renders the
+     Health tab on every poll and its HTML replaces the pane's contents, so a
+     sprite defined there would be re-inserted each refresh — duplicate DOM ids
+     with <use> resolving against whichever copy won. Parsed once here, it
+     persists across every poll.
+
+     Ids are `lu-i-` prefixed because the plugin renders inside Unraid's webGui
+     DOM, not a standalone page; unprefixed ids can collide with the shell's own
+     markup. ajax_info.php's row loop maps indicator keys to these ids. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="lu-i-thermal" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5" />
+    <path d="M10 9l4 0" />
+  </symbol>
+
+  <symbol id="lu-i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5" />
+    <path d="M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5" />
+    <path d="M3 21l2.5 -2.5" />
+    <path d="M18.5 5.5l2.5 -2.5" />
+    <path d="M10 11l-2 2" />
+    <path d="M13 14l-2 2" />
+  </symbol>
+
+  <symbol id="lu-i-topology" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2" />
+    <path d="M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2" />
+    <path d="M7 8l0 .01" />
+    <path d="M7 16l0 .01" />
+    <path d="M11 8h6" />
+    <path d="M11 16h6" />
+  </symbol>
+
+  <symbol id="lu-i-hostlink" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M18 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M10 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M6 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M18 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M14 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M22 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
+    <path d="M6 12h4" />
+    <path d="M14 12h4" />
+    <path d="M15 7l-2 3" />
+    <path d="M9 7l2 3" />
+    <path d="M11 14l-2 3" />
+    <path d="M13 14l2 3" />
+  </symbol>
+
+  <symbol id="lu-i-controller" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 6a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -12" />
+    <path d="M9 9h6v6h-6l0 -6" />
+    <path d="M3 10h2" />
+    <path d="M3 14h2" />
+    <path d="M10 3v2" />
+    <path d="M14 3v2" />
+    <path d="M21 10h-2" />
+    <path d="M21 14h-2" />
+    <path d="M14 21v-2" />
+    <path d="M10 21v-2" />
+  </symbol>
+</svg>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
 <div class="lu-tabs">
@@ -317,54 +406,46 @@ if ($enableFlash) {
 
 <!-- ── HBA Health tab (five sub-indicators + a worst-of rollup; no config toggle) -->
 <div id="tab-health" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
-    </div>
-    <div id="health-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
   </div>
+  <div id="health-content"><div class="lu-loading">Loading…</div></div>
 </div>
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
 <?php if ($showPhy): ?>
 <div id="tab-phy" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
-    </div>
-    <div id="phy-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
   </div>
+  <div id="phy-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
 <!-- ── Drives tab ────────────────────────────────────────────────────────── -->
 <?php if ($showDrives): ?>
 <div id="tab-drives" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
-      <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
-    </div>
-    <div id="drives-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
+    <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
   </div>
+  <div id="drives-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
 <!-- ── Event Log tab ─────────────────────────────────────────────────────── -->
 <?php if ($showEvents): ?>
 <div id="tab-events" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
-      <span>
-        <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
-        <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
-      </span>
-    </div>
-    <div id="events-content"><div class="lu-loading">Loading…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
+    <span>
+      <button class="lu-refresh-btn" onclick="luCopy('events', this)">Copy</button>
+      <button class="lu-refresh-btn" onclick="luReloadTab('events')">Refresh</button>
+    </span>
   </div>
+  <div id="events-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 

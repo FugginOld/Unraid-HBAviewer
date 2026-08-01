@@ -293,7 +293,9 @@ function renderOverviewCards(array $data, array $cfg): string {
 
 /* ── PHY Health (per controller; columns adapt to the detected backend) ────── */
 function luCtlHead(int $i): string {
-    return '<h3 style="margin:18px 0 8px;color:#f5a623;font-size:12px;'
+    // No top margin: this is now the first child of its controller's card, and
+    // the card already supplies 18px of padding above it.
+    return '<h3 style="margin:0 0 10px;color:#f5a623;font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
 function luLinkBadge(string $link): string {
@@ -307,10 +309,14 @@ function renderPhyTables(array $data): string {
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or PHY-less controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
         $phys = $ctl['phys'] ?? [];
-        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; continue; }
+        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p></div>'; continue; }
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
@@ -351,6 +357,7 @@ function renderPhyTables(array $data): string {
             }
             $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
@@ -364,8 +371,12 @@ function renderDrivesTables(array $data): string {
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or driveless controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
 
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         foreach ($ctl['enclosures'] ?? [] as $e) {
@@ -382,7 +393,7 @@ function renderDrivesTables(array $data): string {
         }
 
         $drives = $ctl['drives'] ?? [];
-        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; continue; }
+        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p></div>'; continue; }
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
@@ -421,6 +432,7 @@ function renderDrivesTables(array $data): string {
             }
             $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
@@ -436,8 +448,12 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
     $multi   = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA (see renderOverviewCards). Both early-outs below close
+        // it too: an errored or entry-less controller still gets its own card
+        // instead of bare text floating between its neighbours'.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
         $file = event_store_path($i, $dir);
@@ -448,7 +464,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         // through the wrong renderer produces undefined-key warnings and blank rows.
         $entries = event_visible($archived, $data['backend'] ?? '');
         $hidden  = count($archived) - count($entries);
-        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; continue; }
+        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p></div>'; continue; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
@@ -479,6 +495,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
             }
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
         }
+        $out .= '</div>';
     }
     return $out;
 }
@@ -504,8 +521,12 @@ function renderHealthTables(array $data): string {
     $multi = count($ctls) > 1;
     $out   = '';
     foreach ($ctls as $i => $ctl) {
+        // One card per HBA, matching renderOverviewCards — including the error
+        // branch below, or an errored controller renders as bare text floating
+        // between two cards.
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
         if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p>'; continue; }
+        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
 
         // The only place that touches the /tmp ring — see health.php's header.
         $file  = health_store_path($i);
@@ -542,7 +563,7 @@ function renderHealthTables(array $data): string {
               . '" style="--td:' . $gStops[0] . ';--tl:' . $gStops[1] . '">'
               . '<div class="lu-gauge"><div class="lu-arc-wrap">'
               . lsi_gauge_svg('lu-hgrad-' . $i, $g['frac'], $gStops)
-              . '<div class="lu-arc-readout"><span class="val">' . $g['ok'] . ' / ' . $g['total'] . '</span>'
+              . '<div class="lu-arc-readout count"><span class="val">' . $g['ok'] . ' / ' . $g['total'] . '</span>'
               . '<span class="unit">indicators ok</span></div></div></div>';
 
         // Only thermal earns a band meter: it is the one continuous metric with
@@ -565,16 +586,25 @@ function renderHealthTables(array $data): string {
         }
         $out .= '</div>';
 
+        // Order and labels mirror hbaviewer.php's header sentence ("Thermal, link
+        // integrity, topology, host link, and read health"), which is also
+        // health_indicators()'s return order. Every key it returns must appear
+        // here: the gauge above counts all of them, so an omitted row makes the
+        // count contradict the list beneath it (plan 031 — `thermal` was missing).
         $out .= '<div class="lu-indicator-rows">';
-        foreach (['link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Controller'] as $key => $label) {
+        foreach (['thermal' => 'Thermal', 'link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Read Health'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
             [$bDark, $bLight] = lsi_health_gradient($row['state']);
+            // Sprite ids live in hbaviewer.php's #lu-wrap. Most match $key; these
+            // two do not, and a mismatch renders an empty icon slot silently.
+            $icon = ['link_integrity' => 'link', 'host_link' => 'hostlink'][$key] ?? $key;
             $out .= '<div class="lu-indicator-row">'
-                  . '<span class="lu-ind-bar" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
+                  . '<span class="lu-ind-dot" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
+                  . '<svg class="lu-ind-icon" aria-hidden="true"><use href="#lu-i-' . $icon . '"/></svg>'
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
                   . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
         }
-        $out .= '</div>';
+        $out .= '</div></div>';
     }
     return $out;
 }
