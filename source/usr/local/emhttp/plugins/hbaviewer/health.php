@@ -221,6 +221,22 @@ function health_indicators(array $ring, array $rates, int $now): array {
     ];
 }
 
+/* What the Health gauge reads: how many indicators are `ok`, out of how many
+   there ARE. Deliberately NOT a 0-100 score — the indicators are categorical,
+   and a number that slides from 89 to 87 for reasons nobody can explain is
+   worse than no number (plan 030, option A). Counts whatever
+   health_indicators() returned, so adding a sixth indicator needs no edit here.
+   'frac' is pre-divided because the empty-input case (total 0) must not reach a
+   division at the call site. */
+function health_gauge(array $indicators): array {
+    $ok = 0;
+    foreach ($indicators as $ind) if (($ind['state'] ?? '') === 'ok') $ok++;
+    $total = count($indicators);
+    // (float) because PHP's / hands back an int on an exact division, and the
+    // caller passes this straight into a float-typed signature.
+    return ['ok' => $ok, 'total' => $total, 'frac' => $total > 0 ? (float) $ok / $total : 0.0];
+}
+
 /* Worst-of rollup: max(severity), never an average — four ok and one
    critical is not "mostly fine". If any indicator is `unknown` and nothing
    else is `warning` or worse, the rollup is `unknown` (a card that cannot be

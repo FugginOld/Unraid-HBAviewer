@@ -174,6 +174,18 @@ check('rank ok < watch < warning < critical',
     && health_rank('warning') < health_rank('critical'));
 check('rank unknown is unranked', health_rank('unknown') === -1);
 
+// ── health_gauge: a COUNT of what health_indicators() returned, not a score ──
+$st = fn(string ...$states) => array_map(fn($s) => ['state' => $s], $states);
+check('gauge 0 of N',   health_gauge($st('warning', 'critical', 'unknown')) === ['ok' => 0, 'total' => 3, 'frac' => 0.0]);
+check('gauge N of N',   health_gauge($st('ok', 'ok', 'ok', 'ok')) === ['ok' => 4, 'total' => 4, 'frac' => 1.0]);
+$mixed = health_gauge($st('ok', 'watch', 'ok', 'unknown', 'ok'));
+check('gauge mixed count', $mixed['ok'] === 3 && $mixed['total'] === 5);
+check('gauge mixed frac',  abs($mixed['frac'] - 0.6) < 1e-9);
+// empty input must not divide by zero — the tab renders before any sample lands
+check('gauge empty', health_gauge([]) === ['ok' => 0, 'total' => 0, 'frac' => 0.0]);
+// counts whatever came back, so a sixth indicator needs no edit here
+check('gauge counts real indicators', health_gauge(health_indicators($ring, $rates, 1000))['total'] === count(health_indicators($ring, $rates, 1000)));
+
 // ── store round-trip through a temp dir (no /tmp collision with real runs) ──
 $dir  = sys_get_temp_dir() . '/hbav_health_' . getmypid();
 $file = health_store_path(0, $dir);

@@ -49,18 +49,27 @@ echo <<<CSS
 .lu-d-tile .lu-d-ctl { padding-top:16px; margin-top:16px; border-top:1px solid var(--d-border); }
 .lu-d-tile .lu-d-ctl:first-child { padding-top:0; margin-top:0; border-top:none; }
 .lu-d-tile .lu-d-overview { display:flex; align-items:center; gap:16px; }
-/* Gauge column: the circle with the status badge centred beneath it. flex-shrink:0
-   so the meta column's text never squeezes the gauge. */
-.lu-d-tile .lu-d-gauge { display:flex; flex-direction:column; align-items:center; gap:8px; flex-shrink:0; }
-.lu-d-tile .lu-d-circle {
-  position:relative; width:84px; height:84px; flex-shrink:0; border-radius:50%;
-  background:conic-gradient(var(--tc,#2ecc71) calc(var(--pct,0)*1%), var(--d-border) 0);
-  display:grid; place-items:center;
-  filter:drop-shadow(0 0 8px color-mix(in srgb, var(--tc,#2ecc71) 30%, transparent));
+/* Gauge column: the instrument tile with the band label centred beneath the arc.
+   flex-shrink:0 so the meta column's text never squeezes the gauge.
+   This is the SAME gauge as the Overview tab's (hbaviewer.php .lu-tile/.lu-arc)
+   — the two have drifted before, so a change to one must be made to the other.
+   The geometry itself is shared: both call lsi_gauge_svg() in view.php. */
+.lu-d-tile .lu-d-gauge {
+  display:flex; flex-direction:column; align-items:center; gap:7px; flex-shrink:0;
+  padding:9px 13px 10px; border-radius:12px; border:1px solid #2e2e2e; background:transparent;
+  --gauge-track:#3a3a3a; --mark:var(--tl,#41d141);
 }
-.lu-d-tile .lu-d-circle::before { content:''; position:absolute; inset:6px; border-radius:50%; background:var(--d-bg); border:1px solid var(--d-border); }
-.lu-d-tile .lu-d-circle .v { position:relative; z-index:1; transform:translateY(-3px); font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--d-text); line-height:1; }
-.lu-d-tile .lu-d-circle .u { position:absolute; z-index:1; left:0; right:0; bottom:15px; text-align:center; font-size:10px; color:var(--d-text); letter-spacing:0.05em; }
+.lu-d-tile .lu-d-gauge.light {
+  background:#6e6e6e; border-color:#5c5c5c; box-shadow:inset 0 1px 0 rgba(255,255,255,.22);
+  --gauge-track:#5a5a5a; --mark:#fff;
+}
+.lu-d-tile .lu-arc { display:block; width:116px; height:65px; }
+.lu-d-tile .lu-arc-bg, .lu-d-tile .lu-arc-fg { fill:none; stroke-width:14; stroke-linecap:round; }
+.lu-d-tile .lu-arc-bg { stroke:var(--gauge-track); }
+.lu-d-tile .lu-arc-wrap { position:relative; }
+.lu-d-tile .lu-arc-readout { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; padding-bottom:1px; line-height:1; }
+.lu-d-tile .lu-arc-readout .v { font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; color:var(--mark); }
+.lu-d-tile .lu-arc-readout .u { font-size:10px; letter-spacing:0.05em; color:var(--mark); margin-top:4px; }
 .lu-d-tile .lu-d-meta { flex:1; }
 .lu-d-tile .lu-d-meta p   { margin:3px 0; font-size:12px; color:var(--d-text); display:flex; justify-content:space-between; gap:10px; border-bottom:1px dashed var(--d-border); padding-bottom:2px; }
 .lu-d-tile .lu-d-meta span { color:var(--d-text); font-weight:500; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums; }
@@ -72,16 +81,19 @@ echo <<<CSS
   box-shadow:0 0 8px color-mix(in srgb, var(--sc,#2ecc71) 30%, transparent);
 }
 .lu-d-tile .lu-d-health::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
-.lu-d-tile .lu-d-temp-band { font-size:10px; font-weight:700; letter-spacing:0.06em; font-family:ui-monospace,"SF Mono",Menlo,monospace; }
+.lu-d-tile .lu-d-temp-band { font-size:10px; font-weight:700; letter-spacing:0.06em; font-family:ui-monospace,"SF Mono",Menlo,monospace; color:var(--mark); }
 .lu-d-tile .lu-d-ts { font-size:10px; color:var(--d-text); text-align:right; margin-top:8px; font-family:ui-monospace,Menlo,monospace; }
 .lu-d-tile .lu-d-pill {
   display:none; align-items:center; margin-right:8px;
   padding:3px 11px; border-radius:20px;
   font-size:12px; font-weight:700; letter-spacing:0.03em;
   font-family:ui-monospace,"SF Mono",Menlo,monospace; font-variant-numeric:tabular-nums;
-  color:var(--tc,#2ecc71);
-  border:1px solid color-mix(in srgb, var(--tc,#2ecc71) 55%, transparent);
-  background:color-mix(in srgb, var(--tc,#2ecc71) 12%, transparent);
+  /* --tc here is lsi_temp_text(): the gradient stop that reads as TEXT on this
+     theme's own surfaces. The pill sits in the tile HEADER, outside the
+     instrument tile, so it gets no panel to supply its background. */
+  color:var(--tc,#41d141);
+  border:1px solid color-mix(in srgb, var(--tc,#41d141) 55%, transparent);
+  background:color-mix(in srgb, var(--tc,#41d141) 12%, transparent);
 }
 /* Collapsed-only footer. Unraid hides every <tr> after the first by setting an
    inline display:none on it — no class, no attribute we can hook. Measured on
@@ -149,8 +161,9 @@ foreach ($controllers as $i => $c) {
     }
 
     $v         = lsi_hba_view($c, $port, $i);
-    $col       = $v['color'];       // rollup status -> badge
-    $tempCol   = $v['temp_stroke']; // temperature band -> gauge/glow/pill
+    $col       = $v['color'];                            // rollup status -> badge
+    [$gDark, $gLight] = $v['temp_grad'];                 // temperature band -> gauge arc
+    $tempCol   = lsi_temp_text($v['temp_band'] ?? '');   // ...and the header pill's text
     $temp      = (int)($c['temp'] ?? 0);
     $model     = htmlspecialchars($v['model']);
     $chip      = htmlspecialchars($v['chip']);
@@ -167,7 +180,7 @@ foreach ($controllers as $i => $c) {
     $isCrit    = ($v['temp_band'] ?? '') === 'critical';
     $tempChip  = $isCrit
         ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
-        : '<span style="color:' . $v['temp_stroke'] . '">' . htmlspecialchars($v['temp_label']) . '</span>';
+        : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
 
     // Title stays the plugin name; the subtitle identifies which card this tile is.
     // $portLabel is already "Controller /cN" on storcli cards and
@@ -199,13 +212,22 @@ foreach ($controllers as $i => $c) {
     }
     $t['foot'] = "<div class='lu-d-foot-row'>" . implode('', $parts) . "</div>";
 
+    // Same 0-110C scale and the same renderer as the Overview tab's gauge.
+    // The gradient id carries the controller index because a box with two HBAs
+    // emits two tiles onto ONE dashboard page.
+    $gauge = lsi_gauge_svg("lu-dgrad-{$i}", $temp / 110, [$gDark, $gLight]);
+    $tileLight = lsi_tile_is_light() ? ' light' : '';
+
     $t['body'] = "
     <div class='lu-d-ctl'>
       <div class='lu-d-overview'>
-        <div class='lu-d-gauge'>
-          <div class='lu-d-circle' style='--tc:{$tempCol};--pct:{$temp}'>
-            <span class='v'>{$temp}</span>
-            <span class='u'>°C</span>
+        <div class='lu-d-gauge{$tileLight}' style='--td:{$gDark};--tl:{$gLight}'>
+          <div class='lu-arc-wrap'>
+            {$gauge}
+            <div class='lu-arc-readout'>
+              <span class='v'>{$temp}</span>
+              <span class='u'>°C</span>
+            </div>
           </div>
           <span class='lu-d-temp-band'>{$tempChip}</span>
         </div>

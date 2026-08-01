@@ -17,6 +17,46 @@ check('color warn',  lsi_status_color('warn')  === '#f39c12');
 check('color alert', lsi_status_color('alert') === '#e74c3c');
 check('label alert', lsi_status_label('alert') === 'ALERT');
 
+// temperature bands are gradients now: two stops each, five bands + a default
+foreach (['critical' => ['#6b0f0c', '#b82820'], 'alert' => ['#9c1810', '#e8443a'],
+          'warning'  => ['#a85410', '#f09428'], 'elevated' => ['#b8890a', '#f5d020'],
+          'normal'   => ['#0f7a1a', '#41d141'], ''         => ['#0f7a1a', '#41d141'],
+          'nonsense' => ['#0f7a1a', '#41d141']] as $band => $want) {
+    check("gradient " . ($band === '' ? '(empty)' : $band), lsi_temp_gradient($band) === $want);
+}
+// the critical chip is the one flat fill that survived the move to gradients
+check('critical chip fill', lsi_temp_color('critical') === '#922b21');
+check('non-critical -> dark stop', lsi_temp_color('elevated') === '#b8890a');
+
+// health states borrow the temperature gradients; unknown is grey, never green
+check('health critical grad', lsi_health_gradient('critical') === lsi_temp_gradient('alert'));
+check('health watch grad',    lsi_health_gradient('watch')    === lsi_temp_gradient('elevated'));
+check('health ok grad',       lsi_health_gradient('ok')       === lsi_temp_gradient('normal'));
+check('health unknown grey',  lsi_health_gradient('unknown')  === ['#4a4d4a', '#8f938f']);
+
+// theme signal: the two light themes only, and a MISSING $display must be dark
+unset($GLOBALS['display']);
+check('no $display -> dark', lsi_tile_is_light() === false);
+foreach (['white' => true, 'azure' => true, 'black' => false, 'gray' => false, 'martian' => false] as $theme => $want) {
+    $GLOBALS['display'] = ['theme' => $theme];
+    check("theme $theme", lsi_tile_is_light() === $want);
+}
+$GLOBALS['display'] = [];
+check('$display without theme -> dark', lsi_tile_is_light() === false);
+unset($GLOBALS['display']);
+
+// gauge arc: dashoffset counts DOWN from the full arc, so 0 must be EMPTY (a
+// 0C reading rendering as a full gauge is the off-by-one this guards).
+$g0 = lsi_gauge_svg('g0', 0.0, ['#000', '#fff']);
+check('0% arc is empty',  strpos($g0, 'stroke-dashoffset="251.3"') !== false);
+check('full arc',         strpos(lsi_gauge_svg('g1', 1.0, ['#000', '#fff']), 'stroke-dashoffset="0.0"') !== false);
+check('half arc',         strpos(lsi_gauge_svg('g2', 0.5, ['#000', '#fff']), 'stroke-dashoffset="125.7"') !== false);
+check('frac clamped low', strpos(lsi_gauge_svg('g3', -5.0, ['#000', '#fff']), 'stroke-dashoffset="251.3"') !== false);
+check('frac clamped high',strpos(lsi_gauge_svg('g4', 9.0, ['#000', '#fff']), 'stroke-dashoffset="0.0"') !== false);
+// ids must be unique per gauge or two controllers cross-contaminate
+check('gradient id used', strpos($g0, 'id="g0"') !== false && strpos($g0, 'url(#g0)') !== false);
+check('stops emitted',    strpos($g0, 'stop-color="#000"') !== false && strpos($g0, 'stop-color="#fff"') !== false);
+
 // full view over a representative payload
 $data = [
     'temp' => 47, 'status' => 'ok',
@@ -34,6 +74,10 @@ check('chip=model', $v['chip'] === 'SAS2308');
 check('port label', $v['port_label'] === 'ioc0 (lsiutil -p1)');
 check('pcie count', count($v['pcie']) === 4);
 check('pcie order', $v['pcie'][0]['label'] === 'PCIe Width' && $v['pcie'][0]['value'] === 'x8');
+check('temp_grad key',  $v['temp_grad'] === ['#0f7a1a', '#41d141']);
+// dead field, dropped by plan 030 rather than ported to a gradient
+check('no temp_color',  !array_key_exists('temp_color', $v));
+check('no temp_stroke', !array_key_exists('temp_stroke', $v));
 
 // fallbacks + empty PCIe
 $bare = lsi_hba_view(['temp' => 30, 'status' => 'alert'], 2);

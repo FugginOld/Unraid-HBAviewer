@@ -107,17 +107,43 @@ if ($enableFlash) {
 /* Gauge and its band label read as one unit — the band describes the number
    above it, which is not what a row buried in the field list conveyed. */
 .lu-gauge { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
-.lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); }
-.lu-circle {
-    position: relative; width: 108px; height: 108px; flex-shrink: 0; border-radius: 50%;
-    background: conic-gradient(var(--tc, var(--good)) calc(var(--pct,0)*1%), var(--track) 0);
-    display: grid; place-items: center;
-    filter: drop-shadow(0 0 10px color-mix(in srgb, var(--tc, var(--good)) 32%, transparent));
-    transition: background 0.4s;
+.lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); color: var(--mark); }
+
+/* ── The instrument tile ──────────────────────────────────────────────────
+   A panel that supplies its own background to the marks sitting on it, so they
+   stop depending on what the Unraid theme puts behind them. The class is added
+   server-side from lsi_tile_is_light() — no Unraid theme sets
+   prefers-color-scheme, so CSS alone cannot tell light from dark here.
+   --td/--tl are the band's gradient stops, set inline per card; --mark is the
+   colour of the number and the band label, which is white on the filled panel
+   and the band's own light stop when there is no panel. That difference is
+   deliberate: floating on a dark card with no panel, white loses its
+   association with the arc. */
+.lu-tile {
+    padding: 12px 16px 13px; border-radius: 12px;
+    border: 1px solid #2e2e2e; background: transparent;
+    --gauge-track: #3a3a3a; --mark: var(--tl, #41d141);
 }
-.lu-circle::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface)); border: 1px solid var(--border-soft); }
-.lu-circle .val  { position: relative; z-index: 1; transform: translateY(-4px); font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1; }
-.lu-circle .unit { position: absolute; z-index: 1; left: 0; right: 0; bottom: 19px; text-align: center; font-size: 11px; color: var(--muted); letter-spacing: 0.05em; }
+.lu-tile.light {
+    background: #6e6e6e; border-color: #5c5c5c;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
+    --gauge-track: #5a5a5a; --mark: #fff;
+}
+/* Half-circle gauge. The geometry lives in lsi_gauge_svg() (view.php) — this
+   only sizes and strokes it. ponytail: no vertical sheen on the arc; an SVG
+   stroke cannot carry the overlay the flat bars use, and the arc's own
+   dark->light sweep already gives it internal contrast. */
+.lu-arc { display: block; width: 138px; height: 78px; }
+.lu-arc-bg, .lu-arc-fg { fill: none; stroke-width: 14; stroke-linecap: round; }
+.lu-arc-bg { stroke: var(--gauge-track); }
+.lu-arc-fg { transition: stroke-dashoffset 0.4s; }
+.lu-arc-wrap { position: relative; }
+.lu-arc-readout {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: flex-end; align-items: center; padding-bottom: 2px; line-height: 1;
+}
+.lu-arc-readout .val  { font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mark); }
+.lu-arc-readout .unit { font-size: 11px; letter-spacing: 0.05em; color: var(--mark); margin-top: 5px; }
 .lu-meta { flex: 1; min-width: 0; }
 .lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
 .lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -209,15 +235,25 @@ if ($enableFlash) {
    Segments sized to the plan-018 cut-points (65/75/85/95) over a 0-110C scale:
    65/110, 10/110, 10/110, 10/110, 15/110 as flex-grow ratios. */
 .lu-band-meter { margin: 0 0 18px; }
-.lu-band-track { position: relative; display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--track); }
+.lu-band-track { position: relative; display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--gauge-track, var(--track)); }
 .lu-band-seg { display: block; height: 100%; }
-.lu-band-seg.s0 { flex: 65; background: #2ecc71; }
-.lu-band-seg.s1 { flex: 10; background: #f1c40f; }
-.lu-band-seg.s2 { flex: 10; background: #e67e22; }
-.lu-band-seg.s3 { flex: 10; background: #e74c3c; }
-.lu-band-seg.s4 { flex: 15; background: #922b21; }
+/* Each band is a dark->light gradient so the segment carries its own internal
+   contrast (see lsi_temp_gradient in view.php). The `flex` weights below are
+   UNCHANGED by plan 030 and must stay in step with the label percentages
+   emitted by ajax_info.php — both encode the same band edges. */
+.lu-band-seg.s0 { flex: 65; background: linear-gradient(90deg, #0f7a1a, #41d141); }
+.lu-band-seg.s1 { flex: 10; background: linear-gradient(90deg, #b8890a, #f5d020); }
+.lu-band-seg.s2 { flex: 10; background: linear-gradient(90deg, #a85410, #f09428); }
+.lu-band-seg.s3 { flex: 10; background: linear-gradient(90deg, #9c1810, #e8443a); }
+.lu-band-seg.s4 { flex: 15; background: linear-gradient(90deg, #6b0f0c, #b82820); }
+/* The vertical sheen the Unraid bars carry, laid over all five segments at
+   once rather than repeated on each. */
+.lu-band-track::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 55%, rgba(0,0,0,.13));
+}
 .lu-band-marker {
-    position: absolute; top: -3px; width: 2px; height: 16px; background: #fff;
+    position: absolute; top: -3px; width: 2px; height: 16px; background: #fff; z-index: 1;
     box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translateX(-1px);
 }
 /* Labels sit at their TRUE percentage of the 0-110 scale (set inline per-span
@@ -229,10 +265,23 @@ if ($enableFlash) {
 .lu-band-labels span { position: absolute; transform: translateX(-50%); }
 .lu-band-labels span:first-child { transform: none; }             /* 0 flush left */
 .lu-band-labels span:last-child  { transform: translateX(-100%); } /* 110 flush right */
+/* Gauge + band meter share one instrument tile: the gauge is the summary, the
+   meter is the one continuous metric behind it, and both need the panel's own
+   background rather than the theme's. */
+.lu-health-tile { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 0 0 16px; }
+.lu-health-tile .lu-band-meter { flex: 1 1 260px; margin: 0; }
+.lu-tile.light .lu-band-labels { color: #fff; }
 .lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
 .lu-indicator-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
 .lu-indicator-row:last-child { border-bottom: none; }
-.lu-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+/* Was a flat coloured dot; a gradient bar carries its own internal contrast and
+   is readable on any theme surface. --gd/--gl set inline per row from
+   lsi_health_gradient(). */
+.lu-ind-bar {
+    width: 30px; height: 9px; border-radius: 3px; flex: 0 0 auto;
+    background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 55%, rgba(0,0,0,.13)),
+                linear-gradient(90deg, var(--gd), var(--gl));
+}
 .lu-indicator-label { color: var(--faint); flex: 1; }
 .lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
 

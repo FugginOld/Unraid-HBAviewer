@@ -24,27 +24,59 @@ function lsi_health_color(string $s): string {
     };
 }
 
-/* Temperature band -> colour. SEPARATE from lsi_status_color on purpose: the
-   thermometer shows heat, the badge shows the whole-controller rollup (which also
-   reflects drive and PHY problems). Conflating them is what made issue #8 read as
-   a false temperature warning. Hexes are contrast-measured against the plugin's
-   own card surfaces (#232323 / #1c1c1c / #2a2a2a); all clear 3:1.
-   'critical' is a FILL behind white text, not a foreground — #922b21 measures
-   1.94:1 as a stroke on a dark card and is unreadable. Do not "promote" it. */
-function lsi_temp_color(string $band): string {
-    return match ($band) {
-        'critical' => '#922b21',
-        'alert'    => '#e74c3c',
-        'warning'  => '#e67e22',
-        'elevated' => '#f1c40f',
-        default    => '#2ecc71',
+/* The same five states as [dark, light] gradient stops, for the marks the
+   Health tab DRAWS (the gauge arc and the indicator bars) rather than writes
+   as text. Borrowed from the temperature bands so the tab does not carry a
+   second palette; `unknown` is the one state with no thermal analogue, and it
+   is grey because a card that cannot be read is not a card that is fine. */
+function lsi_health_gradient(string $state): array {
+    return match ($state) {
+        'critical' => lsi_temp_gradient('alert'),
+        'warning'  => lsi_temp_gradient('warning'),
+        'watch'    => lsi_temp_gradient('elevated'),
+        'unknown'  => ['#4a4d4a', '#8f938f'],
+        default    => lsi_temp_gradient('normal'),
     };
 }
-/* Where a band must be drawn as a stroke or glow rather than a fill, critical
-   needs a lighter red to stay legible (4.93:1 vs 1.94:1). */
-function lsi_temp_stroke(string $band): string {
-    return $band === 'critical' ? '#ff5252' : lsi_temp_color($band);
+
+/* Temperature band -> [dark, light] gradient stops. Each band is a gradient,
+   not a flat colour, so the mark carries its own internal contrast and reads on
+   any surface. This replaced a flat palette that had been contrast-measured
+   against the plugin's own dark cards — a measurement plan 021 invalidated the
+   moment those cards started following the Unraid theme (bands fell to 1.36:1
+   on `white`). Do not "simplify" these back to single hexes.
+   SEPARATE from lsi_status_color on purpose: the thermometer shows heat, the
+   badge shows the whole-controller rollup (which also reflects drive and PHY
+   problems). Conflating them is what made issue #8 read as a false temperature
+   warning. */
+function lsi_temp_gradient(string $band): array {
+    return match ($band) {
+        'critical' => ['#6b0f0c', '#b82820'],
+        'alert'    => ['#9c1810', '#e8443a'],
+        'warning'  => ['#a85410', '#f09428'],
+        'elevated' => ['#b8890a', '#f5d020'],
+        default    => ['#0f7a1a', '#41d141'],
+    };
 }
+
+/* Survives the move to gradients for ONE caller: the critical chip, which is a
+   flat fill behind white text and needs no gradient. #922b21 is that fill and
+   is not a foreground — it measures 1.94:1 as a stroke on a dark card. Do not
+   "promote" it. Any other band falls back to its dark stop, so this function
+   never introduces a sixth hex. */
+function lsi_temp_color(string $band): string {
+    return $band === 'critical' ? '#922b21' : lsi_temp_gradient($band)[0];
+}
+
+/* The gradient stop that reads as TEXT drawn straight onto the page's own
+   surfaces: a light theme needs the dark stop, a dark theme the light one.
+   Marks that sit ON the instrument tile do NOT use this — the tile supplies
+   its own background and CSS picks the colour there. */
+function lsi_temp_text(string $band): string {
+    [$dark, $light] = lsi_temp_gradient($band);
+    return lsi_tile_is_light() ? $dark : $light;
+}
+
 function lsi_band_label(string $band): string {
     return match ($band) {
         'critical' => 'CRITICAL', 'alert' => 'ALERT', 'warning' => 'WARNING',
@@ -77,27 +109,63 @@ function lsi_strftime_to_date(string $f): string {
     return $out;
 }
 
-/* Timestamp in the user's configured format. Unraid stores the display
-   preference in dynamix's config and also exposes $display to page scripts, so
-   try the in-memory global first and fall back to reading the file. date()
-   already renders in the system timezone — only the 12/24-hour choice needs
-   resolving here, so a missing config degrades to the previous 24-hour output
-   rather than guessing.
+/* One dynamix display preference. Unraid exposes $display to page scripts, but
+   NOT to the AJAX endpoints — those are fetched directly, with no dynamix
+   bootstrap — so fall back to the config file dynamix wrote it to. '' when
+   neither has it, which every caller treats as "keep the previous default". */
+function lsi_display_pref(string $key): string {
+    if (isset($GLOBALS['display'][$key]) && is_string($GLOBALS['display'][$key])) {
+        return trim($GLOBALS['display'][$key]);
+    }
+    $cfg = @parse_ini_file('/boot/config/plugins/dynamix/dynamix.cfg', true);
+    return (is_array($cfg) && isset($cfg['display'][$key]) && is_string($cfg['display'][$key]))
+        ? trim($cfg['display'][$key]) : '';
+}
+
+/* Which instrument-tile treatment to use. Unraid's themes are `white`, `black`,
+   `azure` and `gray`; the two light ones get the filled panel. Absent or
+   unrecognised -> dark treatment, which is what shipped before plan 030.
+   Do NOT try to detect this in CSS: no Unraid theme sets prefers-color-scheme,
+   and the variables that do differ cannot be branched on from a stylesheet. */
+function lsi_tile_is_light(): bool {
+    return in_array(lsi_display_pref('theme'), ['white', 'azure'], true);
+}
+
+/* The half-circle gauge, shared by the Overview card, the dashboard tile and
+   the Health tab — three copies of one geometry, and the first two had already
+   drifted apart once. viewBox 0 0 200 112; the arc is an r=80 semicircle from
+   (20,100) to (180,100), so its length is pi*80 = 251.3. dashoffset counts DOWN
+   from that full length, so $frac 0 leaves the arc completely EMPTY — a 0 °C
+   reading must not render as a full gauge.
+   $id must be unique per gauge ON THE PAGE: two <linearGradient>s sharing an id
+   make every gauge render the first one's colours. */
+const LSI_ARC_LEN = 251.3;
+
+function lsi_gauge_svg(string $id, float $frac, array $stops): string {
+    $frac = max(0.0, min(1.0, $frac));
+    $d    = 'M20,100 A80,80 0 0 1 180,100';
+    return '<svg class="lu-arc" viewBox="0 0 200 112" aria-hidden="true">'
+         . '<defs><linearGradient id="' . $id . '" x1="0" y1="0" x2="1" y2="0">'
+         . '<stop offset="0" stop-color="' . $stops[0] . '"/>'
+         . '<stop offset="1" stop-color="' . $stops[1] . '"/>'
+         . '</linearGradient></defs>'
+         . '<path class="lu-arc-bg" d="' . $d . '"/>'
+         . '<path class="lu-arc-fg" d="' . $d . '" stroke="url(#' . $id . ')"'
+         . ' stroke-dasharray="' . LSI_ARC_LEN . '"'
+         . ' stroke-dashoffset="' . number_format(LSI_ARC_LEN * (1 - $frac), 1, '.', '') . '"/>'
+         . '</svg>';
+}
+
+/* Timestamp in the user's configured format. date() already renders in the
+   system timezone — only the 12/24-hour choice needs resolving here, so a
+   missing preference degrades to the previous 24-hour output rather than
+   guessing.
    ponytail: Unraid writes strftime-style formats (e.g. "%I:%M %p"), translated by
    the helper above; a plain date() format is still accepted for the case where
    $display carries one. Anything else drops back to 24-hour. */
 function lsi_time(?int $when = null): string {
     $when ??= time();
-    $fmt = '';
-    if (isset($GLOBALS['display']['time']) && is_string($GLOBALS['display']['time'])) {
-        $fmt = trim($GLOBALS['display']['time']);
-    }
-    if ($fmt === '') {
-        $cfg = @parse_ini_file('/boot/config/plugins/dynamix/dynamix.cfg', true);
-        if (is_array($cfg) && isset($cfg['display']['time']) && is_string($cfg['display']['time'])) {
-            $fmt = trim($cfg['display']['time']);
-        }
-    }
+    $fmt  = lsi_display_pref('time');
     if ($fmt === '' || strlen($fmt) > 32) {
         return date('H:i:s', $when);
     }
@@ -145,8 +213,8 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
         'color'      => lsi_status_color($status),
         'label'      => lsi_status_label($status),
         'temp_band'   => $data['temp_band'] ?? '',
-        'temp_color'  => lsi_temp_color($data['temp_band'] ?? ''),
-        'temp_stroke' => lsi_temp_stroke($data['temp_band'] ?? ''),
+        // [dark, light] stops; the consumers paint gradients, never a flat hex.
+        'temp_grad'   => lsi_temp_gradient($data['temp_band'] ?? ''),
         'temp_label'  => lsi_band_label($data['temp_band'] ?? ''),
         'cfg_band'       => $data['cfg_band'] ?? '',
         'cfg_band_label' => lsi_band_label($data['cfg_band'] ?? ''),
