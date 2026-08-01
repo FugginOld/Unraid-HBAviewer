@@ -109,9 +109,13 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .lu-toggle span { font-size: 13px; color: var(--text); }
 .lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
-.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: #8ccc8c; font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
-.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: #e0a0a0; font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
-.lu-danger strong { color: var(--crit); }
+/* Text colour was a fixed green/red pastel tuned for a dark card only — 1.5-1.8:1
+   on a light theme, near-invisible. Mixed 50% toward --text-color instead, which
+   is dark on light themes and light on dark ones, so the result self-adjusts
+   toward whichever end clears 4.5:1 body-text contrast on that theme's card. */
+.lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd)); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
+.lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd)); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
+.lu-danger strong { color: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd)); }
 .lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
