@@ -20,6 +20,7 @@ const LSI_SCHEMA = [
     'SHOW_EVENTS'     => [1,  0, 1],
     'SHOW_PERF'       => [1,  0, 1],   // Performance (real-time graphs) tab
     'ENABLE_FLASH'    => [0,  0, 1],   // advanced: unlocks the Firmware/BIOS tab
+    'ENABLE_NOTIFY'   => [0,  0, 1],   // opt-in: cron notifies on health status changes
 ];
 
 function lsi_clamp(string $key, $val): int {

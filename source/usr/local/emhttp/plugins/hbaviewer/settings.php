@@ -64,7 +64,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
         'SHOW_EVENTS'     => isset($_POST['show_events']) ? 1 : 0,
         'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
-        'ENABLE_FLASH'    => isset($_POST['enable_flash']) ? 1 : 0,
+        'ENABLE_FLASH'    => isset($_POST['enable_flash'])  ? 1 : 0,
+        'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -171,7 +172,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       <div class="lu-s-row">
         <div class="lu-s-label">
           Badge Sensitivity
-          <small>Temperature colours are fixed (Normal &le;65, Elevated 66&ndash;75, Warning 76&ndash;85, Alert 86&ndash;95, Critical &gt;95 &deg;C). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem. HBAviewer does not send notifications.</small>
+          <small>Temperature colours are fixed (Normal &le;65, Elevated 66&ndash;75, Warning 76&ndash;85, Alert 86&ndash;95, Critical &gt;95 &deg;C). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem &mdash; and, when Notifications are enabled below, the point at which HBAviewer notifies you.</small>
         </div>
         <div class="lu-s-control">
           <select name="threshold">
@@ -219,6 +220,16 @@ foreach ($bands as $floor => $label) {
         <input type="checkbox" name="show_perf" <?= lu_checked((int)$cfg['SHOW_PERF']) ?>>
         <span>Performance</span>
         <small>Real-time throughput / IOPS / %util / latency graphs</small>
+      </label>
+    </div>
+
+    <div class="lu-s-card">
+      <h3>Notifications</h3>
+      <p style="font-size:12px;color:var(--text);margin:0 0 14px">Off by default. When on, HBAviewer checks every 10 minutes and sends one notification each time a controller's health status <em>changes</em> &mdash; never a repeat while it stays the same. Delivery (browser, email, agents) follows your Unraid <a class="lu-link" href="/Settings/Notifications">Notification Settings</a>.</p>
+      <label class="lu-toggle">
+        <input type="checkbox" name="enable_notify" <?= lu_checked((int)$cfg['ENABLE_NOTIFY']) ?>>
+        <span>Notify on health status changes</span>
+        <small>uses Unraid's own notification system</small>
       </label>
     </div>
 
