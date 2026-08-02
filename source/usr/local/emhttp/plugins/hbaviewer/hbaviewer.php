@@ -224,6 +224,17 @@ if ($enableFlash) {
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
 .lu-fstep { margin: 14px 0; }
 .lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+/* Locked state (plan 037): while the array runs, Step 3 is dimmed and inert.
+   COSMETIC ONLY — flash.php's flash_array_stopped() and luFlashGo's
+   !flashArrayStopped alert are the actual gate. Deleting this CSS must still
+   leave flashing blocked; if it ever doesn't, the safety model has inverted.
+   0.45 measured 2.3-2.8:1 on the light themes (white/azure); 0.6 keeps every
+   theme >= 3.3:1. .lu-flock is a SIBLING of the locked step, not a child:
+   opacity applies to the whole subtree, so a child can never be less
+   transparent than its parent — the plan's `.is-locked .lu-flock{opacity:1}`
+   would have been a no-op and left the explanation as dim as what it explains. */
+.lu-fstep.is-locked { opacity: 0.6; pointer-events: none; }
+.lu-flock { color: var(--warn-text); font-size: 12px; margin: 14px 0 0; }
 .lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
 .lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
 .lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
@@ -613,6 +624,16 @@ if ($enableFlash) {
        drives flash.php; every real guard (array stopped, confirm, lock) is
        re-checked on the server, so the JS checks here are only fast feedback. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
+    /* Step 3 writes hardware, so it is greyed out and disabled while the array
+       runs. Steps 1 (read-only listing) and 2 (uploads to the plugin's own tools
+       dir) stay live on purpose — staging the image before the array goes down
+       is what keeps the outage short. `disabled` as well as pointer-events
+       because a pointer-only lock is still keyboard-reachable, which is a worse
+       trap than an enabled button. Read once at render: stopping the array needs
+       a page reload, same as the banner already says. */
+    var lockCls  = flashArrayStopped ? '' : ' is-locked';
+    var lockAttr = flashArrayStopped ? '' : ' disabled';
+    var lockNote = flashArrayStopped ? '' : '<div class="lu-flock">Locked while the array is running — stop the array on the Main tab, then reload this page.</div>';
     // Unraid rejects POSTs without its CSRF token. Prefer Unraid's own fresh JS
     // global; fall back to the token we read from var.ini at render time.
     var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
@@ -647,10 +668,11 @@ if ($enableFlash) {
                 +   'Flash tool if not installed (sas2flash/sas3flash): <input type="file" id="flash-tool-'+i+'"> '
                 +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
                 +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
-                + '<div class="lu-fstep"><label class="step">Step 3 — confirm &amp; flash</label>'
-                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"> I understand a wrong image can permanently brick this controller.</label>'
-                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"> '
-                +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')">Flash /c'+i+'</button></div>'
+                + lockNote
+                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 3 — confirm &amp; flash</label>'
+                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
+                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"'+lockAttr+'> '
+                +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')"'+lockAttr+'>Flash /c'+i+'</button></div>'
                 + '<pre id="flash-log-'+i+'" style="display:none"></pre>'
                 + '</div>';
             }).join('');
