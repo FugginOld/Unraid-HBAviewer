@@ -189,7 +189,19 @@ Both surfaced while executing 003; both cost a full dispatch.
 
 Work happens on `dev`, not `main`.
 
-- `dev` is the integration branch and is currently level with `main` at `0346777`.
+- `dev` is the integration branch. It is **well ahead of `main`** and of the
+  last release (2026.07.27) — as of `81d7362` it carries 017/#6, 038/#9, the
+  Health tab, notifications, the diagnostic bundle, the PHY baseline, the theme
+  work and the per-controller cards, none of which any user has installed.
+- **Maintainer's release policy, stated 2026-08-02: nothing ships to `main`
+  until every plan is complete.** Merging to `dev` is not shipping. Two live
+  consequences to keep in view rather than rediscover:
+  1. **Issues #6 and #9 stay open for the duration**, even though both fixes are
+     merged and hardware-proven. Neither reporter can install a fix that has no
+     release.
+  2. **Every reporter test must therefore be patch-in-place from `dev`** (see
+     the block below), which is the workflow that already cost #6 a wasted
+     round-trip when a branch went missing. Verify any URL you hand out.
 - Each plan says `Branch: advisor/NNN-<slug>`. **Cut that branch from `dev`**
   (`git switch dev && git switch -c advisor/NNN-<slug>`) and merge it back to
   `dev` when its done criteria pass.
@@ -231,6 +243,46 @@ Three details that will otherwise waste your afternoon:
    ssh root@192.168.2.248 'rm -f /tmp/lsiutil_dash.json /tmp/hbav_overview.out \
      /tmp/lsiutil_smart.json /tmp/lsiutil_smart.json.progress'
    ```
+
+### Handing a reporter a test build (no release, no rsync, no branch URLs)
+
+While the release policy holds, this is the **only** way a reporter can run a
+fix. It needs nothing on their side but a terminal, and it is one block rather
+than a 16-file `curl` loop that fails silently when a path moves:
+
+```bash
+D=/usr/local/emhttp/plugins/hbaviewer
+rm -rf /tmp/hbavdev /tmp/hbavdev.tgz && mkdir -p /tmp/hbavdev
+curl -fsSL -o /tmp/hbavdev.tgz \
+  https://codeload.github.com/FugginOld/Unraid-HBAviewer/tar.gz/refs/heads/dev
+tar -xzf /tmp/hbavdev.tgz -C /tmp/hbavdev --strip-components=1
+[ -f /tmp/hbavdev/source$D/phy_baseline.php ] && echo "download OK" || echo "STALE — stop here"
+
+cp -r /tmp/hbavdev/source$D/. $D/
+rm -f /tmp/lsiutil_dash.json /tmp/hbav_overview.out /tmp/hbav_overview.lock \
+      /tmp/lsiutil_smart.json /tmp/lsiutil_smart.json.progress
+echo "now running dev"
+```
+
+Four things that make this safe to paste to a stranger:
+
+- **`--strip-components=1`** means the archive's root directory name never
+  matters, so the block does not rot when a branch or commit changes.
+- **A positive download check before the copy.** `curl -f` writes nothing on a
+  404 and the failure is otherwise invisible — the copy "succeeds" and they
+  test the old code. That is exactly what happened on #6.
+- **`cp -r`, never `cp -a` or `rsync --delete`.** `-r` stamps current mtimes;
+  `get_hba_info.sh:22` invalidates its cache by comparing the cache's mtime to
+  its own, so preserved older mtimes leave new code sitting behind a stale
+  cache. No `--delete` keeps the git-ignored `chart.umd.min.js`, without which
+  the Performance tab breaks.
+- **Undo is a reboot.** `/usr/local/emhttp` is tmpfs and the `.plg` reinstalls
+  the released `.txz` at boot, so there is nothing to restore by hand and no
+  way for this to persist a bad state.
+
+Say plainly that it pulls **all** of `dev`, not just their fix — the Health
+tab, notifications (off by default; the cron is only ever installed by the
+`.plg`, so it stays dormant) and the diagnostic bundle come with it.
 
 To go back to the released version: reinstall the plugin from **Plugins →
 Install Plugin** using the URL in the README. Nothing here writes to
