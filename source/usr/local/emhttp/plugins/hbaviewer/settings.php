@@ -113,8 +113,10 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
    invented breakpoint (same idiom as .lu-perf-grid in hbaviewer.php); min() keeps
    it from overflowing below 360px. Sits INSIDE <form> so the POST is unaffected,
    and wraps only the cards so the Save button stays below it in normal flow.
-   NOTE: this assumes exactly three sections. A fourth must decide whether it
-   pairs with Advanced or pushes Advanced down. */
+   NOTE: four non-span sections now (HBA Connection, Display Panels,
+   Notifications, Diagnostic Bundle) filling two rows, with Advanced spanning
+   below them. A FIFTH would leave a ragged half-row; decide then whether it
+   pairs, spans, or displaces one of these. */
 .lu-s-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }
 .lu-s-grid > .lu-s-card { margin-bottom: 0; }
 .lu-s-grid > .lu-s-span { grid-column: 1 / -1; }
@@ -248,6 +250,38 @@ foreach ($bands as $floor => $label) {
         <span>Notify on health status changes</span>
         <small>uses Unraid's own notification system</small>
       </label>
+    </div>
+
+    <?php /* Pairs beside Notifications in the two-column grid rather than
+             spanning: it is a routine, read-only support action, and the span
+             is reserved for Advanced precisely because that section unlocks
+             firmware writes and must not read as a peer of the routine
+             controls. Two toggles + a button also fit a single column.
+
+             The button uses formaction to post THIS form to bundle.php: a
+             download needs its own response, a second <form> cannot be nested
+             inside this one, and formaction is the native way to do it — no
+             JS, and Unraid's page framework still injects its csrf_token into
+             the one form on the page. Only the clicked button's name is
+             submitted, so this never triggers a settings save, and the two
+             checkboxes below are ignored by lsi_config_write (schema-driven).
+             Neither setting is persisted: both are per-download choices. */ ?>
+    <div class="lu-s-card">
+      <h3>Diagnostic Bundle</h3>
+      <p style="font-size:12px;color:var(--text);margin:0 0 14px">Collects everything needed to debug a controller problem &mdash; the raw storcli/lsiutil output, the sysfs state, and what HBAviewer made of both &mdash; into one archive you can attach to a <a class="lu-link" href="https://github.com/Fuggin/Unraid-HBAviewer/issues">GitHub issue</a>. Read-only: nothing is changed on your controller. Takes a few seconds.</p>
+      <label class="lu-toggle">
+        <input type="checkbox" name="bundle_anon" checked>
+        <span>Anonymise</span>
+        <small>replaces serials, WWNs, SAS addresses &amp; hostname</small>
+      </label>
+      <label class="lu-toggle">
+        <input type="checkbox" name="bundle_smart">
+        <span>Include SMART</span>
+        <small>slower &mdash; ~1s per drive; sleeping drives stay asleep</small>
+      </label>
+      <p style="font-size:11px;color:var(--faint);margin:10px 0 14px;line-height:1.5">Anonymising keeps drive <em>models</em>, sizes, firmware versions, temperatures and error counters &mdash; hiding those would make the bundle useless. It replaces every identifier with a same-length stand-in, using one mapping for the whole bundle, so the report still hangs together. Your flash drive GUID, licence key and share names are never collected at all.</p>
+      <button class="lu-btn" type="submit" name="make_bundle" value="1"
+              formaction="/plugins/hbaviewer/bundle.php" formmethod="post">Generate diagnostic bundle</button>
     </div>
 
     <div class="lu-s-card lu-s-span">

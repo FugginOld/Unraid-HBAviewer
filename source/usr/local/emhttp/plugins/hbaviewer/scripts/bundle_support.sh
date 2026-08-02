@@ -77,7 +77,12 @@ bundle_anon() {   # $1 = directory, $2.. = extra literals (hostname) to replace
     function reg(v, c) {
         if (isaddr(v)) { v = toupper(v); c = "addr" }
         if (v == "" || (v in cls)) return
-        if (length(v) < 4) return
+        # The length floor keeps a stray 2-char "value" from being swapped out
+        # everywhere it happens to occur. The hostname is exempt: it is an exact
+        # literal the caller handed us, not something inferred from a pattern,
+        # and short hostnames (nas, srv) are common enough that skipping them
+        # would leave the machine named in uname -a.
+        if (length(v) < 4 && c != "host") return
         if (v ~ /^([Nn]\/[Aa]|NA|-+|[Uu]nknown|[Nn]one|0+)$/) return
         cls[v] = c; keys[++nkeys] = v
     }

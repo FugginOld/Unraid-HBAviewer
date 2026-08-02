@@ -53,6 +53,7 @@ invalid_dword_count = 5
 EOF
 printf 'NAME="sda" WWN="0x5000cca26a1b2c8b" SERIAL="2TGX1234" MODEL="WUH721414AL4204"\n' \
     > "$T/02-raw/lsblk.txt"
+printf 'Linux tower 6.1.79-Unraid #1 SMP x86_64 GNU/Linux\n' > "$T/02-raw/uname.txt"
 printf '%s' '{"drives":[{"model":"WUH721414AL4204","serial":"2TGX1234","sas_address":"5000CCA26A1B2C8B","firmware":"C240"}]}' \
     > "$T/04-parsed/drives.json"
 
@@ -110,6 +111,19 @@ absent "controller SAS address gone" 5003005702960060 "$T"
 absent "drive serial gone"       2TGX1234         "$T"
 absent "controller serial gone"  SP52801234        "$T"
 absent "board tracer number gone" SK52801234ZZ     "$T"
+absent "hostname gone from uname -a" " tower "     "$T"
+present "kernel version kept"    "6.1.79-Unraid"   "$T"
+
+# A short hostname must still go. The length floor that stops a stray 2-char
+# value being swapped out everywhere does NOT apply to the hostname, which is an
+# exact literal the caller supplies — and nas/srv-length names are common.
+S=$(mktemp -d)
+printf 'Linux nas 6.1.79-Unraid #1 SMP\n' > "$S/uname.txt"
+bash "$BS" anon "$S" nas >/dev/null 2>&1
+absent "short hostname gone" " nas " "$S/uname.txt"
+eq "short hostname kept its length" \
+   "$(awk '{print length}' "$S/uname.txt")" "30"
+rm -rf "$S"
 
 # ── 5. The map is never written into the bundle ─────────────────────────────
 [ -z "$(find "$T" -name '*.anon' -o -name '*map*' -o -name '*.anon_counts')" ] \
