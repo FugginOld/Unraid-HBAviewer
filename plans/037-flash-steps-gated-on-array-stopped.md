@@ -1,4 +1,4 @@
-# Plan 037: Grey out flash Steps 2 and 3 until the array is stopped
+# Plan 037: Grey out flash Step 3 until the array is stopped
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
@@ -25,13 +25,22 @@
 
 ## What changes
 
-On the Firmware/BIOS tab, **Steps 2 and 3 are visually disabled and
-non-interactive while the array is running.** Step 1 stays active.
+On the Firmware/BIOS tab, **Step 3 is visually disabled and non-interactive
+while the array is running.** Steps 1 and 2 stay active.
 
-Step 1 only asks the flash tool to list what it can see on that controller. It
-is read-only, useful for diagnosis regardless of array state, and blocking it
-would remove the one thing a user can safely do while deciding whether to
-proceed.
+Both exemptions are deliberate:
+
+- **Step 1** only asks the flash tool to list what it can see on that
+  controller. Read-only, useful for diagnosis regardless of array state, and
+  the only thing a user can safely do while deciding whether to proceed.
+- **Step 2** uploads an image to `/boot/config/plugins/hbaviewer/tools`. It
+  touches no hardware. Leaving it enabled lets a user stage the image while the
+  array is still serving, then stop the array and flash immediately — which
+  **shortens array downtime**, the thing a maintainer actually cares about
+  during a flash. Locking it would force all the fiddly file-picking to happen
+  inside the outage window.
+
+Step 3 is where hardware gets written. That is the one that locks.
 
 ## This is an affordance, not a control — read before starting
 
@@ -97,11 +106,12 @@ Each step is a `.lu-fstep` div. That is the hook to disable.
 
 - A `.lu-fstep.is-locked` CSS state: reduced opacity, `pointer-events: none`,
   and a `cursor: not-allowed` on a wrapper so the block reads as unavailable.
-- Applying that class to the **Step 2 and Step 3** divs when
-  `flashArrayStopped` is false.
-- Setting the `disabled` attribute on the inputs and buttons inside those two
-  steps. `pointer-events: none` alone leaves them keyboard-reachable, which
-  would be a worse trap than leaving them enabled.
+- Applying that class to the **Step 3** div only, when `flashArrayStopped`
+  is false.
+- Setting the `disabled` attribute on the inputs and button inside Step 3 —
+  the acknowledgement checkbox, the FLASH text field, and the Flash button.
+  `pointer-events: none` alone leaves them keyboard-reachable, which would be a
+  worse trap than leaving them enabled.
 - A short explanatory line inside the locked region saying *why* it is locked
   and what to do — "Stop the array on the Main tab, then reload this page."
   A greyed control with no explanation is a support ticket.
@@ -113,6 +123,8 @@ Each step is a `.lu-fstep` div. That is the hook to disable.
 - The `!flashArrayStopped` alert at line 695. **It stays.**
 - The array-state banner at the top of the tab.
 - Step 1 and `luFlashList`.
+- **Step 2 and `luFlashUpload`** — uploading stays available while the array
+  runs, deliberately.
 - Any other tab.
 - Live polling of array state.
 
@@ -139,11 +151,13 @@ the light theme, raise it and say what you chose.
 
 ### Step 2: apply the class and disable the controls
 
-When `flashArrayStopped` is false, add `is-locked` to the Step 2 and Step 3
-divs, add `disabled` to every `<input>` and `<button>` inside them, and insert
-the explanation line.
+When `flashArrayStopped` is false, add `is-locked` to the **Step 3** div, add
+`disabled` to its checkbox, text input and button, and insert the explanation
+line.
 
-**Do not disable anything in Step 1.**
+**Do not disable anything in Step 1 or Step 2.** If you find yourself locking
+Step 2 "for consistency", re-read "What changes" — that costs array downtime
+for no safety gain.
 
 ### Step 3: confirm the server gate is untouched
 
@@ -166,15 +180,16 @@ This tab is built in JavaScript, so the PHP render tests cannot reach it.
 - `git diff -- tests/expected/` empty.
 - `php -l` clean.
 - Exercise the changed function under a DOM shim with `flashArrayStopped` both
-  true and false, and assert: with it false, Step 2 and Step 3 contain
-  `is-locked` and every input/button inside carries `disabled`, while Step 1's
-  button does not; with it true, no `is-locked` and nothing disabled.
+  true and false, and assert: with it false, **only Step 3** carries
+  `is-locked` and its three controls carry `disabled`, while Step 1's Verify
+  button and **all of Step 2's file inputs and Upload button remain enabled**;
+  with it true, no `is-locked` and nothing disabled.
 
 ## Done criteria
 
-- [ ] Array running: Steps 2 and 3 dimmed, all their controls `disabled`,
+- [ ] Array running: Step 3 dimmed, its three controls `disabled`,
       explanation visible and legible
-- [ ] Array running: Step 1's Verify button still works
+- [ ] Array running: Step 1's Verify button AND Step 2's upload still work
 - [ ] Array stopped: all three steps fully active, no `is-locked` anywhere
 - [ ] `flash.php` unchanged (`git diff` empty for that file)
 - [ ] The `!flashArrayStopped` alert at line 695 still present
@@ -188,7 +203,7 @@ This tab is built in JavaScript, so the PHP render tests cannot reach it.
 - `flash.php` or anything under `scripts/` appears in the diff.
 - The line-695 alert is removed, weakened, or made conditional on the new
   disabled state.
-- Step 1 is disabled.
+- Step 1 or Step 2 is disabled. Only Step 3 locks.
 - Controls are hidden with `pointer-events: none` but left keyboard-reachable
   without `disabled`.
 - A golden moves.
@@ -202,6 +217,9 @@ This tab is built in JavaScript, so the PHP render tests cannot reach it.
 - **The flag is read once at page render.** A user who stops the array must
   reload. That matches the banner's existing wording; if either changes, both
   should.
-- **Step 1 is deliberately never locked.** It is read-only and is the only
-  useful action while the array is up. A future "tidy up by locking the whole
-  tab" change would remove real capability.
+- **Steps 1 and 2 are deliberately never locked.** Step 1 is read-only.
+  Step 2 writes only to the plugin's own tools directory, and keeping it open
+  lets a user stage the image before taking the array down — a real reduction
+  in downtime. A future "lock the whole tab for consistency" change would
+  remove capability and buy no safety, since the server guard is what actually
+  blocks flashing.
