@@ -63,6 +63,63 @@ check('phy multi heads controllers', str_contains(
 check('phy single omits head', !str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]]]]), 'Controller /c0'));
 
+/* ── PHY error baseline: the three display states (plan 022) ──────────────
+   The raw-counter table is unchanged by this feature — it is purely additive,
+   so the no-baseline case must render exactly what it always did. */
+$phyBase = ['backend' => 'storcli', 'controllers' => [['phys' => [
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000cca0','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]];
+
+// (a) no baseline -> raw only, and NOT a delta of zero (which would read as
+// "no errors" rather than "no reference point").
+$h = renderPhyTables($phyBase, [], 4600, 9000);
+check('phy no baseline omits delta', !str_contains($h, 'lu-phy-delta'));
+check('phy no baseline offers button', str_contains($h, 'Set Baseline')
+                                    && str_contains($h, 'luPhyBaseline(0, this)'));
+
+// (b) baseline an hour old, inv 100 -> 250: delta 150, rate 150/hr.
+$bl = ['0:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
+$h  = renderPhyTables($phyBase, $bl, 1000 + 3600, 5000 + 3600);
+check('phy delta rendered',   str_contains($h, '&Delta;150'));
+check('phy rate rendered',    str_contains($h, '150/hr'));
+check('phy baseline time shown', str_contains($h, 'Baseline set'));
+check('phy offers reset',     str_contains($h, 'Reset Baseline'));
+check('phy raw counter kept', str_contains($h, '250'));
+
+// (c) counter restart -> NEVER a negative count anywhere; the bar asks for a
+// fresh baseline instead. Both signals, independently.
+foreach ([
+    'reboot'        => [90000, 120],     // uptime below the stored 5000
+    'driver reload' => [90000, 99000],   // uptime fine, counter below baseline
+] as $why => [$when, $up]) {
+    $cur = $why === 'reboot' ? $phyBase : ['backend'=>'storcli','controllers'=>[['phys'=>[
+        ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000cca0','inv'=>3,'disp'=>0,'sync'=>0,'reset'=>0],
+    ]]]];
+    $h = renderPhyTables($cur, $bl, $when, $up);
+    check("phy $why shows stale note", str_contains($h, 'lu-phy-stale'));
+    check("phy $why omits delta",      !str_contains($h, 'lu-phy-delta'));
+    check("phy $why has no negative",  !preg_match('/&Delta;-|-\d+\/hr/', $h));
+    // The note says "press Reset Baseline"; the button must say the same words.
+    check("phy $why button matches note", str_contains($h, '>Reset Baseline</button>')
+                                       && !str_contains($h, '>Set Baseline</button>'));
+}
+
+// A stale controller must not poison a healthy one on the same card list.
+$two = ['backend' => 'storcli', 'controllers' => [
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0]]],
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>1,  'disp'=>0,'sync'=>0,'reset'=>0]]],
+]];
+$bl2 = $bl + ['1:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
+$h = renderPhyTables($two, $bl2, 1000 + 3600, 5000 + 3600);
+check('phy per-controller isolation', substr_count($h, 'lu-phy-stale') === 1
+                                   && substr_count($h, 'lu-phy-delta') === 4);
+
+// The lsiutil column set carries the baseline too — one mechanism, both backends.
+$h = renderPhyTables(['backend'=>'lsiutil','controllers'=>[['phys'=>[
+    ['phy'=>0,'link'=>'up','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], $bl, 1000 + 3600, 5000 + 3600);
+check('phy lsiutil delta rendered', str_contains($h, '&Delta;150') && str_contains($h, '150/hr'));
+
 /* ── Drives: backend picks columns; enclosure summary renders ────────────── */
 $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
     'enclosures' => [['eid'=>'8','product'=>'VirtualSES','vendor'=>'LSI','slots'=>'8','drives'=>'4','direct'=>1]],
