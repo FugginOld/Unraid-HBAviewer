@@ -132,6 +132,47 @@ check('drives enclosure summary',  str_contains($h, 'VirtualSES') && str_contain
 check('drives smart button',       str_contains($h, 'luSmart(this') && str_contains($h, 'ZA1ABCDE'));
 check('drives uppercases sas',     str_contains($h, '5000C500A1B2C3D4'));
 
+// Issue #6: storcli's own enclosure counts (8 slots / 0 drives) are real but
+// describe nothing — this controller's drives carry no eid at all, so the
+// counts must not render, and the summary must say why.
+$drvNoEncl = ['backend' => 'storcli', 'controllers' => [[
+    'enclosures' => [['eid'=>'0','product'=>'VirtualSES','vendor'=>'BROADCOM',
+                      'slots'=>'8','drives'=>'0','direct'=>1]],
+    'drives' => [['slot'=>'0','port'=>'8','model'=>'ST26000NM','serial'=>'ZXA069R6',
+                  'state'=>'JBOD','sas_address'=>'5000C500EA001805','size'=>'23.647 TB',
+                  'link'=>'12.0Gb/s','firmware'=>'SN02']],
+]]];
+$h = renderDrivesTables($drvNoEncl);
+check('drives no-encl suppresses counts', !str_contains($h, '8 slots') && !str_contains($h, '0 drives'));
+check('drives no-encl keeps product/mode', str_contains($h, 'VirtualSES') && str_contains($h, 'direct-attach'));
+check('drives no-encl states why', str_contains($h, 'drives are addressed without an enclosure'));
+check('drives no-encl row still renders', str_contains($h, 'ZXA069R6'));
+
+// A mixed controller (some drives carry an eid, some don't) keeps its counts —
+// some drives really are behind that enclosure.
+$drvMixed = ['backend' => 'storcli', 'controllers' => [[
+    'enclosures' => [['eid'=>'0','product'=>'VirtualSES','vendor'=>'BROADCOM',
+                      'slots'=>'8','drives'=>'1','direct'=>1]],
+    'drives' => [
+        ['slot'=>'0/1','port'=>'14','model'=>'ST8000NM','serial'=>'ZA1ABCDE','state'=>'JBOD',
+         'size'=>'7.276 TB','sas_address'=>'5000c500a1b2c3d4','link'=>'12.0Gb/s','firmware'=>'SN02'],
+        ['slot'=>'2','port'=>'15','model'=>'ST8000NM','serial'=>'ZA1FGHIJ','state'=>'JBOD',
+         'size'=>'7.276 TB','sas_address'=>'5000c500a1b2c3d5','link'=>'12.0Gb/s','firmware'=>'SN02'],
+    ],
+]]];
+$h = renderDrivesTables($drvMixed);
+check('drives mixed keeps counts', str_contains($h, '8 slots') && str_contains($h, '1 drives'));
+
+// An enclosure with no drives array at all has nothing to contradict its
+// counts — absence of evidence is not evidence, so the counts stay.
+$drvEmptyList = ['backend' => 'storcli', 'controllers' => [[
+    'enclosures' => [['eid'=>'0','product'=>'VirtualSES','vendor'=>'BROADCOM',
+                      'slots'=>'8','drives'=>'0','direct'=>1]],
+    'drives' => [],
+]]];
+$h = renderDrivesTables($drvEmptyList);
+check('drives empty list keeps counts', str_contains($h, '8 slots') && str_contains($h, '0 drives'));
+
 $drvLsi = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
     ['bus'=>'0','target'=>'3','phy'=>'2','sas_address'=>'5000c500a1b2c3d4','os_name'=>'/dev/sdb'],
 ]]]];
