@@ -125,18 +125,23 @@ health_lsiutil() {
         fw="Unknown"
     fi
 
-    # lsiutil reports current width/speed as a bitmask hex code (same decode
-    # parse/hba.sh uses); it has no max_link_width/max_link_speed query at
-    # all, so max stays 0/"" and host_link never false-flags a card it can't
-    # fully read.
+    # lsiutil has no max_link_width/max_link_speed query, so max stays 0/""
+    # and host_link never false-flags a card it can't fully read.
+    # PCIeWidth is a one-hot bitmask; PCIeSpeed is an enum (mpi2_cnfg.h,
+    # MPI2_IOUNITPAGE7_*). They are NOT the same encoding — see plan 038.
+    # Keep the speed table in sync with scripts/parse/hba.sh.
     width_hex=$(grep "PCIeWidth:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
     case "${width_hex,,}" in
         0x01) width=1 ;; 0x02) width=2 ;; 0x04) width=4 ;; 0x08) width=8 ;; 0x10) width=16 ;; *) width=0 ;;
     esac
     speed_hex=$(grep "PCIeSpeed:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
-    case "${speed_hex,,}" in
-        0x01) speed="2.5 GT/s" ;; 0x02) speed="5.0 GT/s" ;; 0x04) speed="8.0 GT/s" ;; *) speed="" ;;
-    esac
+    speed=""
+    if [ -n "$speed_hex" ]; then
+        case "$((16#${speed_hex#0x}))" in
+            0) speed="2.5 GT/s" ;; 1) speed="5.0 GT/s"  ;; 2) speed="8.0 GT/s" ;;
+            3) speed="16.0 GT/s" ;; 4) speed="32.0 GT/s" ;;
+        esac
+    fi
 
     hnum=$(_first_sas_host)
 

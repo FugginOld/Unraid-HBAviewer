@@ -139,6 +139,9 @@ check hba-notemp   hba_notemp.json   bash "$P/hba.sh" fixtures/hba_ioc_notemp.tx
 # hba-normal covers the P20 decode; this covers a genuinely old one still tripping
 # the pre-P20 flag (10000700 = P16).
 check hba-p16      hba_p16.json      bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner_p16.txt fixtures/hba_board.txt 80
+# PCIeSpeed is an enum, not a bitmask (plan 038): 0x00 is Gen1, and under the
+# old bitmask table it matched nothing and rendered an empty string.
+check hba-gen1     hba_gen1.json     bash "$P/hba.sh" fixtures/hba_ioc_gen1.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
 
 echo

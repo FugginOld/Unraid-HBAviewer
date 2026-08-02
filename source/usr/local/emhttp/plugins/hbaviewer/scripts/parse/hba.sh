@@ -26,13 +26,23 @@ case "${PCIE_WIDTH_HEX,,}" in
     0x10) PCIE_WIDTH="x16" ;; *)    PCIE_WIDTH=""     ;;
 esac
 
+# IOUnit Page 7 PCIeSpeed is an ENUM (0,1,2,3,4), unlike PCIeWidth directly
+# above it, which is a one-hot bitmask. Reading it as a bitmask reported every
+# card one generation low and rendered nothing at all for Gen1 (issue #9).
+# Values per mpi2_cnfg.h MPI2_IOUNITPAGE7_PCIE_SPEED_*. Compared numerically so
+# a firmware that pads the field (0x0002) decodes the same as 0x02.
+# Keep in sync with the same table in scripts/get_hba_health.sh.
 PCIE_SPEED_HEX=$(parse_hex "PCIeSpeed:")
-case "${PCIE_SPEED_HEX,,}" in
-    0x01) PCIE_SPEED="Gen1 (2.5 GT/s)" ;;
-    0x02) PCIE_SPEED="Gen2 (5.0 GT/s)" ;;
-    0x04) PCIE_SPEED="Gen3 (8.0 GT/s)" ;;
-    *)    PCIE_SPEED="" ;;
-esac
+PCIE_SPEED=""
+if [ -n "$PCIE_SPEED_HEX" ]; then
+    case "$((16#${PCIE_SPEED_HEX#0x}))" in
+        0) PCIE_SPEED="Gen1 (2.5 GT/s)"  ;;
+        1) PCIE_SPEED="Gen2 (5.0 GT/s)"  ;;
+        2) PCIE_SPEED="Gen3 (8.0 GT/s)"  ;;
+        3) PCIE_SPEED="Gen4 (16.0 GT/s)" ;;
+        4) PCIE_SPEED="Gen5 (32.0 GT/s)" ;;
+    esac
+fi
 
 POWER_HEX=$(parse_hex "CurrentPowerMode:")
 case "${POWER_HEX,,}" in
