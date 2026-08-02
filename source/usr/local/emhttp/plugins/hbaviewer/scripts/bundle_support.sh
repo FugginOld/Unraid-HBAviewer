@@ -4,6 +4,7 @@
 #
 #   bash bundle_support.sh [--smart] [--no-anon]     -> prints the archive path
 #   bash bundle_support.sh anon <dir> [literal ...]  -> anonymise a dir in place
+#   bash bundle_support.sh attr <sysfs-leaf>         -> one "attr = value" line
 #
 # The `anon` subcommand exists so the anonymisation pass is testable as a pure
 # function over fixture text — see tests/anon_test.sh. It is the only part of
@@ -20,6 +21,29 @@
 # plugin's own hbaviewer.cfg. Not "anonymise if asked" — out of scope entirely.
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Text = no NUL and no 8-bit byte, read from stdin so callers choose how much to
+# feed it. Everything else in this file is a TEXT operation: the anonymiser
+# rewrites text and greps text, so bytes it cannot read as text it also cannot
+# check for identifiers. A binary blob may carry a SAS address in binary form
+# that no text search would ever find, which is why "0 grep hits" proves nothing
+# about one — the only safe answer for a non-text file is to leave it alone and
+# say so.
+is_text() { [ "$(LC_ALL=C tr -dc '\000\200-\377' | wc -c)" -eq 0 ]; }
+
+# One sysfs leaf as "attr = value". A binary attribute is NAMED but never
+# captured — mpt3sas exposes host_trace_buffer, a raw firmware trace ring, and
+# capturing it made the whole file report as `data`, made awk warn on every
+# read, and put bytes in the bundle that no grep could clear. Naming it keeps
+# the bundle honest about what it omitted instead of silently dropping it.
+attr() {   # $1 = path, $2 = name to print (defaults to the leaf name)
+    local n="${2:-${1##*/}}"
+    if head -c 512 "$1" 2>/dev/null | is_text; then
+        printf '%s = %s\n' "$n" "$(head -c 512 "$1" 2>/dev/null | tr -d '\000\n' | tr -s ' ')"
+    else
+        printf '%s = <skipped: binary>\n' "$n"
+    fi
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Anonymisation
@@ -47,8 +71,16 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # one; revisit if a real bundle ever shows otherwise.
 bundle_anon() {   # $1 = directory, $2.. = extra literals (hostname) to replace
     local dir="$1"; shift
-    local files f counts
-    files=$(find "$dir" -type f | sort)
+    local files f counts skipped
+    # Defence in depth against a binary file reaching this pass at all (the
+    # collector now refuses to capture one). awk would rewrite it byte-blind and
+    # produce a mangled blob that still cannot be checked, so a non-text file is
+    # refused outright and named in ANONYMISED.txt.
+    files=""; skipped=""
+    while IFS= read -r f; do
+        if is_text < "$f"; then files="$files$f"$'\n'; else skipped="$skipped$f"$'\n'; fi
+    done < <(find "$dir" -type f | sort)
+    files="${files%$'\n'}"
     [ -n "$files" ] || return 0
 
     counts=$(printf '%s\n' "$files" | awk -v extras="$*" '
@@ -77,6 +109,15 @@ bundle_anon() {   # $1 = directory, $2.. = extra literals (hostname) to replace
     function reg(v, c) {
         if (isaddr(v)) { v = toupper(v); c = "addr" }
         if (v == "" || (v in cls)) return
+        # A value made only of digits is a counter, a queue depth or a slot
+        # number, not an identifier — the real ones are 16-hex addresses (already
+        # promoted to "addr" above) or serials keyed off a Serial/SN line. The
+        # host class is the one path with NEITHER a pattern nor the length floor
+        # below, so a caller literal of "12" used to register and rewrite every
+        # "12" in the bundle: host_busy = 12 came back as host_busy = 01. A
+        # hostname of pure digits is indistinguishable from a count, so it is
+        # left alone rather than corrupting every count in the bundle.
+        if (c == "host" && v ~ /^[0-9]+$/) return
         # The length floor keeps a stray 2-char "value" from being swapped out
         # everywhere it happens to occur. The hostname is exempt: it is an exact
         # literal the caller handed us, not something inferred from a pattern,
@@ -184,6 +225,14 @@ bundle_anon() {   # $1 = directory, $2.. = extra literals (hostname) to replace
         echo
         echo "Replaced classes (counts only):"
         printf '%s\n' "$counts" | sed 's/^addr /  SAS addresses + WWNs: /; s/^serial /  serial numbers: /; s/^host /  hostname: /' | sort
+        if [ -n "$skipped" ]; then
+            echo
+            echo "REFUSED, because they are not text: the files below were left exactly as"
+            echo "collected. This pass rewrites and checks TEXT; a binary file could hold an"
+            echo "identifier in a form no text search would find, so nothing above is claimed"
+            echo "about them. Check them by hand, or delete them, before posting this bundle."
+            printf '%s' "$skipped" | sed "s|^$dir/|  |"
+        fi
         echo
         echo "Deliberately NOT anonymised, because a bundle hiding them could not have"
         echo "diagnosed a single issue this project has closed: drive models, sizes,"
@@ -200,6 +249,9 @@ if [ "$1" = "anon" ]; then
     bundle_anon "$d" "$@"
     exit 0
 fi
+# Same reason as `anon`: the binary-attribute skip is a disclosure control, and
+# this is the only way to exercise it without the hardware that has one.
+if [ "$1" = "attr" ]; then attr "$2" "$3"; exit 0; fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Collection
@@ -238,8 +290,8 @@ run() {   # $1 = outfile, $2.. = command
     [ -s "$out" ] || printf '(no output from: %s)\n' "$*" > "$out"
 }
 
-# sysfs leaves, one "attr = value" line each. Truncated and NUL-stripped: a few
-# sysfs attributes are binary and would otherwise make the bundle unreadable.
+# sysfs leaves, one "attr = value" line each, via attr() — which truncates, and
+# names rather than captures any attribute that is not text.
 dump_attrs() {   # $1 = outfile, $2.. = directories
     local out="$B/$1" d f; shift
     for d in "$@"; do
@@ -247,8 +299,7 @@ dump_attrs() {   # $1 = outfile, $2.. = directories
         printf '===== %s =====\n' "$d"
         for f in "$d"/*; do
             [ -f "$f" ] && [ -r "$f" ] || continue
-            printf '%s = %s\n' "${f##*/}" \
-                "$(head -c 512 "$f" 2>/dev/null | tr -d '\000\n' | tr -s ' ')"
+            attr "$f"
         done
         printf '\n'
     done > "$out" 2>/dev/null
@@ -341,7 +392,7 @@ dump_attrs 03-sysfs/sas_end_device.txt /sys/class/sas_end_device/end_device-*
         [ -d "$p" ] || continue
         printf '===== %s =====\n' "$p"
         for a in current_link_width current_link_speed max_link_width max_link_speed power_state vendor device; do
-            printf '%s = %s\n' "$a" "$(cat "$p/$a" 2>/dev/null)"
+            attr "$p/$a" "$a"
         done
         printf '\n'
     done

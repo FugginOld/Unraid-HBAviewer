@@ -179,5 +179,67 @@ absent "de-masked SAS address replaced" 5000CCA2AAAAAA8B "$F/demasked"
 present "de-masked bundle got tokens"   5000000000000001 "$F/demasked"
 present "de-masked model kept"          WUH721414AL4204  "$F/demasked"
 
+# ── 8. A counter is not an identifier ───────────────────────────────────────
+# Found on real hardware: host_busy, a live queue-depth counter, came back as
+# "host_busy = 01". reg()'s host class waives the 4-char length floor (nas/srv
+# are real hostnames) and checks no pattern at all, so a caller literal of "12"
+# registered "12" and every "12" in the bundle was rewritten. The literal below
+# is that exact shape — anonymising a count is both wrong and, for any class
+# whose token is not length-matched, a column-alignment break.
+C=$(mktemp -d); Corig=$(mktemp)
+cat > "$C/scsi_host.txt" <<'EOF'
+===== /sys/class/scsi_host/host0 =====
+host_busy = 12
+can_queue = 7532
+cmd_per_lun = 7
+unique_id = 1
+ioc_reset_count = 0
+host_sas_address = 0x5000000000000137
+EOF
+cp "$C/scsi_host.txt" "$Corig"
+bash "$BS" anon "$C" 12 >/dev/null 2>&1
+present "counter left alone (host_busy)"  "host_busy = 12"   "$C/scsi_host.txt"
+present "counter left alone (can_queue)"  "can_queue = 7532" "$C/scsi_host.txt"
+present "counter left alone (unique_id)"  "unique_id = 1"    "$C/scsi_host.txt"
+# ...while the identifier on the very next line still goes.
+absent  "sysfs host SAS address still replaced" 5000000000000137 "$C/scsi_host.txt"
+d=$(diff <(awk '{print length}' "$Corig") <(awk '{print length}' "$C/scsi_host.txt"))
+[ -z "$d" ] && ok "line lengths unchanged (counter fixture)" \
+             || bad "line lengths unchanged (counter fixture)" "$d"
+rm -rf "$C" "$Corig"
+
+# ── 9. A non-text file is refused, not rewritten ────────────────────────────
+# mpt3sas exposes host_trace_buffer, a binary firmware trace ring. Rewriting one
+# mangles it AND leaves a blob no text grep can clear — a binary form of a SAS
+# address is invisible to every check in this file, so "0 hits" would prove
+# nothing. Refuse it, and say which file was refused.
+N=$(mktemp -d); Norig=$(mktemp)
+printf 'SN = 2TGX1234\nSAS Address = 5000CCA26A1B2C8B\n' > "$N/text.txt"
+printf 'host_trace_buffer = \303\050\200\377\000\376ABCD 5000CCA26A1B2C8B\n' > "$N/binary.txt"
+cp "$N/binary.txt" "$Norig"
+bash "$BS" anon "$N" >/dev/null 2>&1
+cmp -s "$Norig" "$N/binary.txt" && ok "binary file left byte-identical" \
+                                || bad "binary file left byte-identical" "it was rewritten"
+present "the refusal names the file"   "binary.txt" "$N/ANONYMISED.txt"
+present "the refusal is stated plainly" "not text"  "$N/ANONYMISED.txt"
+# The text file beside it must still be anonymised — one bad file must not stop
+# the pass.
+absent  "text file beside it still anonymised" 2TGX1234 "$N/text.txt"
+rm -rf "$N" "$Norig"
+
+# ── 10. Binary sysfs attributes are never captured in the first place ───────
+# The real fix for the above: attr() names a binary attribute instead of
+# catting it, so the bundle is honest about the omission rather than carrying
+# bytes it cannot vouch for.
+A=$(mktemp -d)
+printf '12\n' > "$A/host_busy"
+printf '0x5000000000000137\n' > "$A/host_sas_address"
+printf '\303\050\200\377\000\376trace\n' > "$A/host_trace_buffer"
+eq "text attribute captured"     "$(bash "$BS" attr "$A/host_busy")"         "host_busy = 12"
+eq "text attribute captured (2)" "$(bash "$BS" attr "$A/host_sas_address")"  "host_sas_address = 0x5000000000000137"
+eq "binary attribute named, not captured" \
+   "$(bash "$BS" attr "$A/host_trace_buffer")" "host_trace_buffer = <skipped: binary>"
+rm -rf "$A"
+
 echo
 if [ $fail -eq 0 ]; then echo "anon: all pass"; exit 0; else echo "anon: FAILURES"; exit 1; fi
