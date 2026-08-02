@@ -284,6 +284,24 @@ foreach ($bands as $floor => $label) {
               formaction="/plugins/hbaviewer/bundle.php" formmethod="post">Generate diagnostic bundle</button>
     </div>
 
+    <?php
+    // HTTP_HOST is client-supplied (the Host: header) and not validated by
+    // PHP — escape it before interpolating into markup, or a crafted Host
+    // header becomes reflected XSS. Falls back to a relative URL rather than
+    // rendering a broken absolute one when the header is missing.
+    $host       = htmlspecialchars($_SERVER['HTTP_HOST'] ?? '', ENT_QUOTES);
+    $exportBase = $host !== '' ? '//' . $host : '';
+    $exportJson = $exportBase . '/plugins/hbaviewer/export.php';
+    $exportProm = $exportBase . '/plugins/hbaviewer/export.php?format=prometheus';
+    ?>
+    <div class="lu-s-card">
+      <h3>Export / API</h3>
+      <p style="font-size:12px;color:var(--text);margin:0 0 14px">A read-only JSON snapshot of every controller's model, temperature, status, band and drive count &mdash; plus the same data in Prometheus text format.</p>
+      <p style="margin:0 0 8px"><a class="lu-link" href="<?= $exportJson ?>" target="_blank" rel="noopener"><code><?= $exportJson ?></code></a></p>
+      <p style="margin:0 0 14px"><a class="lu-link" href="<?= $exportProm ?>" target="_blank" rel="noopener"><code><?= $exportProm ?></code></a></p>
+      <p style="font-size:11px;color:var(--faint);margin:0;line-height:1.5">Both URLs are session-gated, same as every other page in this plugin &mdash; a Prometheus scraper outside a logged-in webGui session <strong>cannot</strong> poll them. They work from a logged-in browser, a Homepage-style widget behind the same login, or a logged-in <code>curl</code>.</p>
+    </div>
+
     <div class="lu-s-card lu-s-span">
       <h3>Advanced — Firmware Flashing</h3>
       <div class="lu-danger">
