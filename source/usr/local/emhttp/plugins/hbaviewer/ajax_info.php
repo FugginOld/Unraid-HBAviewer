@@ -430,17 +430,25 @@ function renderDrivesTables(array $data): string {
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
 
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
+        // storcli_drives.sh emits "eid/slot" when a drive carries an enclosure ID and a
+        // bare "slot" when it does not. If NO drive on this controller carries one, the
+        // enclosure's own slot/drive counts describe something the drives aren't
+        // attached to — showing "0 drives" above 15 rows reads as a bug (issue #6).
+        $dl = $ctl['drives'] ?? [];
+        $enclLess = $dl !== [] && !array_filter($dl, fn($d) => str_contains((string) ($d['slot'] ?? ''), '/'));
         foreach ($ctl['enclosures'] ?? [] as $e) {
             $mode  = !empty($e['direct']) ? 'direct-attach (no expander)' : 'expander / backplane';
             // Only state a slot/drive count when storcli actually reported one —
             // an empty Properties section previously rendered as "8 slots / 0 drives"
-            // on a controller with 15 drives.
-            $counts = ($e['slots'] ?? '') !== '' && ($e['drives'] ?? '') !== ''
+            // on a controller with 15 drives. Also suppress when this controller's
+            // drives are addressed without an enclosure (issue #6): the counts are
+            // real but describe nothing the drive table shows.
+            $counts = !$enclLess && ($e['slots'] ?? '') !== '' && ($e['drives'] ?? '') !== ''
                 ? htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives']) . ' drives &middot; '
                 : '';
             $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Enclosure e' . htmlspecialchars($e['eid'])
                   . ': ' . htmlspecialchars($e['product']) . ' (' . htmlspecialchars($e['vendor']) . ') &middot; '
-                  . $counts . $mode . '</p>';
+                  . $counts . $mode . ($enclLess ? ' &middot; drives are addressed without an enclosure' : '') . '</p>';
         }
 
         $drives = $ctl['drives'] ?? [];
