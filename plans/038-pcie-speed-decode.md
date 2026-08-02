@@ -329,7 +329,16 @@ matches that.
 
 ## Follow-ups this plan does not do
 
-- **`CurrentPowerMode` is probably decoded wrong too.** `parse/hba.sh:37-43`
+- **`CurrentPowerMode` — SETTLED 2026-08-02, leave it alone.** @jac2424's capture
+  from a running SAS2308 reads `CurrentPowerMode: 0x00` (and
+  `PreviousPowerMode: 0x00`, `PowerManagementCapabilities: 0x0000010C`) on a card
+  that is plainly operational. So `0x00` is what an MPI2.0 card reports for a
+  live controller, the MPI2.5 `PM_MODE_UNAVAILABLE` reading does not apply here,
+  and the shipped `0x00 → Full` mapping produces a truthful display. **Do not
+  "fix" it to the MPI2.5 values** — that would print "unavailable" for every
+  healthy SAS2 card. The original reasoning is kept below for whoever revisits
+  this on an MPI2.5 card, where the answer may differ.
+- ~~**`CurrentPowerMode` is probably decoded wrong too.**~~ `parse/hba.sh:37-43`
   maps `0x00→Full, 0x08→Reduced, 0x10→Standby`; the header's
   `MPI25_IOUNITPAGE7_PM_MODE_*` values are `0x04→Full, 0x05→Reduced,
   0x06→Standby` under mask `0x07`, and `0x00` is `PM_MODE_UNAVAILABLE` — the
@@ -343,10 +352,16 @@ matches that.
 - **That same capture would replace `hba_ioc.txt` with real output** rather
   than the corrected-but-still-synthetic file this plan leaves. Same argument
   as plan 036 makes for the `UGood` fixtures.
-- **The width tables still string-match padded hex.** `0x0008` would decode to
-  width 0. Left alone: the reporter's box demonstrably prints `0x04`, so there
-  is no evidence of padding on this field, and touching a table this plan
-  otherwise leaves untouched widens the diff for a hypothetical.
+- **The width tables still string-match padded hex** — and the hazard is now
+  **confirmed real, not hypothetical.** The same capture shows lsiutil printing
+  fields at *different* widths in one block: `PCIeWidth: 0x04` and
+  `CurrentPowerMode: 0x00` at two digits, but `IOCTemperature: 0x0030` and
+  `BoardTemperature: 0x0000` at four. So a firmware that pads `PCIeWidth` the
+  way this one pads `IOCTemperature` would decode to width 0 and render nothing.
+  Still left alone here — this card prints `0x04`, so there is no live bug, and
+  the numeric comparison this plan introduced for speed is the pattern to copy
+  when someone does hit it. Temperature was never at risk: it goes through
+  `$((16#…))` already.
 
 ## Maintenance notes
 
