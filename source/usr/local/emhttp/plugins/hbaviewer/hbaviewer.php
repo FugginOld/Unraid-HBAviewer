@@ -214,10 +214,12 @@ if ($enableFlash) {
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
 .lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: var(--crit-text); font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
 .lu-flash-warn strong { color: var(--crit-text); }
-.lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; margin-bottom: 16px; }
+.lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; }
 .lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
 .lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
-.lu-fc { border: 1px solid var(--border-soft); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; background: var(--bg); }
+/* Each controller box is a .lu-card now, so its border, radius, padding, margin
+   and background all come from there — .lu-fc keeps only the rules .lu-card has
+   no opinion about, and stays as the hook flashCard() selects on. */
 .lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
 .lu-fstep { margin: 14px 0; }
@@ -302,7 +304,8 @@ if ($enableFlash) {
 .lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
-.lu-perf-ctl { margin-bottom: 22px; }
+/* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
+   .lu-perf-ctl survives only as the hook for the heading below. */
 .lu-perf-ctl h4 { margin: 0 0 10px; color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .lu-perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .lu-perf-cell { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 12px 6px; }
@@ -463,12 +466,10 @@ if ($enableFlash) {
 <!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->
 <?php if ($showPerf): ?>
 <div id="tab-perf" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-tab-toolbar">
-      <span style="font-size:12px;color:var(--text);">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
-    </div>
-    <div id="perf-content"><div class="lu-loading">Waiting for first samples…</div></div>
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
   </div>
+  <div id="perf-content"><div class="lu-loading">Waiting for first samples…</div></div>
 </div>
 <?php endif; ?>
 
@@ -490,8 +491,8 @@ if ($enableFlash) {
         this page. Flashing is blocked by the server until the array is stopped.
       <?php endif; ?>
     </div>
-    <div id="flash-content"><div class="lu-loading">Loading controllers…</div></div>
   </div>
+  <div id="flash-content"><div class="lu-loading">Loading controllers…</div></div>
 </div>
 <?php endif; ?>
 
@@ -617,7 +618,11 @@ if ($enableFlash) {
     var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
-    function flashChip(i){ var c=flashCard(i); return c?c.getAttribute('data-chip'):''; }
+    // Errored controllers render a card with data-ctl but no data-chip, so the
+    // lookup can succeed while the attribute is absent. Coalesce to '' — chip is
+    // only ever sent as a POST field, and URLSearchParams would stringify a null
+    // into the literal "null", which flash.php's alnum filter happily accepts.
+    function flashChip(i){ var c=flashCard(i); return c ? (c.getAttribute('data-chip') || '') : ''; }
 
     window.luFlashInit = function () {
         var el = document.getElementById('flash-content');
@@ -628,9 +633,9 @@ if ($enableFlash) {
             var ctls = (d && d.controllers) || [];
             if (!ctls.length) { el.innerHTML = '<div class="lu-error">No controllers detected (or backend error).</div>'; return; }
             el.innerHTML = ctls.map(function(c,i){
-              if (c.error) return '<div class="lu-fc"><h4>Controller /c'+i+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
+              if (c.error) return '<div class="lu-fc lu-card first" data-ctl="'+i+'"><h4>Controller /c'+i+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
               var chip = c.model || '';
-              return '<div class="lu-fc" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
+              return '<div class="lu-fc lu-card first" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
                 + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
                 + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
                 + '<div class="lu-fstep"><label class="step">Step 1 — verify the flash tool sees THIS card (controller /c'+i+' only)</label>'
@@ -774,7 +779,8 @@ if ($enableFlash) {
             { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
         ];
         ctls.forEach(function (c) {
-            var box = document.createElement('div'); box.className = 'lu-perf-ctl';
+            var box = document.createElement('div'); box.className = 'lu-perf-ctl lu-card first';
+            box.setAttribute('data-ctl', c.idx);
             var h = document.createElement('h4'); h.textContent = 'Controller /c' + c.idx; box.appendChild(h);
             var grid = document.createElement('div'); grid.className = 'lu-perf-grid';
             var cells = {};
