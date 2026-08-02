@@ -7,9 +7,19 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 4338f68..HEAD -- tests/run.sh tests/fixtures/storcli source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_drives.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh`
-> Expected output: **nothing**. Every excerpt below is quoted from `4338f68`
-> (`dev` tip, 2026-08-01). Any difference is a STOP condition.
+> `git diff --stat 2aadc7c..HEAD -- tests/run.sh tests/fixtures/storcli source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_drives.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh`
+> Expected output: **nothing**. Every excerpt below is quoted from `2aadc7c`
+> (`dev` tip, 2026-08-02). Any difference is a STOP condition.
+>
+> **Baseline re-stamped 2026-08-02.** Written against `4338f68`; since then plan
+> 026 appended a bundle-anonymisation block to the end of `tests/run.sh`
+> (+5/-1). The three `check` lines this plan quotes are unchanged and still at
+> lines 33, 56 and 57. The parsers and every fixture are untouched.
+>
+> **Getting the reporter's output**: fetch it verbatim, do not retype it —
+> `gh issue view 5 --repo FugginOld/Unraid-HBAviewer --json comments -q '.comments[] | select(.author.login=="t0ffemannen") | .body'`
+> The relevant comment is dated 2026-08-01 and contains a `PD LIST` with eight
+> blank-EID `UGood` rows, a `ROC temperature` of 56, and `Drive /c0/sN :` blocks.
 
 ## Status
 
