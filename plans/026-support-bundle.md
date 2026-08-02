@@ -319,3 +319,118 @@ Unraid, so a leaked bundle costs memory until reboot.
 - **New composer → new bundle section.** The capture list mirrors the
   composers; when one is added this script keeps working while quietly becoming
   incomplete. Worth a line in any plan that adds one.
+
+---
+
+## Execution record
+
+- **Executed**: 2026-08-01, branch `advisor/026-diagnostic-bundle` off `dev` (`90634f2`)
+- **Commits**: `bb6b872` (collector + anonymiser + tests), `cc54d0c` (endpoint +
+  Settings controls + guard test)
+- **Files added**: `scripts/bundle_support.sh`, `bundle.php`, `tests/anon_test.sh`,
+  `tests/bundle_php_test.php`
+- **Files changed**: `settings.php`, `tests/run.sh`, `tests/run_php.sh`
+- **Not touched**, per the STOP conditions: `scripts/capture*.sh`, every parser,
+  every composer, `flash.php`. Confirmed by `git diff --name-only dev..HEAD`.
+
+### Archiver
+
+`zip` is **absent** on the development machine, so the `tar czf` fallback is what
+actually ran end to end. Both branches exist; the check is `command -v zip`, never
+an assumption. Which one a given Unraid box takes is decided at run time.
+
+### The anonymisation design, as built
+
+Replacement operates on **words** — maximal runs of `[A-Za-z0-9_.-]` — rather than
+on substrings or on whole lines. That turned out to be the load-bearing choice:
+every identifier this tool sees is exactly one such word (storcli's padded
+columns, JSON string values, lsblk `key="value"`, sysfs leaf contents), so
+length preservation is *structural* rather than something the implementation has
+to remember to do. There is no code path that can change a line's length.
+
+Two bugs were found by the tests and fixed before the first commit, both of which
+would have looked fine in a casual read of the output:
+
+1. **Case.** sysfs writes `sas_address` lower case and storcli writes it upper.
+   Keying the map case-sensitively gave the *same PHY* two different pseudonyms —
+   precisely the failure this plan warns about, arriving through a door the plan
+   did not name. The map is now keyed upper-case for hex identifiers, in one
+   normalisation point inside `reg()`. `tests/anon_test.sh` pins it.
+2. **Short serials.** The plan's `SERIAL0000000001` is 16 characters; a real
+   8-character drive serial trimmed it to `00000001`, losing the class marker.
+   Tokens now fit as much of the prefix as leaves 4 counter digits: 16 chars gives
+   the plan's exact `SERIAL0000000001`, 8 gives `SERI0001`, 4 gives `0001`.
+
+Tokens are assigned only **after** the whole scan completes, so no pseudonym can
+collide with a real value that has yet to be replaced — that would have left a
+genuine identifier sitting in the output as some other drive's pseudonym and
+quietly defeated the entire feature.
+
+### Judgement calls the plan did not cover
+
+- **`phy_baseline.php` does not exist.** Plan 022 is unstarted, so its "POST-gate
+  precedent" was taken from the two lines this plan quotes verbatim, and from
+  `flash.php`'s guard-function-then-dispatch shape. No CSRF check was added.
+- **Where the controls went, and how they post.** A new `.lu-s-card` pairing
+  beside Notifications, not spanning — the span is reserved for Advanced because
+  that section unlocks firmware writes and must not read as a peer of the routine
+  controls. A download needs its own response and a second `<form>` cannot be
+  nested inside the settings form, so the button uses **`formaction`** to post the
+  existing form to `bundle.php`. No JS, and Unraid's page framework still injects
+  its `csrf_token` into the one form on the page. Only the clicked button's name
+  is submitted, so this can never trigger a settings save; conversely the two
+  checkboxes are ignored by the schema-driven `lsi_config_write`. Neither setting
+  is persisted — both are per-download choices.
+- **The hostname is exempt from the minimum-length floor.** The floor stops a
+  stray 2-character value being swapped out everywhere it happens to occur, but
+  the hostname is an exact literal the caller supplies, and `nas`/`srv`-length
+  names are common enough that skipping them would leave the machine named in
+  `uname -a`.
+- **`bundle_archive_ok()` and a small PHP test were added** beyond the plan's test
+  list. The endpoint `readfile()`s whatever path the shell script printed; the
+  allowlist confining that to `/tmp/hbav_bundle.*` with an archive extension is a
+  trust boundary, and it is 12 assertions.
+- **A 16-hex word is treated as an address** when it either carries an `0x`
+  prefix, contains a hex letter, or begins `5`/`6`. The letter test is what
+  catches `enclosures_c0.txt`'s `EnclLogicalID = 0x300605B010115B90`. The residual
+  heuristic is documented in the script: a 16-*digit* decimal beginning 5 or 6
+  would be swapped for another 16-digit number — length-safe, and no size this
+  tool reports is that wide.
+- **Fixtures are committed pre-masked**, so they could not on their own prove the
+  replacement fires. `tests/anon_test.sh` runs them both as committed *and*
+  de-masked (`sed 'y/XY/AB/'`, turning the masks into plausible hex), and asserts
+  the length profile is unchanged in both.
+- **A serial containing whitespace would not be replaced.** No drive ships one;
+  marked with a `ponytail:` comment rather than handled speculatively.
+
+### Verification, as run
+
+| Check | Result |
+|---|---|
+| Plan drift check (`fe90641..dev`, before any code) | empty |
+| `bash tests/run.sh` | `--- all pass ---` |
+| `git diff -- tests/expected/` | empty — no golden moved |
+| `bash -n` on `bundle_support.sh`, `anon_test.sh` | clean |
+| `php -l` on all 12 plugin `.php` files (php:8.2-cli) | no syntax errors |
+| `diff <(awk '{print length}' before) <(awk …)` on all 18 real storcli fixtures | empty, every file |
+| `git diff --name-only dev..HEAD` | no `capture*.sh`, no `scripts/parse/`, no `flash.php` |
+| End-to-end run with neither storcli nor lsiutil present | usable bundle, 26 files, absences recorded in `NOTES.txt` |
+
+The cross-file property, on de-masked real fixture text — storcli's upper-case
+padded column, sysfs's lower-case `0x` form and the parser's own JSON all
+resolving to one token, with the columns still aligned:
+
+```
+BEFORE  0 12.0 Gbps    500605B0AAAAAA90 B    0    0017 5000CCA2AAAAAA45 0
+AFTER   0 12.0 Gbps    5000000000000003 B    0    0017 5000000000000004 0
+BEFORE  sas_address = 0x500605b0aaaaaa90        AFTER  0x5000000000000003
+BEFORE  sas_address = 0x5000cca2aaaaaa45        AFTER  0x5000000000000004
+AFTER   {"serial":"SERI0001", … "sas_address":"5000000000000001", …}
+```
+
+### Still unverified
+
+Nothing here has run against real hardware. The storcli and lsiutil capture
+blocks, the SMART loop and the sysfs PCI resolution were exercised only on their
+absent-tool paths. The anonymiser is fully covered without hardware, which is the
+half that matters most.

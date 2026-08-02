@@ -146,11 +146,15 @@ echo "=== flash tests ==="
 bash flash_test.sh; flash_fail=$?
 
 echo
+echo "=== bundle anonymisation tests ==="
+bash anon_test.sh; anon_fail=$?
+
+echo
 echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1
