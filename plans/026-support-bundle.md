@@ -1,4 +1,4 @@
-# Plan 026: One-click support bundle for bug reports
+# Plan 026: Complete diagnostic bundle, with consistent anonymisation
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
@@ -7,209 +7,315 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8286fe7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/settings.php scripts/capture.sh scripts/capture_storcli.sh scripts/capture_sysfs.sh`
-> Expected output: **nothing**. Every excerpt below is quoted from `8286fe7`
-> (`dev` tip, 2026-07-30). Any difference is a STOP condition.
+> `git diff --stat fe90641..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/settings.php scripts/capture.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh`
+> Expected output: **nothing**. Every excerpt below is quoted from `fe90641`
+> (`dev` tip, 2026-08-01). Any difference is a STOP condition.
+>
+> **Rewritten 2026-08-01.** The earlier version had anonymisation as a one-line
+> placeholder (`:`) with a note to "confirm exact patterns". The maintainer
+> asked for a *complete* diagnostic generator with real anonymisation, and the
+> naive version of that feature destroys the bundle's value — see "Why naive
+> redaction is worse than none".
+
+## Status
+
+- **Priority**: P2
+- **Effort**: M (was S — the anonymisation design is the bulk of it)
+- **Risk**: LOW-MEDIUM — read-only collection, but it produces a file the user
+  hands to strangers. The risk here is *disclosure*, not corruption.
+- **Depends on**: none
+- **Category**: feature
+- **Planned at**: `fe90641`, 2026-08-01
+- **Requested by**: maintainer. Motivated by issues #3, #5 and #6, each of
+  which took multiple round-trips of hand-pasted terminal output — and in #5's
+  case, the reporter manually X-ing out their own serials.
 
 ## Correcting an assumption this plan started from — read first
 
-The initial framing for this plan assumed `scripts/capture*.sh` could be
-exposed directly as an end-user "download support bundle" button. **That's
-wrong and this plan does not do it.** Reading them:
+The original framing assumed `scripts/capture*.sh` could be exposed as the
+bundle generator. **It cannot, and this plan does not.**
 
 ```bash
 # scripts/capture.sh
 # Capture REAL lsiutil output from the Unraid box into test fixtures.
-# The committed fixtures are seeded from documented formats; run this on the
-# actual HBA to replace them with ground truth, then regenerate goldens:
-#   bash scripts/capture.sh [PORT] [OUTDIR]
-#   UPDATE=1 bash tests/run.sh     # re-bless expected/ from the new fixtures
 PORT="${1:-1}"
 OUT="${2:-tests/fixtures}"
 LSIUTIL="/usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64"
 ```
 
-These are **developer test-fixture generators** — they write into
-`tests/fixtures/` (a repo path, not a user download location), assume an
-absolute binary path, and exist so the maintainer can regenerate golden
-test fixtures from real hardware. They are not designed to be invoked from
-a served PHP page against arbitrary user input, and repurposing them as-is
-would mean either writing into the plugin's own installed source tree from
-a web request (bad) or forking their logic — at which point it's cleaner
-to write the bundle script fresh, reusing the *idea* (call the same
-read-only binaries, capture their raw output) without reusing the files.
+Those live at **repo root** `scripts/` — not in the plugin tree — write into
+`tests/fixtures/`, and exist so the maintainer can regenerate goldens from real
+hardware. Serving them from a PHP request would mean writing into the installed
+source tree from a web context. Build fresh; reuse the *idea*, not the files.
+**`capture*.sh` must not be modified.**
 
-This plan builds a new, purpose-built bundle script instead.
+## What "complete" means here
 
-## Status
+Every issue this project has diagnosed was solved the same way: **compare the
+raw tool output against what the parser made of it.** #3 was a `proc_name`
+mismatch, #5/#6 an enclosure-less address form, #8 PHY counters bleeding into
+the temperature badge. In each case the raw text alone was not enough, and the
+parsed JSON alone was not enough.
 
-- **Priority**: P2
-- **Effort**: S
-- **Risk**: LOW — read-only, same binaries the plugin already calls
-- **Depends on**: none
-- **Category**: feature
-- **Planned at**: `8286fe7`, 2026-07-31
-- **Requested by**: external roadmap review — issues
-  [#5](https://github.com/FugginOld/Unraid-HBAviewer/issues/5) and
-  [#6](https://github.com/FugginOld/Unraid-HBAviewer/issues/6) both
-  involved back-and-forth pasting of raw `storcli`/sysfs output that a
-  bundle would have collected in one step
+So the bundle captures **both, side by side**, for every source.
 
-## Why this matters
+### Section 1 — environment
 
-Every bug report so far involving a specific card (issues #3, #5, #6) has
-required several rounds of "please paste the output of X" before there was
-enough to diagnose. A single button that runs the same reads the plugin
-already performs, plus a couple of extra raw dumps a developer would
-actually ask for, and zips them for attachment to a GitHub issue collapses
-that back-and-forth into one round trip.
+| Item | Source |
+|---|---|
+| Kernel / Unraid version | `uname -a`, `/etc/unraid-version` |
+| Plugin version | `/boot/config/plugins/hbaviewer.plg` |
+| storcli present + version | `find_storcli`'s search list, then `storcli -v` |
+| lsiutil present | the bundled `hbaviewer.x86_64` |
+| Loaded driver + version | `/sys/module/{mpt3sas,mpt2sas,mptsas}/version` |
+| Per-host `proc_name` | `/sys/class/scsi_host/host*/proc_name` |
 
-## Current state
+`proc_name` is listed explicitly because plan 010 proved it is the honest
+SAS2-vs-SAS3 signal, and it is the first thing to check on any "controller not
+detected" report.
 
-### `settings.php` — where the button belongs
+### Section 2 — raw tool output, one file per command
 
-Same page that already hosts `ENABLE_FLASH` and the read-only "Detected
-Hardware" diagnostic row from plan 010. A "Download Support Bundle" button
-fits naturally next to that existing diagnostic row rather than needing a
-new page.
+Mirror what the composers invoke, writing to files instead of piping into
+parsers. **Read the composers to derive the current list** rather than trusting
+this table, but it should come to:
 
-### What's read-only and safe to include
+```
+storcli show
+storcli /cN show                     storcli /cN show all
+storcli /cN show temperature         storcli /cN/pall show
+storcli /cN/eall show all            storcli /cN/eall/sall show all
+storcli /cN/sall show all
+lsiutil banner (via `printf '0\n' |`)
+lsiutil -b
+lsiutil -p<PORT> -a 25,2,0,0         lsiutil -p<PORT> -a 20,12,0,0
+lsiutil -p<PORT> -a 42,0             lsiutil -e -p<PORT> -a 35,0
+lsblk -S -P -o NAME,WWN,SERIAL,MODEL
+```
 
-- `storcli /cN/show all`, `/cN/eall show all`, `/cN/eall/sall show all` —
-  already-called commands, just captured to a file instead of parsed
-- `lsiutil -p<port> -a 25,2,0,0` / `-a 20,12,0,0` / `-a 42,0` — same,
-  lsiutil path
-- Relevant `/sys/class/scsi_host/host*/{proc_name,board_name,version_fw}`
-  and `/sys/class/sas_phy/*/` contents — sysfs snapshot
-- The plugin's own current config (`config.php`'s `lsi_config_read()`
-  output) — helps reproduce with the same settings
-- Plugin version / Unraid version strings
+`/cN/eall/sall` **and** `/cN/sall` are both captured deliberately. They are
+complements, not alternatives — that distinction is the entire content of plan
+017, and a bundle capturing only one would have been useless for #5/#6.
 
-### What needs redaction
+### Section 3 — sysfs
 
-Drive serial numbers and SAS addresses are identifying enough that an
-"anonymize" checkbox is worth offering, matching the same instinct
-`collect_smart.sh` documents about model-string quoting elsewhere in the
-codebase (grep it for the drive-model quoting comment before assuming this
-is unprecedented in the repo).
+`/sys/class/scsi_host/host*/`, `/sys/class/sas_phy/`,
+`/sys/class/sas_end_device/`, and the controller's
+`/sys/bus/pci/devices/*/current_link_{width,speed}`, `max_link_*`,
+`power_state`. Capture a file listing plus the contents of each leaf.
+
+### Section 4 — what the plugin made of it
+
+Run each composer and save its JSON: `get_hba_info.sh`, `get_phy_health.sh`,
+`get_attached_drives.sh`, `get_hba_health.sh`, `get_event_log.sh`. Plus the
+plugin's own `/boot/config/plugins/hbaviewer/hbaviewer.cfg` — its own file,
+small, and `HBA_PORT` / `ALERT_THRESHOLD` change what the composers do.
+
+### Section 5 — SMART (optional, off by default)
+
+`smartctl -a` is ~1s per drive and spins up standby disks. Separate checkbox,
+default **off**, and use `smartctl -n standby -a` so a sleeping drive is
+reported as sleeping rather than woken — matching `collect_smart.sh`.
+
+## Why naive redaction is worse than none
+
+**This is the most important section of this plan.**
+
+The obvious implementation — regex each file, replace serials with `XXXX` —
+produces a bundle that looks anonymised and is diagnostically worthless, for
+two independent reasons.
+
+**1. It breaks the joins.** The plugin's hardest bugs live in the join between
+PHY data and drive data, keyed on **SAS address**. `drives_join.sh`'s own
+header calls that join "where the historical drive bugs lived". If the same SAS
+address becomes a different placeholder in `phy.txt` than in `drives.txt` — or
+the same opaque `XXXX` as every *other* address — the one relationship a
+debugger needs is destroyed. Per-file regex does exactly this.
+
+**2. It breaks column alignment.** storcli pads to fixed columns and the
+parsers key on that structure. Replacing a 16-character SAS address with
+`REDACTED` shifts every field after it. A bundle that reflows columns cannot be
+dropped in as a test fixture — which is precisely what plan 036 does with
+@t0ffemannen's output from issue #5.
+
+### Required behaviour: stable, length-preserving pseudonyms
+
+- Build **one map for the whole bundle**, before rewriting any file.
+- Each distinct real value gets a distinct token: SAS addresses →
+  `5000000000000001`, `5000000000000002`, …; serials → `SERIAL0000000001`,
+  padded to **exactly the original's length**.
+- Apply that one map across **every file**, so a given drive is the same
+  pseudonym in sysfs, in storcli output, and in the parsed JSON.
+- **The map is never written into the bundle.** It lives in memory only.
+
+The result: every cross-reference still resolves, every column still lines up,
+nothing identifies the machine.
+
+### What is anonymised, and what deliberately is not
+
+| Anonymise | Keep |
+|---|---|
+| Drive serial numbers | Drive **models** — which model misbehaves is the finding |
+| WWNs | Sizes, firmware versions, link rates |
+| SAS addresses | Temperatures, error counters |
+| Controller serial / Board Tracer Number | PCI addresses (`00:02:00:00` — topology, not identity) |
+| Hostname | Slot / enclosure numbers |
+
+Keeping models and firmware is not an oversight — a bundle hiding them could
+not have diagnosed a single issue this project has closed.
+
+### Never collected at all
+
+**Do not capture, under either setting**: the Unraid flash GUID, the licence
+key, `/boot/config/ident.cfg`, `/boot/config/super.dat`, `/boot/config/shadow`,
+network configuration, share names, or any `/boot/config` file other than the
+plugin's own `hbaviewer.cfg`. These are not "anonymise if asked" — they are out
+of scope for a controller diagnostic and must never enter the bundle.
+
+**If you find yourself writing a glob over `/boot/config`, that is a STOP
+condition.**
 
 ## Scope
 
 **In scope**:
 
-- New `scripts/bundle_support.sh`, purpose-built (not a reuse of
-  `capture*.sh`), invoked from a new small PHP endpoint following the
-  `flash.php`-style "guard function first, dispatch skipped under CLI"
-  pattern even though this isn't a mutating action — the precedent for
-  "how does this plugin structure a non-`ajax_info.php` action" is worth
-  reusing regardless of mutation status
-- Output: single zip under `/tmp` (not `/boot` — this is a one-off
-  download, not persisted state), served for download, then cleaned up
-  (or left in `/tmp` to age out on reboot — decide in Step 1)
-- "Anonymize" checkbox: strip serials/SAS addresses via regex before
-  zipping when checked
-- Settings page button placement next to the existing Detected Hardware row
+- New `source/usr/local/emhttp/plugins/hbaviewer/scripts/bundle_support.sh`
+  (inside the plugin tree, unlike `capture*.sh`).
+- A small `bundle.php` endpoint, guard-function-first, following `flash.php`'s
+  structure and `phy_baseline.php`'s POST-gate precedent.
+- Settings controls: "Generate diagnostic bundle" button, **Anonymise**
+  checkbox (default **on**), **Include SMART** checkbox (default **off**).
+- Output to `/tmp`, streamed as a download, then deleted.
 
-**Out of scope**:
+**Out of scope** — do not touch:
 
-- Automatic upload/attachment to GitHub issues (the working rules in
-  `plans/README.md` explicitly forbid the plugin — or its author acting
-  through it — writing to the issues page; a manual download-then-attach
-  flow is correct here for the same reason)
-- Modifying `capture*.sh` at all — they stay exactly as-is, serving their
-  existing dev-fixture purpose
+- `scripts/capture.sh`, `capture_storcli.sh`, `capture_sysfs.sh` at repo root.
+- Any parser, composer, or renderer. The bundle **calls** them; it does not
+  change them.
+- Any upload or attach-to-GitHub flow. The user downloads and attaches manually.
+- `flash.php` and anything on the flashing path.
 
 ## Steps
 
-### Step 1: Decide output location and cleanup policy
+### Step 1: confirm the archiver exists
 
-`/tmp/hbav_bundle_<timestamp>.zip`, matching `FLASH_DIR`'s existing
-`/tmp/hbav_flash` naming convention in `flash.php`. Decide whether to
-delete-after-serve or let `/tmp` age it out — `/tmp` is RAM-backed on
-Unraid, so leaving it costs memory until reboot, not disk; delete-after-
-serve is the tidier default unless there's a reason to keep it browsable.
+**Do not assume `zip` is present.** Unraid ships a minimal userland. Check for
+`zip`; if absent use `tar czf` and name the file `.tar.gz`. Report which you
+found. A bundle that silently produces a zero-byte archive because `zip` is
+missing is worse than no feature at all.
 
-### Step 2: `scripts/bundle_support.sh`
+**Verify**: `command -v zip || command -v tar`, and state which the script uses.
+
+### Step 2: the collector, without anonymisation
+
+Collect Sections 1–4 into a temp directory. Get it complete first; anonymisation
+is a separate pass over the finished directory.
+
+Every command must be **read-only**, and one missing tool must not fail the run
+— a box without storcli should still produce a bundle with the lsiutil half
+populated and a note recording that storcli was absent.
+
+**Verify**: every expected file exists; none is zero-byte without an
+explanatory note beside it.
+
+### Step 3: the anonymisation pass
+
+A separate function over the completed directory:
+
+1. Scan **all** files, collecting every distinct SAS address, WWN and serial
+   into one map, each with a length-matched pseudonym.
+2. Rewrite every file using that single map.
+3. Write `ANONYMISED.txt` listing which *classes* were replaced — never the map.
+
+Patterns to detect, at minimum. **Confirm each against real output in
+`tests/fixtures/storcli/` before relying on it:**
+
+- `SAS Address = 5003005702960060`
+- `WWN="0x5000c500a1b2c3d4"` (lsblk `-P` form)
+- `Serial Number = …`, `SERIAL="…"`
+- sysfs `sas_address` contents (`0x…`, sometimes lower-case — the parsers
+  upper-case it, so match case-insensitively)
+
+**Verify**, and treat this as the step's real gate:
 
 ```bash
-#!/bin/bash
-# Purpose-built support bundle — NOT a reuse of capture*.sh (those are
-# dev test-fixture generators, see plan 026). Read-only: calls the same
-# binaries the plugin's own composers call, captures raw + parsed output,
-# zips for attachment to a bug report.
-OUT="$1"          # target directory, caller-provided (e.g. mktemp -d)
-ANON="${2:-0}"    # 1 = strip serials/SAS addresses
-mkdir -p "$OUT"
-
-# ... storcli / lsiutil / sysfs captures, mirroring what get_hba_info.sh,
-# get_phy_health.sh, get_attached_drives.sh already invoke, written to
-# $OUT/*.txt instead of piped into a parser ...
-
-if [ "$ANON" = "1" ]; then
-    # Redact serials/SAS addresses in place — confirm exact patterns against
-    # collect_smart.sh's existing serial-quoting comment before inventing a
-    # new regex for the same class of data.
-    :
-fi
-
-( cd "$OUT" && zip -r -q bundle.zip . )
+# alignment survived — empty output means every line kept its length
+diff <(awk '{print length}' before.txt) <(awk '{print length}' after.txt)
 ```
 
-**Verify**: `bash -n scripts/bundle_support.sh` → exit 0
+Also confirm the same input address maps to the same token in two different
+files, and that `grep` for the originals returns nothing. **This is the check
+that distinguishes a working implementation from a plausible one.**
 
-### Step 3: PHP endpoint
+### Step 4: the endpoint and the Settings controls
 
-Guard-function-first, `flash.php`-style:
+Follow `phy_baseline.php`'s gate exactly:
 
 ```php
-function bundle_preflight(array $in): array {
-    // minimal — this is read-only, so mostly just "is bundling even possible"
-    return ['ok' => true];
-}
+if (PHP_SAPI === 'cli') return;
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST['make_bundle'])) return;
 ```
 
-Then shell out to Step 2's script into a temp dir, zip, stream the file
-for download (`Content-Disposition: attachment`), clean up per Step 1's
-decision.
+**Do NOT add a CSRF check.** Unraid's auto-prepended `local_prepend.php`
+already `hash_equals`-checks every POST and then `unset()`s the token. Plan 009
+added its own check and it denied every settings save; it was reverted and
+marked "do not re-attempt".
 
-### Step 4: Settings page button
+The controls go in the two-column grid plan 034 established, as a new
+`.lu-s-card`. Decide whether it pairs beside Notifications or spans, and say
+which and why.
 
-Next to the existing "Detected Hardware" row from plan 010, with the
-anonymize checkbox and a one-line explanation of what's collected.
+### Step 5: clean up
+
+Delete the temp directory and archive after streaming. `/tmp` is RAM-backed on
+Unraid, so a leaked bundle costs memory until reboot.
 
 ## Test plan
 
-- `bash -n` on the new script.
-- The PHP endpoint's guard function (however minimal) unit-tested the
-  same way `flash_preflight` is.
-- No golden fixtures to update — this plan doesn't touch any existing
-  parser or contract.
-- `bash tests/run.sh` stays green.
+- `bash -n` on the new script; `php -l` on the new endpoint.
+- **Unit-test the anonymisation pass as a pure function over fixture text.**
+  This is the part testable without hardware, and the part where a bug is
+  invisible until someone's serial is already on GitHub. Cover: same value in
+  two files → same token; different values → different tokens; line lengths
+  unchanged; originals absent afterwards; a value appearing in both a raw file
+  and a parsed JSON file → same token in both.
+- Follow the repo's CLI harness (`tests/run.sh`, `tests/run_php.sh`) — **not**
+  PHPUnit. See `tests/health_test.php` for the `check(...)` convention.
+- `bash tests/run.sh` → `--- all pass ---`, no golden moved.
 
 ## Done criteria
 
-- [ ] `scripts/capture*.sh` are untouched (`git diff` shows zero changes
-      to those three files)
-- [ ] `bash -n scripts/bundle_support.sh` → exit 0
-- [ ] Anonymize option verified to strip serials/SAS addresses from at
-      least one captured file in a test run
-- [ ] Settings button downloads a zip containing the expected file set
-- [ ] `bash tests/run.sh` → `--- all pass ---`
+- [ ] Bundle contains Sections 1–4; SMART only when its box is ticked
+- [ ] Both `/cN/eall/sall` and `/cN/sall` captured
+- [ ] With Anonymise on, `grep` for any real serial, WWN or SAS address from
+      the host returns **nothing** anywhere in the bundle
+- [ ] The same real value yields the **same** token in every file
+- [ ] `awk '{print length}'` identical before and after the pass
+- [ ] The pseudonym map appears nowhere in the bundle
+- [ ] Nothing from `/boot/config` except `hbaviewer.cfg`
+- [ ] A box missing storcli still produces a usable bundle
+- [ ] `bash tests/run.sh` → `--- all pass ---`, `git diff -- tests/expected/` empty
+- [ ] `bash -n` / `php -l` clean
 
 ## STOP conditions
 
 - The drift check prints anything.
-- Any edit lands in `scripts/capture.sh`, `capture_storcli.sh`, or
-  `capture_sysfs.sh` — those are out of scope entirely, not a base to
-  build on.
-- The bundle is written anywhere under the plugin's installed source tree
-  (mirroring `capture.sh`'s `tests/fixtures` habit) instead of `/tmp` —
-  a served PHP page must never write into its own source directory.
+- A glob over `/boot/config` appears anywhere.
+- Anonymisation is implemented per-file rather than with one bundle-wide map.
+- Line lengths change under anonymisation.
+- Any CSRF check is added.
+- `capture*.sh`, any parser, any composer, or `flash.php` is modified.
+- `zip` is assumed present without a check.
 
 ## Maintenance notes
 
-- **Keep this script and `capture*.sh` conceptually separate even though
-  they call similar binaries.** One writes into the repo for test-fixture
-  regeneration by a developer; the other serves a zip to an end user from
-  a running plugin. Merging them "to avoid duplication" would blur a
-  distinction that matters for where each is allowed to write.
+- **The anonymisation map is the security-critical part of this plugin.** It is
+  the only code whose failure publishes a user's hardware identifiers to a
+  public issue tracker. It deserves the review posture of the flashing guards,
+  and its tests must never be weakened to make a refactor pass.
+- **The bundle's value depends on capturing raw and parsed together.** If a
+  future change drops the parsed JSON to save space, the bundle stops being
+  able to answer the question every past issue needed answering.
+- **New composer → new bundle section.** The capture list mirrors the
+  composers; when one is added this script keeps working while quietly becoming
+  incomplete. Worth a line in any plan that adds one.
