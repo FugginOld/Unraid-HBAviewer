@@ -13,6 +13,19 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.03###
+- Fixed: 2026.08.02 could not be installed. Unraid rejected the plugin file
+  with "XML file doesn't exist or xml parse error" before downloading
+  anything. A shell comment inside one of the plg's INLINE blocks contained
+  angle brackets, which an XML parser reads as an unclosed tag; INLINE content
+  is XML text, so a bare "&lt;" or "&amp;" anywhere in it — even in a comment —
+  breaks installation for everyone. The comment is reworded; nothing else
+  changed.
+- Added: the test suite now parses hbaviewer.plg and fails on a bare "&lt;" or
+  "&amp;" inside any INLINE block, on a missing version/pkgURL/md5 entity, on a pkgURL
+  whose path does not match the version, and on a missing changelog block. CI
+  linted every .php and .sh but never the one file that decides whether the
+  plugin installs at all.
 ###2026.08.02###
 The largest release so far: a new HBA Health tab, PHY error baselines, an
 export endpoint, diagnostic bundles, notifications, and fixes for every open
@@ -144,7 +157,7 @@ tar -xJf /boot/config/plugins/hbaviewer/hbaviewer.txz -C /
 chmod +x /usr/local/emhttp/plugins/hbaviewer/hbaviewer.x86_64
 chmod +x /usr/local/emhttp/plugins/hbaviewer/scripts/*.sh
 # Unraid's plugin manager resolves the Plugins-page icon against
-# plugins/<name>/, where <name> is this plg's name attribute — "HBAviewer",
+# plugins/NAME/, where NAME is this plg's name attribute — "HBAviewer",
 # capital H — not the lowercase install directory. So the icon has to exist
 # there too. Deliberately created here rather than shipped in the repo:
 # HBAviewer/ and hbaviewer/ collide on case-insensitive filesystems, so a
