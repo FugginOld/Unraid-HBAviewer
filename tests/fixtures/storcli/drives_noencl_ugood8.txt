@@ -1,0 +1,700 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = Show Drive Information Succeeded.
+
+
+Drive /c0/s0 :
+============
+
+-------------------------------------------------------------------------
+EID:Slt DID State DG     Size Intf Med SED PI SeSz Model              Sp 
+-------------------------------------------------------------------------
+ :0       0 UGood -  3.638 TB SATA HDD -   N  512B ST4000VN008-2DR166 -  
+-------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s0 - Detailed Information :
+===================================
+
+Drive /c0/s0 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s0 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST4000VN008-2DR166
+NAND Vendor = NA
+SN =             XXXXXXXX
+WWN = XXXXXXXXXXXX
+Firmware Revision = SC60    
+Raw size = 3.638 TB [0x1d1c0beaf Sectors]
+Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Non Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 7814037167
+Connector Name = N/A
+
+
+Drive /c0/s0 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 0 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221100000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+47 5a 38 59 47 53 4d 57 00 00 00 40 00 00 43 53 
+30 36 20 20 20 20 54 53 30 34 30 30 4e 56 30 30 
+2d 38 44 32 31 52 36 36 20 20 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5c ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s1 :
+============
+
+-------------------------------------------------------------------------
+EID:Slt DID State DG     Size Intf Med SED PI SeSz Model              Sp 
+-------------------------------------------------------------------------
+ :1       1 UGood -  3.638 TB SATA HDD -   N  512B ST4000VN008-2DR166 -  
+-------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s1 - Detailed Information :
+===================================
+
+Drive /c0/s1 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s1 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST4000VN008-2DR166
+NAND Vendor = NA
+SN =             XXXXXXXXXX
+WWN = XXXXXXXXXXX
+Firmware Revision = SC60    
+Raw size = 3.638 TB [0x1d1c0beaf Sectors]
+Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Non Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 7814037167
+Connector Name = N/A
+
+
+Drive /c0/s1 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 1 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221101000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+4d 5a 30 34 30 59 57 57 00 00 00 40 00 00 43 53 
+30 36 20 20 20 20 54 53 30 34 30 30 4e 56 30 30 
+2d 38 44 32 31 52 36 36 20 20 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5c ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s2 :
+============
+
+-------------------------------------------------------------------------
+EID:Slt DID State DG     Size Intf Med SED PI SeSz Model              Sp 
+-------------------------------------------------------------------------
+ :2       2 UGood -  3.638 TB SATA HDD -   N  512B ST4000VN008-2DR166 -  
+-------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s2 - Detailed Information :
+===================================
+
+Drive /c0/s2 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s2 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST4000VN008-2DR166
+NAND Vendor = NA
+SN =             XXXXXXXX
+WWN = XXXXXXX
+Firmware Revision = SC60    
+Raw size = 3.638 TB [0x1d1c0beaf Sectors]
+Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Non Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 7814037167
+Connector Name = N/A
+
+
+Drive /c0/s2 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 2 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221102000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+44 5a 35 48 46 33 31 56 00 00 00 40 00 00 43 53 
+30 36 20 20 20 20 54 53 30 34 30 30 4e 56 30 30 
+2d 38 44 32 31 52 36 36 20 20 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5c ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s3 :
+============
+
+-------------------------------------------------------------------------
+EID:Slt DID State DG     Size Intf Med SED PI SeSz Model              Sp 
+-------------------------------------------------------------------------
+ :3       3 UGood -  3.638 TB SATA HDD -   N  512B ST4000VN008-2DR166 -  
+-------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s3 - Detailed Information :
+===================================
+
+Drive /c0/s3 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s3 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = ST4000VN008-2DR166
+NAND Vendor = NA
+SN =             XXXXXXXX
+WWN = XXXXXXXXX
+Firmware Revision = SC60    
+Raw size = 3.638 TB [0x1d1c0beaf Sectors]
+Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Non Coerced size = 3.638 TB [0x1d1c0beaf Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 7814037167
+Connector Name = N/A
+
+
+Drive /c0/s3 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 3 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221103000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+44 5a 37 48 53 59 4d 35 00 00 00 40 00 00 43 53 
+30 36 20 20 20 20 54 53 30 34 30 30 4e 56 30 30 
+2d 38 44 32 31 52 36 36 20 20 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5c ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s4 :
+============
+
+----------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model                Sp 
+----------------------------------------------------------------------------
+ :4       5 UGood -  16.371 TB SATA HDD -   N  512B WDC  WUH721818ALE6L4 -  
+----------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s4 - Detailed Information :
+===================================
+
+Drive /c0/s4 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s4 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = WDC  WUH721818ALE6L4
+NAND Vendor = NA
+SN = XXXXXXX           
+WWN = XXXXXXXX
+Firmware Revision = PCGNW232
+Raw size = 16.371 TB [0x82f7fffff Sectors]
+Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Non Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 35156656127
+Connector Name = N/A
+
+
+Drive /c0/s4 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 4 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221104000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 04 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 4d 33 39 47 52 48 55 45 20 20 20 20 
+20 20 20 20 20 20 20 20 03 00 00 00 38 00 43 50 
+4e 47 32 57 32 33 44 57 20 43 57 20 48 55 32 37 
+38 31 38 31 4c 41 36 45 34 4c 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 00 59 ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s5 :
+============
+
+----------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model                Sp 
+----------------------------------------------------------------------------
+ :5       6 UGood -  16.371 TB SATA HDD -   N  512B WDC  WUH721818ALE6L4 -  
+----------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s5 - Detailed Information :
+===================================
+
+Drive /c0/s5 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s5 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = WDC  WUH721818ALE6L4
+NAND Vendor = NA
+SN = XXXXXX           
+WWN = XXXXXXX
+Firmware Revision = PCGNW8C2
+Raw size = 16.371 TB [0x82f7fffff Sectors]
+Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Non Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 35156656127
+Connector Name = N/A
+
+
+Drive /c0/s5 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 5 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221105000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 04 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 4e 32 54 4a 44 4b 58 37 20 20 20 20 
+20 20 20 20 20 20 20 20 03 00 00 00 38 00 43 50 
+4e 47 38 57 32 43 44 57 20 43 57 20 48 55 32 37 
+38 31 38 31 4c 41 36 45 34 4c 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 00 59 ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/s6 :
+============
+
+---------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model               Sp 
+---------------------------------------------------------------------------
+ :6       4 UGood -  20.009 TB SATA HDD -   N  512B TOSHIBA MG10AFA22TE -  
+---------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s6 - Detailed Information :
+===================================
+
+Drive /c0/s6 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s6 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = TOSHIBA MG10AFA22TE
+NAND Vendor = NA
+SN =         XXXXXXXX
+WWN = XXXXXXXX
+Firmware Revision = 0104    
+Raw size = 20.009 TB [0xa013fffff Sectors]
+Coerced size = 20.009 TB [0xa013fffff Sectors]
+Non Coerced size = 20.009 TB [0xa013fffff Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 42970644479
+Connector Name = N/A
+
+
+Drive /c0/s6 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 6 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221106000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+40 00 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 35 58 32 32 
+30 41 37 33 4d 46 4a 38 00 00 00 00 00 00 31 30 
+34 30 20 20 20 20 4f 54 48 53 42 49 20 41 47 4d 
+30 31 46 41 32 41 54 32 20 45 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 00 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 07 00 07 00 
+
+
+
+Drive /c0/s7 :
+============
+
+----------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model                Sp 
+----------------------------------------------------------------------------
+ :7       7 UGood -  16.371 TB SATA HDD -   N  512B WDC  WUH721818ALE6L4 -  
+----------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+
+Drive /c0/s7 - Detailed Information :
+===================================
+
+Drive /c0/s7 State :
+==================
+Shield Counter = N/A
+Media Error Count = N/A
+Other Error Count = N/A
+Predictive Failure Count = N/A
+S.M.A.R.T alert flagged by drive = N/A
+
+
+Drive /c0/s7 Device attributes :
+==============================
+Manufacturer Id = ATA     
+Model Number = WDC  WUH721818ALE6L4
+NAND Vendor = NA
+SN = XXXXXXXXXX         
+WWN = XXXXXXXX
+Firmware Revision = PCGNW232
+Raw size = 16.371 TB [0x82f7fffff Sectors]
+Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Non Coerced size = 16.371 TB [0x82f7fffff Sectors]
+Device Speed = Unknown
+Link Speed = 6.0Gb/s
+NCQ setting = N/A
+Sector Size = 512B
+Config ID = NA
+Number of Blocks = 35156656127
+Connector Name = N/A
+
+
+Drive /c0/s7 Policies/Settings :
+==============================
+Enclosure position = -
+Connected Port Number = 7 
+Sequence Number = 0
+Commissioned Spare = No
+Emergency Spare = No
+Last Predictive Failure Event Sequence Number = N/A
+Successful diagnostics completion on = N/A
+SED Capable = N/A
+SED Enabled = N/A
+Secured = N/A
+Needs EKM Attention = N/A
+PI Eligible = No
+Certified = N/A
+Wide Port Capable = N/A
+Multipath = No
+
+Port Information :
+================
+
+-----------------------------------------
+Port Status Linkspeed SAS address        
+-----------------------------------------
+   0 Active 6.0Gb/s   0x4433221107000000 
+-----------------------------------------
+
+
+Inquiry Data = 
+5a 04 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 52 33 5a 4b 30 42 43 52 20 20 20 20 
+20 20 20 20 20 20 20 20 03 00 00 00 38 00 43 50 
+4e 47 32 57 32 33 44 57 20 43 57 20 48 55 32 37 
+38 31 38 31 4c 41 36 45 34 4c 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 00 59 ff ff ff 0f 00 00 07 00 

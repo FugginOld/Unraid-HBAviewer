@@ -165,11 +165,26 @@ done
 # X-ed serials keep their key lines, and enclosures_c0.txt's EnclLogicalID is a
 # genuine 16-hex SAS address. Those must be replaced; every other line must come
 # back untouched, or the pass is corrupting text it was never asked to change.
+#
+# Two more lines join the allowlist for plan 036's real-hardware fixtures:
+#   Board Tracer Number = -- matched by LABEL in bundle_support.sh's
+#     scan_serials, so it is rewritten whatever its value, exactly like
+#     SN = and Serial Number = already above. Masking the value changes
+#     nothing; the label alone triggers the rewrite.
+#   WWN =                 -- the real-hardware fixtures carry reporter-masked
+#     WWNs whose X-runs collide by length with SN values on OTHER drives
+#     (e.g. a 7-X WWN on one drive equals a 7-X SN on another). The
+#     anonymiser maps by exact value, not by label, so both sides get
+#     swapped. This is a fixture artifact of the reporter's uniform masking,
+#     not a bug in the pass.
+# SAS Address = is deliberately NOT here: it is masked with a distinct Y-run
+# (see overview_noencl_ugood.txt), so it is only reachable via the 16-hex
+# rule and should never be rewritten. If it ever is, that is a new finding.
 absent "committed fixture EnclLogicalID replaced" 300605B010115B90 "$F/asis"
 d=$(for f in "$F/asis.orig"/*.txt; do diff "$f" "$F/asis/${f##*/}"; done \
     | grep -c '^[<>].*' 2>/dev/null)
 d2=$(for f in "$F/asis.orig"/*.txt; do diff "$f" "$F/asis/${f##*/}"; done \
-    | grep '^[<>]' | grep -vcE 'SN =|Serial Number =|EnclLogicalID')
+    | grep '^[<>]' | grep -vcE 'SN =|Serial Number =|EnclLogicalID|Board Tracer Number =|WWN =')
 eq "committed fixtures changed only on identifier lines" "$d2" "0"
 [ "$d" -gt 0 ] && ok "committed fixtures did have identifiers to replace ($d lines)" \
                || bad "committed fixtures did have identifiers to replace" "nothing changed"
