@@ -1,0 +1,137 @@
+===== banner (device list + lsiutil version) =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+
+Select a device:  [1-1 or 0 to quit] ===== port 1 : -a 1,0 =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 1
+
+Current active firmware version is 14000700 (20.00.07)
+Firmware image's version is MPTFW-20.00.07.00-IT
+  LSI Logic
+  Not Packaged Yet
+x86 BIOS image's version is MPT2BIOS-7.39.02.00 (2015.08.03)
+EFI BIOS image's version is 7.27.01.01
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 0
+===== port 1 : interactive fallback =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+
+ 1.  Identify firmware, BIOS, and/or FCode
+ 2.  Download firmware (update the FLASH)
+ 4.  Download/erase BIOS and/or FCode (update the FLASH)
+ 8.  Scan for devices
+ 801.  Scan for 1 LUN
+ 810.  Scan for 10 LUN's
+10.  Change IOC settings (interrupt coalescing)
+13.  Change SAS IO Unit settings
+16.  Display attached devices
+20.  Diagnostics
+21.  RAID actions
+23.  Reset target
+42.  Display operating system names for devices
+43.  Diagnostic Buffer actions
+45.  Concatenate SAS firmware and NVDATA files
+59.  Dump PCI config space
+60.  Show non-default settings
+61.  Restore default settings
+66.  Show SAS discovery errors
+69.  Show board manufacturing information
+97.  Reset SAS link, HARD RESET
+98.  Reset SAS link
+99.  Reset port
+ e   Enable expert mode in menus
+ p   Enable paged mode
+ w   Enable logging
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 
+Current active firmware version is 14000700 (20.00.07)
+Firmware image's version is MPTFW-20.00.07.00-IT
+  LSI Logic
+  Not Packaged Yet
+x86 BIOS image's version is MPT2BIOS-7.39.02.00 (2015.08.03)
+EFI BIOS image's version is 7.27.01.01
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] ===== port 2 : -a 1,0 =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== port 2 : interactive fallback =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== port 3 : -a 1,0 =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== port 3 : interactive fallback =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== port 4 : -a 1,0 =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== port 4 : interactive fallback =====
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+ERROR:  No such port.  Valid ports are:
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+===== driver personality per host =====
+/sys/class/scsi_host/host0/ proc_name=mpt2sas board=SAS9207-8i
+/sys/class/scsi_host/host1/ proc_name=ahci board=
+/sys/class/scsi_host/host2/ proc_name=ahci board=
+/sys/class/scsi_host/host3/ proc_name=ahci board=
+/sys/class/scsi_host/host4/ proc_name=ahci board=
+/sys/class/scsi_host/host5/ proc_name=usb-storage board=
+/sys/class/scsi_host/host6/ proc_name=usb-storage board=
+/sys/class/scsi_host/host7/ proc_name=usb-storage board=
+/sys/class/scsi_host/host8/ proc_name=usb-storage board=
+/sys/class/scsi_host/host9/ proc_name=usb-storage board=
