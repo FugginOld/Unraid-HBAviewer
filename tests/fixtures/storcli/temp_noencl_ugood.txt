@@ -1,0 +1,16 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+
+Controller Properties :
+=====================
+
+--------------------------------------
+Ctrl_Prop                       Value 
+--------------------------------------
+ROC temperature(Degree Celsius) 56    
+--------------------------------------
+

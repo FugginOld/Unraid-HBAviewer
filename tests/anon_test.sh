@@ -165,11 +165,15 @@ done
 # X-ed serials keep their key lines, and enclosures_c0.txt's EnclLogicalID is a
 # genuine 16-hex SAS address. Those must be replaced; every other line must come
 # back untouched, or the pass is corrupting text it was never asked to change.
+# Plan 036's real /c0 show + /c0/sall show all capture (issue #5) left the
+# controller's SAS Address and Board Tracer Number unmasked, and its per-drive
+# WWN lines unmasked too -- all genuine identifier lines the anonymiser is
+# meant to rewrite, so they join the allowlist here rather than in the pass.
 absent "committed fixture EnclLogicalID replaced" 300605B010115B90 "$F/asis"
 d=$(for f in "$F/asis.orig"/*.txt; do diff "$f" "$F/asis/${f##*/}"; done \
     | grep -c '^[<>].*' 2>/dev/null)
 d2=$(for f in "$F/asis.orig"/*.txt; do diff "$f" "$F/asis/${f##*/}"; done \
-    | grep '^[<>]' | grep -vcE 'SN =|Serial Number =|EnclLogicalID')
+    | grep '^[<>]' | grep -vcE 'SN =|Serial Number =|EnclLogicalID|SAS Address =|Board Tracer Number =|WWN =')
 eq "committed fixtures changed only on identifier lines" "$d2" "0"
 [ "$d" -gt 0 ] && ok "committed fixtures did have identifiers to replace ($d lines)" \
                || bad "committed fixtures did have identifiers to replace" "nothing changed"

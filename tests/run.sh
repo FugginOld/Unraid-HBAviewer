@@ -33,6 +33,11 @@ check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixture
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
 check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview.sh" 80 0 "" "x8" "Gen3 (8.0 GT/s)" "Full" < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
+# Real `/c0 show` + `/c0 show temperature` from issue #5 (@t0ffemannen,
+# SAS3008/IR firmware): eight blank-EID UGood rows in PD LIST followed by the
+# legend block whose "UGood-Unconfigured Good|..." text is the exact string
+# that false-matched MODE before plan 017. ROC temperature 56.
+check storcli-overview-noencl-ugood storcli_overview_noencl_ugood.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_noencl_ugood.txt fixtures/storcli/temp_noencl_ugood.txt)
 # health rollup: failed drive -> alert (even at 50C); PHY errors -> warn
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
@@ -55,6 +60,11 @@ check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtur
 # firmware (UGood, no (path0) suffix on the port, Connector Name = N/A).
 check storcli-drives-noencl-jbod  storcli_drives_noencl_jbod.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_jbod.txt
 check storcli-drives-noencl-ugood storcli_drives_noencl_ugood.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood.txt
+# Real `/c0/sall show all` from the same issue #5 report: eight drives, slots
+# s0-s7, with DIDs deliberately out of order (5 at s4, 4 at s6) -- pins that
+# the parser keys on slot, not device id or row order. Also the only fixture
+# with a double space inside a model name ("WDC  WUH721818ALE6L4").
+check storcli-drives-noencl-ugood8 storcli_drives_noencl_ugood8.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood8.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
 check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
