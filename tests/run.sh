@@ -67,8 +67,11 @@ check storcli-drives-noencl-ugood storcli_drives_noencl_ugood.json bash "$P/stor
 check storcli-drives-noencl-ugood8 storcli_drives_noencl_ugood8.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood8.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
-check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
-check smart-sata       smart_sata.json      bash "$P/smart.sh" < fixtures/smart/sata_drive.txt
+check smart-sas        smart_sas.json       bash "$P/smart.sh" sas  < fixtures/smart/sas_drive.txt
+check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/smart/sata_drive.txt
+# No transport passed (lsblk reported usb/nvme/nothing): the field must be
+# empty so the UI shows a dash, never a guessed bus.
+check smart-notran     smart_notran.json    bash "$P/smart.sh"      < fixtures/smart/sata_drive.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
 # Performance-tab temperatures: per controller, in order. Covers the lsiutil
@@ -163,11 +166,15 @@ echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
 echo
+echo "=== read_smart tests ==="
+bash read_smart_test.sh; read_smart_fail=$?
+
+echo
 echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1
