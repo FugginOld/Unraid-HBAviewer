@@ -7,19 +7,49 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 2aadc7c..HEAD -- tests/run.sh tests/fixtures/storcli source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_drives.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh`
-> Expected output: **nothing**. Every excerpt below is quoted from `2aadc7c`
+> `git diff --stat 20d2142..HEAD -- tests/run.sh tests/fixtures/storcli source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_drives.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh`
+> Expected output: **nothing**. Every excerpt below is quoted from `20d2142`
 > (`dev` tip, 2026-08-02). Any difference is a STOP condition.
 >
-> **Baseline re-stamped 2026-08-02.** Written against `4338f68`; since then plan
-> 026 appended a bundle-anonymisation block to the end of `tests/run.sh`
-> (+5/-1). The three `check` lines this plan quotes are unchanged and still at
-> lines 33, 56 and 57. The parsers and every fixture are untouched.
+> **Baseline re-stamped twice.** Written against `4338f68`; plan 026 later
+> appended a bundle block to `tests/run.sh`, and plan 038 added one `hba-gen1`
+> check line. **The three `check` lines this plan quotes are still at lines 33,
+> 56 and 57**, and the parsers and every fixture remain untouched.
 >
-> **Getting the reporter's output**: fetch it verbatim, do not retype it —
-> `gh issue view 5 --repo FugginOld/Unraid-HBAviewer --json comments -q '.comments[] | select(.author.login=="t0ffemannen") | .body'`
-> The relevant comment is dated 2026-08-01 and contains a `PD LIST` with eight
-> blank-EID `UGood` rows, a `ROC temperature` of 56, and `Drive /c0/sN :` blocks.
+> ## The reporter's output — already fetched and verified for you
+>
+> **Do not re-fetch, do not retype, do not reformat.** The verbatim text is
+> saved at:
+>
+> `C:/Users/Joe/AppData/Local/Temp/claude/c--Users-Joe-Documents-GitHub-Unraid-HBAviewer/195733c9-54c9-4142-a60f-a02033ab0418/scratchpad/ugood_real.txt`
+>
+> (774 lines, 22,433 bytes. Provenance: issue #5, @t0ffemannen, comment
+> `2026-08-01T19:59:16Z`. Re-fetchable with
+> `gh issue view 5 --repo FugginOld/Unraid-HBAviewer --json comments -q '.comments[] | select(.createdAt=="2026-08-01T19:59:16Z") | .body'`
+> — but only if the file is missing, and byte-compare it if you do.)
+>
+> **That one comment holds three separate storcli invocations back to back.**
+> Slice it by line number; do not search for markers:
+>
+> | Lines | Invocation | Becomes |
+> |---|---|---|
+> | 1–56 | `/c0 show` — `Physical Drives = 8`, `PD LIST`, legend block | the overview fixture |
+> | 58–73 | `/c0 show temperature` — `ROC temperature(Degree Celsius) 56` | the temperature fixture |
+> | 75–774 | `/c0/sall show all` — eight `Drive /c0/sN :` blocks | the drives fixture |
+>
+> **Three traps that will otherwise waste a round:**
+>
+> 1. **Other comments on the same issue contain a different, single-drive
+>    `PD LIST` with different spacing.** Selecting by author or by date alone
+>    picks up the wrong one. The `createdAt` above is exact.
+> 2. **Each per-drive block repeats its own `EID:Slt` row and legend.** So over
+>    the whole comment `grep -c 'UGood-Unconfigured Good'` is **9**, not 1, and
+>    `grep -cE '^ :[0-9]+ +[0-9]+ UGood'` is **16**, not 8. Within lines 1–56
+>    those counts are 1 and 8. Do not "fix" a count that looks wrong until you
+>    have checked which range you are counting.
+> 3. **The drives section ends with raw hex inquiry dumps** (lines of
+>    `20 20 20 … 80`). That is genuine `show all` output. Keep it — the plan's
+>    rule is verbatim, and a trimmed fixture is no longer evidence.
 
 ## Status
 
@@ -28,7 +58,7 @@
 - **Risk**: LOW — test data only, no source change expected
 - **Depends on**: none (017 is merged and confirmed)
 - **Category**: test coverage
-- **Planned at**: `4338f68`, 2026-08-01
+- **Planned at**: `20d2142`, 2026-08-02 (re-stamped; originally `4338f68`)
 - **Requested by**: maintainer, after @t0ffemannen supplied real controller
   output on issue #5
 
