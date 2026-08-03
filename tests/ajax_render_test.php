@@ -120,6 +120,82 @@ $h = renderPhyTables(['backend'=>'lsiutil','controllers'=>[['phys'=>[
 ]]]], $bl, 1000 + 3600, 5000 + 3600);
 check('phy lsiutil delta rendered', str_contains($h, '&Delta;150') && str_contains($h, '150/hr'));
 
+/* ── PHY top offenders (plan 027): the SAS-address join and the ranking ─────
+   phy_drive_label() address pairs below are the real capture from the plan
+   (9400-16i + 9400-8i, 24 drives): the PHY's sas_addr and the drive's
+   sas_address are two ports of one dual-ported device and differ only in the
+   LAST hex digit, by a vendor-specific, non-fixed offset — so the join
+   compares the first 15 hex digits, uppercased. */
+check('phy_drive_label fn exists',      function_exists('phy_drive_label'));
+check('phy_drive_label storcli exact pair', phy_drive_label(
+    [['slot' => '0/12', 'sas_address' => '5000CCA25319FB47']],
+    ['phy' => 0, 'sas_addr' => '5000CCA25319FB45']
+) === '0/12');
+// Seagate: -1 on the last nibble.
+check('phy_drive_label storcli seagate offset', phy_drive_label(
+    [['slot' => '0/13', 'sas_address' => '5000C500AEBADCE8']],
+    ['phy' => 1, 'sas_addr' => '5000C500AEBADCE9']
+) === '0/13');
+// Toshiba: -2 on the last nibble — proves no fixed offset is assumed.
+check('phy_drive_label storcli toshiba offset', phy_drive_label(
+    [['slot' => '0/15', 'sas_address' => '50000399384073B0']],
+    ['phy' => 2, 'sas_addr' => '50000399384073B2']
+) === '0/15');
+// Collision guard: two drives share the 15-digit prefix -> null, never a guess.
+check('phy_drive_label storcli prefix collision -> null', phy_drive_label(
+    [
+        ['slot' => '0/12', 'sas_address' => '5000CCA25319FB47'],
+        ['slot' => '0/99', 'sas_address' => '5000CCA25319FB4A'],
+    ],
+    ['phy' => 0, 'sas_addr' => '5000CCA25319FB45']
+) === null);
+check('phy_drive_label storcli no match -> null', phy_drive_label(
+    [['slot' => '0/1', 'sas_address' => '5000C500FFFFFFFF']],
+    ['phy' => 0, 'sas_addr' => '5000CCA25319FB45']
+) === null);
+check('phy_drive_label lsiutil phy match', phy_drive_label(
+    [['phy' => 2, 'os_name' => '/dev/sda'], ['phy' => 3, 'os_name' => '/dev/sdb']],
+    ['phy' => 3]
+) === '/dev/sdb');
+check('phy_drive_label case-insensitive sas_address', phy_drive_label(
+    [['slot' => '0/12', 'sas_address' => '5000cca25319fb47']],
+    ['phy' => 0, 'sas_addr' => '5000CCA25319FB45']
+) === '0/12');
+
+check('phy_top_offenders fn exists', function_exists('phy_top_offenders'));
+$rate = fn(int $inv) => ['reset' => false, 'delta' => ['inv' => $inv, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+                          'rate' => ['inv' => (float) $inv, 'disp' => 0.0, 'sync' => 0.0, 'reset' => 0.0]];
+
+$off = phy_top_offenders([['phy' => 0], ['phy' => 1]], [0 => $rate(10), 1 => $rate(50)], []);
+check('phy_top_offenders ranks descending', $off[0]['phy'] === 1 && $off[1]['phy'] === 0);
+
+$off = phy_top_offenders([['phy' => 2], ['phy' => 1]], [0 => $rate(10), 1 => $rate(10)], []);
+check('phy_top_offenders ties break by phy index ascending', $off[0]['phy'] === 1 && $off[1]['phy'] === 2);
+
+$off = phy_top_offenders([['phy' => 0], ['phy' => 1]], [0 => null, 1 => $rate(5)], []);
+check('phy_top_offenders excludes null delta (not present at 0)', count($off) === 1 && $off[0]['phy'] === 1);
+
+$off = phy_top_offenders([['phy' => 0], ['phy' => 1]], [0 => ['reset' => true], 1 => $rate(5)], []);
+check('phy_top_offenders excludes stale reset', count($off) === 1 && $off[0]['phy'] === 1);
+
+check('phy_top_offenders excludes measured all-zero',
+      phy_top_offenders([['phy' => 0]], [0 => $rate(0)], []) === []);
+
+$physN = []; $deltasN = [];
+for ($k = 0; $k < 10; $k++) { $physN[] = ['phy' => $k]; $deltasN[$k] = $rate($k + 1); }
+check('phy_top_offenders honours limit', count(phy_top_offenders($physN, $deltasN, [], 3)) === 3);
+
+$warned = false;
+set_error_handler(function () use (&$warned) { $warned = true; return true; });
+$offEmpty = phy_top_offenders([], [], []);
+restore_error_handler();
+check('phy_top_offenders empty phys/deltas -> []', $offEmpty === []);
+check('phy_top_offenders empty input stays quiet', $warned === false);
+
+// A PHY whose drive does not resolve (no drives payload at all) still ranks.
+$off = phy_top_offenders([['phy' => 5, 'sas_addr' => '5000CCA25319FB45']], [0 => $rate(3)], []);
+check('phy_top_offenders unresolved drive still ranks', count($off) === 1 && $off[0]['drive'] === null);
+
 /* ── Drives: backend picks columns; enclosure summary renders ────────────── */
 $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
     'enclosures' => [['eid'=>'8','product'=>'VirtualSES','vendor'=>'LSI','slots'=>'8','drives'=>'4','direct'=>1]],
