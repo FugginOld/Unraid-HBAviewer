@@ -339,9 +339,74 @@ function luPhyCell($v, bool $err, ?array $d, string $k): string {
          . ' &middot; ' . number_format($r, $r > 0 && $r < 10 ? 1 : 0) . '/hr</div>';
 }
 
+/* Which drive sits behind this PHY? Two backends, two keys:
+     lsiutil  - drives carry `phy`; match it directly.
+     storcli  - drives carry no `phy` at all. The PHY's `sas_addr` and the
+                drive's `sas_address` are two ports of the same dual-ported
+                device and differ in the LAST hex digit only (measured across
+                24 drives: Seagate -1, HGST +2, Toshiba -2 — no fixed offset),
+                so compare the first 15 digits, uppercased.
+   Returns null when nothing matches AND when the 15-digit prefix is not unique
+   within this controller: a top-offenders row names a physical bay, and naming
+   the wrong one is worse than naming none (plan 027). */
+function phy_drive_label(array $drives, array $phy): ?string {
+    if (!$drives) return null;
+
+    // lsiutil: drives carry `phy` directly — a straight index match.
+    if (isset($drives[0]['phy'])) {
+        foreach ($drives as $d) {
+            if (isset($d['phy']) && (string) $d['phy'] === (string) ($phy['phy'] ?? '')) {
+                return $d['os_name'] ?? null;
+            }
+        }
+        return null;
+    }
+
+    // storcli: no `phy` field on drives — join on the SAS address prefix.
+    $pfx = strtoupper(substr((string) ($phy['sas_addr'] ?? ''), 0, 15));
+    if (strlen($pfx) < 15) return null;
+
+    $matches = array_values(array_filter($drives, fn($d) =>
+        strtoupper(substr((string) ($d['sas_address'] ?? ''), 0, 15)) === $pfx
+    ));
+    // Exactly one match is safe. Zero (no drive) or more than one (the prefix
+    // collides between two drives) both resolve to null — never a guess.
+    return count($matches) === 1 ? ($matches[0]['slot'] ?? null) : null;
+}
+
+/* $phys and $deltas share indices, exactly as renderPhyTables builds them.
+   Rank by TOTAL errors/hour — the plain sum of the four counters' rates. No
+   weighting is invented here: the per-counter thresholds used to color the
+   Health tab's link-integrity indicator live in health.php, and duplicating
+   that judgement in a second place would let the two disagree (plan 027). */
+function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit = 5): array {
+    $rows = [];
+    foreach ($phys as $n => $p) {
+        $d = $deltas[$n] ?? null;
+        // No baseline, or a stale one: excluded entirely. Zero would read as
+        // "measured and clean" when it means "never measured".
+        if ($d === null || !empty($d['reset'])) continue;
+        $total = array_sum($d['rate']);
+        if ($total <= 0.0) continue;   // measured and clean is not an offender
+        $rows[] = [
+            'phy'        => $p['phy'] ?? $n,
+            'rate_total' => $total,
+            'rate'       => $d['rate'],
+            'drive'      => phy_drive_label($drives, $p),
+        ];
+    }
+    usort($rows, fn($a, $b) => $a['rate_total'] === $b['rate_total']
+        ? $a['phy'] <=> $b['phy']
+        : $b['rate_total'] <=> $a['rate_total']);
+    return array_slice($rows, 0, $limit);
+}
+
 /* $baselines defaults to none, so every existing caller (and the raw-only
-   fresh install) renders exactly what it rendered before this plan. */
-function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null): string {
+   fresh install) renders exactly what it rendered before this plan. $drives is
+   the decoded `drives` payload (the same shape $data carries), added last and
+   defaulting to empty so every existing caller still renders exactly what it
+   rendered before this plan. */
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -375,6 +440,40 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
         // so the button must read "Reset Baseline" — the same words the stale
         // note tells the user to press.
         $out .= luPhyBaselineBar((int) $i, $ts, $stale);
+
+        // Top offenders: reuses $deltas above, never a second rate computation
+        // (see this function's header). Skipped entirely while stale — the bar
+        // above already asks for a re-baseline, and a second, differently-worded
+        // empty state here would only contradict it.
+        if (!$stale) {
+            $ctlDrives = $drives['controllers'][$i]['drives'] ?? [];
+            $off = phy_top_offenders($phys, $deltas, $ctlDrives);
+            if ($ts === null) {
+                $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0">Set a baseline to rank PHYs by error rate.</p>';
+            } elseif (empty($off)) {
+                $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0">No PHY has logged errors since the baseline.</p>';
+            } else {
+                $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0 4px">Top offenders</p>';
+                $rows = [];
+                foreach ($off as $rank => $o) {
+                    $drvLabel = $o['drive'] !== null ? htmlspecialchars($o['drive']) : 'drive not identified';
+                    $rows[] = [
+                        (string) ($rank + 1),
+                        'PHY ' . htmlspecialchars((string) $o['phy']) . ' &mdash; ' . $drvLabel,
+                        number_format($o['rate_total'], 1) . '/hr',
+                        // lu-muted, not lu-phy-delta: the latter's count is asserted
+                        // 1:1 against the main table's per-counter cells elsewhere in
+                        // this file's tests, and this breakdown is a second, distinct
+                        // rendering of the same rates.
+                        '<span class="lu-muted">inv ' . number_format($o['rate']['inv'], 1)
+                            . ' &middot; disp ' . number_format($o['rate']['disp'], 1)
+                            . ' &middot; sync ' . number_format($o['rate']['sync'], 1)
+                            . ' &middot; reset ' . number_format($o['rate']['reset'], 1) . '</span>',
+                    ];
+                }
+                $out .= luTable(['#', 'PHY', 'Errors/hr', 'Breakdown'], $rows);
+            }
+        }
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
@@ -413,7 +512,17 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
     return $out;
 }
 
-if ($type === 'phy') { echo renderPhyTables($data, phy_baseline_read()); exit; }
+if ($type === 'phy') {
+    // Drive names for the top-offenders list (plan 027). Read through the
+    // shared cache — never a second bare shell_exec — so the PHY tab's poll
+    // stays cheap. A warming cache renders the list without drive names
+    // rather than blocking the tab.
+    $dr    = cached_read('drives', 60, 'bash ' . escapeshellarg("$scripts/get_attached_drives.sh"));
+    $ddec  = $dr['state'] === 'ready' && $dr['body'] !== '' ? json_decode($dr['body'], true) : null;
+    $ddata = is_array($ddec) ? $ddec : [];
+    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata);
+    exit;
+}
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 function renderDrivesTables(array $data): string {
