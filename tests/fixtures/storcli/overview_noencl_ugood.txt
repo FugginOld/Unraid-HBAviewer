@@ -8,8 +8,8 @@ Status = Success
 Description = None
 
 Product Name = LSI SAS3008
-Serial Number = 0000000054447481
-SAS Address =  5003005702960060
+Serial Number = XXXXXXXXXXXXXXXX
+SAS Address =  YYYYYYYYYYYYYYYY
 PCI Address = 00:02:00:00
 System Time = 08/01/2026 19:55:04
 FW Package Build = 00.00.00.00
@@ -28,7 +28,7 @@ SubVendor Id = 0x1000
 SubDevice Id = 0x97
 Board Name = LSI SAS3008
 Board Assembly = N/A
-Board Tracer Number = 0000000054447481
+Board Tracer Number = XXXXXXXXXXXXXXXX
 Security Protocol = None
 Physical Drives = 8
 
