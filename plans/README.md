@@ -206,8 +206,12 @@ Work happens on `dev`, not `main`.
   last release (2026.07.27) — as of `81d7362` it carries 017/#6, 038/#9, the
   Health tab, notifications, the diagnostic bundle, the PHY baseline, the theme
   work and the per-controller cards, none of which any user has installed.
-- **Maintainer's release policy, stated 2026-08-02: nothing ships to `main`
-  until every plan is complete.** Merging to `dev` is not shipping. Two live
+- **Release policy, revised 2026-08-02: superseded.** The earlier rule was
+  "nothing ships to `main` until every plan is complete"; the maintainer cut
+  **2026.08.02** with 024, 028 and 029 still open, on the grounds that seven
+  merged and hardware-verified fixes should not wait on unstarted feature work.
+  The consequences below applied while that rule held and are kept as the
+  reasoning, not as current practice. Merging to `dev` is not shipping. Two live
   consequences to keep in view rather than rediscover:
   1. **A closed issue does not mean a fixed installation.** #6 and #9 were
      closed 2026-08-02 once their fixes were merged and hardware-proven, but

@@ -36,9 +36,23 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   driver version, IT/IR mode, connected-drive count, and PCIe info. Pre-P20
   SAS2 firmware is flagged; cards with no onboard sensor show `N/A · no sensor`
   instead of erroring.
+- **HBA Health** — five independent indicators (thermal, link integrity,
+  topology, host link, controller read) with a **worst-of** rollup and a reason
+  string naming the offending PHY. An indicator that cannot be measured reads
+  **grey/unknown**, never green — a collector that times out or a card that is
+  pulled must not look healthy.
 - **PHY Health** — per-PHY link state, negotiated speed, attached SAS address,
   and error counters (invalid DWords, disparity, loss-of-sync, reset) — read
   from the controller (lsiutil) or from Linux `sysfs` (`mpt3sas`) on SAS3/3.5.
+  **Set a baseline** per controller and every counter is then shown as a delta
+  and an errors/hour rate, so "40,000 invalid DWords two months ago" stops
+  looking like "40,000 last night". The baseline lives on `/boot` and survives
+  reboots; a reboot or driver reload invalidates it rather than reporting a
+  negative delta.
+- **Top offenders** — above the PHY table, the PHYs with the highest error rate
+  since the baseline, each **named by the drive it serves** (enclosure/slot, or
+  `/dev/sdX` on SAS2). PHYs with no baseline are excluded rather than ranked at
+  zero — zero would read as "measured and clean" when it means "never measured".
 - **Attached Drives** — enclosure/slot, HBA port, model, serial, state, size,
   SAS address, link speed, firmware, and a **per-drive SMART** button.
 - **SMART tab** — health, temperature, grown defects, pending sectors, and
@@ -51,6 +65,21 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   vs expander/backplane).
 - **Dashboard tile** — at-a-glance temperature and health on the Unraid
   dashboard (Unraid 7.2+).
+- **Notifications** *(opt-in, off by default)* — sends one Unraid notification
+  each time a controller's health status **changes**, and never repeats while it
+  stays the same. Delivery follows your existing Unraid notification settings.
+- **Diagnostic bundle** — one button collects the raw `storcli`/`lsiutil`
+  output, the sysfs state and the plugin's own parsed JSON into a single archive
+  for a bug report. **Anonymised by default** with one length-preserving map for
+  the whole bundle, so serials, WWNs, SAS addresses and the hostname are
+  replaced while models, sizes, firmware versions, temperatures and error
+  counters stay real. Your flash GUID, licence key and share names are never
+  collected at all.
+- **Export / API** — a read-only JSON snapshot of every controller
+  (`/plugins/hbaviewer/export.php`) plus the same data in Prometheus text format
+  (`?format=prometheus`), for Homepage-style widgets and dashboards. Both are
+  **session-gated**, so an unauthenticated Prometheus scraper cannot poll them —
+  see [HOWTO.md](HOWTO.md#export--api).
 - **Performance graphs** *(real-time, in-browser)* — live per-controller
   throughput, IOPS, %util, latency, PHY error-rate, and temperature, sampled
   ~2 s from `/proc/diskstats` and `sysfs` (zero-dependency — no sampler daemon,
@@ -118,6 +147,14 @@ appears on the Monitor.
 - Linux flashers **update** the BIOS region but **cannot erase** it.
 - Stop any Unassigned Devices on the HBA as well before flashing.
 
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| **[HOWTO.md](HOWTO.md)** | Task-oriented guide — install, first run, finding the drive behind a failing PHY, baselines, the export endpoint, generating a bug-report bundle, and troubleshooting. |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the plugin is built — backend selection, the parse layer, request lifecycle, caching, the one mutating path, and the test strategy. Read this before changing code. |
+| `source/.../CONTEXT.md` | Module vocabulary — the short definitions the code assumes you already know. |
+
 ## Requirements
 
 - Unraid 6.12 or newer (7.2+ for the dashboard tile)
@@ -147,8 +184,8 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 ```text
 Tools
 └── HBAviewer
-    └── HBA Monitor   (tabs: Overview · PHY Health · Drives · SMART · Event Log
-                              · Performance · Firmware/BIOS Update*)
+    └── HBA Monitor   (tabs: Overview · HBA Health · PHY Health · Drives · SMART
+                              · Event Log · Performance · Firmware/BIOS Update*)
                               *opt-in, off by default
 
 User Utilities
@@ -174,6 +211,7 @@ right backend is in use before opening the Monitor.
 | Show Attached Drives | On | Drives tab. |
 | Show Event Log | On | Event Log tab. |
 | Show Performance | On | Performance tab — real-time throughput / IOPS / %util / latency / PHY-error-rate / temperature graphs (in-browser, resets on reload). |
+| Enable notifications | **Off** | Sends an Unraid notification when a controller's health status changes (checked every 10 minutes). One notification per change, never a repeat while it persists. |
 | Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
@@ -209,8 +247,14 @@ bash tests/run.sh
 ```
 
 It runs the parser goldens plus the PHP unit tests (using a local `php`, or the
-`php:8.2-cli` Docker image if `php` isn't installed). Real-hardware output is
-captured with the `scripts/capture*.sh` helpers and used to seed the fixtures.
+`php:8.2-cli` Docker image if `php` isn't installed), and needs GNU awk.
+
+Fixtures are **real controller output wherever possible** — captured with the
+`scripts/capture*.sh` helpers or contributed by reporters on the issue tracker,
+with identifiers masked length-preservingly so column alignment (which the
+parsers key on) survives. A fixture that was modelled by hand rather than
+captured has caused a real bug here before, so treat fixtures as evidence
+rather than as editable test data.
 
 ## Credits
 

@@ -13,6 +13,60 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.02###
+The largest release so far: a new HBA Health tab, PHY error baselines, an
+export endpoint, diagnostic bundles, notifications, and fixes for every open
+issue on the tracker.
+
+**New**
+- HBA Health tab: five independent indicators (thermal, link integrity,
+  topology, host link, controller read) with a worst-of rollup and a reason
+  string naming the offending PHY. Anything that cannot be measured reads grey
+  rather than green — a collector that times out must never look healthy.
+- PHY error baselines: press Set Baseline per controller and every counter is
+  shown as a delta and an errors/hour rate instead of a number that has been
+  accumulating since the driver loaded. Stored on /boot so it survives reboots;
+  a reboot or driver reload invalidates it rather than showing a negative delta.
+- Top offenders: above the PHY table, the PHYs with the highest error rate since
+  the baseline, each named by the drive it serves. A PHY that cannot be matched
+  to exactly one drive says so rather than guessing at a bay.
+- Notifications (opt-in, off by default): one Unraid notification each time a
+  controller's health status changes, never a repeat while it persists.
+- Diagnostic bundle: one button collects the raw storcli/lsiutil output, the
+  sysfs state and the plugin's parsed JSON into one archive for a bug report,
+  anonymised by default with one length-preserving map for the whole bundle.
+- Export / API: a read-only JSON snapshot of every controller, plus the same
+  data in Prometheus text format, linked from Settings. Session-gated, so an
+  unauthenticated scraper cannot poll it.
+- HOWTO.md and ARCHITECTURE.md.
+
+**Fixed**
+- Drives tab empty on controllers that report no enclosure. storcli answers the
+  enclosure form with "No drive found!" on those cards and addresses drives as
+  /cN/sN instead; that form is now used as a fallback. (#5, #6)
+- PCIe width and speed missing on storcli cards, now read from sysfs. (#5)
+- PCIe generation reported one notch low on SAS2/lsiutil cards — the IOUnit
+  Page 7 speed field is an enum, not a bitmask like the width field beside it,
+  so a card negotiating 8 GT/s read as Gen2. Gen1 rendered as nothing at all. (#9)
+- False "warning" temperature notifications: five fixed bands now separate how
+  hot the card is from whether the badge should complain, and the PHY error
+  floor no longer trips on a handful of counts. (#8)
+- Plugin colours now follow the Unraid theme instead of hardcoded values that
+  only worked on one of them. (#7)
+- The enclosure summary no longer reports "8 slots, 0 drives" above a table of
+  drives; those counts describe a synthesised enclosure the drives are not
+  attached to.
+- Event archive no longer mixes entry shapes when a system changes backend.
+- Firmware/BIOS Step 3 is greyed out while the array is running. The server-side
+  guard was always there; the UI now says so before you fill the form in.
+
+**Changed**
+- Every per-controller tab renders one card per HBA.
+- Two-column Settings layout.
+- Dashboard tile: per-controller model and temperature, status colour, and a
+  "no sensor" reading instead of 0 °C on cards without one.
+- Test fixtures are now real controller output from reporters wherever possible,
+  with identifiers masked length-preservingly.
 ###2026.07.27###
 - Fixed: the Performance tab showed no temperature on SAS2 (9200-series) cards.
   Temperatures were matched with a pattern that never fit the lsiutil backend's
