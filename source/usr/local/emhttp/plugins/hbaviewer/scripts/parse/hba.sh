@@ -5,6 +5,7 @@
 #   $2  banner  = printf '0\n' | lsiutil     (chip model, firmware, port name)
 #   $3  board   = lsiutil -b                 (product name, PCI location)
 #   $4  alert   = alert threshold (int, for status classification)
+#   $5  ident   = lsiutil -pN -a 1,0        (firmware image name -> IT/IR)
 #
 # No hardware here — feed captured fixtures to test the whole shape.
 
@@ -12,6 +13,7 @@ IOC=$(cat "$1" 2>/dev/null)
 BANNER=$(cat "$2" 2>/dev/null)
 BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
+IDENT=$(cat "$5" 2>/dev/null)
 
 # ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
@@ -74,6 +76,19 @@ else
     FW_VER="Unknown"
 fi
 
+# ── Firmware personality (IT vs IR) ──────────────────────────────────────────
+# lsiutil main-menu option 1 names the flashed firmware image, and the suffix
+# IS the personality:
+#   "Firmware image's version is MPTFW-20.00.07.00-IT"
+# Anchored on that exact sentence and on the END of the token, NOT a bare grep
+# for "IT" — the same block prints "MPT2BIOS-..." and free text ("LSI Logic",
+# "Not Packaged Yet"), and a loose match would call every card IT. A port that
+# does not exist prints "ERROR:  No such port." with no MPTFW line at all, and
+# must yield "" so the UI hides the row rather than inventing a mode.
+MODE=$(printf '%s\n' "$IDENT" \
+    | grep -m1 -oE "Firmware image's version is MPTFW-[0-9.]+-(IT|IR)" \
+    | grep -oE '(IT|IR)$')
+
 # ── 3. Board: product name, PCI location ────────────────────────────────────
 BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
 BOARD_NAME=$(echo "$BOARD_LINE" | awk '{print $5}')
@@ -127,6 +142,7 @@ cat <<EOF
   "temp": $TEMPJSON,
   "model": "${MODEL:-Unknown}",
   "firmware": "${FW_VER}",
+  "mode": "${MODE}",
   "fw_old": $FW_OLD,
   "port_name": "${PORT_NAME:-ioc0}",
   "board_name": "${BOARD_NAME:-}",

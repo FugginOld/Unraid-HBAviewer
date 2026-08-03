@@ -1,0 +1,18 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+1 MPT Port found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 1
+
+Current active firmware version is 14000700 (20.00.07)
+Firmware image's version is MPTFW-20.00.07.00-IT
+  LSI Logic
+  Not Packaged Yet
+x86 BIOS image's version is MPT2BIOS-7.39.02.00 (2015.08.03)
+EFI BIOS image's version is 7.27.01.01
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 0
