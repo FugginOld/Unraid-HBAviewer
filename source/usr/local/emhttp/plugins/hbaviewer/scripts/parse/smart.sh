@@ -1,9 +1,11 @@
 #!/bin/bash
 # Pure filter: `smartctl -a /dev/sdX` text on stdin -> SMART summary JSON.
-# Targets SAS drives (named fields, no SATA attribute table); also picks up the
-# SATA overall-health line. Empty fields mean "not reported" (e.g. drive asleep
-# under `-n standby`, or a SATA drive whose attributes we don't parse yet).
-awk '
+# Parses both vocabularies: SAS named fields (health/temp/defect-list log
+# pages) and the SATA ATA attribute table, falling back from one to the other
+# field-by-field. Empty fields mean "not reported" (e.g. drive asleep under
+# `-n standby`).
+TRAN="${1:-}"   # "sas" | "sata" | "" — from lsblk, injected by read_smart.sh
+awk -v tran="$TRAN" '
 function afterColon(s){ sub(/^[^:]*:[ \t]*/,"",s); gsub(/[ \t]+$/,"",s); return s }
 BEGIN { health=""; temp=""; trip=""; poh=""; defects=""; pending=""; nonmed="";
         st=""; sp=""; sd=""; spd="" }
@@ -27,7 +29,12 @@ END {
     if (poh     == "") poh     = sp
     if (defects == "") defects = sd
     if (pending == "") pending = spd
-    printf "{\"health\":\"%s\",\"temp\":\"%s\",\"trip_temp\":\"%s\",\"power_on_hours\":\"%s\",\"defects\":\"%s\",\"pending\":\"%s\",\"nonmedium\":\"%s\"}", \
-        health, temp, trip, poh, defects, pending, nonmed
+    # `defects` means two different things depending on the bus: grown defects
+    # (SAS log page) or reallocated sectors (ATA attribute 5). Both are
+    # "sectors the drive permanently retired", which is why one field carries
+    # both — but the UI cannot label the column honestly without knowing which
+    # bus it came from, so the transport travels with the data.
+    printf "{\"health\":\"%s\",\"temp\":\"%s\",\"trip_temp\":\"%s\",\"power_on_hours\":\"%s\",\"defects\":\"%s\",\"pending\":\"%s\",\"nonmedium\":\"%s\",\"transport\":\"%s\"}", \
+        health, temp, trip, poh, defects, pending, nonmed, tran
 }
 '

@@ -12,7 +12,7 @@ dev="$1"
 
 tran=$(lsblk -dno TRAN "$dev" 2>/dev/null | tr -d ' \n')
 if [ "$tran" = "sas" ]; then
-    smartctl -a "$dev" 2>/dev/null | bash "$DIR/parse/smart.sh"
+    smartctl -a "$dev" 2>/dev/null | bash "$DIR/parse/smart.sh" "$tran"
 else
-    smartctl -n standby -a "$dev" 2>/dev/null | bash "$DIR/parse/smart.sh"
+    smartctl -n standby -a "$dev" 2>/dev/null | bash "$DIR/parse/smart.sh" "$tran"
 fi
