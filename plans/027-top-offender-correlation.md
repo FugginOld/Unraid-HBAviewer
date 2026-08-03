@@ -1,4 +1,4 @@
-# Plan 027: "Top offenders" — join PHY error rate to the drive/slot it serves
+# Plan 027 (v2): "Top offenders" — rank PHYs by error rate and name the drive
 
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
@@ -7,225 +7,288 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 8286fe7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/drives_join.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/get_attached_drives.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/get_phy_health.sh source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php`
-> Expected output: **nothing**. Every excerpt below is quoted from `8286fe7`
-> (`dev` tip, 2026-07-30). Any difference is a STOP condition.
+> `git diff --stat 515195d..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php source/usr/local/emhttp/plugins/hbaviewer/phy_baseline.php source/usr/local/emhttp/plugins/hbaviewer/cached_read.php source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_phy.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/drives_join.sh tests/ajax_render_test.php`
+> Expected output: **nothing**. Every excerpt below is quoted from `515195d`
+> (`dev` tip, 2026-08-02). Any difference is a STOP condition.
 
 ## Status
 
 - **Priority**: P2
 - **Effort**: M
-- **Risk**: LOW — read-only join over data the plugin already collects
-- **Depends on**: **022** (PHY error baseline/rate) — a raw cumulative
-  counter is not a meaningful thing to rank by; see "Why this depends on
-  022" below. Do not start this plan until 022 has shipped, or scope it
-  down per that section.
+- **Risk**: MEDIUM. The output names a physical bay. **A list that points at the
+  wrong drive is worse than no list** — someone pulls a healthy disk. Every
+  ambiguity in this plan resolves to "show nothing", never "best guess".
+- **Depends on**: **022** (DONE, merged) — the rate source.
 - **Category**: feature
-- **Planned at**: `8286fe7`, 2026-07-31
-- **Requested by**: external roadmap review
+- **Planned at**: `515195d`, 2026-08-02 (**v2** — see History)
 
-## Two possible rate sources — pick one deliberately
+## History — v1's two open questions, both now answered with hardware evidence
 
-This plan was written when 022 was the only route to a rate. **Plan 020 has since
-shipped per-PHY rates**, computed from a `/tmp` sample ring and verified on real
-hardware, and its `link_integrity` reason string already names the worst PHY. So
-there are now two providers:
+v1 was written 2026-07-31 against `8286fe7` and left two things undecided. Both
+are now settled and **v1's Step 2 code does not work** — do not resurrect it.
 
-| | plan 020 (`health.php`) | plan 022 (baseline file) |
-|---|---|---|
-| Rate window | rolling ~4 h, automatic | since the user pressed Reset |
-| Available | as soon as 020 merges | needs 022 built |
-| Survives reboot | no | yes |
-| Good for ranking | "who is bad *now*" | "who got worse since I fixed it" |
+**1. The join key. v1's `$rate_by_phy[$d['phy']]` is broken on storcli.**
+v1 assumed drives carry a `phy` field. They do on the lsiutil path only:
 
-Either satisfies this plan's requirement that ranking uses a rate, not a
-cumulative counter. Building on **020** drops the 022 dependency entirely and is
-the shorter path; building on **022** gives a ranking anchored to a user-chosen
-reference point, which is arguably the more useful question after a repair.
+| Backend | PHY payload has | Drives payload has | Join |
+|---|---|---|---|
+| lsiutil (`parse/phy.sh` + `drives_join.sh`) | `phy` | `phy`, `sas_address`, `os_name` | PHY index, direct |
+| storcli (`parse/storcli_phy.sh` + `storcli_drives.sh`) | `phy`, `sas_addr` | `sas_address`, `slot` — **no `phy`** | SAS address, see below |
 
-Decide before Step 1 and record the choice — do not build a third rate
-computation. If both eventually exist, this list should read whichever the user
-is currently looking at, not average them.
+`grep -c '"phy"' tests/expected/storcli_drives.json` → **0**. v1's join silently
+produces an empty list on every storcli box.
 
-## Why this depends on 022
+**2. The rate source.** v1 offered plan 020's health ring or plan 022's
+baseline. **Decision: 022.** The ring only fills while the Health tab is being
+polled, so it reads empty or stale for anyone who has not opened that tab —
+the same trap that kept the health rollup out of plan 025's export. 022's rate
+is anchored to a reference point the user chose deliberately. The cost is that
+it exists only where Set Baseline was pressed, which this plan handles with an
+honest empty state rather than a fallback.
 
-Ranking PHY error counters to find "the cable most likely to need
-reseating" only works on a **rate**, not a cumulative counter — a
-controller that's been up for six months will have naturally larger raw
-counts than one rebooted yesterday, regardless of actual cable health.
-Plan 022 is what turns the raw counter into `errors/hour since baseline`.
-Building this plan against the raw counter instead would rank by uptime,
-not by health, and would need redoing once 022 ships anyway.
+## The SAS-address join — measured, not assumed
 
-**If 022 is not yet available and this is being picked up standalone**,
-the fallback is to rank by the existing `PHYERR_FLOOR=100` threshold
-crossing (binary: over/under) rather than a continuous rank — strictly
-less useful, but not actively misleading the way raw-counter ranking would
-be. Note that choice explicitly in the plan's status row if taken.
+Captured from the maintainer's box (9400-16i + 9400-8i, 24 drives) on
+2026-08-02 by running the plugin's own two scripts and comparing:
 
-## Why this matters
+```
+PHY  5000CCA25319FB45   ->  slot 0/12   5000CCA25319FB47      (5 -> 7)
+PHY  5000C500AEBADCE9   ->  slot 0/13   5000C500AEBADCE8      (9 -> 8)
+PHY  50000399384073B2   ->  slot 0/15   50000399384073B0      (2 -> 0)
+PHY  5000CCA2510DA989   ->  slot 0/14   5000CCA2510DA98B      (9 -> B)
+```
 
-The PHY Health tab and the Attached Drives tab both exist, but nothing
-joins them today — the answer to "which physical drive is behind the PHY
-throwing errors" requires a human to cross-reference a PHY index against a
-slot number by hand. A ranked "top offenders" list, sorted by rate,
-labeled with the enclosure/slot it maps to, turns that into a glance.
+An exact-match join scores **0 out of 24**. The reason is dual-port SAS
+addressing: the PHY reports the port address it is attached to, storcli's `WWN`
+reports the drive's other port or its node address. **In all 24 pairs the first
+15 hex digits are identical and only the 16th differs.** The delta is
+vendor-specific — `5000C500` (Seagate) −1, `5000CCA2` (HGST) +2, `50000399`
+(Toshiba) −2 — so no fixed offset works, but truncation does.
+
+**The rule: compare the first 15 hex digits, uppercased.**
+
+### Independently corroborated through the kernel, 2026-08-02
+
+The join was not only measured against storcli's own two views — it was checked
+against a third source that never sees storcli. Sysfs reports, for each drive,
+the SAS address of the port it is attached through, and that value equals the
+PHY's `sas_addr` **exactly** (no nibble difference — it is storcli's `WWN` that
+reports the drive's *other* port). Cross-referencing that with the kernel's
+enclosure-slot map closes the chain:
+
+| Join says | PHY attached SAS | `/sys/block` says | `/sys/class/enclosure` says |
+|---|---|---|---|
+| c0 phy 0 -> slot 0/12 | `5000CCA25319FB45` | sda | slot 12 = sda |
+| c0 phy 9 -> slot 0/0 | `5000CCA28DDE3C89` | sdg | slot 0 = sdg |
+| c0 phy 15 -> slot 0/3 | `5000C500CADB8C65` | sdl | slot 3 = sdl |
+
+Three further pairs (phy 2/sdm/slot 13, phy 6/sde/slot 15, phy 14/sdk/slot 7)
+agree. **24 of 24 PHYs resolve, and the ones checked resolve to the right bay** —
+"resolves" and "resolves correctly" are different claims, and this is the second.
+
+**The guard that makes it safe: the 15-digit prefix must be unique within that
+controller's drive list.** Verified on the same capture — all 16 prefixes on c0
+and all 8 on c1 are distinct, because different drives differ far above the low
+nibble. If a prefix ever collides, that PHY resolves to **no drive**, not to
+the first match. A wrong bay is the one outcome this feature must never produce.
 
 ## Current state
 
-### `scripts/parse/drives_join.sh` — the join pattern already in the codebase
+### `ajax_info.php:343-378` — the renderer, which already computes the rates
 
-```awk
-# Pure parser: join OS-name map with sysfs SAS/PHY map -> drives JSON.
-#   $1 osmap : "bus_tgt /dev/sdX"        (drives_osmap.sh, or sysfs fallback)
-#   $2 sasmap: "/dev/sdX SAS_ADDR PHY"   (sysfs sas_end_device)
-# This join is where the historical drive bugs lived — golden-tested.
-awk '
-BEGIN { first=1; printf "{\"drives\":[" }
-NR==FNR { os[$1]=$2; n++; ord[n]=$1; next }
-{ sasmap[$1]=$2; phymap[$1]=$3 }
-END {
-    for (i=1; i<=n; i++) {
-        key=ord[i]; dev=os[key]
-        ...
-        phy=(dev in phymap) ? phymap[dev]+0 : tgt
-        ...
-    }
-}'
+```php
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null): string {
+    …
+        // Resolve every PHY's delta first: a reboot or driver reload zeroes the
+        // whole controller's counters at once, so one invalidated PHY condemns
+        // the controller's baseline rather than just its own row.
+        $bl     = phy_baseline_for($baselines, (int) $i);
+        $ts     = phy_baseline_ts($baselines, (int) $i);
+        $deltas = [];
+        $stale  = false;
+        foreach ($phys as $n => $p) {
+            $d = phy_baseline_delta($bl[(int) ($p['phy'] ?? -1)] ?? null, $p, $now, $uptime);
+            if ($d !== null && !empty($d['reset'])) $stale = true;
+            $deltas[$n] = $d;
+        }
+        if ($stale) $deltas = array_map(fn() => null, $deltas);
+        $out .= luPhyBaselineBar((int) $i, $ts, $stale);
 ```
 
-This is the lsiutil-path drive↔PHY join, and it's explicitly called out as
-"where the historical drive bugs lived" — the codebase already treats this
-class of join as delicate. **This plan adds a second join (PHY error
-rate ↔ drive) on top of an already-fragile first join** — see Scope for
-why that argues for building it as a display-layer aggregation over
-already-joined data, not a third awk script duplicating the join logic.
+**`$deltas` is the rate source and it is already sitting right there.** Build
+the list from that same array. Recomputing rates separately would let the list
+and the table below it disagree — in particular about staleness, where one
+invalidated PHY nulls the whole controller.
 
-### The two data sources being correlated
+### `phy_baseline.php` — what a delta contains
 
-- PHY Health (`get_phy_health.sh`) — per-PHY error counters, keyed by PHY
-  index (lsiutil path) or SAS address (storcli path, merged from sysfs per
-  `get_phy_health.sh`'s own header comment)
-- Attached Drives (`get_attached_drives.sh` / `drives_join.sh`) — per-drive
-  `phy` field, already present in the joined output
+```php
+    $out   = ['reset' => false, 'ts' => (int) $base['ts'], 'delta' => [], 'rate' => []];
+        …
+        $out['rate'][$k]  = $d / $hours;
+```
 
-Both already key on PHY index for the lsiutil path. The storcli path's
-`storcli_phy.sh` (not excerpted here — read it before Step 1) merges via
-SAS address, which is the more reliable join key when both are storcli-
-sourced, since `phy` numbering conventions can differ between what
-`storcli show all` reports and what sysfs reports.
+Keyed by the four counters in `PHY_COUNTERS` = `['inv','disp','sync','reset']`.
+`null` means "no baseline for this PHY"; `['reset' => true]` means the baseline
+is stale.
+
+### `ajax_info.php:20-24` — why new functions are testable
+
+The file returns early under CLI, but PHP hoists top-level function
+declarations, so functions defined after the return are still available to
+`tests/ajax_render_test.php`. Put the new pure functions in this file, beside
+the renderer that uses them, and test them there.
 
 ## Scope
 
 **In scope**:
 
-- A display-layer aggregation (PHP, not a new awk parser) that takes the
-  already-decoded PHY payload and already-decoded drives payload — both
-  already JSON by the time they reach PHP — and joins them by PHY
-  index/SAS address, entirely in PHP. **Do not write a third bash/awk join
-  script** — the existing two JSON payloads have everything needed; a PHP
-  array join is simpler to test and doesn't touch the fragile shell join
-  layer at all.
-- Sort by plan 022's rate field (or the floor-crossing boolean, if taken
-  standalone per "Why this depends on 022"), descending, top N (5 is a
-  reasonable default)
-- Render as a small ranked list — Overview tab or a new section on PHY
-  Health, whichever reads better next to the per-controller cards (decide
-  in Step 1 with a mockup, this is a UI judgment call)
-- Label each entry with enclosure/slot (from the drives payload) so it
-  reads as "which physical drive," not just "which PHY index"
+- `ajax_info.php`: two new pure functions, the `$type === 'phy'` dispatch
+  reading the drives payload, and a list rendered inside `renderPhyTables`.
+- `tests/ajax_render_test.php`: cases for both pure functions.
 
-**Out of scope**:
+**Out of scope — do not touch**:
 
-- Any new shell-level join script — see above, this stays a PHP
-  aggregation over existing JSON
-- Changing `drives_join.sh` or `storcli_phy.sh` themselves
-- Cross-controller ranking in a single list if the plugin ever supports
-  genuinely heterogeneous multi-vendor setups — scope this to "top
-  offenders per controller" first; a global cross-controller list is a
-  natural follow-up, not required here
+- **Every parser and script.** No new shell/awk join — v1 was right about this
+  and it still holds. Both payloads are already JSON by the time PHP sees them.
+- `phy_baseline.php`, `health.php`. The rate already exists; do not add a second
+  computation, and do not read the health ring (see History for why).
+- `drives_join.sh`, `storcli_phy.sh`, `storcli_drives.sh` — the plan reads their
+  output, never their logic.
+- Cross-controller ranking. This is **top offenders per controller**; a global
+  list is a separate plan.
 
 ## Steps
 
-### Step 1: Confirm the join key per backend
-
-- lsiutil path: PHY index, already shared between the two payloads
-  directly (`drives_join.sh`'s `phy` field, `parse/phy.sh`'s `phy` field)
-- storcli path: read `storcli_phy.sh` fully (not done for this plan — it's
-  outside the excerpted files) to confirm whether it emits PHY index, SAS
-  address, or both, and match against what `storcli_drives.sh` emits for
-  the same drive. **If the two storcli-side parsers use different keys,
-  this step is where that gets resolved — do not assume they align just
-  because the lsiutil side does.**
-
-### Step 2: PHP join function
+### Step 1: `phy_drive_label()` — resolve a PHY to a drive, or to nothing
 
 ```php
-// $phy_data: decoded PHY payload (per plan 022, includes 'rate' per phy
-// when a baseline exists). $drives_data: decoded drives payload.
-// Returns drives sorted by their PHY's rate, descending, rate-having only.
-function top_offenders(array $phy_data, array $drives_data, int $limit = 5): array {
-    $rate_by_phy = [];
-    foreach ($phy_data['phys'] ?? [] as $p) {
-        if (isset($p['rate'])) $rate_by_phy[$p['phy']] = $p['rate'];
-    }
-    $ranked = [];
-    foreach ($drives_data['drives'] ?? [] as $d) {
-        if (isset($rate_by_phy[$d['phy']])) {
-            $ranked[] = $d + ['rate' => $rate_by_phy[$d['phy']]];
-        }
-    }
-    usort($ranked, fn($a, $b) => $b['rate'] <=> $a['rate']);
-    return array_slice($ranked, 0, $limit);
-}
+/* Which drive sits behind this PHY? Two backends, two keys:
+     lsiutil  - drives carry `phy`; match it directly.
+     storcli  - drives carry no `phy` at all. The PHY's `sas_addr` and the
+                drive's `sas_address` are two ports of the same dual-ported
+                device and differ in the LAST hex digit only (measured across
+                24 drives: Seagate -1, HGST +2, Toshiba -2 — no fixed offset),
+                so compare the first 15 digits, uppercased.
+   Returns null when nothing matches AND when the 15-digit prefix is not unique
+   within this controller: a top-offenders row names a physical bay, and naming
+   the wrong one is worse than naming none. */
+function phy_drive_label(array $drives, array $phy): ?string
 ```
 
-Pure function over two already-decoded arrays — no I/O, straightforward to
-unit test with fixture JSON.
+Return the drive's `slot` for storcli (e.g. `0/12`) or its `os_name` for
+lsiutil (e.g. `/dev/sdb`), whichever the payload carries. `null` otherwise.
 
-**Verify**: unit test with a fixture where drive A's PHY has a high rate,
-drive B's has none (baseline never set) — B must not appear in the ranked
-output, and A must be first.
+### Step 2: `phy_top_offenders()` — rank, excluding the unmeasured
 
-### Step 3: Render
+```php
+/* $phys and $deltas share indices, exactly as renderPhyTables built them.
+   Rank by TOTAL errors/hour — the plain sum of the four counters' rates. No
+   weighting is invented here: health.php's health_rate_state() is where
+   per-counter thresholds live, and duplicating that judgement in a second
+   place would let the two disagree. */
+function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit = 5): array
+```
 
-Small ranked list component — reuse whatever card/table styling
-`hbaviewer.php` already has for the Attached Drives table rather than
-inventing new markup.
+Rules, each pinned by a test:
+
+- A PHY whose delta is `null` (no baseline) or `['reset' => true]` (stale) is
+  **excluded entirely**. It must never rank at zero — zero reads as "measured
+  and clean" when it means "never measured".
+- A PHY whose total rate is `0.0` is also excluded. The list is for offenders;
+  a clean measured PHY is not one, and listing it dilutes the thing.
+- Sort descending by total rate, then by PHY index ascending for a stable order
+  when rates tie.
+- Return at most `$limit` (default 5) entries, each carrying `phy`, `rate_total`,
+  the per-counter rates, and `drive` (from Step 1, possibly `null`).
+
+### Step 3: read the drives payload on the PHY tab
+
+`renderPhyTables` gets a new optional `array $drives = []` parameter — last
+position, defaulting to empty so **every existing caller renders exactly what it
+renders today** (the same backward-compatible shape `$baselines` already uses).
+
+In the `$type === 'phy'` dispatch, read the drives payload through
+`cached_read('drives', 60, …)` — never a second bare `shell_exec`. That call is
+the second most expensive read in the plugin and the PHY tab polls; the cache is
+what makes this affordable. If the cache is warming, pass `[]` and the list
+renders without drive names rather than blocking the tab.
+
+### Step 4: render
+
+Above the PHY table, below `luPhyBaselineBar()`. Match the existing muted
+subtitle style used elsewhere in the card; do not invent a new visual language.
+
+Each row: rank, `PHY n`, the drive label when known, total errors/hour to one
+decimal, and the per-counter breakdown. When `drive` is `null`, say
+`PHY 6 — drive not identified`, never a guess.
+
+**Two empty states, and they say different things:**
+
+- No baseline on this controller → *"Set a baseline to rank PHYs by error
+  rate."* (Not an error. This is the normal state on a fresh install.)
+- Baseline exists, every measured PHY at zero → *"No PHY has logged errors
+  since the baseline."* That is good news and should read as good news.
 
 ## Test plan
 
-- `top_offenders()` — pure, fixture-driven: normal ranking, drive with no
-  rate data excluded (not ranked-as-zero, which would misleadingly imply
-  "measured and healthy" rather than "not measured"), empty-PHY-data
-  edge case (no crash, empty result).
-- No existing goldens touched — this is new, additive aggregation.
-- `bash tests/run.sh` stays green.
+`tests/ajax_render_test.php`, matching its existing `check(name, bool)` style.
+Fixture shapes come from the real capture above — use these actual address
+pairs, not invented ones.
+
+`phy_drive_label()`:
+
+- storcli: PHY `5000CCA25319FB45` + drive `slot 0/12` / `5000CCA25319FB47` → `0/12`
+- storcli: the Seagate (`…E9` vs `…E8`) and Toshiba (`…B2` vs `…B0`) pairs, to
+  prove no fixed offset is assumed
+- storcli: **two drives sharing a 15-digit prefix → `null`** (the collision guard)
+- storcli: no drive matches → `null`
+- lsiutil: drive with `phy` 3 → that drive's `os_name`
+- case-insensitivity: lowercase `sas_address` still matches
+
+`phy_top_offenders()`:
+
+- ranks descending by summed rate; a lower-rate PHY sorts after a higher one
+- a PHY with `null` delta is absent from the output (**not** present with 0)
+- a PHY with `['reset' => true]` is absent
+- a measured PHY with all-zero rates is absent
+- `limit` is honoured
+- empty `$phys` / empty `$deltas` → `[]`, no warning
+- a PHY whose drive does not resolve still ranks, with `drive === null`
 
 ## Done criteria
 
-- [ ] Step 1's per-backend join key confirmed by actually reading
-      `storcli_phy.sh` and `storcli_drives.sh`, not assumed
-- [ ] `top_offenders()` unit-tested: normal rank, no-rate-data exclusion,
-      empty-input edge case
-- [ ] Drives with no baseline/rate are excluded from the list, never
-      shown ranked at zero
-- [ ] `bash tests/run.sh` → `--- all pass ---`
+- [ ] `grep -c 'health_' ajax_info.php` unchanged — the health ring is not read
+- [ ] No file under `scripts/` appears in the diff
+- [ ] A `null` or stale delta never produces a row (asserted)
+- [ ] The 15-digit prefix collision case returns `null` (asserted)
+- [ ] `renderPhyTables()`'s existing callers still work — its new parameter is
+      last and optional; the existing PHY render tests pass **unmodified**
+- [ ] `php -l` clean; `bash tests/run.sh` → `--- all pass ---`
+- [ ] `git diff -- tests/expected/` empty
+- [ ] The suite's PHP warning count is unchanged (`docker run … php tests/ajax_render_test.php 2>&1 | grep -ciE 'warning|deprecated'` → `2`)
 
 ## STOP conditions
 
 - The drift check prints anything.
-- A new shell/awk join script is introduced — the PHP-aggregation-over-
-  existing-JSON approach is the point of this plan's scope.
-- A drive with no rate data is ranked/displayed as if it had a rate of
-  zero, rather than being excluded — that would read as "confirmed
-  healthy" when it actually means "never baselined."
-- This plan is started before plan 022 ships, without explicitly falling
-  back to the floor-crossing-boolean scope described above.
+- Any file under `scripts/` is modified.
+- A PHY with no baseline, or a stale one, appears in the list at any rate
+  including zero.
+- A 15-digit prefix collision resolves to a drive instead of `null`.
+- An exact-match-only SAS join is used — it scores 0/24 on real hardware.
+- A second rate computation is introduced instead of reusing `$deltas`.
+- `health.php`'s ring is read.
 
 ## Maintenance notes
 
-- **This plan is entirely dependent on 022's rate field existing and
-  being trustworthy.** If 022's baseline mechanism changes shape later,
-  this join needs to move with it — they should probably be reviewed
-  together if either changes after both have shipped.
+- **The join rule is empirical.** It rests on 24 real drives from two
+  controllers and one vendor mix. If a report ever shows a PHY resolving to the
+  wrong bay, the fix is to tighten the guard — not to widen the match.
+- **This list and the PHY table must agree.** They share `$deltas` precisely so
+  staleness is handled once. If someone later gives the list its own rate
+  source, they will drift, and the list is the one users will trust.
+- **`health.php`'s `link_integrity` reason string also names the worst PHY**,
+  computed from the ring rather than the baseline. Two features naming "the
+  worst PHY" from different windows is acceptable — they answer different
+  questions — but if they ever visibly contradict each other on the same screen,
+  that is a design problem worth resolving rather than a bug in either.
