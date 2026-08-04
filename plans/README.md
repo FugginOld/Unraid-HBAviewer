@@ -18,13 +18,22 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-Active plans (still in `plans/`): **024** (executed but **not merged** — its
-hardware acceptance came back negative, see its row), **028** (executed but
-**not merged** — delivered as a *negative result*: the feature as conceived
-cannot be built, see its row), **041** and **042** (both executed, reviewed and
-approved, **not merged** — 041 awaits hardware confirmation, 042 does not), and
-**029** (executed and approved, **parked** pending a reboot test — see its row),
-and **043** — written, not started. **043 branches from 041's tip, not `dev`.**
+Active plans (still in `plans/`) — all four are blocked on something only a
+person can supply, or not yet started:
+
+| Plan | State | Waiting on |
+|------|-------|------------|
+| **024** | executed, **not merged**, parked | a reporter with a real SES enclosure processor — the maintainer's box gave a negative result and cannot verify it |
+| **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **041** | executed and approved, **not merged** | `jac2424` running the SAS2 mode command block on his 9207-8i |
+| **043** | written, not started | nothing — dispatchable now, but **branch it from 041's tip, not `dev`**, or its guard test passes trivially |
+
+Archived to `archive/` on merge: **042** (merged `514ae74`) and **044**
+(merged `bd77c0a`). **028** is archived too, though its code was deliberately
+**not** merged — it was executed and definitively resolved as a *negative
+result* (the check it proposed cannot be built), so nothing further will
+happen to it; only its Step 1 research is in `dev`. Their status rows stay in
+the table below.
 
 **Open, blocked on reporter data — the storcli half of issue #10.**
 `parse/storcli_overview.sh:58-60` infers IT/IR from drive states (`JBOD` → IT,
