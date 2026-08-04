@@ -6,7 +6,7 @@ Description = None
 
 Product Name = SAS9305-16i
 Serial Number = SERIAL0015
-SAS Address =  5000000000000018
+SAS Address =  YYYYYYYYYYYYYYYY
 PCI Address = 00:01:00:00
 System Time = 08/03/2026 21:47:11
 FW Package Build = 00.00.00.00
