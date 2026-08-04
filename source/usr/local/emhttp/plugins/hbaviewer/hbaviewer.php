@@ -298,7 +298,10 @@ if ($enableFlash) {
 .lu-health-tile .lu-band-meter { flex: 1 1 260px; margin: 0; }
 .lu-tile.light .lu-band-labels { color: #fff; }
 .lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
-.lu-indicator-row { display: flex; align-items: center; gap: 10px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
+/* Wraps so the hint line drops below label+value. column-gap stays 10px (the
+   dot/icon/label rhythm); row-gap is tight so the hint reads as part of the row
+   above it, not as a row of its own. */
+.lu-indicator-row { display: flex; align-items: center; flex-wrap: wrap; column-gap: 10px; row-gap: 1px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
 .lu-indicator-row:last-child { border-bottom: none; }
 /* A dot again as of plan 032 — but the GRADIENT FILL IS LOAD-BEARING, not
    decoration, so it survived the shape change. Flat status colours were measured
@@ -318,6 +321,11 @@ if ($enableFlash) {
 .lu-ind-icon { width: 15px; height: 15px; flex: none; color: var(--faint); fill: none; stroke: currentColor; }
 .lu-indicator-label { color: var(--faint); flex: 1; }
 .lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+/* What the value MEANS, on its own line under it. 33px = dot 8 + icon 15 + two
+   10px column gaps, so it starts under the label rather than under the dot.
+   Dimmed by opacity, not colour: --text/--muted/--faint are the same Unraid
+   theme variable, so a colour swap here would be a no-op. */
+.lu-ind-hint { flex: 0 0 100%; margin-left: 33px; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 /* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;

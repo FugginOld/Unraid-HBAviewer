@@ -11,10 +11,9 @@
 #   lsiutil: temp/fw from the IOC + banner queries get_hba_info.sh already
 #            uses. lsiutil has no max_link_width/max_link_speed query, so
 #            host_link degrades to "no downtraining signal" on this backend
-#            rather than a false negative. Drive count is left at 0 — an
-#            accurate count needs the same three-stage sysfs join
-#            get_attached_drives.sh does for the lsiutil backend; add it if
-#            topology's drive-missing check needs to work on SAS2 boxes too.
+#            rather than a false negative. Drive count comes from sysfs
+#            (_drive_count) — lsiutil itself is never asked, see that
+#            function's comment.
 DIR="$(dirname "$0")"
 source "$DIR/lib.sh"
 source "$DIR/config.sh"   # sets PORT, ALERT
@@ -51,6 +50,21 @@ _phys_json() {   # $1 = controller host index
             "$(cat "$p/negotiated_linkrate"           2>/dev/null | tr ' ' '_')")
     done
     printf '[%s]' "$out"
+}
+
+# Drives behind one SAS host, from sysfs. The shape is get_attached_drives.sh's
+# stage-3 fallback (target*/lun*/block/*), minus the lsiutil OS-map join that
+# script needs to NAME each drive — topology only needs how many, so one glob is
+# the whole read. Enclosure/SES targets carry no `block/` and are skipped, which
+# is why this counts 8 on a 9207-8i with 8 disks and not 9 (issue #11: the
+# lsiutil backend previously hardcoded 0, so Topology read "0 drives" on a card
+# with a full backplane attached).
+_drive_count() {   # $1 = controller host index
+    local b n=0
+    for b in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host"$1"/device/target"$1":*/*/block/*/; do
+        [ -d "$b" ] && n=$((n + 1))
+    done
+    printf '%d' "$n"
 }
 
 UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null); UPTIME="${UPTIME:-0}"
@@ -145,9 +159,9 @@ health_lsiutil() {
 
     hnum=$(_first_sas_host)
 
-    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":0,"read_ok":%s,"link":{"width":%s,"max_width":0,"speed":"%s","max_speed":""},"phys":%s}' \
+    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":0,"speed":"%s","max_speed":""},"phys":%s}' \
         "$NOW" "$UPTIME" \
-        "${temp:-null}" "$band" "$fw" "$readok" \
+        "${temp:-null}" "$band" "$fw" "$(_drive_count "${hnum:-0}")" "$readok" \
         "$width" "$speed" \
         "$(_phys_json "${hnum:-0}")"
 }

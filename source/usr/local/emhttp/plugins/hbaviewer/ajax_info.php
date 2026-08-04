@@ -763,6 +763,11 @@ function renderHealthTables(array $data): string {
         $out .= '<div class="lu-indicator-rows">';
         foreach (['thermal' => 'Thermal', 'link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Read Health'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
+            // The reason string health_indicators() already computes for the rollup
+            // pill, printed under its own row too. Without it a row reads "Link
+            // Integrity 0/hr" with nothing saying 0 what (issue #11) — the number
+            // is only meaningful next to the sentence that names it.
+            $hint = (string) ($row['reason'] ?? '');
             [$bDark, $bLight] = lsi_health_gradient($row['state']);
             // Sprite ids live in hbaviewer.php's #lu-wrap. Most match $key; these
             // two do not, and a mismatch renders an empty icon slot silently.
@@ -771,7 +776,9 @@ function renderHealthTables(array $data): string {
                   . '<span class="lu-ind-dot" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
                   . '<svg class="lu-ind-icon" aria-hidden="true"><use href="#lu-i-' . $icon . '"/></svg>'
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
-                  . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
+                  . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span>'
+                  . ($hint !== '' ? '<span class="lu-ind-hint">' . htmlspecialchars($hint) . '</span>' : '')
+                  . '</div>';
         }
         $out .= '</div></div>';
     }

@@ -480,6 +480,14 @@ $sorted = $pos; sort($sorted, SORT_NUMERIC);
 check('health rows in header order', !in_array(false, $pos, true) && $pos === $sorted);
 check('health thermal shows temp', str_contains($h, '<span class="lu-indicator-value">77°C</span>'));
 
+/* Issue #11: every row prints the reason under its value. "Link Integrity
+   0/hr" with nothing saying 0-of-what was the report; the hint line is what
+   answers it, so assert one per row and that the CSS class the shell styles
+   actually exists. */
+check('health rows each carry a hint line', substr_count($h, '<span class="lu-ind-hint">') === 5);
+check('health hint explains the link rate', str_contains($h, 'No new cabling errors on any PHY'));
+check('health hint explains the drive count', str_contains($h, 'All 8 attached drives present'));
+
 /* Row icons (plan 032). Two indicator keys do not match their sprite id
    (`link_integrity` -> lu-i-link, `host_link` -> lu-i-hostlink); a mismatch
    renders an empty icon slot silently, so assert the ids AND that every one is
@@ -490,6 +498,9 @@ check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
 preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
+// The hint line is only readable as a sub-line if the shell styles it; unstyled
+// it inherits the row's 12.5px flex and lands next to the value.
+check('hint line is styled in the shell', str_contains($shell, '.lu-ind-hint {'));
 // The sprite must be parsed once in the page shell, never re-emitted by the
 // per-poll Health render, which would duplicate these ids on every refresh.
 check('sprite defined once, in the shell only',
