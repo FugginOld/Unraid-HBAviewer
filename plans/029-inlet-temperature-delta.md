@@ -7,9 +7,31 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat 96daac5..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/config.php source/usr/local/emhttp/plugins/hbaviewer/scripts/config.sh source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/view.php`
-> Expected output: **nothing**. Every excerpt below is quoted from `96daac5`
-> (`dev` tip, 2026-08-01). Any difference is a STOP condition.
+> `git diff --stat 005588f..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/config.php source/usr/local/emhttp/plugins/hbaviewer/scripts/config.sh source/usr/local/emhttp/plugins/hbaviewer/settings.php source/usr/local/emhttp/plugins/hbaviewer/view.php`
+> Expected output: **nothing**. Every excerpt below was re-verified against
+> `005588f` (`dev` tip, 2026-08-03). Any difference is a STOP condition.
+>
+> **Reconciled 2026-08-03** (originally written against `96daac5`, 88 commits
+> earlier). Every excerpt below was re-checked line by line and **all of them
+> still hold verbatim**: `lsi_clamp()` is byte-identical, `lsi_config_read()`
+> and `lsi_config_write()` still route every value through it,
+> `scripts/config.sh` and `view.php` are untouched, `grep -rn 'hwmon'` over
+> `source/` and `tests/` still returns nothing, and `INLET_SENSOR` does not
+> exist yet. Two changes since the original writing, neither invalidating
+> anything:
+>
+> 1. `LSI_SCHEMA` gained one more **int** key, `ENABLE_NOTIFY` — it sits in the
+>    `...` elision in the excerpt below and does not weaken the premise that
+>    every existing setting is an integer.
+> 2. `settings.php` grew ~88 lines and is now a **two-column grid of `<h3>`
+>    cards** inside one `<form method="post">` (line 151): *HBA Connection*
+>    (156), *Display Panels* (215), *Notifications* (246), *Diagnostic Bundle*
+>    (270), *Export / API* (298), *Advanced — Firmware Flashing* (306). The
+>    three form conventions quoted below survive verbatim at lines 186, 197 and
+>    219, inside the *HBA Connection* card. **Put the sensor picker in the
+>    *HBA Connection* card**, below the alert threshold — it is a reading-source
+>    setting, not a display toggle. Do not add a new top-level card for one
+>    `<select>`.
 
 ## Status
 
@@ -20,7 +42,7 @@
   See "The blocker" below; that is the real work.
 - **Depends on**: 020 (DONE) for the Health tab, if the Δ is surfaced there
 - **Category**: feature
-- **Planned at**: `96daac5`, 2026-08-01
+- **Planned at**: `96daac5`, 2026-08-01 — **reconciled to `005588f`, 2026-08-03**
 - **Requested by**: maintainer. Renumbered out of the 021 slot when an
   external roadmap review claimed it; this is the original 021.
 
