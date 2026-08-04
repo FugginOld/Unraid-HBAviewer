@@ -26,6 +26,9 @@ const LSI_SCHEMA = [
     // change. bay_map.php owns the setter; this is only where they persist.
     'BAY_ROWS'        => [6,  1, 12],
     'BAY_COLS'        => [4,  1, 12],
+    // Locks the finished map against edits. Persisted, because the accident it
+    // prevents is a stray click on a map somebody spent time building.
+    'BAY_LOCK'        => [0,  0, 1],
 ];
 
 function lsi_clamp(string $key, $val): int {

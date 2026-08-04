@@ -109,6 +109,19 @@ function bay_map_dims_set(int $rows, int $cols, ?string $path = null): void {
     lsi_config_write(['BAY_ROWS' => $rows, 'BAY_COLS' => $cols] + lsi_config_read($path), $path);
 }
 
+/* The lock. Enforced HERE, in the dispatch below, not only by greying out the
+   UI: a lock that just hides buttons still lets a stale browser tab, a double
+   submit, or anything else POST an edit through — and the thing being
+   protected is a map somebody built by walking to the rack. Same merge-first
+   write as the dimensions, for the same reason. */
+function bay_map_locked(?string $path = null): bool {
+    return (int) lsi_config_read($path)['BAY_LOCK'] === 1;
+}
+
+function bay_map_lock_set(bool $locked, ?string $path = null): void {
+    lsi_config_write(['BAY_LOCK' => $locked ? 1 : 0] + lsi_config_read($path), $path);
+}
+
 /* ── POST dispatch (served only; skipped under the CLI test runner) ──────────
    Requiring this file is read-only: every branch below needs a POST with an
    `action`, so ajax_info.php can pull the store in without risk of mutating it.
@@ -119,6 +132,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST['action'])) r
 
 header('Content-Type: application/json; charset=utf-8');
 $action = (string) $_POST['action'];
+
+// Setting the lock is the one thing a locked map still accepts.
+if ($action === 'lock') {
+    bay_map_lock_set(($_POST['locked'] ?? '') === '1');
+    echo json_encode(['ok' => true, 'locked' => bay_map_locked()]);
+    exit;
+}
+
+/* Every other action mutates the map, so the lock stops it at the server. The
+   UI disables these too, but that is convenience — this is the guarantee. */
+if (bay_map_locked()) {
+    http_response_code(409);
+    echo json_encode(['ok' => false, 'error' => 'The bay map is locked. Unlock it to make changes.']);
+    exit;
+}
 
 if ($action === 'dims') {
     // Clamp BEFORE pruning: pruning to an unclamped 9999x9999 would keep every

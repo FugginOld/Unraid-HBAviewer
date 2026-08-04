@@ -333,15 +333,33 @@ if ($enableFlash) {
    should read as the front of the chassis at a glance. The column count comes
    from the stored BAY_COLS, set inline via --bay-cols rather than a class, so
    changing the size is one style write and no re-layout of the CSS. */
-.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), 1fr); gap: 8px; margin: 0 0 18px; }
+/* minmax(150px, 1fr): the floor gives the grid real intrinsic width, so the map
+   still reads sensibly if it is opened before the drives table has rendered and
+   there is nothing to measure against (see luBayToggle). */
+.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), minmax(150px, 1fr)); gap: 8px; margin: 0 0 18px; }
+/* 3:1 is the EMPTY bay's shape (plan 047: a bay holds a drive, and a drive is
+   not square). A filled one carries six fields, so the ratio becomes a floor
+   via min-height rather than a fixed height — the row grows to whatever the
+   longest cell needs and every bay in that row matches it, which is what keeps
+   the grid reading as a chassis. Clipping the fields to hold the ratio would
+   defeat the point of showing them. */
 .lu-bay-cell {
     position: relative;   /* the position label is absolute inside it */
-    aspect-ratio: 3 / 1; border: 1px dashed var(--border-soft); border-radius: 8px;
+    aspect-ratio: 3 / 1; height: auto;
+    border: 1px dashed var(--border-soft); border-radius: 8px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 2px; padding: 4px; font-size: 11px; text-align: center; cursor: pointer;
-    background: var(--surface); overflow: hidden;
+    background: var(--surface);
 }
 .lu-bay-cell.filled { border-style: solid; }
+/* Two short columns (device/port, temp/size) then model and serial across the
+   full width — those two are the ones whose length actually varies. */
+.lu-bay-info { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 8px; width: 100%; padding: 9px 6px 2px; }
+.lu-bay-wide { grid-column: 1 / -1; }
+.lu-bay-sub, .lu-bay-wide {
+    font-family: var(--mono); font-size: 9.5px; color: var(--faint); opacity: .85;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 /* State colour is carried by the left edge and a tint, never by the text: the
    temperature has to stay readable on every theme. `nodata` gets neither — a
    drive nobody has read must not look like a drive that passed. */
@@ -349,7 +367,10 @@ if ($enableFlash) {
 .lu-bay-cell.warn { border-left: 4px solid #f39c12; background: color-mix(in srgb,#f39c12 10%, var(--surface)); }
 .lu-bay-cell.fail { border-left: 4px solid #e74c3c; background: color-mix(in srgb,#e74c3c 12%, var(--surface)); }
 .lu-bay-cell.nodata { border-left: 4px solid var(--border-soft); }
-.lu-bay-cell.target { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lu-bay-cell.target, .lu-bay-cell.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Locked: still fully readable, just inert. Dimming the map would punish the
+   state you are meant to leave it in. */
+.lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
 .lu-bay-pos  { position: absolute; top: 3px; left: 6px; font-size: 9px; color: var(--faint); opacity: .5; }
 .lu-bay-dev  { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
 .lu-bay-temp { font-family: var(--mono); font-size: 10px; color: var(--faint); }
@@ -729,6 +750,18 @@ if ($enableFlash) {
         var map = document.getElementById('baymap-content');
         var tbl = document.getElementById('drives-content');
         var show = map.style.display === 'none';
+        /* #lu-wrap is width:fit-content, so the page is only as wide as the
+           widest thing in it. Hiding the drives table takes that width away and
+           the map would collapse to whatever its 1fr columns happen to need.
+           Measure the table while it is still on screen and hold the map to at
+           least that — min-width, not width, so a wider viewport still widens
+           the cells rather than pinning them to the table's size. */
+        if (show) {
+            var w = tbl.offsetWidth;
+            if (w) map.style.minWidth = w + 'px';
+        } else {
+            map.style.minWidth = '';
+        }
         map.style.display = show ? '' : 'none';
         tbl.style.display = show ? 'none' : '';
         document.getElementById('baymap-toggle').textContent = show ? 'Table' : 'Map';
@@ -769,26 +802,45 @@ if ($enableFlash) {
        typing into and drop focus mid-number, so only the grid and tray repaint. */
     function luBayRender() {
         var d = luBay.data, el = document.getElementById('baymap-content');
+        var dis = d.locked ? ' disabled' : '';
         el.innerHTML =
             '<div class="lu-card first">'
           + '<div class="lu-bay-dims">'
-          +   '<label>Rows <input type="number" id="bay-rows" min="1" max="12" value="' + (d.rows | 0) + '"></label>'
-          +   '<label>Columns <input type="number" id="bay-cols" min="1" max="12" value="' + (d.cols | 0) + '"></label>'
-          +   '<span>Pick a drive below, then click a bay. Click a filled bay to take it back.</span>'
+          +   '<label>Rows <input type="number" id="bay-rows" min="1" max="12" value="' + (d.rows | 0) + '"' + dis + '></label>'
+          +   '<label>Columns <input type="number" id="bay-cols" min="1" max="12" value="' + (d.cols | 0) + '"' + dis + '></label>'
+          +   '<button class="lu-refresh-btn" id="bay-lock" onclick="luBayLock()">' + (d.locked ? '&#128274; Unlock' : '&#128275; Lock') + '</button>'
+          +   '<span>' + (d.locked
+                  ? 'Locked — the layout cannot be changed until you unlock it.'
+                  : 'Pick a drive below, then click a bay. Drag order: click a filled bay to pick that drive up, <strong>double-click</strong> to empty it.') + '</span>'
           + '</div>'
           + '<div class="lu-bay-grid" id="bay-grid"></div>'
           + '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Unassigned drives</p>'
           + '<div class="lu-bay-tray" id="bay-tray"></div>'
           + '</div>';
-        document.getElementById('bay-rows').oninput = luBayDims;
-        document.getElementById('bay-cols').oninput = luBayDims;
+        if (!d.locked) {
+            // change, not input: `input` fires on every keystroke, so clearing
+            // the field to retype it read as "1 row" and the debounced save
+            // then displaced every drive below row 0 — the accidental wipe.
+            // `change` waits for the field to be committed (blur/Enter/spinner).
+            document.getElementById('bay-rows').onchange = luBayDims;
+            document.getElementById('bay-cols').onchange = luBayDims;
+        }
         luBayPaint();
     }
+
+    window.luBayLock = function () {
+        luBayPost({action: 'lock', locked: luBay.data.locked ? '0' : '1'}, function (j) {
+            luBay.data.locked = !!j.locked;
+            luBay.sel = null;
+            luBayRender();
+        });
+    };
 
     function luBayPaint() {
         var d = luBay.data;
         var grid = document.getElementById('bay-grid');
         if (!grid) return;
+        grid.parentNode.classList.toggle('lu-bay-locked', !!d.locked);
         grid.innerHTML = '';
         grid.style.setProperty('--bay-cols', d.cols);
         var at = {};
@@ -798,24 +850,34 @@ if ($enableFlash) {
             for (var c = 0; c < d.cols; c++) {
                 var drv  = at[r + ':' + c];
                 var cell = document.createElement('div');
-                cell.className = 'lu-bay-cell ' + (drv ? 'filled ' + drv.state : (luBay.sel ? 'target' : ''));
+                cell.className = 'lu-bay-cell '
+                    + (drv ? 'filled ' + drv.state + (luBay.sel === drv.key ? ' sel' : '')
+                           : (luBay.sel ? 'target' : ''));
                 cell.title = drv ? [drv.model, drv.serial, drv.size].filter(Boolean).join(' · ') : 'Empty bay';
                 var pos = document.createElement('span');
                 pos.className = 'lu-bay-pos';
                 pos.textContent = (r + 1) + '·' + (c + 1);
                 cell.appendChild(pos);
                 if (drv) {
-                    var dev = document.createElement('span');
-                    dev.className = 'lu-bay-dev';
-                    dev.textContent = drv.dev || drv.slot || drv.key;
-                    cell.appendChild(dev);
-                    var t = document.createElement('span');
-                    t.className = 'lu-bay-temp';
+                    var info = document.createElement('div');
+                    info.className = 'lu-bay-info';
+                    // Two short columns, then model and serial across the full
+                    // width — the two that actually vary in length. textContent
+                    // throughout: these strings come off the drive's own
+                    // firmware, which is not a trusted source of markup.
+                    luBayField(info, 'lu-bay-dev',  drv.dev || drv.slot || drv.key);
+                    luBayField(info, 'lu-bay-sub',  drv.port);
                     // No SMART reading is stated as such, never left to look like 0°C.
-                    t.textContent = drv.temp === null ? 'no SMART data' : drv.temp + '°C';
-                    cell.appendChild(t);
+                    luBayField(info, 'lu-bay-temp', drv.temp === null ? 'no SMART' : drv.temp + '°C');
+                    luBayField(info, 'lu-bay-sub',  drv.size);
+                    luBayField(info, 'lu-bay-wide', drv.model);
+                    luBayField(info, 'lu-bay-wide', drv.serial);
+                    cell.appendChild(info);
                 }
-                cell.onclick = luBayCellClick(r, c, drv);
+                if (!d.locked) {
+                    cell.onclick    = luBayCellClick(r, c, drv);
+                    cell.ondblclick = luBayCellClear(drv);
+                }
                 grid.appendChild(cell);
             }
         }
@@ -832,38 +894,78 @@ if ($enableFlash) {
             chip.title = u.key === null
                 ? 'This drive reports no port or PHY, so it cannot be assigned to a bay.'
                 : [u.model, u.serial, u.size].filter(Boolean).join(' · ');
-            if (u.key !== null) {
+            if (u.key !== null && !d.locked) {
                 chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
             }
             tray.appendChild(chip);
         });
     }
 
+    // One field of a filled bay. An empty value still emits its cell so the
+    // fields below it stay in their column — a drive with no serial reported
+    // must not slide its model into the serial's place.
+    function luBayField(parent, cls, text) {
+        var s = document.createElement('span');
+        s.className = cls;
+        s.textContent = (text === null || text === undefined || text === '') ? '—' : text;
+        parent.appendChild(s);
+    }
+
+    /* Single click never destroys anything. On a filled bay it picks the drive
+       up so you can put it somewhere else; on an empty one it drops whatever is
+       held. Emptying a bay is a double-click (luBayCellClear) — deliberate,
+       because a stray click on a map somebody walked to the rack to build
+       should not undo any of it. */
     function luBayCellClick(r, c, drv) {
         return function () {
-            if (drv) { luBayPost({action: 'unassign', key: drv.key}, luBayFetch); return; }
+            if (drv) { luBay.sel = (luBay.sel === drv.key) ? null : drv.key; luBayPaint(); return; }
             if (!luBay.sel) return;
             luBayPost({action: 'assign', key: luBay.sel, row: r, col: c}, luBayFetch);
         };
     }
 
-    /* Resize: reflow the grid on screen immediately, persist after a pause.
-       Drives that no longer fit are moved into the tray HERE too, not just by
-       the server's prune — so the preview shows what shrinking will actually
-       do before it is saved. */
+    // Clears THIS bay and nothing else — the drive goes back to the tray.
+    function luBayCellClear(drv) {
+        return function () {
+            if (!drv) return;
+            luBay.sel = null;
+            luBayPost({action: 'unassign', key: drv.key}, luBayFetch);
+        };
+    }
+
+    /* Resize: reflow the grid on screen, then persist. Drives that no longer
+       fit move to the tray HERE too, not just in the server's prune, so the
+       preview shows what the change will actually do.
+       A shrink that displaces drives asks first. Everything else about this
+       view is reversible with another click; this is the one action that can
+       undo a lot of someone's work at once. */
     function luBayDims() {
-        var rows = Math.max(1, Math.min(12, parseInt(document.getElementById('bay-rows').value, 10) || 1));
-        var cols = Math.max(1, Math.min(12, parseInt(document.getElementById('bay-cols').value, 10) || 1));
-        var d = luBay.data, keep = [];
+        var rf = document.getElementById('bay-rows'), cf = document.getElementById('bay-cols');
+        var rows = parseInt(rf.value, 10), cols = parseInt(cf.value, 10);
+        // A blank or half-typed field is not a resize request. Without this,
+        // clearing the box to retype it read as 1 and wiped the layout below
+        // the first row.
+        if (!(rows >= 1 && rows <= 12) || !(cols >= 1 && cols <= 12)) return;
+
+        var d = luBay.data, keep = [], drop = [];
         d.placed.forEach(function (p) {
-            if (p.row < rows && p.col < cols) keep.push(p); else d.unassigned.push(p);
+            if (p.row < rows && p.col < cols) keep.push(p); else drop.push(p);
         });
+        if (drop.length && !confirm(
+                drop.length + (drop.length === 1 ? ' drive does' : ' drives do')
+                + ' not fit in a ' + rows + ' x ' + cols + ' grid.\n\n'
+                + 'They go back to the unassigned list and you will have to place them again. '
+                + 'Everything that still fits keeps its bay.')) {
+            rf.value = d.rows; cf.value = d.cols;   // put the fields back
+            return;
+        }
+        drop.forEach(function (p) { d.unassigned.push(p); });
         d.placed = keep; d.rows = rows; d.cols = cols;
         luBayPaint();
         clearTimeout(luBay.dimTimer);
         luBay.dimTimer = setTimeout(function () {
             luBayPost({action: 'dims', rows: rows, cols: cols}, luBayFetch);
-        }, 700);
+        }, 400);
     }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     // Errored controllers render a card with data-ctl but no data-chip, so the

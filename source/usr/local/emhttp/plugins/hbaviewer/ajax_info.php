@@ -732,7 +732,7 @@ if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); e
    "collected but this drive is not in it" are the same thing here — no data,
    which is a state of its own and never renders as healthy. */
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
-                          array $devBySerial = []): array {
+                          array $devBySerial = [], bool $locked = false): array {
     // Serial is the join key the SMART collector already emits per drive; it is
     // also the only identifier both payloads share (storcli's WWN differs by a
     // nibble from /dev's — see lsi_dev_by_serial).
@@ -760,6 +760,13 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 'model'  => $d['model'] ?? '',
                 'size'   => $d['size'] ?? '',
                 'slot'   => $d['slot'] ?? (isset($d['phy']) ? 'PHY ' . $d['phy'] : ''),
+                // Display-ready, because the two backends key on different
+                // wires and the word has to match: "Port 14" is storcli's
+                // Connected Port Number, "PHY 2" is lsiutil's PHY index.
+                // Calling a PHY a port on the cell would be a small lie in
+                // exactly the place someone reads before pulling a drive.
+                'port'   => isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . $d['phy']
+                          : ((($d['port'] ?? '') !== '') ? 'Port ' . $d['port'] : ''),
                 'temp'   => ($s['temp'] ?? '') !== '' ? (int) $s['temp'] : null,
                 'state'  => smart_state($s),
             ];
@@ -774,14 +781,16 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
             }
         }
     }
-    return ['rows' => $rows, 'cols' => $cols, 'placed' => $placed, 'unassigned' => $tray];
+    return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked,
+            'placed' => $placed, 'unassigned' => $tray];
 }
 
 if ($type === 'baymap') {
     header('Content-Type: application/json; charset=utf-8');
     $d = bay_map_dims();
     echo json_encode(bay_map_assemble(
-        $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'], lsi_dev_by_serial()
+        $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
+        lsi_dev_by_serial(), bay_map_locked()
     ));
     exit;
 }

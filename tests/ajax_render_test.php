@@ -340,6 +340,11 @@ $bmSmart = ['drives' => [
 $bm = bay_map_assemble($bmDrives, $bmSmart, ['c0:p14'=>['row'=>1,'col'=>2], 'c0:p15'=>['row'=>0,'col'=>0]],
                        6, 4, ['PLACED01'=>'/dev/sda']);
 check('baymap carries the grid dims',   $bm['rows'] === 6 && $bm['cols'] === 4);
+// The view needs the lock state in the same payload, or it renders an editable
+// map over a store that will refuse every edit.
+check('baymap reports unlocked by default', $bm['locked'] === false);
+check('baymap passes the lock through',
+      bay_map_assemble($bmDrives, null, [], 6, 4, [], true)['locked'] === true);
 check('baymap places mapped drives',    count($bm['placed']) === 2);
 check('baymap trays unmapped drives',   count($bm['unassigned']) === 1 && $bm['unassigned'][0]['serial'] === 'TRAYDRV1');
 $placed = array_column($bm['placed'], null, 'serial');
@@ -350,6 +355,20 @@ check('baymap placed-but-unread is nodata, NOT ok',
       $placed['NOSMART1']['state'] === 'nodata' && $placed['NOSMART1']['temp'] === null);
 check('baymap flags pending sectors as warn', $bm['unassigned'][0]['state'] === 'warn');
 check('baymap keys storcli drives on port',   $placed['PLACED01']['key'] === 'c0:p14');
+// The cell prints six fields; each has to survive the join.
+check('baymap carries model, serial and size',
+      $placed['PLACED01']['model'] === 'ST8000NM' && $placed['PLACED01']['serial'] === 'PLACED01'
+      && $placed['PLACED01']['size'] === '7.276 TB');
+/* The wire label is display-ready and backend-specific on purpose: calling an
+   lsiutil PHY a "Port" would be a small lie in the exact place someone reads
+   before pulling a drive out of a running array. */
+check('baymap labels a storcli wire as Port', $placed['PLACED01']['port'] === 'Port 14');
+check('baymap labels an lsiutil wire as PHY',
+      bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[['phy'=>'2','serial'=>'S']]]]],
+                       null, [], 6, 4)['unassigned'][0]['port'] === 'PHY 2');
+check('baymap port is empty when the drive reports no wire',
+      $bmNoKey_port = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[['serial'=>'S']]]]],
+                       null, [], 6, 4)['unassigned'][0]['port'] === '');
 
 // No SMART cache at all (never collected) — every drive is nodata, nothing green.
 $bmNone = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>0,'col'=>0]], 6, 4);

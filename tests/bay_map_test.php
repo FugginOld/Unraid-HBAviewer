@@ -104,6 +104,26 @@ check('dims clamp to schema', bay_map_dims($cfg) === ['rows' => 12, 'cols' => 1]
 // Defaults are the maintainer's chassis: 6 rows x 4 columns.
 check('defaults are 6x4', bay_map_dims("$dir/nonexistent.cfg") === ['rows' => 6, 'cols' => 4]);
 
+/* ── 7. The lock ─────────────────────────────────────────────────────────────
+   It persists, because the accident it prevents is a stray click on a map
+   somebody built by walking to the rack — and a lock that forgets itself on
+   reload prevents nothing. A new install is unlocked: there is nothing to
+   protect until the map exists. */
+check('a fresh install is unlocked', bay_map_locked("$dir/nonexistent.cfg") === false);
+bay_map_lock_set(true, $cfg);
+check('lock persists', bay_map_locked($cfg) === true);
+$afterLock = lsi_config_read($cfg);
+check('locking preserves the grid size', $afterLock['BAY_ROWS'] === 12 && $afterLock['BAY_COLS'] === 1);
+check('locking preserves HBA_PORT',      $afterLock['HBA_PORT'] === 4);
+bay_map_lock_set(false, $cfg);
+check('unlock persists', bay_map_locked($cfg) === false);
+/* The lock guards the store, not the store's own functions: bay_map_set() is
+   the primitive the dispatch calls AFTER its lock check, so it must stay
+   unconditional — a lock enforced in two places drifts. */
+bay_map_lock_set(true, $cfg);
+bay_map_set('c0:p7', 1, 1, $path);
+check('the store primitive itself is not lock-aware', isset(bay_map_read($path)['c0:p7']));
+
 array_map('unlink', glob("$dir/*") ?: []);
 @rmdir($dir);
 
