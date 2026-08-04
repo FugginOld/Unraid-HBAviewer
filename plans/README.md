@@ -24,11 +24,11 @@ person can supply, or not yet started:
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **041** | executed and approved, **not merged** | `jac2424` running the SAS2 mode command block on his 9207-8i |
-| **043** | written, not started | nothing — dispatchable now, but **branch it from 041's tip, not `dev`**, or its guard test passes trivially |
+| **043** | written, not started | nothing — **base is now `dev`** (041 merged, so `dev` has the `-a 1,0` call the guard test needs). Also extended 2026-08-04 to capture `sas_device`'s `target_port_protocols`, the per-drive SAS/SATA signal no bundle currently carries |
+| **045** | written, not started | nothing — dispatchable now, with `PaliKinG3`'s capture already saved under `plans/assets/` |
 
-Archived to `archive/` on merge: **042** (merged `514ae74`) and **044**
-(merged `bd77c0a`). **028** is archived too, though its code was deliberately
+Archived to `archive/` on merge: **041** (merged 2026-08-04, hardware-passed),
+**042** (merged `514ae74`) and **044** (merged `bd77c0a`). **028** is archived too, though its code was deliberately
 **not** merged — it was executed and definitively resolved as a *negative
 result* (the check it proposed cannot be built), so nothing further will
 happen to it; only its Step 1 research is in `dev`. Their status rows stay in

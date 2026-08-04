@@ -7,11 +7,14 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Base branch**: this plan is written against **`advisor/041-sas2-it-ir-mode`
-> (`c44f030`)**, not `dev`. Plan 041 adds the `hba_query -p"$PORT" -a 1,0`
-> call that Step 1's guard test is designed to notice. Branch from 041's tip
-> (or from `dev` **after** 041 is merged). If neither is available, that is a
-> STOP condition — say so rather than proceeding from plain `dev`.
+> **Base branch — UPDATED 2026-08-04: branch from `dev`.** Plan 041 is now
+> **merged**, so `dev` contains the `hba_query -p"$PORT" -a 1,0` call that
+> Step 1's guard test is designed to notice. The original instruction to
+> branch from `advisor/041-sas2-it-ir-mode` is obsolete; that branch has been
+> deleted. Run the base check first:
+> `git merge-base --is-ancestor dev HEAD && echo BASE-OK || echo BASE-STALE`
+> and `git rebase dev` if stale. If `grep -c 'a 1,0' source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh`
+> returns `0`, you are not on a base containing 041 — that is a STOP condition.
 >
 > **Drift check (run first)**:
 > `git diff --stat c44f030..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/bundle_support.sh`
@@ -287,6 +290,24 @@ run 02-raw/lsblk.txt lsblk -S -P -o NAME,TRAN,WWN,SERIAL,MODEL
 
 `-P` emits `key="value"` pairs, so adding a column cannot shift any other
 field — unlike positional output. Do not reorder the existing columns.
+
+**Also add the per-device SAS protocol.** `lsblk`'s `TRAN` reports the
+*bus*, and on 2026-08-04 a reporter's capture showed every SATA drive behind
+an HBA reading `TRAN=sas` — correct kernel behaviour, useless as a drive-type
+signal. The authoritative per-drive answer lives in the `sas_device` class,
+which section 3 does **not** currently capture (it captures `sas_end_device`,
+a different class that carries link attributes rather than protocols):
+
+```bash
+# lsblk's TRAN is the BUS, not the drive: a SATA disk behind a SAS HBA reads
+# "sas". The per-drive truth is target_port_protocols in the sas_device class
+# (ssp = SAS, sata = SATA). Captured because a diagnosis on 2026-08-04 needed
+# it and no bundle had it — sas_end_device, already dumped below, is a
+# different class and does not carry it.
+dump_attrs 03-sysfs/sas_device.txt /sys/class/sas_device/end_device-*
+```
+
+Put it beside the existing `dump_attrs` calls in section 3, not in section 2.
 
 **Verify**:
 ```
