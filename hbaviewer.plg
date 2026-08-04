@@ -2,11 +2,11 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.08.03">
+<!ENTITY version   "2026.08.04">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.08.03/hbaviewer.txz">
-<!ENTITY md5       "16ad6b9af70dcd3ca8035d73f8b95220">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.08.04/hbaviewer.txz">
+<!ENTITY md5       "a32b15eda53df9f749520ece0c93bfc2">
 <!ENTITY icon      "hbaviewer.png">
 ]>
 
