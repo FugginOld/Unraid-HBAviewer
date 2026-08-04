@@ -13,6 +13,41 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.04.1###
+Everything reported on issue #11, plus two things found while fixing it.
+Thanks to @jac2424, whose screenshots of a SAS9207-8i showed a healthy card
+reporting nonsense.
+
+**Fixed**
+- Topology read "0 drives" on SAS2 cards. Cards read through lsiutil never
+  counted their drives at all, so the row judged a hard-coded zero and still
+  called it "all drives present" on a card with eight disks attached. The
+  count now comes from the drives the controller's own SAS host actually
+  presents. A controller that cannot report a count says so, instead of
+  claiming zero. (#11)
+- HBA Health rows gave numbers with nothing to read them against. "Link
+  Integrity 0/hr" never said 0 of what, and "Read Health ok" said nothing at
+  all. Every row now prints the sentence behind its value — what was measured,
+  over what window, and why it is judged the way it is. Values that are words
+  are capitalised to match the rest of the plugin. (#11)
+- Drive names never appeared on the PHY Health tab. The tab read its drive
+  list through a 60-second cache that it was the only user of, so the cache
+  had always expired by the next visit and every visit got an empty answer.
+  This also affected the drive names on the top-offenders list.
+
+**Added**
+- A Device column on the Drives and PHY Health tabs. Enclosure/slot, bus/target
+  and PHY index are the controller's own addressing and line up with nothing on
+  Unraid's Main page, so a row could not be matched to a disk without comparing
+  SAS addresses by eye. Both tabs now lead with the same /dev name Main and the
+  SMART tab use. Rows that cannot be resolved with certainty show a dash rather
+  than a guess. (#11)
+
+**Changed**
+- The Settings page no longer leaves holes between its cards. Sections sat in a
+  grid whose rows were as tall as their tallest card, so every short section
+  left empty space beside it. They now pack.
+
 ###2026.08.04###
 Everything reported on issue #10, plus a Health tab fix found while
 investigating it. Thanks to @PaliKinG3 and @jac2424, who ran diagnostics on
