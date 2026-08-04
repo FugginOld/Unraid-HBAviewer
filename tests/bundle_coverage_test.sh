@@ -1,0 +1,60 @@
+#!/bin/bash
+# Guard for bundle_support.sh's own stated rule (see its "Section 2" comment):
+# every lsiutil -a token a composer issues must also be captured by the
+# bundle. Nothing else in the suite enforces this -- anon_test.sh builds a
+# synthetic tree and never enumerates the real capture list, and
+# bundle_php_test.php only covers the HTTP endpoint -- so a capture can go
+# missing forever without a single test turning red.
+#
+# That is exactly what happened on issue #10: `lsiutil -a 1,0` (the IT/IR
+# firmware personality) and the drive transport were both missing from the
+# bundle, and a maintainer had to hand-write two command blocks to get them.
+# This test is the cheap static check that would have caught the omission --
+# a source-level token match, not a run of the real bundle against hardware.
+#   bash tests/bundle_coverage_test.sh   ->  "bundle-coverage: all pass" (exit 0)
+cd "$(dirname "$0")" || exit 2
+SCRIPTS="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
+BUNDLE="$SCRIPTS/bundle_support.sh"
+fail=0
+ok()  { echo "PASS  $1"; }
+bad() { echo "FAIL  $1 -- $2"; fail=1; }
+
+# Every -a token a composer (anything under scripts/*.sh EXCEPT bundle_support.sh
+# itself, which is the thing being checked, not a source of truth) issues.
+composer_files=""
+for f in "$SCRIPTS"/*.sh; do
+    [ "$(basename "$f")" = "bundle_support.sh" ] && continue
+    composer_files="$composer_files $f"
+done
+composer_tokens=$(grep -hoE -- '-a [0-9]+(,[0-9]+)*' $composer_files | sort -u)
+bundle_tokens=$(grep -hoE -- '-a [0-9]+(,[0-9]+)*' "$BUNDLE" | sort -u)
+
+while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    if grep -qxF -- "$tok" <<<"$bundle_tokens"; then
+        ok "bundle captures $tok"
+    else
+        bad "bundle missing $tok" "composer issues it but bundle_support.sh does not capture it"
+    fi
+done <<<"$composer_tokens"
+
+# TRAN is the SAS-vs-SATA signal (read_smart.sh already branches on it) and has
+# no -a token to be caught by the loop above, so it needs its own assertion.
+if grep -E '^run 02-raw/lsblk\.txt lsblk .*-o [A-Za-z,]*TRAN' "$BUNDLE" >/dev/null; then
+    ok "lsblk capture requests TRAN"
+else
+    bad "lsblk capture missing TRAN" "the -o column list has no TRAN, so no bundle can answer SAS-vs-SATA"
+fi
+
+# lsblk's TRAN reports the BUS, not the drive: a SATA disk behind a SAS HBA
+# reads "sas". target_port_protocols in the sas_device class is the per-drive
+# truth, and sas_end_device (a different class, already dumped) does not carry
+# it. This capture has no -a token either, so it also needs its own assertion.
+if grep -E 'dump_attrs 03-sysfs/sas_device\.txt +/sys/class/sas_device/end_device-\*' "$BUNDLE" >/dev/null; then
+    ok "sas_device class is dumped"
+else
+    bad "sas_device class not dumped" "lsblk's TRAN is the bus; target_port_protocols in sas_device is the per-drive SAS-vs-SATA truth, and sas_end_device does not carry it"
+fi
+
+echo
+[ $fail -eq 0 ] && { echo "bundle-coverage: all pass"; exit 0; } || { echo "bundle-coverage: FAILURES"; exit 1; }
