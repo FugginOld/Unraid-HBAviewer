@@ -321,11 +321,12 @@ if ($enableFlash) {
 .lu-ind-icon { width: 15px; height: 15px; flex: none; color: var(--faint); fill: none; stroke: currentColor; }
 .lu-indicator-label { color: var(--faint); flex: 1; }
 .lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-/* What the value MEANS, on its own line under it. 33px = dot 8 + icon 15 + two
-   10px column gaps, so it starts under the label rather than under the dot.
+/* What the value MEANS, on its own line under it — right-aligned, so it hangs
+   off the value it explains rather than off the label. The 2px right padding
+   matches .lu-indicator-row's, keeping it flush with the value above it.
    Dimmed by opacity, not colour: --text/--muted/--faint are the same Unraid
    theme variable, so a colour swap here would be a no-op. */
-.lu-ind-hint { flex: 0 0 100%; margin-left: 33px; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
+.lu-ind-hint { flex: 0 0 100%; text-align: right; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 /* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
