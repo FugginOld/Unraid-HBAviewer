@@ -328,6 +328,42 @@ if ($enableFlash) {
    theme variable, so a colour swap here would be a no-op. */
 .lu-ind-hint { flex: 0 0 100%; text-align: right; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
 
+/* ── Drive bay map (plan 047) ─────────────────────────────────────────────
+   3:1 cells, because a bay holds a drive and a drive is not square — the grid
+   should read as the front of the chassis at a glance. The column count comes
+   from the stored BAY_COLS, set inline via --bay-cols rather than a class, so
+   changing the size is one style write and no re-layout of the CSS. */
+.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), 1fr); gap: 8px; margin: 0 0 18px; }
+.lu-bay-cell {
+    position: relative;   /* the position label is absolute inside it */
+    aspect-ratio: 3 / 1; border: 1px dashed var(--border-soft); border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 4px; font-size: 11px; text-align: center; cursor: pointer;
+    background: var(--surface); overflow: hidden;
+}
+.lu-bay-cell.filled { border-style: solid; }
+/* State colour is carried by the left edge and a tint, never by the text: the
+   temperature has to stay readable on every theme. `nodata` gets neither — a
+   drive nobody has read must not look like a drive that passed. */
+.lu-bay-cell.ok   { border-left: 4px solid #2ecc71; background: color-mix(in srgb,#2ecc71 8%, var(--surface)); }
+.lu-bay-cell.warn { border-left: 4px solid #f39c12; background: color-mix(in srgb,#f39c12 10%, var(--surface)); }
+.lu-bay-cell.fail { border-left: 4px solid #e74c3c; background: color-mix(in srgb,#e74c3c 12%, var(--surface)); }
+.lu-bay-cell.nodata { border-left: 4px solid var(--border-soft); }
+.lu-bay-cell.target { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lu-bay-pos  { position: absolute; top: 3px; left: 6px; font-size: 9px; color: var(--faint); opacity: .5; }
+.lu-bay-dev  { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+.lu-bay-temp { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+.lu-bay-tray { display: flex; flex-wrap: wrap; gap: 6px; }
+.lu-bay-chip {
+    border: 1px solid var(--border-soft); border-radius: 6px; padding: 5px 9px;
+    font-size: 11px; font-family: var(--mono); cursor: pointer; background: var(--surface-2);
+}
+.lu-bay-chip.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lu-bay-chip.dead { cursor: not-allowed; opacity: .45; }
+.lu-bay-dims { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 0 0 14px; color: var(--faint); }
+.lu-bay-dims input { width: 58px; padding: 4px 6px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border-soft); border-radius: 6px; font-family: var(--mono); }
+
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 /* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
    .lu-perf-ctl survives only as the hook for the heading below. */
@@ -457,9 +493,14 @@ if ($enableFlash) {
 <div id="tab-drives" class="lu-tab-pane">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
-    <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
+    <button class="lu-refresh-btn" id="baymap-toggle" onclick="luBayToggle()">Map</button>
+    <button class="lu-refresh-btn" onclick="luBayRefresh()">Refresh</button>
   </div>
   <div id="drives-content"><div class="lu-loading">Loading…</div></div>
+  <!-- Bay map (plan 047): the same drives, arranged the way they sit in the
+       chassis. Hidden until the Map button is pressed, and fetched then — the
+       payload costs a SMART join the table has no use for. -->
+  <div id="baymap-content" style="display:none"></div>
 </div>
 <?php endif; ?>
 
@@ -675,6 +716,155 @@ if ($enableFlash) {
     // global; fall back to the token we read from var.ini at render time.
     var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    /* ── Drives tab: the bay map (plan 047) ───────────────────────────────────
+       Lives here, below flashCsrf, because every write goes through the same
+       Unraid CSRF token the flash and baseline POSTs use.
+       The grid is built from the payload with createElement + textContent, not
+       innerHTML: model and serial strings come off the drive itself, and a
+       drive's own firmware is not a trusted source of markup. */
+    var luBay = { data: null, sel: null, dimTimer: 0 };
+
+    window.luBayToggle = function () {
+        var map = document.getElementById('baymap-content');
+        var tbl = document.getElementById('drives-content');
+        var show = map.style.display === 'none';
+        map.style.display = show ? '' : 'none';
+        tbl.style.display = show ? 'none' : '';
+        document.getElementById('baymap-toggle').textContent = show ? 'Table' : 'Map';
+        if (show && !luBay.data) luBayFetch();
+    };
+
+    // One Refresh button for both views — it refreshes whichever is on screen.
+    window.luBayRefresh = function () {
+        if (document.getElementById('baymap-content').style.display === 'none') luReloadTab('drives');
+        else luBayFetch();
+    };
+
+    function luBayFetch() {
+        var el = document.getElementById('baymap-content');
+        el.innerHTML = '<div class="lu-loading">Loading…</div>';
+        fetch('/plugins/hbaviewer/ajax_info.php?type=baymap')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.error) { el.innerHTML = '<div class="lu-error"></div>'; el.firstChild.textContent = d.error; return; }
+                luBay.data = d; luBay.sel = null; luBayRender();
+            })
+            .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
+    }
+
+    function luBayPost(body, done) {
+        body.csrf_token = flashCsrf;
+        fetch('/plugins/hbaviewer/bay_map.php', {method: 'POST', body: new URLSearchParams(body)})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { alert(j.error || 'Bay map not saved.'); return; }
+                if (done) done(j);
+            })
+            .catch(function () { alert('Bay map request failed.'); });
+    }
+
+    /* Chrome once, contents on every change. Re-rendering the whole view from
+       the dimension inputs' own oninput would replace the input the person is
+       typing into and drop focus mid-number, so only the grid and tray repaint. */
+    function luBayRender() {
+        var d = luBay.data, el = document.getElementById('baymap-content');
+        el.innerHTML =
+            '<div class="lu-card first">'
+          + '<div class="lu-bay-dims">'
+          +   '<label>Rows <input type="number" id="bay-rows" min="1" max="12" value="' + (d.rows | 0) + '"></label>'
+          +   '<label>Columns <input type="number" id="bay-cols" min="1" max="12" value="' + (d.cols | 0) + '"></label>'
+          +   '<span>Pick a drive below, then click a bay. Click a filled bay to take it back.</span>'
+          + '</div>'
+          + '<div class="lu-bay-grid" id="bay-grid"></div>'
+          + '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Unassigned drives</p>'
+          + '<div class="lu-bay-tray" id="bay-tray"></div>'
+          + '</div>';
+        document.getElementById('bay-rows').oninput = luBayDims;
+        document.getElementById('bay-cols').oninput = luBayDims;
+        luBayPaint();
+    }
+
+    function luBayPaint() {
+        var d = luBay.data;
+        var grid = document.getElementById('bay-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        grid.style.setProperty('--bay-cols', d.cols);
+        var at = {};
+        d.placed.forEach(function (p) { at[p.row + ':' + p.col] = p; });
+
+        for (var r = 0; r < d.rows; r++) {
+            for (var c = 0; c < d.cols; c++) {
+                var drv  = at[r + ':' + c];
+                var cell = document.createElement('div');
+                cell.className = 'lu-bay-cell ' + (drv ? 'filled ' + drv.state : (luBay.sel ? 'target' : ''));
+                cell.title = drv ? [drv.model, drv.serial, drv.size].filter(Boolean).join(' · ') : 'Empty bay';
+                var pos = document.createElement('span');
+                pos.className = 'lu-bay-pos';
+                pos.textContent = (r + 1) + '·' + (c + 1);
+                cell.appendChild(pos);
+                if (drv) {
+                    var dev = document.createElement('span');
+                    dev.className = 'lu-bay-dev';
+                    dev.textContent = drv.dev || drv.slot || drv.key;
+                    cell.appendChild(dev);
+                    var t = document.createElement('span');
+                    t.className = 'lu-bay-temp';
+                    // No SMART reading is stated as such, never left to look like 0°C.
+                    t.textContent = drv.temp === null ? 'no SMART data' : drv.temp + '°C';
+                    cell.appendChild(t);
+                }
+                cell.onclick = luBayCellClick(r, c, drv);
+                grid.appendChild(cell);
+            }
+        }
+
+        var tray = document.getElementById('bay-tray');
+        tray.innerHTML = d.unassigned.length
+            ? '' : '<span class="lu-muted" style="font-size:12px">Every detected drive is placed.</span>';
+        d.unassigned.forEach(function (u) {
+            var chip = document.createElement('span');
+            // No key = the drive reported neither a port nor a PHY, so there is
+            // nothing stable to remember it by. Shown, but not placeable.
+            chip.className = 'lu-bay-chip' + (u.key === null ? ' dead' : (luBay.sel === u.key ? ' sel' : ''));
+            chip.textContent = u.dev || u.slot || u.serial || '?';
+            chip.title = u.key === null
+                ? 'This drive reports no port or PHY, so it cannot be assigned to a bay.'
+                : [u.model, u.serial, u.size].filter(Boolean).join(' · ');
+            if (u.key !== null) {
+                chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
+            }
+            tray.appendChild(chip);
+        });
+    }
+
+    function luBayCellClick(r, c, drv) {
+        return function () {
+            if (drv) { luBayPost({action: 'unassign', key: drv.key}, luBayFetch); return; }
+            if (!luBay.sel) return;
+            luBayPost({action: 'assign', key: luBay.sel, row: r, col: c}, luBayFetch);
+        };
+    }
+
+    /* Resize: reflow the grid on screen immediately, persist after a pause.
+       Drives that no longer fit are moved into the tray HERE too, not just by
+       the server's prune — so the preview shows what shrinking will actually
+       do before it is saved. */
+    function luBayDims() {
+        var rows = Math.max(1, Math.min(12, parseInt(document.getElementById('bay-rows').value, 10) || 1));
+        var cols = Math.max(1, Math.min(12, parseInt(document.getElementById('bay-cols').value, 10) || 1));
+        var d = luBay.data, keep = [];
+        d.placed.forEach(function (p) {
+            if (p.row < rows && p.col < cols) keep.push(p); else d.unassigned.push(p);
+        });
+        d.placed = keep; d.rows = rows; d.cols = cols;
+        luBayPaint();
+        clearTimeout(luBay.dimTimer);
+        luBay.dimTimer = setTimeout(function () {
+            luBayPost({action: 'dims', rows: rows, cols: cols}, luBayFetch);
+        }, 700);
+    }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     // Errored controllers render a card with data-ctl but no data-chip, so the
     // lookup can succeed while the attribute is absent. Coalesce to '' — chip is

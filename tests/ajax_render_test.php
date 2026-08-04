@@ -322,6 +322,72 @@ check('drives storcli unmatched device is em dash',
       str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '<span class="lu-muted">—</span>')
       && !str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '/dev/sdz'));
 
+/* ── Bay map join (plan 047) ──────────────────────────────────────────────────
+   Three payloads meet here: the drive list, the background SMART cache (keyed
+   by serial) and the stored positions (keyed by port/PHY). The load-bearing
+   case is the third check: a drive nobody has SMART for must be `nodata`, not
+   green — a bay coloured healthy for a drive that was never read is the whole
+   failure this feature would introduce if it got that wrong. */
+$bmDrives = ['backend' => 'storcli', 'controllers' => [['drives' => [
+    ['slot'=>'0/0','port'=>'14','model'=>'ST8000NM','serial'=>'PLACED01','size'=>'7.276 TB'],
+    ['slot'=>'0/1','port'=>'15','model'=>'ST8000NM','serial'=>'NOSMART1','size'=>'7.276 TB'],
+    ['slot'=>'0/2','port'=>'16','model'=>'ST8000NM','serial'=>'TRAYDRV1','size'=>'7.276 TB'],
+]]]];
+$bmSmart = ['drives' => [
+    ['dev'=>'/dev/sda','serial'=>'PLACED01','smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0']],
+    ['dev'=>'/dev/sdc','serial'=>'TRAYDRV1','smart'=>['health'=>'PASSED','temp'=>'41','defects'=>'0','pending'=>'2']],
+]];
+$bm = bay_map_assemble($bmDrives, $bmSmart, ['c0:p14'=>['row'=>1,'col'=>2], 'c0:p15'=>['row'=>0,'col'=>0]],
+                       6, 4, ['PLACED01'=>'/dev/sda']);
+check('baymap carries the grid dims',   $bm['rows'] === 6 && $bm['cols'] === 4);
+check('baymap places mapped drives',    count($bm['placed']) === 2);
+check('baymap trays unmapped drives',   count($bm['unassigned']) === 1 && $bm['unassigned'][0]['serial'] === 'TRAYDRV1');
+$placed = array_column($bm['placed'], null, 'serial');
+check('baymap placed keeps its position', $placed['PLACED01']['row'] === 1 && $placed['PLACED01']['col'] === 2);
+check('baymap joins SMART by serial',     $placed['PLACED01']['state'] === 'ok' && $placed['PLACED01']['temp'] === 34);
+check('baymap resolves the /dev name',    $placed['PLACED01']['dev'] === '/dev/sda');
+check('baymap placed-but-unread is nodata, NOT ok',
+      $placed['NOSMART1']['state'] === 'nodata' && $placed['NOSMART1']['temp'] === null);
+check('baymap flags pending sectors as warn', $bm['unassigned'][0]['state'] === 'warn');
+check('baymap keys storcli drives on port',   $placed['PLACED01']['key'] === 'c0:p14');
+
+// No SMART cache at all (never collected) — every drive is nodata, nothing green.
+$bmNone = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>0,'col'=>0]], 6, 4);
+check('baymap with no SMART cache colours nothing',
+      count(array_filter(array_merge($bmNone['placed'], $bmNone['unassigned']),
+                         fn($e) => $e['state'] !== 'nodata')) === 0);
+
+// lsiutil backend: no port anywhere, so the key comes off the PHY.
+$bmLsi = bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[
+    ['bus'=>'0','target'=>'3','phy'=>'2','os_name'=>'/dev/sdb','serial'=>'LSIDRV01'],
+]]]], null, ['c0:h2'=>['row'=>2,'col'=>1]], 6, 4);
+check('baymap keys lsiutil drives on phy', ($bmLsi['placed'][0]['key'] ?? '') === 'c0:h2');
+check('baymap lsiutil dev comes from os_name', ($bmLsi['placed'][0]['dev'] ?? '') === '/dev/sdb');
+
+// A stored position outside the current grid (hand-edited file) must land in
+// the tray, not vanish and not render off-screen.
+$bmOut = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>9,'col'=>9]], 2, 2);
+check('baymap out-of-grid position falls back to the tray',
+      $bmOut['placed'] === [] && count($bmOut['unassigned']) === 3);
+
+// A drive with neither port nor PHY cannot be placed — but must still be
+// listed, or a missing drive reads as a detection bug.
+$bmNoKey = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['slot'=>'0/9','model'=>'ST8000NM','serial'=>'NOPORT01'],
+]]]], null, [], 6, 4);
+check('baymap unplaceable drive still appears, with a null key',
+      count($bmNoKey['unassigned']) === 1 && $bmNoKey['unassigned'][0]['key'] === null);
+
+/* smart_state is the one health rule the SMART tab, the per-drive line and the
+   bay map all share (plan 047 STOP condition). */
+check('smart_state ok',      smart_state(['health'=>'PASSED']) === 'ok');
+check('smart_state ok on OK', smart_state(['health'=>'OK']) === 'ok');
+check('smart_state warn on pending', smart_state(['health'=>'OK','pending'=>'3']) === 'warn');
+check('smart_state warn on defects', smart_state(['health'=>'OK','defects'=>'1']) === 'warn');
+check('smart_state fail',    smart_state(['health'=>'FAILED']) === 'fail');
+check('smart_state nodata on empty', smart_state([]) === 'nodata');
+check('smart_state nodata is uncoloured', smart_state_color('nodata') === '');
+
 check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
 check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
 check('drive_dev_name null when unmatched', drive_dev_name(['serial'=>'NOPE'], ['X'=>'/dev/sdq']) === null);

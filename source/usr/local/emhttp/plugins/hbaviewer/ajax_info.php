@@ -14,6 +14,8 @@ require_once __DIR__ . '/health.php';
 // Read path only. phy_baseline.php's own dispatch fires solely on a POST
 // carrying reset_baseline, so requiring it here cannot mutate anything.
 require_once __DIR__ . '/phy_baseline.php';
+// Same posture: bay_map.php's dispatch fires only on a POST carrying an action.
+require_once __DIR__ . '/bay_map.php';
 
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
@@ -24,7 +26,7 @@ require_once __DIR__ . '/phy_baseline.php';
    Same posture as flash.php. */
 if (PHP_SAPI === 'cli') return;
 
-$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','events','smart','smart_all','metrics','health'])
+$type    = in_array($_GET['type'] ?? '', ['overview','overview_html','phy','drives','baymap','events','smart','smart_all','metrics','health'])
            ? $_GET['type'] : 'overview';
 $scripts = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
@@ -53,14 +55,12 @@ if ($type === 'metrics') {
    detached collector) so the request never blocks — the tab polls this. */
 if ($type === 'smart_all') {
     header('Content-Type: text/html; charset=utf-8');
-    $cache = '/tmp/lsiutil_smart.json';
+    $cache = SMART_CACHE_PATH;
     $prog  = $cache . '.progress';
     if (($_GET['refresh'] ?? '') === '1') { @unlink($cache); @unlink($prog); }
 
-    if (is_file($cache) && (time() - filemtime($cache)) < 600) {
-        echo renderSmartTable(json_decode((string) file_get_contents($cache), true) ?: []);
-        exit;
-    }
+    $cached = smart_cache_read();
+    if ($cached !== null) { echo renderSmartTable($cached); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -94,10 +94,7 @@ if ($type === 'smart') {
         echo '<span class="lu-muted">standby (SATA, not read)</span>'; exit;
     }
 
-    $health = strtoupper($s['health'] ?? '');
-    $ok     = $health === 'OK' || $health === 'PASSED';
-    $warn   = (int)($s['defects'] ?? 0) > 0 || (int)($s['pending'] ?? 0) > 0;
-    $color  = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
+    $color = smart_state_color(smart_state($s));
     $f = fn($v) => $v === '' || $v === null ? '?' : htmlspecialchars($v);
     printf(
         '<span style="color:%s;font-weight:700">%s</span> &middot; %s&deg;C &middot; %s def &middot; %s pend &middot; %sh',
@@ -176,12 +173,22 @@ $scriptMap = [
     'phy'    => "$scripts/get_phy_health.sh",
     'drives' => "$scripts/get_attached_drives.sh",
     'events' => "$scripts/get_event_log.sh",
+    // The bay map is the same drive list as the Drives tab, joined against the
+    // SMART cache and the stored positions further down.
+    'baymap' => "$scripts/get_attached_drives.sh",
 ];
 
 $raw  = shell_exec('bash ' . escapeshellarg($scriptMap[$type]) . ' 2>/dev/null');
 $data = $raw ? json_decode($raw, true) : null;
 
 if (!$data || isset($data['error'])) {
+    // The bay map is the one consumer here that expects JSON; handing it an
+    // HTML error block would surface as a silent parse failure in the view.
+    if ($type === 'baymap') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['error' => $data['error'] ?? 'Script returned no data.']);
+        exit;
+    }
     $msg = htmlspecialchars($data['error'] ?? 'Script returned no data.');
     echo '<div class="lu-error"><strong>Error:</strong> ' . $msg . '</div>';
     exit;
@@ -200,6 +207,44 @@ function luTable(array $headers, array $rows): string {
     return $h . '</tbody></table>';
 }
 
+/* ── The background SMART cache: one reader, one health rule ────────────────
+   collect_smart.sh writes {"drives":[{dev,serial,model,smart:{…}}]} here. Both
+   the SMART tab and the bay map read it, and they must never disagree about a
+   drive, so neither gets its own copy of "where is it / is it fresh / is it
+   healthy" (plan 047's STOP condition).
+   Returns null when there is no usable cache — deliberately NOT [], because a
+   collected-and-genuinely-empty cache (a box with no drives) has to be
+   distinguishable from one that was never collected, or the SMART tab would
+   relaunch its collector on every visit forever. */
+const SMART_CACHE_PATH = '/tmp/lsiutil_smart.json';
+const SMART_CACHE_TTL  = 600;
+
+function smart_cache_read(?string $path = null, ?int $ttl = null): ?array {
+    $path ??= SMART_CACHE_PATH;
+    $ttl  ??= SMART_CACHE_TTL;
+    if (!is_file($path) || (time() - filemtime($path)) >= $ttl) return null;
+    $d = json_decode((string) file_get_contents($path), true);
+    return is_array($d) ? $d : null;
+}
+
+/* One drive's SMART verdict: 'ok' | 'warn' | 'fail' | 'nodata'.
+   'nodata' covers both "never collected" and "asleep, deliberately not woken"
+   — the two cases where we know nothing. It is a distinct state, not a
+   fall-through to healthy: a bay coloured green for a drive nobody has read
+   is the exact failure this is here to prevent. */
+function smart_state(array $s): string {
+    $health = strtoupper((string) ($s['health'] ?? ''));
+    if ($health === '') return 'nodata';
+    if ($health !== 'OK' && $health !== 'PASSED') return 'fail';
+    return ((int) ($s['defects'] ?? 0) > 0 || (int) ($s['pending'] ?? 0) > 0) ? 'warn' : 'ok';
+}
+
+/* The colours those states have always rendered as, kept in step across the
+   SMART table, the per-drive line and the bay map. */
+function smart_state_color(string $state): string {
+    return ['fail' => '#e74c3c', 'warn' => '#f39c12', 'ok' => '#2ecc71'][$state] ?? '';
+}
+
 /* Render the background-collected SMART cache as a table. */
 function renderSmartTable(array $data): string {
     $drives = $data['drives'] ?? [];
@@ -207,16 +252,12 @@ function renderSmartTable(array $data): string {
     $dash = '<span class="lu-muted">—</span>';
     $rows = [];
     foreach ($drives as $d) {
-        $s = $d['smart'] ?? [];
-        $health = strtoupper((string) ($s['health'] ?? ''));
-        if ($health === '') {
-            $hb = '<span class="lu-muted">standby</span>';
-        } else {
-            $ok   = $health === 'OK' || $health === 'PASSED';
-            $warn = (int) ($s['defects'] ?? 0) > 0 || (int) ($s['pending'] ?? 0) > 0;
-            $hc   = !$ok ? '#e74c3c' : ($warn ? '#f39c12' : '#2ecc71');
-            $hb   = '<span style="color:' . $hc . ';font-weight:700">' . htmlspecialchars($s['health']) . '</span>';
-        }
+        $s     = $d['smart'] ?? [];
+        $state = smart_state($s);
+        $hb    = $state === 'nodata'
+            ? '<span class="lu-muted">standby</span>'
+            : '<span style="color:' . smart_state_color($state) . ';font-weight:700">'
+              . htmlspecialchars($s['health']) . '</span>';
         $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;
         $rows[] = [
             '<code>' . htmlspecialchars($d['dev'] ?? '') . '</code>',
@@ -673,6 +714,69 @@ function renderDrivesTables(array $data, array $devBySerial = []): string {
 }
 
 if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); exit; }
+
+/* ── Drive bay map: drives × stored positions × SMART health (plan 047) ──────
+   The data half only. It returns the payload the map view renders client-side
+   — the grid is interactive (click a drive, click a bay), so its state lives
+   in JS either way and server-rendered cells would just have to be re-derived
+   there on every click.
+   $smart is the decoded SMART cache or null (see smart_cache_read); null and
+   "collected but this drive is not in it" are the same thing here — no data,
+   which is a state of its own and never renders as healthy. */
+function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
+                          array $devBySerial = []): array {
+    // Serial is the join key the SMART collector already emits per drive; it is
+    // also the only identifier both payloads share (storcli's WWN differs by a
+    // nibble from /dev's — see lsi_dev_by_serial).
+    $bySerial = [];
+    foreach ($smart['drives'] ?? [] as $sd) {
+        $sn = strtoupper(trim((string) ($sd['serial'] ?? '')));
+        if ($sn !== '') $bySerial[$sn] = $sd['smart'] ?? [];
+    }
+
+    $placed = [];
+    $tray   = [];
+    foreach ($drivesData['controllers'] ?? [$drivesData] as $i => $ctl) {
+        foreach ($ctl['drives'] ?? [] as $d) {
+            $sn = strtoupper(trim((string) ($d['serial'] ?? '')));
+            $s  = $bySerial[$sn] ?? [];
+            $key = bay_map_key((int) $i, $d);
+            $entry = [
+                // null key = this drive reported neither a port nor a PHY, so it
+                // cannot be placed. It still appears in the tray, greyed: a drive
+                // silently missing from both lists reads as a detection bug.
+                'key'    => $key,
+                'ctl'    => (int) $i,
+                'dev'    => drive_dev_name($d, $devBySerial),
+                'serial' => $d['serial'] ?? '',
+                'model'  => $d['model'] ?? '',
+                'size'   => $d['size'] ?? '',
+                'slot'   => $d['slot'] ?? (isset($d['phy']) ? 'PHY ' . $d['phy'] : ''),
+                'temp'   => ($s['temp'] ?? '') !== '' ? (int) $s['temp'] : null,
+                'state'  => smart_state($s),
+            ];
+            $pos = $key !== null ? ($map[$key] ?? null) : null;
+            // An out-of-grid position falls back to the tray rather than being
+            // dropped: bay_map_prune_to_dims() normally clears these on resize,
+            // but a hand-edited bay_map.json must not strand a drive off-screen.
+            if ($pos !== null && (int) $pos['row'] < $rows && (int) $pos['col'] < $cols) {
+                $placed[] = $entry + ['row' => (int) $pos['row'], 'col' => (int) $pos['col']];
+            } else {
+                $tray[] = $entry;
+            }
+        }
+    }
+    return ['rows' => $rows, 'cols' => $cols, 'placed' => $placed, 'unassigned' => $tray];
+}
+
+if ($type === 'baymap') {
+    header('Content-Type: application/json; charset=utf-8');
+    $d = bay_map_dims();
+    echo json_encode(bay_map_assemble(
+        $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'], lsi_dev_by_serial()
+    ));
+    exit;
+}
 
 /* ── Event Log (per controller; persisted to /boot across reboots) ─────────── */
 /* $dir is the archive location; it is injectable so tests can point the store

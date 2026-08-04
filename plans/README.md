@@ -24,6 +24,19 @@ person can supply, or not yet started:
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **047** | **executed** on `dev`, suite green | one pass on real hardware — see below |
+
+**047 (drive bay map), executed 2026-08-04 on `dev`.** Re-stamped `8286fe7` →
+`d7d7fa7` first: issues #10 and #11 had moved 800+ lines through the same
+files, but every contract the plan quotes was re-verified and holds. Two
+corrections are recorded inline in the plan itself — its `bay_map_dims_set()`
+snippet would have reset every other config key to defaults, and Step 1's
+open question was already answered by shipped code (`phy_drive()`). What is
+left is one pass on real hardware: place a drive, shrink the grid past it, and
+confirm it comes back to the tray rather than vanishing. The store, the
+three-way join and the clamp are unit-tested (`tests/bay_map_test.php`, plus
+the bay-map block in `tests/ajax_render_test.php`); the grid and the two-click
+assignment are browser-only and have not been driven by a person yet.
 
 Archived to `archive/` on merge: **041** (merged 2026-08-04, hardware-passed),
 **042** (merged `514ae74`), **044** (merged `bd77c0a`), **045** (merged `f53e161`), **046** and **043**. **028** is archived too, though its code was deliberately

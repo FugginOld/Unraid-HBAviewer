@@ -21,6 +21,11 @@ const LSI_SCHEMA = [
     'SHOW_PERF'       => [1,  0, 1],   // Performance (real-time graphs) tab
     'ENABLE_FLASH'    => [0,  0, 1],   // advanced: unlocks the Firmware/BIOS tab
     'ENABLE_NOTIFY'   => [0,  0, 1],   // opt-in: cron notifies on health status changes
+    // Drive bay map grid (plan 047). Deliberately NOT on the Settings page:
+    // these are edited in the map view itself, where you can see the grid
+    // change. bay_map.php owns the setter; this is only where they persist.
+    'BAY_ROWS'        => [6,  1, 12],
+    'BAY_COLS'        => [4,  1, 12],
 ];
 
 function lsi_clamp(string $key, $val): int {
