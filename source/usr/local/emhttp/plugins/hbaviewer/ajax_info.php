@@ -561,12 +561,19 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
 }
 
 if ($type === 'phy') {
-    // Drive names for the top-offenders list (plan 027). Read through the
-    // shared cache — never a second bare shell_exec — so the PHY tab's poll
-    // stays cheap. A warming cache renders the list without drive names
-    // rather than blocking the tab.
-    $dr    = cached_read('drives', 60, 'bash ' . escapeshellarg("$scripts/get_attached_drives.sh"));
-    $ddec  = $dr['state'] === 'ready' && $dr['body'] !== '' ? json_decode($dr['body'], true) : null;
+    /* Drive names for the Device column and the top-offenders list. Read the
+       same way the Drives tab reads them — one direct call — and NOT through
+       cached_read('drives') as this did before (plan 027). That cache was
+       cheap on paper and empty in practice: the PHY tab is its only consumer,
+       so a 60s TTL had always expired by the next visit, every visit got the
+       `warming` (empty) answer and re-launched the producer, and the names
+       never appeared (issue #11). The producer also folds stderr into the
+       cached file (`2>&1`), so one storcli warning is enough to make the JSON
+       undecodable and the drives vanish silently. The tab loads on click and
+       on Refresh, never on a timer, and the Drives tab already pays exactly
+       this read on exactly this hardware. */
+    $ddec  = json_decode((string) shell_exec(
+        'bash ' . escapeshellarg("$scripts/get_attached_drives.sh") . ' 2>/dev/null'), true);
     $ddata = is_array($ddec) ? $ddec : [];
     echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial());
     exit;
