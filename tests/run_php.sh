@@ -7,10 +7,10 @@
 cd "$(dirname "$0")/.." || exit 2
 
 if command -v php >/dev/null 2>&1; then
-    php tests/config_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php && php tests/flash_php_test.php && php tests/ajax_render_test.php && php tests/health_test.php && php tests/notify_test.php && php tests/bundle_php_test.php && php tests/phy_baseline_test.php && php tests/export_test.php && php tests/plg_test.php
+    php tests/config_test.php && php tests/inlet_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php && php tests/flash_php_test.php && php tests/ajax_render_test.php && php tests/health_test.php && php tests/notify_test.php && php tests/bundle_php_test.php && php tests/phy_baseline_test.php && php tests/export_test.php && php tests/plg_test.php
 else
     echo "no local php — using php:8.2-cli via docker"
     MSYS_NO_PATHCONV=1 docker run --rm \
         -v "$(pwd -W 2>/dev/null || pwd):/app" -w /app php:8.2-cli \
-        sh -c 'php tests/config_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php && php tests/flash_php_test.php && php tests/ajax_render_test.php && php tests/health_test.php && php tests/notify_test.php && php tests/bundle_php_test.php && php tests/phy_baseline_test.php && php tests/export_test.php && php tests/plg_test.php'
+        sh -c 'php tests/config_test.php && php tests/inlet_test.php && php tests/view_test.php && php tests/event_archive_test.php && php tests/cached_read_test.php && php tests/flash_php_test.php && php tests/ajax_render_test.php && php tests/health_test.php && php tests/notify_test.php && php tests/bundle_php_test.php && php tests/phy_baseline_test.php && php tests/export_test.php && php tests/plg_test.php'
 fi

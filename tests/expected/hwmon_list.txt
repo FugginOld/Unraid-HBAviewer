@@ -1,0 +1,3 @@
+nct6798	SYSTIN	fixtures/hwmon/hwmon0/temp1_input	55000
+acpitz	acpitz temp1	fixtures/hwmon/hwmon1/temp1_input	-61000
+coretemp	Package id 0	fixtures/hwmon/hwmon2/temp1_input	0

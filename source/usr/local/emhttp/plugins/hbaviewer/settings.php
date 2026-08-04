@@ -3,6 +3,7 @@
    Reached via the HBAviewer icon card in Unraid Settings > System Settings. */
 
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/inlet.php';
 $cfg   = lsi_config_read();
 $saved = false;
 
@@ -66,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
         'ENABLE_FLASH'    => isset($_POST['enable_flash'])  ? 1 : 0,
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
+        'INLET_SENSOR'    => $_POST['inlet_sensor'] ?? '',   // sanitised by lsi_config_write
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -207,6 +209,33 @@ foreach ($bands as $floor => $label) {
 }
 ?>
           </select>
+        </div>
+      </div>
+
+      <?php
+      // Live candidates, each with its current reading, so the user can see a
+      // junk -61C/0C unconnected header BEFORE picking it (plan 029) — hwmon
+      // indices are not stable across reboots, so nothing here is stored as a
+      // path; the select value is chip/label, resolved fresh on every read.
+      $inletCandidates = lsi_inlet_candidates();
+      $inletCurrent     = (string) $cfg['INLET_SENSOR'];
+      ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Inlet Sensor
+          <small>Optional. Shows Inlet &amp; &Delta; (controller minus inlet) on the Overview card. Off by default &mdash; a wrong reading shown confidently is worse than none.</small>
+        </div>
+        <div class="lu-s-control">
+          <select name="inlet_sensor">
+            <option value=""<?= $inletCurrent === '' ? ' selected' : '' ?>>Off</option>
+<?php foreach ($inletCandidates as $cand): ?>
+            <option value="<?= htmlspecialchars($cand['sensor']) ?>"<?= $cand['sensor'] === $inletCurrent ? ' selected' : '' ?>><?= htmlspecialchars($cand['sensor']) ?> &mdash; <?= (int) $cand['reading'] ?> &deg;C</option>
+<?php endforeach; ?>
+<?php if ($inletCurrent !== '' && !in_array($inletCurrent, array_column($inletCandidates, 'sensor'), true)): ?>
+            <option value="<?= htmlspecialchars($inletCurrent) ?>" selected><?= htmlspecialchars($inletCurrent) ?> &mdash; not currently readable</option>
+<?php endif; ?>
+          </select>
+          <small style="display:block;color:var(--faint);margin-top:6px;line-height:1.4">Readings below 0&deg;C or above 80&deg;C are almost certainly unconnected headers, not intake air.</small>
         </div>
       </div>
     </div>

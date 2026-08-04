@@ -8,6 +8,7 @@
 
 require_once __DIR__ . '/view.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/inlet.php';
 require_once __DIR__ . '/event_archive.php';
 require_once __DIR__ . '/cached_read.php';
 require_once __DIR__ . '/health.php';
@@ -234,11 +235,14 @@ function renderSmartTable(array $data): string {
 }
 
 /* Render the Overview cards (one per controller) — same markup the Monitor page
-   used to emit server-side, moved here so the initial load is async. */
-function renderOverviewCards(array $data, array $cfg): string {
+   used to emit server-side, moved here so the initial load is async.
+   $inletSysRoot is injectable (tests point it at a fixture hwmon tree); null
+   means "the real /sys/class/hwmon", via lsi_inlet_reading's own default. */
+function renderOverviewCards(array $data, array $cfg, ?string $inletSysRoot = null): string {
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
+    $inletCfg  = $cfg['INLET_SENSOR'] ?? '';
     $driver    = $data['driver'] ?? '';
     $out = '<div class="lu-ov-grid">';
     foreach (lsi_controllers($data) as $i => $c) {
@@ -259,6 +263,17 @@ function renderOverviewCards(array $data, array $cfg): string {
         // lives in the same DOM, so it uses its own prefix.
         [$gDark, $gLight] = $v['temp_grad'];
         $frac  = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
+        // Inlet + Delta (plan 029): nothing at all — not "n/a", not a dash —
+        // when no sensor is configured or the configured one is unreadable.
+        // Off by default, and deliberately unjudged: no colour, no band.
+        $inletRow = '';
+        if ($inletCfg !== '' && $v['temp'] !== '') {
+            $inletTemp = lsi_inlet_reading($inletCfg, $inletSysRoot);
+            if ($inletTemp !== null) {
+                $delta = lsi_inlet_delta((int) $v['temp'], $inletTemp);
+                $inletRow = '<p>Inlet: <span>' . $inletTemp . '&deg;C &middot; &Delta; ' . $delta . '</span></p>';
+            }
+        }
         $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<div class="lu-overview-row">'
               . '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
@@ -270,6 +285,7 @@ function renderOverviewCards(array $data, array $cfg): string {
               . '<span class="lu-temp-band">' . $tempChip . '</span>'
               . '</div>'
               . '<div class="lu-meta">'
+              . $inletRow
               . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
               . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
               . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'

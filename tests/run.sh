@@ -74,6 +74,18 @@ check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/s
 check smart-notran     smart_notran.json    bash "$P/smart.sh"      < fixtures/smart/sata_drive.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
+# Inlet sensor discovery/resolve (plan 029). Fixture root: a labelled input
+# (nct6798/SYSTIN, 55C), an unlabelled one (acpitz, -61C — an unconnected
+# header), and a zero-reading one (coretemp, 0C) — all three must appear in
+# discovery output; filtering junk out is the UI's job, not the parser's.
+check hwmon-list hwmon_list.txt bash "$P/hwmon_list.sh" fixtures/hwmon
+# Resolve: happy path, chip absent, and label absent but chip present. The
+# not-found cases MUST print nothing (not some other sensor's reading) — that
+# fallback is the worst failure mode this feature can have.
+check hwmon-resolve-happy    hwmon_resolve_happy.txt    bash "$P/hwmon_resolve.sh" nct6798 SYSTIN fixtures/hwmon
+check hwmon-resolve-notfound hwmon_resolve_notfound.txt bash "$P/hwmon_resolve.sh" nonexistent SYSTIN fixtures/hwmon
+check hwmon-resolve-nolabel  hwmon_resolve_notfound.txt bash "$P/hwmon_resolve.sh" nct6798 NOPE fixtures/hwmon
+
 # Performance-tab temperatures: per controller, in order. Covers the lsiutil
 # pretty-printed shape (space after the colon) and an erroring controller —
 # the two cases a positional grep got wrong.
@@ -170,11 +182,15 @@ echo "=== read_smart tests ==="
 bash read_smart_test.sh; read_smart_fail=$?
 
 echo
+echo "=== hwmon chip-derivation tests ==="
+bash hwmon_chip_test.sh; hwmon_chip_fail=$?
+
+echo
 echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $hwmon_chip_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

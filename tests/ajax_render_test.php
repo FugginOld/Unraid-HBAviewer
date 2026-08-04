@@ -633,6 +633,38 @@ array_map('unlink', glob("$cdir/*.json") ?: []);
 if ($hSaved1 === null) @unlink($hRing1); else file_put_contents($hRing1, $hSaved1);
 if ($hSaved === null) @unlink($hRing); else file_put_contents($hRing, $hSaved);
 
+/* ── Overview card: Inlet + Δ (plan 029) — off by default, nothing rendered
+   unless a sensor is configured AND currently readable ─────────────────── */
+check('renderOverviewCards fn exists', function_exists('renderOverviewCards'));
+
+$ovData  = ['controllers' => [['temp' => 72, 'status' => 'ok', 'model' => 'SAS2308', 'firmware' => 'x', 'port_name' => 'ioc0']]];
+$ovCfg   = lsi_config_read(sys_get_temp_dir() . '/inlet_render_test_' . getmypid() . '.cfg'); // nonexistent -> defaults
+$fixRoot = __DIR__ . '/fixtures/hwmon';
+
+check('inlet off by default -> no Inlet row', !str_contains(renderOverviewCards($ovData, $ovCfg, $fixRoot), 'Inlet:'));
+
+$ovCfgOn = $ovCfg; $ovCfgOn['INLET_SENSOR'] = 'nct6798/SYSTIN';
+$h = renderOverviewCards($ovData, $ovCfgOn, $fixRoot);
+check('inlet configured+readable shows reading', str_contains($h, 'Inlet: <span>55&deg;C'));
+check('inlet configured+readable shows delta',   str_contains($h, '&Delta; 17'));   // 72 - 55
+
+$ovCfgBad = $ovCfg; $ovCfgBad['INLET_SENSOR'] = 'nct6798/NOPE'; // chip present, label not found
+check('inlet configured but unreadable (label absent) -> no row, not "n/a"',
+      !str_contains(renderOverviewCards($ovData, $ovCfgBad, $fixRoot), 'Inlet:'));
+
+// Chip itself absent from the fixture tree entirely — the case the "unreadable
+// -> render nothing" guard exists for. Catches `if ($inletTemp !== null)`
+// degrading to `if (true)`, which the label-absent case above does NOT catch
+// on its own (both must independently guard against a vanished sensor).
+$ovCfgGone = $ovCfg; $ovCfgGone['INLET_SENSOR'] = 'doesnotexist/SYSTIN';
+check('inlet configured but unreadable (chip absent) -> no row, not "n/a"',
+      !str_contains(renderOverviewCards($ovData, $ovCfgGone, $fixRoot), 'Inlet:'));
+
+// Negative Δ (inlet reads hotter than controller) is shown, not hidden or clamped.
+$ovDataCool = ['controllers' => [['temp' => 30, 'status' => 'ok', 'model' => 'SAS2308', 'firmware' => 'x', 'port_name' => 'ioc0']]];
+$h = renderOverviewCards($ovDataCool, $ovCfgOn, $fixRoot); // controller 30, inlet SYSTIN 55 -> Δ-25
+check('inlet negative delta shown, not clamped', str_contains($h, '&Delta; -25'));
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
