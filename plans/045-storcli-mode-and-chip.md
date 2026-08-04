@@ -13,8 +13,15 @@
 > only covers in-scope files and **cannot** detect a stale base.
 >
 > **Drift check**:
-> `git diff --stat 095762e..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh tests/run.sh`
-> Expected output: **nothing**. Every excerpt below is quoted from `095762e`.
+> `git diff --stat b61be96..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh tests/run.sh`
+> Expected output: **nothing**. Every excerpt below was re-verified against
+> `b61be96`.
+>
+> **Re-stamped 2026-08-04** from `095762e` after plan 041 merged. 041 touched
+> `get_hba_info.sh` and `tests/run.sh`, but only in `ov_lsiutil` and the
+> lsiutil golden cases — **both excerpts this plan quotes were re-checked and
+> are byte-identical**, and `storcli_overview.sh` was not touched at all. The
+> `storcli_overview.sh` call is still at `get_hba_info.sh:78`.
 
 ## Status
 
