@@ -322,6 +322,30 @@ check('smart defects amber',  str_contains($h, '#f39c12'));
 check('smart standby row',    str_contains($h, 'standby'));
 check('smart formats hours',  str_contains($h, '12,345h'));
 check('smart empty message',  str_contains(renderSmartTable([]), 'No drives found.'));
+check('smart header drops Grown Defects', !str_contains($h, 'Grown Defects'));
+
+/* transport: the label the plan exists for — SATA drives must not be shown
+   SAS-only vocabulary, and an unknown transport must show a dash, never a
+   guessed bus. */
+$hSata = renderSmartTable(['drives' => [
+    ['dev'=>'/dev/sdb','model'=>'WD80EFAX','serial'=>'WD-XYZ',
+     'smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0','power_on_hours'=>'900','transport'=>'sata']],
+]]);
+check('smart sata renders SATA',       str_contains($hSata, 'SATA'));
+check('smart sata header Reallocated', str_contains($hSata, 'Reallocated'));
+
+$hSas = renderSmartTable(['drives' => [
+    ['dev'=>'/dev/sda','model'=>'ST8000NM','serial'=>'ZA1ABCDE',
+     'smart'=>['health'=>'OK','temp'=>'35','defects'=>'0','pending'=>'0','power_on_hours'=>'27409','transport'=>'sas']],
+]]);
+check('smart sas renders SAS', str_contains($hSas, 'SAS'));
+
+$hNoTran = renderSmartTable(['drives' => [
+    ['dev'=>'/dev/sdd','model'=>'HUH721','serial'=>'K1234',
+     'smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0','power_on_hours'=>'900']],
+]]);
+check('smart no transport shows dash',    str_contains($hNoTran, 'lu-muted'));
+check('smart no transport is not guessed', !str_contains($hNoTran, 'SATA'));
 
 /* ── luTable: headers are escaped, cells are passed through as markup ─────── */
 $t = luTable(['A & B'], [['<code>x</code>']]);

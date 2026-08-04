@@ -372,16 +372,30 @@ if [ -x "$LSIUTIL" ]; then
     printf '0\n' | hba_query > "$B/02-raw/lsiutil_banner.txt" 2>&1
     run 02-raw/lsiutil_b.txt          hba_query -b
     run 02-raw/lsiutil_ioc.txt        hba_query -p"$PORT" -a 25,2,0,0
+    # Main-menu option 1, "Identify firmware, BIOS, and/or FCode". Plain menu
+    # item, NOT expert mode, so no -e. Carries the flashed firmware image name
+    # whose suffix IS the IT/IR personality ("MPTFW-20.00.07.00-IT") — issue #10
+    # needed this collected by hand because the bundle did not have it.
+    run 02-raw/lsiutil_ident.txt      hba_query -p"$PORT" -a 1,0
     run 02-raw/lsiutil_phy.txt        hba_query -p"$PORT" -a 20,12,0,0
     run 02-raw/lsiutil_osmap.txt      hba_query -p"$PORT" -a 42,0
     run 02-raw/lsiutil_eventlog.txt   hba_query -e -p"$PORT" -a 35,0
 fi
-run 02-raw/lsblk.txt lsblk -S -P -o NAME,WWN,SERIAL,MODEL
+# TRAN is the SAS-vs-SATA signal. read_smart.sh already branches on it (a SAS
+# log-page read does not spin a drive up; an ATA one can), but nothing recorded
+# it, so no bundle could answer "are these drives SATA?" without asking.
+run 02-raw/lsblk.txt lsblk -S -P -o NAME,TRAN,WWN,SERIAL,MODEL
 
 # ── Section 3: sysfs ─────────────────────────────────────────────────────────
-run 03-sysfs/listing.txt sh -c 'ls -l /sys/class/scsi_host/ /sys/class/sas_phy/ /sys/class/sas_end_device/ 2>&1'
+run 03-sysfs/listing.txt sh -c 'ls -l /sys/class/scsi_host/ /sys/class/sas_phy/ /sys/class/sas_device/ /sys/class/sas_end_device/ 2>&1'
 dump_attrs 03-sysfs/scsi_host.txt     /sys/class/scsi_host/host*
 dump_attrs 03-sysfs/sas_phy.txt       /sys/class/sas_phy/phy-*
+# lsblk's TRAN is the BUS, not the drive: a SATA disk behind a SAS HBA reads
+# "sas". The per-drive truth is target_port_protocols in the sas_device class
+# (ssp = SAS, sata = SATA). Captured because a diagnosis on 2026-08-04 needed
+# it and no bundle had it — sas_end_device, already dumped below, is a
+# different class and does not carry it.
+dump_attrs 03-sysfs/sas_device.txt /sys/class/sas_device/end_device-*
 dump_attrs 03-sysfs/sas_end_device.txt /sys/class/sas_end_device/end_device-*
 # PCIe link state for the controllers only — resolved from each SAS host's own
 # device path, so this never walks the whole PCI tree.

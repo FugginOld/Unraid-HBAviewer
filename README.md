@@ -267,6 +267,10 @@ rather than as editable test data.
 - **[dkaser — unraid-storcli](https://github.com/dkaser/unraid-storcli)** — the
   easiest way to install `storcli` on Unraid for SAS3 / SAS3.5 cards.
 
+## Special Thanks
+
+Thanks to the early users (in no particular order) @jac2424, @PaliKinG3, @iassis, @t0ffemannen to help fix and troubleshoot the early release bugs.
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.

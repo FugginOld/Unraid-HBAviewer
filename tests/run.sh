@@ -38,6 +38,16 @@ check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview
 # legend block whose "UGood-Unconfigured Good|..." text is the exact string
 # that false-matched MODE before plan 017. ROC temperature 56.
 check storcli-overview-noencl-ugood storcli_overview_noencl_ugood.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_noencl_ugood.txt fixtures/storcli/temp_noencl_ugood.txt)
+# Real `/c0 show` + `/c0 show temperature` from issue #10 (@PaliKinG3), an
+# IT-FLASHED SAS9305-16i reporting 13x UGood. Before plan 045 this card was
+# labelled IR: UGood means "unconfigured", not "IR firmware". Mode must be ""
+# — no IR firmware exists for a 9305-16i, and an empty mode hides the row
+# rather than stating a falsehood.
+check storcli-overview-9305 storcli_overview_9305.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_9305.txt fixtures/storcli/temp_9305.txt)
+# AdapterType passed by the composer wins over the device-ID map (plan 045
+# Part B). 0xC4 is deliberately NOT in that map — this is the case that map
+# could never have handled.
+check storcli-overview-chiparg storcli_overview_chiparg.json bash "$P/storcli_overview.sh" 80 0 "SAS3224" < <(cat fixtures/storcli/overview_9305.txt fixtures/storcli/temp_9305.txt)
 # health rollup: failed drive -> alert (even at 50C); PHY errors -> warn
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
@@ -67,8 +77,18 @@ check storcli-drives-noencl-ugood storcli_drives_noencl_ugood.json bash "$P/stor
 check storcli-drives-noencl-ugood8 storcli_drives_noencl_ugood8.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood8.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
-check smart-sas        smart_sas.json       bash "$P/smart.sh" < fixtures/smart/sas_drive.txt
-check smart-sata       smart_sata.json      bash "$P/smart.sh" < fixtures/smart/sata_drive.txt
+check smart-sas        smart_sas.json       bash "$P/smart.sh" sas  < fixtures/smart/sas_drive.txt
+check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/smart/sata_drive.txt
+# No transport arg passed (lsblk reported usb/nvme/nothing, or was never run).
+# The drive's own ATA attribute table is still enough to call it "sata" --
+# the injected bus arg is only a fallback for when the drive's output can't
+# be classified at all (e.g. asleep under -n standby, almost no SMART data).
+check smart-notran     smart_notran.json    bash "$P/smart.sh"      < fixtures/smart/sata_drive.txt
+# Real-world shape from issue #10 (@jac2424): a SATA drive behind a SAS9207-8i.
+# lsblk calls it TRAN=sas — every one of his eight SATA drives did — so the
+# composer passes "sas" here. The drive's own output is an ATA attribute table
+# with no SCSI fields, and THAT is what must decide the reported type.
+check smart-sata-behind-sas smart_sata_behind_sas.json bash "$P/smart.sh" sas < fixtures/smart/sata_behind_sas.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
 # Performance-tab temperatures: per controller, in order. Covers the lsiutil
@@ -152,6 +172,17 @@ check hba-p16      hba_p16.json      bash "$P/hba.sh" fixtures/hba_ioc.txt fixtu
 # PCIeSpeed is an enum, not a bitmask (plan 038): 0x00 is Gen1, and under the
 # old bitmask table it matched nothing and rendered an empty string.
 check hba-gen1     hba_gen1.json     bash "$P/hba.sh" fixtures/hba_ioc_gen1.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+# Real `lsiutil -a 1,0` from issue #10 (@jac2424, SAS9207-8i / SAS2308,
+# mpt2sas, firmware 20.00.07 IT-flashed). The personality is the suffix on
+# "Firmware image's version is MPTFW-20.00.07.00-IT".
+check hba-mode-it  hba_mode_it.json  bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_it.txt
+# SYNTHETIC: hba_ident_ir.txt is hba_ident_it.txt with the one suffix
+# changed IT->IR. No real IR-firmware SAS2 capture exists in this project;
+# this pins the IR branch's shape, NOT that real IR output looks like this.
+check hba-mode-ir  hba_mode_ir.json  bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_ir.txt
+# Real "ERROR:  No such port." from the same capture: no MPTFW line -> mode ""
+# so the UI hides the row instead of guessing.
+check hba-mode-noport hba_mode_noport.json bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_noport.txt
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
 
 echo
@@ -163,11 +194,19 @@ echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
 echo
+echo "=== read_smart tests ==="
+bash read_smart_test.sh; read_smart_fail=$?
+
+echo
+echo "=== bundle coverage tests ==="
+bash bundle_coverage_test.sh; bundle_coverage_fail=$?
+
+echo
 echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

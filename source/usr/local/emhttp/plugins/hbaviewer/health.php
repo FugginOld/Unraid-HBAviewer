@@ -126,6 +126,21 @@ function health_rate_number(string $s): ?float {
     return preg_match('/([0-9]+(?:\.[0-9]+)?)/', $s, $m) ? (float) $m[1] : null;
 }
 
+/* Events/hour as a display string. One decimal below 10, integer at or above
+   it: a genuine 0.4/hr loss-of-sync is a `warning` (the link dropped and came
+   back), and printing it with %.0f rendered the indicator as
+   "errors rising (0/hr)" — a self-contradiction that reads as a broken tab.
+   A true zero still prints "0/hr", not "0.0/hr". Below that, a floor: the
+   ring window is whatever's between two renders of the Health tab, which can
+   span many hours (open today, open tomorrow), so a single event can still
+   divide down to a rate that rounds to "0.0" at one decimal while being a
+   genuine warning. 0.05 is exactly where number_format(…, 1) starts rounding
+   to "0.0"; below it we say "<0.1/hr" instead of lying with a zero. */
+function health_rate_str(float $rate): string {
+    if ($rate > 0 && $rate < 0.05) return '<0.1/hr';
+    return number_format($rate, $rate > 0 && $rate < 10 ? 1 : 0) . '/hr';
+}
+
 /* The five indicators, each ['state', 'reason', 'value'] — 'reason' is the
    human string the rollup borrows verbatim from the worst one; 'value' is
    what the indicator row prints. $ring's last element is the current sample;
@@ -161,8 +176,8 @@ function health_indicators(array $ring, array $rates, int $now): array {
                 if ($rank > $worstRank) {
                     $worstRank  = $rank;
                     $worstState = $s;
-                    $worstReason = sprintf('PHY %s %s errors rising (%.0f/hr)', $r['idx'], $label, $r[$k]);
-                    $worstValue  = sprintf('%.0f/hr', $r[$k]);
+                    $worstReason = sprintf('PHY %s %s errors rising (%s)', $r['idx'], $label, health_rate_str($r[$k]));
+                    $worstValue  = health_rate_str($r[$k]);
                 }
             }
         }

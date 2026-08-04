@@ -221,6 +221,7 @@ function renderSmartTable(array $data): string {
         $rows[] = [
             '<code>' . htmlspecialchars($d['dev'] ?? '') . '</code>',
             htmlspecialchars($d['model'] ?? ''),
+            ($s['transport'] ?? '') !== '' ? htmlspecialchars(strtoupper($s['transport'])) : $dash,
             '<code>' . htmlspecialchars($d['serial'] ?? '') . '</code>',
             $hb,
             $cell($s['temp'] ?? '', '&deg;C'),
@@ -229,7 +230,7 @@ function renderSmartTable(array $data): string {
             ($s['power_on_hours'] ?? '') !== '' ? number_format((int) $s['power_on_hours']) . 'h' : $dash,
         ];
     }
-    return luTable(['Device', 'Model', 'Serial', 'Health', 'Temp', 'Grown Defects', 'Pending', 'Power-On'], $rows);
+    return luTable(['Device', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
 }
 
 /* Render the Overview cards (one per controller) — same markup the Monitor page
@@ -336,7 +337,7 @@ function luPhyCell($v, bool $err, ?array $d, string $k): string {
     if ($d === null || !empty($d['reset'])) return $cell;
     $r = $d['rate'][$k];
     return $cell . '<div class="lu-phy-delta">&Delta;' . (int) $d['delta'][$k]
-         . ' &middot; ' . number_format($r, $r > 0 && $r < 10 ? 1 : 0) . '/hr</div>';
+         . ' &middot; ' . health_rate_str($r) . '</div>';
 }
 
 /* Which drive sits behind this PHY? Two backends, two keys:

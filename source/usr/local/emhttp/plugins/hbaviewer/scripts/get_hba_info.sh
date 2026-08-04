@@ -36,7 +36,7 @@ fi
 # ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
 # SAS correlation, this cheaper host index is only for the rollup.
 ov_storcli() {   # $1 = controller index
-    local perr=0 p f v out pci dom bus dev fn dir width speed power
+    local perr=0 p f v out pci dom bus dev fn dir width speed power chip
     for p in /sys/class/sas_phy/phy-"${1}":*/; do
         [ -d "$p" ] || continue
         for f in invalid_dword_count running_disparity_error_count loss_of_dword_sync_count phy_reset_problem_count; do
@@ -45,6 +45,16 @@ ov_storcli() {   # $1 = controller index
     done
 
     out=$({ "$STORCLI" /c"$1" show; "$STORCLI" /c"$1" show temperature; } 2>/dev/null)
+
+    # storcli's controller list names the chip outright, which beats a device-ID
+    # map that only knows five chips (issue #10: an 0xC4 / SAS3224 fell through it
+    # and the Overview showed no chip at all). Model contains a space on some cards
+    # ("HBA 9400-16i") and not others ("SAS9305-16i"), so the AdapterType column is
+    # NOT at a fixed field index — cut at the first 0x and take the last token
+    # before it, then drop any "(B0)" revision suffix.
+    chip=$("$STORCLI" show 2>/dev/null \
+         | awk -v c="$1" '$1 == c { sub(/[[:space:]]*0x.*$/, ""); print $NF; exit }' \
+         | sed 's/(.*)//')
 
     # storcli reports "PCI Address = 00:c1:00:00" (domain:bus:device:function).
     # sysfs wants "0000:c1:00.0" — four-digit domain, dot before the function.
@@ -75,7 +85,7 @@ ov_storcli() {   # $1 = controller index
         esac
     fi
 
-    printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "" "$width" "$speed" "$power"
+    printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
 }
 
 ov_lsiutil() {
@@ -98,13 +108,16 @@ ov_lsiutil() {
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD
-    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp)
-    trap 'rm -f "$IOC" "$BANNER" "$BOARD"' EXIT
+    local IOC BANNER BOARD IDENT
+    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
+    trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
     hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
     printf '0\n' | hba_query        2>/dev/null > "$BANNER"
     hba_query -b                    2>/dev/null > "$BOARD"
-    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
+    # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
+    # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
+    hba_query -p"$PORT" -a 1,0      2>/dev/null > "$IDENT"
+    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
 }
 
 out=$(hba_each ov_storcli ov_lsiutil)

@@ -1,0 +1,58 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Product Name = SAS9305-16i
+Serial Number = SERIAL0015
+SAS Address =  YYYYYYYYYYYYYYYY
+PCI Address = 00:01:00:00
+System Time = 08/03/2026 21:47:11
+FW Package Build = 00.00.00.00
+FW Version = 15.00.03.00
+BIOS Version = 08.35.04.00_13.00.00.00
+NVDATA Version = 11.04.00.05
+Driver Name = mpt3sas
+Driver Version = 54.100.00.00
+Bus Number = 1
+Device Number = 0
+Function Number = 0
+Domain ID = 0
+Vendor Id = 0x1000
+Device Id = 0xC4
+SubVendor Id = 0x1000
+SubDevice Id = 0x3190
+Board Name = SAS9305-16i
+Board Assembly = 03-25703-02003
+Board Tracer Number = SERIAL0015
+Security Protocol = None
+Physical Drives = 13
+
+PD LIST :
+=======
+
+-----------------------------------------------------------------------------
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model                 Sp 
+-----------------------------------------------------------------------------
+ :0       2 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :1       3 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :2       1 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68AFPN0 -  
+ :3       0 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68AFPN0 -  
+ :4       7 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :5       8 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :6       6 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :7       4 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :8       5 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+ :12     11 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68AFPN0 -  
+ :13     12 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68AFPN0 -  
+ :14     10 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68AFPN0 -  
+ :15      9 UGood -  14.552 TB SATA HDD -   N  512B WDC WD161KFGX-68CMAN0 -  
+-----------------------------------------------------------------------------
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info
+SeSz-Sector Size|Sp-Spun|U-Up|D-Down|T-Transition
+
+Requested Boot Drive = Not Set
