@@ -17,9 +17,15 @@
 > returns `0`, you are not on a base containing 041 — that is a STOP condition.
 >
 > **Drift check (run first)**:
-> `git diff --stat c44f030..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/bundle_support.sh`
-> Expected output: **nothing**. Every excerpt below is quoted from `c44f030`.
-> Any difference is a STOP condition.
+> `git diff --stat e9381b7..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/scripts/bundle_support.sh`
+> Expected output: **nothing**. Any difference is a STOP condition.
+>
+> **Re-stamped 2026-08-04** from `c44f030` after plans 041, 044, 045 and 046
+> merged. `bundle_support.sh` was untouched by all four, and both excerpts
+> this plan quotes were re-verified byte-exact on `e9381b7`. The premise was
+> re-measured too: composers now issue `-a 1,0`, `-a 20,12,0,0`,
+> `-a 25,2,0,0`, `-a 35,0`, `-a 42,0` — five tokens — and the bundle captures
+> four. `-a 1,0` is still the gap.
 
 ## Status
 
