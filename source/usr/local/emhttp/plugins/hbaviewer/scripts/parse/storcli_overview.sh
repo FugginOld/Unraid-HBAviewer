@@ -51,12 +51,20 @@ fi
 # "UGood-Unconfigured Good|UBad-Unconfigured Bad".
 DSTATES=$(printf '%s\n' "$input" | awk '/^[ \t]*[0-9]*:[0-9]+[ \t]/ { print $3 }')
 
-# IT vs IR from those states, NOT from a whole-output grep: IT firmware reports
-# JBOD, IR firmware reports UGood/UBad for a bare disk and Onln/Optl for a
-# configured one. A grep over the raw text would match the legend line and call
-# every card IR.
-if   printf '%s\n' "$DSTATES" | grep -qiE '^JBOD$';                    then MODE="IT"
-elif printf '%s\n' "$DSTATES" | grep -qiE '^(Onln|Optl|UGood|UBad)$';  then MODE="IR"
+# IT vs IR from drive states, and ONLY where a state actually proves one.
+#   Onln/Optl -> IR: those drives are members of a configured RAID volume, so
+#                    a RAID layer exists.
+#   JBOD      -> IT: JBOD is the state IT firmware reports for a bare disk.
+#   UGood/UBad -> NOTHING. "Unconfigured" is equally true of a bare disk on an
+#                    IT-only HBA and on an IR card with no arrays. Issue #10:
+#                    an IT-flashed SAS9305-16i (a card with no IR firmware in
+#                    existence) reports 13x UGood and was being labelled IR.
+#                    An empty mode hides the row, which beats a confident lie.
+# storcli's brief `show` carries no personality field — `show all` has
+# "Enable JBOD" but the overview path never runs it. Checked on the reporter's
+# own capture; do not go looking for one here again.
+if   printf '%s\n' "$DSTATES" | grep -qiE '^(Onln|Optl)$'; then MODE="IR"
+elif printf '%s\n' "$DSTATES" | grep -qiE '^JBOD$';        then MODE="IT"
 else MODE=""; fi
 
 # ── Temperature band (absolute, NOT derived from the setting) ────────────────

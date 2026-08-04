@@ -38,6 +38,16 @@ check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview
 # legend block whose "UGood-Unconfigured Good|..." text is the exact string
 # that false-matched MODE before plan 017. ROC temperature 56.
 check storcli-overview-noencl-ugood storcli_overview_noencl_ugood.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_noencl_ugood.txt fixtures/storcli/temp_noencl_ugood.txt)
+# Real `/c0 show` + `/c0 show temperature` from issue #10 (@PaliKinG3), an
+# IT-FLASHED SAS9305-16i reporting 13x UGood. Before plan 045 this card was
+# labelled IR: UGood means "unconfigured", not "IR firmware". Mode must be ""
+# — no IR firmware exists for a 9305-16i, and an empty mode hides the row
+# rather than stating a falsehood.
+check storcli-overview-9305 storcli_overview_9305.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_9305.txt fixtures/storcli/temp_9305.txt)
+# AdapterType passed by the composer wins over the device-ID map (plan 045
+# Part B). 0xC4 is deliberately NOT in that map — this is the case that map
+# could never have handled.
+check storcli-overview-chiparg storcli_overview_chiparg.json bash "$P/storcli_overview.sh" 80 0 "SAS3224" < <(cat fixtures/storcli/overview_9305.txt fixtures/storcli/temp_9305.txt)
 # health rollup: failed drive -> alert (even at 50C); PHY errors -> warn
 check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_faildrive.txt
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
