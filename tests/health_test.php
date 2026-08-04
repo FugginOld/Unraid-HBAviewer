@@ -81,6 +81,16 @@ $indStale = health_indicators([sample(1000, 100, 0)], [], 1000 + HEALTH_STALE_SE
 check('controller unknown when stale', $indStale['controller']['state'] === 'unknown');
 $indFailed = health_indicators([sample(1000, 100, 0, 0, 0, 0, ['read_ok' => false])], [], 1000);
 check('controller unknown on read_ok=false', $indFailed['controller']['state'] === 'unknown');
+// Issue #11: printed values are sentence-cased, not bare lowercase tokens.
+check('controller ok value is capitalised',
+    health_indicators([sample(1000, 100, 0)], [], 1000)['controller']['value'] === 'OK');
+check('controller failed value is capitalised', $indFailed['controller']['value'] === 'Read failed');
+/* Every indicator must carry a non-empty `reason`: ajax_info.php prints it as
+   the hint line under the row, so a blank one leaves a bare number with nothing
+   naming it — the thing issue #11 reported. */
+foreach (health_indicators([sample(1000, 100, 0)], [], 1000) as $k => $ind) {
+    check("indicator '$k' has a hint reason", ($ind['reason'] ?? '') !== '');
+}
 
 // ── topology: drive count vs the ring's own baseline ONLY. The per-PHY
 //    downtrain check that used to live here was removed — real hardware (a
@@ -100,6 +110,16 @@ $indTopoMissing = health_indicators($ringMissing, [], 2000);
 check('topology critical when a drive is missing', $indTopoMissing['topology']['state'] === 'critical');
 check('topology reason names both counts',
     str_contains($indTopoMissing['topology']['reason'], '8') && str_contains($indTopoMissing['topology']['reason'], '16'));
+
+/* Issue #11: a controller that has NEVER reported a drive is an unreadable
+   count, not a vanished backplane — the lsiutil backend hardcoded 0 and the row
+   read "0 drives / All drives present" on a 9207-8i with eight disks on it. It
+   must degrade to `unknown` (and so must NOT count towards the ok gauge). */
+$indTopoNone = health_indicators([sample(1000, 100, 0, 0, 0, 0, ['drives' => 0])], [], 1000);
+check('topology unknown when no count is available', $indTopoNone['topology']['state'] === 'unknown');
+check('topology never claims "0 drives" present', !str_contains($indTopoNone['topology']['value'], '0 drive'));
+check('topology one drive is not pluralised',
+    health_indicators([sample(1000, 100, 0, 0, 0, 0, ['drives' => 1])], [], 1000)['topology']['value'] === '1 drive');
 
 // Regression: a virtual SES PHY negotiating at 3.0 Gbit alongside 12.0 Gbit
 // data PHYs must NOT flag topology. This must fail if the downshift rule is

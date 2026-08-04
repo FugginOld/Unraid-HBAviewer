@@ -156,7 +156,7 @@ function health_indicators(array $ring, array $rates, int $now): array {
         $temp  = $newest['temp'] ?? '';
         $thermal = [
             'state'  => $thermalMap[$band],
-            'reason' => ($temp !== '' && $temp !== null) ? "{$temp}°C ({$band})" : ucfirst($band),
+            'reason' => ($temp !== '' && $temp !== null) ? "{$temp}°C — " . ucfirst($band) . " band" : ucfirst($band),
             'value'  => ($temp !== '' && $temp !== null) ? "{$temp}°C" : '—',
         ];
     } else {
@@ -165,10 +165,11 @@ function health_indicators(array $ring, array $rates, int $now): array {
 
     // ── link_integrity: worst PHY, worst counter, its index names the reason ──
     if (empty($rates)) {
-        $link_integrity = ['state' => 'unknown', 'reason' => 'Not enough samples yet', 'value' => '—'];
+        $link_integrity = ['state' => 'unknown', 'reason' => 'Not enough samples yet — needs two reads at least a minute apart', 'value' => '—'];
     } else {
         $labels = ['inv' => 'invalid dword', 'disp' => 'disparity', 'sync' => 'loss of sync', 'rst' => 'reset problem'];
-        $worstState = 'ok'; $worstRank = 0; $worstReason = 'No error growth'; $worstValue = '0/hr';
+        $worstState = 'ok'; $worstRank = 0; $worstValue = '0/hr';
+        $worstReason = 'No new cabling errors on any PHY (0 per hour)';
         foreach ($rates as $r) {
             foreach ($labels as $k => $label) {
                 $s = health_rate_state($k, $r[$k]);
@@ -194,10 +195,17 @@ function health_indicators(array $ring, array $rates, int $now): array {
        visible on the PHY Health tab. */
     $drivesSeen     = array_column($ring, 'drives');
     $baselineDrives = $drivesSeen ? max($drivesSeen) : 0;
-    $curDrives      = $newest['drives'] ?? 0;
-    $topology = $curDrives < $baselineDrives
-        ? ['state' => 'critical', 'reason' => "Drive missing ({$curDrives} of {$baselineDrives})", 'value' => "{$curDrives}/{$baselineDrives}"]
-        : ['state' => 'ok', 'reason' => 'All drives present', 'value' => "{$curDrives} drives"];
+    $curDrives      = (int) ($newest['drives'] ?? 0);
+    if ($baselineDrives < 1) {
+        // Nothing this controller ever reported a drive: an unreadable count, not
+        // eight vanished disks. "0 drives / All drives present" reads as a broken
+        // tab on a card with a full backplane (issue #11).
+        $topology = ['state' => 'unknown', 'reason' => 'No drive count available for this controller', 'value' => '—'];
+    } elseif ($curDrives < $baselineDrives) {
+        $topology = ['state' => 'critical', 'reason' => "Drive missing — {$curDrives} of the {$baselineDrives} seen before", 'value' => "{$curDrives}/{$baselineDrives}"];
+    } else {
+        $topology = ['state' => 'ok', 'reason' => "All {$curDrives} attached drives present", 'value' => $curDrives . ' drive' . ($curDrives === 1 ? '' : 's')];
+    }
 
     // ── host_link: current PCIe width/speed vs this slot's capability ──────────
     $link = $newest['link'] ?? [];
@@ -213,18 +221,20 @@ function health_indicators(array $ring, array $rates, int $now): array {
             'value'  => "x{$w} / x{$mw}",
         ];
     } else {
-        $host_link = ['state' => 'ok', 'reason' => 'At full link capability', 'value' => $w > 0 ? "x{$w}" : '—'];
+        $host_link = ['state' => 'ok', 'reason' => $w > 0
+            ? "PCIe slot running at its full x{$w} width" . (($link['speed'] ?? '') !== '' ? " and {$link['speed']}" : '')
+            : 'No PCIe downtraining reported', 'value' => $w > 0 ? "x{$w}" : '—'];
     }
 
     // ── controller: can we even trust the rest of this row? ────────────────────
     if ($newest === null) {
         $controller = ['state' => 'unknown', 'reason' => 'No samples yet', 'value' => '—'];
     } elseif (empty($newest['read_ok'])) {
-        $controller = ['state' => 'unknown', 'reason' => 'Last read failed', 'value' => 'read failed'];
+        $controller = ['state' => 'unknown', 'reason' => 'The last read of this controller failed', 'value' => 'Read failed'];
     } elseif (($age = $now - ($newest['t'] ?? 0)) > HEALTH_STALE_SECS) {
-        $controller = ['state' => 'unknown', 'reason' => "No sample in {$age}s", 'value' => "{$age}s old"];
+        $controller = ['state' => 'unknown', 'reason' => "Stale — no reading in {$age}s", 'value' => "{$age}s old"];
     } else {
-        $controller = ['state' => 'ok', 'reason' => 'Reading normally', 'value' => 'ok'];
+        $controller = ['state' => 'ok', 'reason' => 'Controller answered the last query normally', 'value' => 'OK'];
     }
 
     return [

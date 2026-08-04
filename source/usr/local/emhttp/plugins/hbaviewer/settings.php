@@ -106,20 +106,23 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px;
 }
 .lu-s-card { background: linear-gradient(180deg,var(--surface-2),var(--surface)); border: 1px solid var(--border-soft); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
-/* Two columns, Advanced spanning both. The span is deliberate: that section
-   unlocks firmware writes, so it must not read as a peer of the routine toggles.
-   Grid, not CSS columns — columns can break a section mid-control.
-   auto-fit + minmax collapses to one column on tablets and split screens with no
-   invented breakpoint (same idiom as .lu-perf-grid in hbaviewer.php); min() keeps
-   it from overflowing below 360px. Sits INSIDE <form> so the POST is unaffected,
-   and wraps only the cards so the Save button stays below it in normal flow.
-   NOTE: four non-span sections now (HBA Connection, Display Panels,
-   Notifications, Diagnostic Bundle) filling two rows, with Advanced spanning
-   below them. A FIFTH would leave a ragged half-row; decide then whether it
-   pairs, spans, or displaces one of these. */
-.lu-s-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 16px; align-items: start; margin-bottom: 16px; }
-.lu-s-grid > .lu-s-card { margin-bottom: 0; }
-.lu-s-grid > .lu-s-span { grid-column: 1 / -1; }
+/* Two columns that PACK, via CSS columns rather than a grid. This was a grid,
+   and a grid row is as tall as its tallest card: every short section left a
+   hole beside its taller neighbour (Display Panels under HBA Connection,
+   Notifications beside Diagnostic Bundle, the whole right half beside
+   Export/API). `break-inside: avoid` below is what makes columns safe — the
+   one thing the grid was chosen to avoid, in one line, and it must stay: a
+   section split across a column break can put a label and its control on
+   different columns. `columns: 360px 2` caps it at two tracks and collapses to
+   one below ~750px, no invented breakpoint (same intent as the auto-fit
+   minmax it replaces). Sits INSIDE <form> so the POST is unaffected, and wraps
+   only the cards so the Save button stays below it in normal flow.
+   Advanced is deliberately OUTSIDE this container: a column layout has no
+   full-width span, and that section unlocks firmware writes, so it must read
+   as a footer rather than a peer of the routine toggles. Adding a section is
+   now free — it packs wherever it fits, no ragged half-row to plan around. */
+.lu-s-grid { columns: 360px 2; column-gap: 16px; }
+.lu-s-grid > .lu-s-card { break-inside: avoid; margin: 0 0 16px; }
 .lu-s-card h3 { margin: 0 0 16px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; border-bottom: 1px solid var(--border-soft); padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 .lu-s-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
 .lu-s-row { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
@@ -302,7 +305,9 @@ foreach ($bands as $floor => $label) {
       <p style="font-size:11px;color:var(--faint);margin:0;line-height:1.5">Both URLs are session-gated, same as every other page in this plugin &mdash; a Prometheus scraper outside a logged-in webGui session <strong>cannot</strong> poll them. They work from a logged-in browser, a Homepage-style widget behind the same login, or a logged-in <code>curl</code>.</p>
     </div>
 
-    <div class="lu-s-card lu-s-span">
+    </div><!-- /.lu-s-grid — Advanced is a full-width footer, see the CSS -->
+
+    <div class="lu-s-card">
       <h3>Advanced — Firmware Flashing</h3>
       <div class="lu-danger">
         <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
@@ -317,8 +322,6 @@ foreach ($bands as $floor => $label) {
         <small>adds a Firmware/BIOS Update tab to the Monitor</small>
       </label>
     </div>
-
-    </div><!-- /.lu-s-grid -->
 
     <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
     <?php if ($saved): ?>

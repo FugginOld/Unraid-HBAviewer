@@ -340,6 +340,32 @@ function luPhyCell($v, bool $err, ?array $d, string $k): string {
          . ' &middot; ' . health_rate_str($r) . '</div>';
 }
 
+/* SERIAL -> /dev/NAME for every SCSI block device, from ONE lsblk call.
+   Serial is the join key, not the WWN: storcli's WWN and /dev's differ by a
+   nibble on the same physical drive, while the serials match exactly — the
+   same correlation the per-drive SMART button above has used since it shipped.
+   Empty on a box without lsblk, which renders every Device cell as "—" rather
+   than failing a tab. Callers pass the result in, so the render functions stay
+   pure and the tests can inject a map. */
+function lsi_dev_by_serial(): array {
+    $map = [];
+    foreach (explode("\n", (string) shell_exec('lsblk -S -o NAME,SERIAL -n 2>/dev/null')) as $line) {
+        $f = preg_split('/\s+/', trim($line), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($f) >= 2 && $f[0] !== '') $map[strtoupper($f[1])] = '/dev/' . $f[0];
+    }
+    return $map;
+}
+
+/* The /dev name for one drive row. The lsiutil backend already resolves it
+   itself (`os_name`, from get_attached_drives.sh's sysfs join); storcli reports
+   no /dev name at all, so it goes through the serial map. Null, never a guess:
+   a Device column that names the wrong disk is worse than one that says "—". */
+function drive_dev_name(array $d, array $devBySerial): ?string {
+    if (!empty($d['os_name'])) return (string) $d['os_name'];
+    $sn = strtoupper(trim((string) ($d['serial'] ?? '')));
+    return $sn !== '' ? ($devBySerial[$sn] ?? null) : null;
+}
+
 /* Which drive sits behind this PHY? Two backends, two keys:
      lsiutil  - drives carry `phy`; match it directly.
      storcli  - drives carry no `phy` at all. The PHY's `sas_addr` and the
@@ -350,15 +376,13 @@ function luPhyCell($v, bool $err, ?array $d, string $k): string {
    Returns null when nothing matches AND when the 15-digit prefix is not unique
    within this controller: a top-offenders row names a physical bay, and naming
    the wrong one is worse than naming none (plan 027). */
-function phy_drive_label(array $drives, array $phy): ?string {
+function phy_drive(array $drives, array $phy): ?array {
     if (!$drives) return null;
 
     // lsiutil: drives carry `phy` directly — a straight index match.
     if (isset($drives[0]['phy'])) {
         foreach ($drives as $d) {
-            if (isset($d['phy']) && (string) $d['phy'] === (string) ($phy['phy'] ?? '')) {
-                return $d['os_name'] ?? null;
-            }
+            if (isset($d['phy']) && (string) $d['phy'] === (string) ($phy['phy'] ?? '')) return $d;
         }
         return null;
     }
@@ -372,7 +396,20 @@ function phy_drive_label(array $drives, array $phy): ?string {
     ));
     // Exactly one match is safe. Zero (no drive) or more than one (the prefix
     // collides between two drives) both resolve to null — never a guess.
-    return count($matches) === 1 ? ($matches[0]['slot'] ?? null) : null;
+    return count($matches) === 1 ? $matches[0] : null;
+}
+
+/* How a top-offenders row names the drive behind a PHY: the /dev name when it
+   resolves, the enclosure bay when storcli gave one, both when both are known.
+   Encl:slot alone does not line up with anything on Unraid's Main page (issue
+   #11), and /dev alone loses the bay you actually have to pull. */
+function phy_drive_label(array $drives, array $phy, array $devBySerial = []): ?string {
+    $d = phy_drive($drives, $phy);
+    if ($d === null) return null;
+    $dev  = drive_dev_name($d, $devBySerial);
+    $slot = isset($d['slot']) && $d['slot'] !== '' ? (string) $d['slot'] : null;
+    if ($slot !== null && $dev !== null) return "$slot · $dev";
+    return $dev ?? $slot;
 }
 
 /* $phys and $deltas share indices, exactly as renderPhyTables builds them.
@@ -380,7 +417,7 @@ function phy_drive_label(array $drives, array $phy): ?string {
    weighting is invented here: the per-counter thresholds used to color the
    Health tab's link-integrity indicator live in health.php, and duplicating
    that judgement in a second place would let the two disagree (plan 027). */
-function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit = 5): array {
+function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit = 5, array $devBySerial = []): array {
     $rows = [];
     foreach ($phys as $n => $p) {
         $d = $deltas[$n] ?? null;
@@ -393,7 +430,7 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
             'phy'        => $p['phy'] ?? $n,
             'rate_total' => $total,
             'rate'       => $d['rate'],
-            'drive'      => phy_drive_label($drives, $p),
+            'drive'      => phy_drive_label($drives, $p, $devBySerial),
         ];
     }
     usort($rows, fn($a, $b) => $a['rate_total'] === $b['rate_total']
@@ -407,7 +444,7 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
    the decoded `drives` payload (the same shape $data carries), added last and
    defaulting to empty so every existing caller still renders exactly what it
    rendered before this plan. */
-function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = []): string {
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -423,6 +460,15 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
         if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
         $phys = $ctl['phys'] ?? [];
         if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p></div>'; continue; }
+        // This controller's drives, for the Device column and the offenders list
+        // below. Empty while the drives cache is still warming — every Device
+        // cell then reads "—" and the tab renders exactly as it used to.
+        $ctlDrives = $drives['controllers'][$i]['drives'] ?? [];
+        $devCell = function (array $p) use ($ctlDrives, $devBySerial): string {
+            $d = phy_drive($ctlDrives, $p);
+            $n = $d !== null ? drive_dev_name($d, $devBySerial) : null;
+            return $n !== null ? '<code>' . htmlspecialchars($n) . '</code>' : '<span class="lu-muted">—</span>';
+        };
 
         // Resolve every PHY's delta first: a reboot or driver reload zeroes the
         // whole controller's counters at once, so one invalidated PHY condemns
@@ -447,8 +493,7 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
         // above already asks for a re-baseline, and a second, differently-worded
         // empty state here would only contradict it.
         if (!$stale) {
-            $ctlDrives = $drives['controllers'][$i]['drives'] ?? [];
-            $off = phy_top_offenders($phys, $deltas, $ctlDrives);
+            $off = phy_top_offenders($phys, $deltas, $ctlDrives, 5, $devBySerial);
             if ($ts === null) {
                 $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0">Set a baseline to rank PHYs by error rate.</p>';
             } elseif (empty($off)) {
@@ -486,13 +531,14 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                 $ec = fn($k) => luPhyCell($p[$k] ?? 0, $hasErr && ($p[$k] ?? 0) > 0, $d, $k);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
+                    $devCell($p),
                     luLinkBadge($p['link']),
                     htmlspecialchars($p['speed']),
                     !empty($p['sas_addr']) ? '<code>' . htmlspecialchars(strtoupper($p['sas_addr'])) . '</code>' : '<span class="lu-muted">—</span>',
                     $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
-            $out .= luTable(['PHY', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
+            $out .= luTable(['PHY', 'Device', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         } else {
             // lsiutil backend: SAS error counters
             $rows = [];
@@ -502,11 +548,12 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                 $ec = fn($k) => luPhyCell($p[$k], $hasErr, $d, $k);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
+                    $devCell($p),
                     luLinkBadge($p['link']),
                     $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
-            $out .= luTable(['PHY', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
+            $out .= luTable(['PHY', 'Device', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
         $out .= '</div>';
     }
@@ -514,19 +561,26 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
 }
 
 if ($type === 'phy') {
-    // Drive names for the top-offenders list (plan 027). Read through the
-    // shared cache — never a second bare shell_exec — so the PHY tab's poll
-    // stays cheap. A warming cache renders the list without drive names
-    // rather than blocking the tab.
-    $dr    = cached_read('drives', 60, 'bash ' . escapeshellarg("$scripts/get_attached_drives.sh"));
-    $ddec  = $dr['state'] === 'ready' && $dr['body'] !== '' ? json_decode($dr['body'], true) : null;
+    /* Drive names for the Device column and the top-offenders list. Read the
+       same way the Drives tab reads them — one direct call — and NOT through
+       cached_read('drives') as this did before (plan 027). That cache was
+       cheap on paper and empty in practice: the PHY tab is its only consumer,
+       so a 60s TTL had always expired by the next visit, every visit got the
+       `warming` (empty) answer and re-launched the producer, and the names
+       never appeared (issue #11). The producer also folds stderr into the
+       cached file (`2>&1`), so one storcli warning is enough to make the JSON
+       undecodable and the drives vanish silently. The tab loads on click and
+       on Refresh, never on a timer, and the Drives tab already pays exactly
+       this read on exactly this hardware. */
+    $ddec  = json_decode((string) shell_exec(
+        'bash ' . escapeshellarg("$scripts/get_attached_drives.sh") . ' 2>/dev/null'), true);
     $ddata = is_array($ddec) ? $ddec : [];
-    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata);
+    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial());
     exit;
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
-function renderDrivesTables(array $data): string {
+function renderDrivesTables(array $data, array $devBySerial = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -564,6 +618,15 @@ function renderDrivesTables(array $data): string {
         $drives = $ctl['drives'] ?? [];
         if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p></div>'; continue; }
 
+        // Leading column on both backends: encl:slot and bus:target are the
+        // controller's own addressing and line up with nothing on Unraid's Main
+        // page (issue #11). /dev/sdX is the name shared with Main, the SMART tab
+        // and every other Unraid screen, so it goes first, like the SMART tab.
+        $devCell = function (array $d) use ($devBySerial): string {
+            $n = drive_dev_name($d, $devBySerial);
+            return $n !== null ? '<code>' . htmlspecialchars($n) . '</code>' : '<span class="lu-muted">—</span>';
+        };
+
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
             // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
@@ -574,6 +637,7 @@ function renderDrivesTables(array $data): string {
                     ? '<button class="lu-refresh-btn" onclick="luSmart(this,\'' . htmlspecialchars($serial, ENT_QUOTES) . '\')">SMART</button>'
                     : '<span class="lu-muted">—</span>';
                 $rows[] = [
+                    $devCell($d),
                     htmlspecialchars($d['slot']),
                     ($d['port'] ?? '') !== '' ? htmlspecialchars($d['port']) : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['model']),
@@ -586,27 +650,29 @@ function renderDrivesTables(array $data): string {
                     $smart,
                 ];
             }
-            $out .= luTable(['Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
+            $out .= luTable(['Device', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
         } else {
-            // lsiutil backend: bus:target, port, SAS address, OS device
+            // lsiutil backend: device, bus:target, port, SAS address. The /dev
+            // name was already here as a trailing "OS Device" column; it moves
+            // to the front so all three tabs lead with the same identifier.
             $rows = [];
             foreach ($drives as $d) {
-                $os  = !empty($d['os_name'])     ? '<code>' . htmlspecialchars($d['os_name']) . '</code>'                : '<span class="lu-muted">—</span>';
                 $sas = !empty($d['sas_address']) ? '<code>' . htmlspecialchars(strtoupper($d['sas_address'])) . '</code>' : '<span class="lu-muted">—</span>';
                 $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . htmlspecialchars((string) $d['phy'])              : '<span class="lu-muted">—</span>';
                 $rows[] = [
+                    $devCell($d),
                     htmlspecialchars((string) $d['bus']) . ':' . htmlspecialchars((string) $d['target']),
-                    $phy, $sas, $os,
+                    $phy, $sas,
                 ];
             }
-            $out .= luTable(['Bus:Tgt', 'Port', 'SAS Address', 'OS Device'], $rows);
+            $out .= luTable(['Device', 'Bus:Tgt', 'Port', 'SAS Address'], $rows);
         }
         $out .= '</div>';
     }
     return $out;
 }
 
-if ($type === 'drives') { echo renderDrivesTables($data); exit; }
+if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); exit; }
 
 /* ── Event Log (per controller; persisted to /boot across reboots) ─────────── */
 /* $dir is the archive location; it is injectable so tests can point the store
@@ -763,6 +829,11 @@ function renderHealthTables(array $data): string {
         $out .= '<div class="lu-indicator-rows">';
         foreach (['thermal' => 'Thermal', 'link_integrity' => 'Link Integrity', 'topology' => 'Topology', 'host_link' => 'Host Link', 'controller' => 'Read Health'] as $key => $label) {
             $row = $ind[$key] ?? ['state' => 'unknown', 'value' => '—'];
+            // The reason string health_indicators() already computes for the rollup
+            // pill, printed under its own row too. Without it a row reads "Link
+            // Integrity 0/hr" with nothing saying 0 what (issue #11) — the number
+            // is only meaningful next to the sentence that names it.
+            $hint = (string) ($row['reason'] ?? '');
             [$bDark, $bLight] = lsi_health_gradient($row['state']);
             // Sprite ids live in hbaviewer.php's #lu-wrap. Most match $key; these
             // two do not, and a mismatch renders an empty icon slot silently.
@@ -771,7 +842,9 @@ function renderHealthTables(array $data): string {
                   . '<span class="lu-ind-dot" style="--gd:' . $bDark . ';--gl:' . $bLight . '"></span>'
                   . '<svg class="lu-ind-icon" aria-hidden="true"><use href="#lu-i-' . $icon . '"/></svg>'
                   . '<span class="lu-indicator-label">' . htmlspecialchars($label) . '</span>'
-                  . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span></div>';
+                  . '<span class="lu-indicator-value">' . htmlspecialchars((string) ($row['value'] ?? '')) . '</span>'
+                  . ($hint !== '' ? '<span class="lu-ind-hint">' . htmlspecialchars($hint) . '</span>' : '')
+                  . '</div>';
         }
         $out .= '</div></div>';
     }

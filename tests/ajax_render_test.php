@@ -53,6 +53,34 @@ $h = renderPhyTables($phyLsi);
 check('phy lsiutil omits speed col', !str_contains($h, '<th>Speed</th>'));
 check('phy lsiutil has counters',    str_contains($h, '<th>Invalid DWords</th>'));
 
+/* ── PHY Device column (issue #11) ────────────────────────────────────────────
+   Same join as the Drives tab, one hop further: PHY -> drive (sas_addr prefix on
+   storcli, phy index on lsiutil) -> /dev. The drives payload arrives from the
+   60s cache, so an empty one must still render the table — with em dashes, not
+   a fatal. The storcli address pair below is a real one (plan 027's capture):
+   the PHY's and the drive's differ in the last hex digit. */
+$phyDrv = ['controllers' => [['drives' => [
+    ['slot'=>'0/5','serial'=>'ZA1ABCDE','sas_address'=>'5000CCA25319FB47'],
+]]]];
+$h = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+    ['phy'=>1,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA999999999','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg']);
+check('phy storcli has device col',   str_contains($h, '<th>Device</th>'));
+check('phy storcli device resolves',  str_contains($h, '<code>/dev/sdg</code>'));
+check('phy storcli device follows phy col',
+      strpos($h, '<th>Device</th>') < strpos($h, '<th>Link</th>'));
+// PHY 1 matches no drive (a VirtualSES PHY is the real-world case) — em dash,
+// never the drive that happens to sit on the neighbouring PHY.
+check('phy storcli unmatched device is em dash', substr_count($h, '<code>/dev/sdg</code>') === 1);
+// No drives cached yet: the table still renders, every Device cell blank.
+$h = renderPhyTables($phyStorcli);
+check('phy device col renders without drives', str_contains($h, '<th>Device</th>') && !str_contains($h, '/dev/'));
+
+$h = renderPhyTables($phyLsi, [], null, null,
+    ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]]);
+check('phy lsiutil device from os_name', str_contains($h, '<code>/dev/sdb</code>'));
+
 /* ── PHY: degenerate inputs must not fatal ───────────────────────────────── */
 check('phy controller error row', str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['error'=>'no response']]]), 'no response'));
@@ -161,6 +189,18 @@ check('phy_drive_label case-insensitive sas_address', phy_drive_label(
     [['slot' => '0/12', 'sas_address' => '5000cca25319fb47']],
     ['phy' => 0, 'sas_addr' => '5000CCA25319FB45']
 ) === '0/12');
+/* Issue #11: with a serial map the offender row names the bay AND the /dev the
+   rest of Unraid calls it. Without one it still names the bay — the map is
+   empty while the drives cache warms, and a nameless offender is no worse than
+   the row that shipped before. */
+check('phy_drive_label adds the dev name', phy_drive_label(
+    [['slot' => '0/12', 'serial' => 'ZA1ABCDE', 'sas_address' => '5000CCA25319FB47']],
+    ['phy' => 0, 'sas_addr' => '5000CCA25319FB45'],
+    ['ZA1ABCDE' => '/dev/sdg']
+) === '0/12 · /dev/sdg');
+check('phy_drive fn exposes the matched drive',
+    (phy_drive([['slot' => '0/12', 'sas_address' => '5000CCA25319FB47']],
+               ['phy' => 0, 'sas_addr' => '5000CCA25319FB45'])['slot'] ?? null) === '0/12');
 
 check('phy_top_offenders fn exists', function_exists('phy_top_offenders'));
 $rate = fn(int $inv) => ['reset' => false, 'delta' => ['inv' => $inv, 'disp' => 0, 'sync' => 0, 'reset' => 0],
@@ -253,8 +293,38 @@ $drvLsi = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
     ['bus'=>'0','target'=>'3','phy'=>'2','sas_address'=>'5000c500a1b2c3d4','os_name'=>'/dev/sdb'],
 ]]]];
 $h = renderDrivesTables($drvLsi);
-check('drives lsiutil col set', str_contains($h, '<th>Bus:Tgt</th>') && str_contains($h, '<th>OS Device</th>'));
+check('drives lsiutil col set', str_contains($h, '<th>Bus:Tgt</th>') && str_contains($h, '<th>Device</th>'));
 check('drives lsiutil no smart btn', !str_contains($h, 'luSmart(this'));
+
+/* ── Device column (issue #11): encl:slot and bus:target line up with nothing
+   on Unraid's Main page, so every drive/PHY row leads with /dev/sdX. The
+   lsiutil backend resolves it itself (os_name); storcli reports no /dev name at
+   all and is joined by SERIAL — the WWN differs by a nibble between storcli and
+   /dev, the serial matches exactly (same key the SMART button uses). The map is
+   injected here, so nothing in this suite shells out to lsblk. */
+check('drives lsiutil device is os_name, no map needed', str_contains($h, '<code>/dev/sdb</code>'));
+check('drives device column leads the row',
+      strpos($h, '<th>Device</th>') < strpos($h, '<th>Bus:Tgt</th>'));
+
+$h = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg']);
+check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>'));
+check('drives storcli device leads the row',
+      strpos($h, '<th>Device</th>') < strpos($h, '<th>Encl:Slot</th>'));
+// Serials come off lsblk in whatever case the drive reports; the map is keyed
+// uppercase and the lookup must not care.
+check('drives storcli device serial match is case-insensitive',
+      str_contains(renderDrivesTables(
+          ['backend'=>'storcli','controllers'=>[['drives'=>[['slot'=>'0','port'=>'1','model'=>'M','serial'=>'za1abcde',
+            'state'=>'JBOD','size'=>'1 TB','sas_address'=>'5000C500A1B2C3D4','link'=>'12.0Gb/s','firmware'=>'F']]]]],
+          ['ZA1ABCDE' => '/dev/sdg']), '<code>/dev/sdg</code>'));
+// An unmatched serial must render an em dash, never a neighbouring drive's name.
+check('drives storcli unmatched device is em dash',
+      str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '<span class="lu-muted">—</span>')
+      && !str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '/dev/sdz'));
+
+check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
+check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
+check('drive_dev_name null when unmatched', drive_dev_name(['serial'=>'NOPE'], ['X'=>'/dev/sdq']) === null);
 check('drives empty', str_contains(
     renderDrivesTables(['backend'=>'storcli','controllers'=>[[]]]), 'No drives detected.'));
 
@@ -480,6 +550,14 @@ $sorted = $pos; sort($sorted, SORT_NUMERIC);
 check('health rows in header order', !in_array(false, $pos, true) && $pos === $sorted);
 check('health thermal shows temp', str_contains($h, '<span class="lu-indicator-value">77°C</span>'));
 
+/* Issue #11: every row prints the reason under its value. "Link Integrity
+   0/hr" with nothing saying 0-of-what was the report; the hint line is what
+   answers it, so assert one per row and that the CSS class the shell styles
+   actually exists. */
+check('health rows each carry a hint line', substr_count($h, '<span class="lu-ind-hint">') === 5);
+check('health hint explains the link rate', str_contains($h, 'No new cabling errors on any PHY'));
+check('health hint explains the drive count', str_contains($h, 'All 8 attached drives present'));
+
 /* Row icons (plan 032). Two indicator keys do not match their sprite id
    (`link_integrity` -> lu-i-link, `host_link` -> lu-i-hostlink); a mismatch
    renders an empty icon slot silently, so assert the ids AND that every one is
@@ -490,6 +568,9 @@ check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
 preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
+// The hint line is only readable as a sub-line if the shell styles it; unstyled
+// it inherits the row's 12.5px flex and lands next to the value.
+check('hint line is styled in the shell', str_contains($shell, '.lu-ind-hint {'));
 // The sprite must be parsed once in the page shell, never re-emitted by the
 // per-poll Health render, which would duplicate these ids on every refresh.
 check('sprite defined once, in the shell only',
