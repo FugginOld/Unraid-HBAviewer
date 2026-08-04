@@ -2,6 +2,7 @@
   "temp": 47,
   "model": "SAS2308",
   "firmware": "16.00.07.00",
+  "mode": "",
   "fw_old": true,
   "port_name": "ioc0",
   "board_name": "SAS9207-8i",

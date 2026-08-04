@@ -155,6 +155,17 @@ check hba-p16      hba_p16.json      bash "$P/hba.sh" fixtures/hba_ioc.txt fixtu
 # PCIeSpeed is an enum, not a bitmask (plan 038): 0x00 is Gen1, and under the
 # old bitmask table it matched nothing and rendered an empty string.
 check hba-gen1     hba_gen1.json     bash "$P/hba.sh" fixtures/hba_ioc_gen1.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+# Real `lsiutil -a 1,0` from issue #10 (@jac2424, SAS9207-8i / SAS2308,
+# mpt2sas, firmware 20.00.07 IT-flashed). The personality is the suffix on
+# "Firmware image's version is MPTFW-20.00.07.00-IT".
+check hba-mode-it  hba_mode_it.json  bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_it.txt
+# SYNTHETIC: hba_ident_ir.txt is hba_ident_it.txt with the one suffix
+# changed IT->IR. No real IR-firmware SAS2 capture exists in this project;
+# this pins the IR branch's shape, NOT that real IR output looks like this.
+check hba-mode-ir  hba_mode_ir.json  bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_ir.txt
+# Real "ERROR:  No such port." from the same capture: no MPTFW line -> mode ""
+# so the UI hides the row instead of guessing.
+check hba-mode-noport hba_mode_noport.json bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80 fixtures/hba_ident_noport.txt
 check drives-join  drives_join.json  bash "$P/drives_join.sh" fixtures/drives_osmap.txt fixtures/drives_sasmap.txt
 
 echo

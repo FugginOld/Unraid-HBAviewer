@@ -98,13 +98,16 @@ ov_lsiutil() {
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD
-    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp)
-    trap 'rm -f "$IOC" "$BANNER" "$BOARD"' EXIT
+    local IOC BANNER BOARD IDENT
+    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
+    trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
     hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
     printf '0\n' | hba_query        2>/dev/null > "$BANNER"
     hba_query -b                    2>/dev/null > "$BOARD"
-    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT"
+    # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
+    # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
+    hba_query -p"$PORT" -a 1,0      2>/dev/null > "$IDENT"
+    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
 }
 
 out=$(hba_each ov_storcli ov_lsiutil)
