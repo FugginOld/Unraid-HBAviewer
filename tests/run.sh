@@ -79,9 +79,16 @@ check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" <
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
 check smart-sas        smart_sas.json       bash "$P/smart.sh" sas  < fixtures/smart/sas_drive.txt
 check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/smart/sata_drive.txt
-# No transport passed (lsblk reported usb/nvme/nothing): the field must be
-# empty so the UI shows a dash, never a guessed bus.
+# No transport arg passed (lsblk reported usb/nvme/nothing, or was never run).
+# The drive's own ATA attribute table is still enough to call it "sata" --
+# the injected bus arg is only a fallback for when the drive's output can't
+# be classified at all (e.g. asleep under -n standby, almost no SMART data).
 check smart-notran     smart_notran.json    bash "$P/smart.sh"      < fixtures/smart/sata_drive.txt
+# Real-world shape from issue #10 (@jac2424): a SATA drive behind a SAS9207-8i.
+# lsblk calls it TRAN=sas — every one of his eight SATA drives did — so the
+# composer passes "sas" here. The drive's own output is an ATA attribute table
+# with no SCSI fields, and THAT is what must decide the reported type.
+check smart-sata-behind-sas smart_sata_behind_sas.json bash "$P/smart.sh" sas < fixtures/smart/sata_behind_sas.txt
 check diskstats        diskstats.json       bash "$P/diskstats.sh" "sdb sdc" < fixtures/diskstats.txt
 
 # Performance-tab temperatures: per controller, in order. Covers the lsiutil
