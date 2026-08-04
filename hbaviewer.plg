@@ -13,6 +13,53 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.04###
+Everything reported on issue #10, plus a Health tab fix found while
+investigating it. Thanks to @PaliKinG3 and @jac2424, who ran diagnostics on
+their own hardware and found several of these.
+
+**Fixed**
+- Mode was missing entirely on 9200-series cards. The Mode row only ever
+  appeared on cards read through storcli, so a SAS9207-8i showed the next
+  field where Mode should be and it looked like a 93xx-only feature. It is now
+  read from the flashed firmware image name, which states the personality
+  directly. Verified on a SAS9207-8i. (#10)
+- Mode could say IR on a card flashed to IT. On cards read through storcli the
+  personality was inferred from drive states, and an unconfigured drive reports
+  "UGood" whether it sits on an IT-only HBA or on an IR card with no arrays —
+  so an IT-flashed SAS9305-16i was labelled IR. Mode is now reported only when
+  the drive states actually prove one, and the row is hidden otherwise. A
+  hidden row is better than a confident wrong answer. (#10)
+- Chip was blank on some controllers. The chip name came from a built-in list
+  of five device IDs, and any card outside it — a SAS9305-16i among them —
+  showed nothing at all. It now comes from storcli's own report, which covers
+  every chipset. (#10)
+- SATA drives were labelled SAS, and every drive showed "Grown Defects" — a
+  metric only SAS drives have. Drive type was taken from the bus, and every
+  drive behind a SAS HBA reports itself as SAS whatever it actually is. The
+  SMART tab now asks the drive rather than the bus, shows a Type column, and
+  the column is renamed Reallocated, which is true on both. (#10)
+- Link Integrity could read "errors rising (0/hr)". A genuine sub-1/hr error
+  rate was rounded down to zero, so the HBA Health tab warned about a rising
+  counter while showing it as nothing. Rates below 1/hr are now shown to one
+  decimal, and a non-zero rate never displays as zero.
+
+**Changed**
+- The diagnostic bundle now collects the firmware personality, the drive
+  transport and the SAS device class. Diagnosing issue #10 needed all three
+  and none were in the bundle, so they had to be requested by hand. A test now
+  fails the build if the bundle stops collecting something the plugin reads.
+
+**Known**
+- Opening the SMART tab can spin up a sleeping SATA drive if it sits behind a
+  SAS HBA. Whether to use smartctl's "do not wake a sleeping disk" guard is
+  decided from the bus, and every drive behind a SAS HBA reports as SAS — a
+  bus whose health reads genuinely do not touch the platters. A SATA drive on
+  that path is therefore read without the guard. This is not new in this
+  release and nothing here changed it. Fixing it means changing when a
+  sleeping array disk gets woken, which needs measuring on real hardware
+  first. If you see drives spin up when you open the tab, please say so on the
+  tracker — that report is the measurement.
 ###2026.08.03###
 - Fixed: 2026.08.02 could not be installed. Unraid rejected the plugin file
   with "XML file doesn't exist or xml parse error" before downloading
