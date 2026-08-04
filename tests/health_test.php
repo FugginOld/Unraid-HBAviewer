@@ -167,6 +167,46 @@ $indBoundary = health_indicators([sample(1000, 100, 0)], $ratesBoundary, 1000);
 check('link_integrity state matches worst rate', $indBoundary['link_integrity']['state'] === 'warning');
 check('link_integrity reason names the PHY index', str_contains($indBoundary['link_integrity']['reason'], 'PHY 4'));
 
+// ── link_integrity rendered value/reason: the "rising (0/hr)" self-contradiction ──
+// a sub-1.0 loss-of-sync rate must render as 0.4/hr, not round to 0, in both
+// the value and the reason string, and must still rank as warning.
+$ratesSubOne = [['idx' => 5, 'inv' => 2.0, 'disp' => 1.1, 'sync' => 0.4, 'rst' => 0.0]];
+$indSubOne = health_indicators([sample(1000, 100, 0)], $ratesSubOne, 1000);
+check('link_integrity sub-1.0 rate value is 0.4/hr', $indSubOne['link_integrity']['value'] === '0.4/hr');
+check('link_integrity sub-1.0 rate reason is 0.4/hr', str_contains($indSubOne['link_integrity']['reason'], '0.4/hr'));
+check('link_integrity sub-1.0 rate reason has no (0/hr)', !str_contains($indSubOne['link_integrity']['reason'], '(0/hr)'));
+check('link_integrity sub-1.0 rate state is warning', $indSubOne['link_integrity']['state'] === 'warning');
+check('link_integrity sub-1.0 rate names loss of sync', str_contains($indSubOne['link_integrity']['reason'], 'loss of sync'));
+
+// a true zero rate still renders as 0/hr, not 0.0/hr
+$indZero = health_indicators([sample(1000, 100, 0)], [], 1000);
+check('link_integrity no-samples value is em dash', $indZero['link_integrity']['value'] === '—');
+$ratesZero = [['idx' => 0, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0]];
+$indAllZero = health_indicators([sample(1000, 100, 0)], $ratesZero, 1000);
+check('link_integrity all-zero rate default value is 0/hr', $indAllZero['link_integrity']['value'] === '0/hr');
+
+// health_rate_str() directly, across the whole boundary
+check('rate str 0 -> 0/hr',      health_rate_str(0)      === '0/hr');
+check('rate str 0.4 -> 0.4/hr',  health_rate_str(0.4)    === '0.4/hr');
+check('rate str 9.99 -> 10.0/hr', health_rate_str(9.99)  === '10.0/hr');
+check('rate str 10 -> 10/hr',    health_rate_str(10)     === '10/hr');
+check('rate str 70 -> 70/hr',    health_rate_str(70)     === '70/hr');
+
+// ── health_rate_str floor: a long ring window can divide one event down to a
+// rate that rounds to "0.0" at one decimal — same self-contradiction, one
+// decimal out. A single loss-of-sync event over ~24h between two tab
+// renders is 1/24 = 0.042/hr, still `warning`, and must not print as zero.
+check('rate str 0.04 -> <0.1/hr', health_rate_str(0.04) === '<0.1/hr');
+check('rate str 0.05 -> 0.1/hr',  health_rate_str(0.05) === '0.1/hr');
+check('rate str 0 still -> 0/hr (floor does not catch true zero)', health_rate_str(0) === '0/hr');
+
+$ratesFloor = [['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.04, 'rst' => 0.0]];
+$indFloor = health_indicators([sample(1000, 100, 0)], $ratesFloor, 1000);
+check('link_integrity floor rate state is warning', $indFloor['link_integrity']['state'] === 'warning');
+check('link_integrity floor rate value is <0.1/hr', $indFloor['link_integrity']['value'] === '<0.1/hr');
+check('link_integrity floor rate reason has <0.1/hr', str_contains($indFloor['link_integrity']['reason'], '<0.1/hr'));
+check('link_integrity floor rate reason has no (0.0/hr)', !str_contains($indFloor['link_integrity']['reason'], '(0.0/hr)'));
+
 // ── health_rank: single source of truth, unknown unranked ──────────────────
 check('rank ok < watch < warning < critical',
     health_rank('ok') < health_rank('watch')

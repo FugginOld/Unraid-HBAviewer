@@ -337,7 +337,7 @@ function luPhyCell($v, bool $err, ?array $d, string $k): string {
     if ($d === null || !empty($d['reset'])) return $cell;
     $r = $d['rate'][$k];
     return $cell . '<div class="lu-phy-delta">&Delta;' . (int) $d['delta'][$k]
-         . ' &middot; ' . number_format($r, $r > 0 && $r < 10 ? 1 : 0) . '/hr</div>';
+         . ' &middot; ' . health_rate_str($r) . '</div>';
 }
 
 /* Which drive sits behind this PHY? Two backends, two keys:
