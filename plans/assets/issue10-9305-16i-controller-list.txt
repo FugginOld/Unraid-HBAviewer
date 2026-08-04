@@ -1,0 +1,22 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Status Code = 0
+Status = Success
+Description = None
+
+Number of Controllers = 1
+Host Name = HOST000000001
+Operating System  = Linux 6.18.38-Unraid
+StoreLib IT Version = 07.3405.0200.0000
+StoreLib IR3 Version = 16.16-0
+
+IT System Overview :
+==================
+
+--------------------------------------------------------------------------
+Ctl Model       AdapterType   VendId DevId SubVendId SubDevId PCI Address 
+--------------------------------------------------------------------------
+  0 SAS9305-16i   SAS3224(A1) 0x1000  0xC4    0x1000   0x3190 00:01:00:00 
+--------------------------------------------------------------------------
+
+
