@@ -378,6 +378,24 @@ $bmNoKey = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
 check('baymap unplaceable drive still appears, with a null key',
       count($bmNoKey['unassigned']) === 1 && $bmNoKey['unassigned'][0]['key'] === null);
 
+/* ── Constants must be declared before the code that uses them ───────────────
+   A `function` is hoisted and callable from anywhere in the file; a top-level
+   `const` is an ordinary statement that only exists once execution reaches it.
+   Declaring SMART_CACHE_PATH beside the functions that use it left it undefined
+   for the endpoints ABOVE it, and the SMART tab fataled with "Undefined
+   constant" — while every test here passed, because requiring this file under
+   CLI returns at the dispatch guard and never reaches an endpoint.
+   Two checks: the specific constants are visible under CLI (so they are above
+   that guard), and no constant in the file is used before its declaration. */
+check('SMART cache constants are declared above the dispatch guard',
+      defined('SMART_CACHE_PATH') && defined('SMART_CACHE_TTL'));
+
+$aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
+foreach ($mc[1] as [$cname, $declAt]) {
+    check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
+}
+
 /* smart_state is the one health rule the SMART tab, the per-drive line and the
    bay map all share (plan 047 STOP condition). */
 check('smart_state ok',      smart_state(['health'=>'PASSED']) === 'ok');

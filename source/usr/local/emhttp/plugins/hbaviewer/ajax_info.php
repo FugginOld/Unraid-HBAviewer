@@ -17,6 +17,17 @@ require_once __DIR__ . '/phy_baseline.php';
 // Same posture: bay_map.php's dispatch fires only on a POST carrying an action.
 require_once __DIR__ . '/bay_map.php';
 
+/* Where the background SMART collector writes, and how long a collection stays
+   good for. ABOVE the dispatch on purpose: a `function` is hoisted and can be
+   called from anywhere in the file, but a top-level `const` is an ordinary
+   statement that only exists once execution reaches it — so a const declared
+   next to the functions that use it is undefined for every endpoint above,
+   which is exactly how the SMART tab broke. Declared here, they are defined
+   before the first endpoint runs AND under the CLI test runner, which returns
+   below. */
+const SMART_CACHE_PATH = '/tmp/lsiutil_smart.json';
+const SMART_CACHE_TTL  = 600;
+
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
    or renders a response for one request. The render functions themselves are
@@ -216,9 +227,6 @@ function luTable(array $headers, array $rows): string {
    collected-and-genuinely-empty cache (a box with no drives) has to be
    distinguishable from one that was never collected, or the SMART tab would
    relaunch its collector on every visit forever. */
-const SMART_CACHE_PATH = '/tmp/lsiutil_smart.json';
-const SMART_CACHE_TTL  = 600;
-
 function smart_cache_read(?string $path = null, ?int $ttl = null): ?array {
     $path ??= SMART_CACHE_PATH;
     $ttl  ??= SMART_CACHE_TTL;
