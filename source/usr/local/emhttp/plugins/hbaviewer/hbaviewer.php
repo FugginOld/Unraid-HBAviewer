@@ -427,7 +427,14 @@ if ($enableFlash) {
    under prefers-reduced-motion it becomes a steady outline rather than nothing
    — the same trade the rebuild stripe makes. */
 .lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
-.lu-refresh-btn.locating { border-color: #58a6ff; color: #58a6ff; }
+/* The button blinks while the drive does, so the screen and the rack are
+   telling you the same thing. Motion is the signal, so reduced-motion keeps a
+   steady highlight rather than dropping to nothing. */
+.lu-refresh-btn.locating { border-color: #58a6ff; color: #58a6ff; animation: lu-locate-blink 1s steps(1, end) infinite; }
+@keyframes lu-locate-blink {
+    0%, 49%   { background: color-mix(in srgb, #58a6ff 22%, transparent); }
+    50%, 100% { background: transparent; }
+}
 .lu-bay-cell.locating { animation: lu-locate-pulse 1s ease-in-out infinite; }
 @keyframes lu-locate-pulse {
     0%, 100% { box-shadow: inset 3px 0 0 var(--rail, transparent); }
@@ -435,6 +442,7 @@ if ($enableFlash) {
 }
 @media (prefers-reduced-motion: reduce) {
     .lu-bay-cell.locating { animation: none; box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
+    .lu-refresh-btn.locating { animation: none; background: color-mix(in srgb, #58a6ff 22%, transparent); }
 }
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
@@ -529,6 +537,9 @@ if ($enableFlash) {
   <button class="lu-tab-btn" data-tab="health" onclick="luTab('health')">HBA Health</button>
   <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
+  <?php /* Same payload as Drives, arranged as the chassis — so it follows the
+           same toggle rather than adding a second setting for one data source. */ ?>
+  <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="baymap" onclick="luTab('baymap')">Array Map</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
@@ -566,15 +577,20 @@ if ($enableFlash) {
 <div id="tab-drives" class="lu-tab-pane">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
-    <button class="lu-refresh-btn" id="lu-locate-bar" onclick="luLocateStopAll()" style="display:none">Stop blinking</button>
-    <button class="lu-refresh-btn" id="baymap-toggle" onclick="luBayToggle()">Map</button>
-    <button class="lu-refresh-btn" onclick="luBayRefresh()">Refresh</button>
+    <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
   </div>
   <div id="drives-content"><div class="lu-loading">Loading…</div></div>
-  <!-- Bay map (plan 047): the same drives, arranged the way they sit in the
-       chassis. Hidden until the Map button is pressed, and fetched then — the
-       payload costs a SMART join the table has no use for. -->
-  <div id="baymap-content" style="display:none"></div>
+</div>
+<?php endif; ?>
+
+<!-- ── Array Map tab (plan 047): the same drives, arranged as the chassis ─── -->
+<?php if ($showDrives): ?>
+<div id="tab-baymap" class="lu-tab-pane">
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Where each drive physically sits — you place them once, the map remembers</span>
+    <button class="lu-refresh-btn" onclick="luBayFetch()">Refresh</button>
+  </div>
+  <div id="baymap-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
@@ -661,6 +677,9 @@ if ($enableFlash) {
             if (!loaded['flash']) luFlashInit();
         } else if (name === 'perf') {
             luMetricsStart();
+        } else if (name === 'baymap') {
+            // JSON, not an HTML fragment, so it never goes through luReloadTab.
+            if (!luBay.data) luBayFetch();
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
@@ -802,28 +821,7 @@ if ($enableFlash) {
        drive's own firmware is not a trusted source of markup. */
     var luBay = { data: null, sel: null, dimTimer: 0 };
 
-    window.luBayToggle = function () {
-        var map = document.getElementById('baymap-content');
-        var tbl = document.getElementById('drives-content');
-        var show = map.style.display === 'none';
-        /* No width measuring any more: the bays are a fixed 236px per the 1b
-           design, so the grid has its own intrinsic width and #lu-wrap sizes to
-           it. Wider than the window, the panel scrolls sideways rather than
-           squeezing the cells — a chassis does not get narrower because the
-           window did. */
-        map.style.display = show ? '' : 'none';
-        tbl.style.display = show ? 'none' : '';
-        document.getElementById('baymap-toggle').textContent = show ? 'Table' : 'Map';
-        if (show && !luBay.data) luBayFetch();
-    };
-
-    // One Refresh button for both views — it refreshes whichever is on screen.
-    window.luBayRefresh = function () {
-        if (document.getElementById('baymap-content').style.display === 'none') luReloadTab('drives');
-        else luBayFetch();
-    };
-
-    function luBayFetch() {
+    window.luBayFetch = function () {
         var el = document.getElementById('baymap-content');
         el.innerHTML = '<div class="lu-loading">Loading…</div>';
         fetch('/plugins/hbaviewer/ajax_info.php?type=baymap')
@@ -834,7 +832,7 @@ if ($enableFlash) {
                 if (window.luLocateSync) luLocateSync();
             })
             .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
-    }
+    };
 
     function luBayPost(body, done) {
         body.csrf_token = flashCsrf;
@@ -1000,7 +998,7 @@ if ($enableFlash) {
                         var lb = document.createElement('button');
                         lb.className = 'lu-refresh-btn lu-bay-loc' + (drv.locating ? ' locating' : '');
                         lb.setAttribute('data-locate', drv.addr);
-                        lb.textContent = drv.locating ? 'Blinking' : 'Locate';
+                        lb.textContent = drv.locating ? 'STOP' : 'Locate';
                         lb.onclick = (function (a, dv) {
                             return function (ev) { luLocate(ev, this, a, dv); };
                         })(drv.addr, drv.dev);
@@ -1061,8 +1059,6 @@ if ($enableFlash) {
         luLocatePost(on ? 'stop' : 'start', addr);
     };
 
-    window.luLocateStopAll = function () { luLocatePost('stop_all', null); };
-
     function luLocatePost(action, addr) {
         var body = {action: action, csrf_token: flashCsrf};
         if (addr) body.addr = addr;
@@ -1082,12 +1078,12 @@ if ($enableFlash) {
         document.querySelectorAll('[data-locate]').forEach(function (el) {
             var on = active.indexOf(el.getAttribute('data-locate')) !== -1;
             el.classList.toggle('locating', on);
-            if (el.tagName === 'BUTTON') el.textContent = on ? 'Blinking' : 'Locate';
+            // The button is its own stop control — one place to press, and it
+            // says what pressing it does rather than what is happening.
+            if (el.tagName === 'BUTTON') el.textContent = on ? 'STOP' : 'Locate';
             var cell = el.closest('.lu-bay-cell');
             if (cell) cell.classList.toggle('locating', on);
         });
-        var bar = document.getElementById('lu-locate-bar');
-        if (bar) bar.style.display = active.length ? '' : 'none';
     }
 
     // On load, ask the server what is already blinking — a locate started in

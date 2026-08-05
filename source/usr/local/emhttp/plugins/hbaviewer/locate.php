@@ -76,15 +76,6 @@ if ($action === 'status') {
     exit;
 }
 
-if ($action === 'stop_all') {
-    foreach (locate_active() as $a) {
-        $pid = locate_pid($a);
-        if ($pid !== null) shell_exec('kill ' . $pid . ' 2>/dev/null');
-    }
-    echo json_encode(['ok' => true, 'active' => locate_active()]);
-    exit;
-}
-
 $addr = (string) ($_POST['addr'] ?? '');
 if (!locate_addr_valid($addr)) {
     http_response_code(400);

@@ -58,7 +58,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   SAS address, link speed, firmware, and a **per-drive SMART** button. The
   `/dev` name and the Unraid slot appear on the PHY and SMART tables too, so a
   row here can be matched against the Main page without tracking `sdX` by eye.
-- **Drive bay map** — a grid of the physical bays, arranged the way they sit in
+- **Array Map** — a grid of the physical bays, arranged the way they sit in
   the chassis, so a problem drive is a place you can walk to rather than a slot
   number. You place each drive once (click a drive, click a bay) and the layout
   is saved to `/boot`; **lock it** when you are done so a stray click cannot
@@ -69,7 +69,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   direct-attach backplane the enclosure/slot addressing is invented by the
   controller — so this is the one thing the plugin cannot work out for you.
 - **Locate a drive** — blink one drive's **activity light** from the Drives
-  table or a bay on the map, so a row becomes a bay you can walk to. Needs no
+  table or a bay on the Array Map, so a row becomes a bay you can walk to. Needs no
   SES, no enclosure processor and no GPIO — it works by reading the drive twice
   a second, so anything with a tray light can be found, including plain HBAs on
   dumb backplanes. Stops itself after five minutes so a forgotten blink cannot
@@ -206,11 +206,10 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 ```text
 Tools
 └── HBAviewer
-    └── HBA Monitor   (tabs: Overview · HBA Health · PHY Health · Drives · SMART
-                              · Event Log · Performance · Firmware/BIOS Update*)
+    └── HBA Monitor   (tabs: Overview · HBA Health · PHY Health · Drives
+                              · Array Map · SMART · Event Log · Performance
+                              · Firmware/BIOS Update*)
                               *opt-in, off by default
-                              Drives has a Map button — the drive bay map,
-                              with its own Rows/Columns and Lock controls
 
 User Utilities
 └── HBAviewer         (full settings page)
@@ -239,7 +238,7 @@ right backend is in use before opening the Monitor.
 | Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 The **drive bay map** deliberately has no row on this page. Its grid size and
-its lock live with the map itself (**Drives → Map**), because a layout is
+its lock live with the map itself (the **Array Map** tab), because a layout is
 something you build while looking at it, not a number you set on one page and
 go check on another. They are still persisted the same way everything else here
 is.

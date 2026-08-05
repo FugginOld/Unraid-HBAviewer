@@ -762,7 +762,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                 htmlspecialchars($addr, ENT_QUOTES),
                 htmlspecialchars($addr, ENT_QUOTES),
                 htmlspecialchars((string) $dev, ENT_QUOTES),
-                $on ? 'Blinking' : 'Locate'
+                $on ? 'STOP' : 'Locate'
             );
         };
 

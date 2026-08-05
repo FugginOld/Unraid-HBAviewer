@@ -74,7 +74,7 @@ means the array does not use that drive.
 
 ## Map your drive bays
 
-**Drives → Map.**
+**Array Map** tab.
 
 The tables tell you a drive is failing. They cannot tell you which of 24 bays to
 walk over and pull, because nothing on the machine knows your chassis layout — on
@@ -124,12 +124,13 @@ up with the rest of your flash drive.
 
 ## Find a drive in the rack (Locate)
 
-**Drives → Locate**, on any row, or the **Locate** button on a bay in the map.
+**Drives → Locate**, on any row, or the **Locate** button on a bay in the
+**Array Map**.
 
 The drive's own **activity light** starts blinking in a steady rhythm, so the
-row you are looking at becomes a bay you can walk to. Press it again — or
-**Stop blinking** in the toolbar — to stop; it also stops itself after five
-minutes.
+row you are looking at becomes a bay you can walk to. The button itself blinks
+and changes to **STOP** — press it again to stop. It also stops itself after
+five minutes, so a forgotten blink cannot keep a disk awake.
 
 It needs nothing from the backplane. There is no LED being driven here: the
 plugin simply reads the drive twice a second, and the tray light flickers
