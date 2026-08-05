@@ -36,6 +36,15 @@ require_once __DIR__ . '/bay_map.php';
    never writing this to the flash drive. */
 const SMART_CACHE_PATH = '/tmp/lsiutil_smart.json';
 
+/* Unraid's own state files, read for the array slot names and the parity
+   rebuild. Up here with SMART_CACHE_PATH for the same reason, one step worse:
+   these two are DEFAULT PARAMETER VALUES of functions, which resolve when the
+   function is called, not where it is written — so a call from any endpoint
+   above their declaration would fatal even though the function itself is
+   hoisted. */
+const UNRAID_VARINI  = '/var/local/emhttp/var.ini';
+const UNRAID_DISKINI = '/var/local/emhttp/disks.ini';
+
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
    or renders a response for one request. The render functions themselves are
@@ -82,7 +91,7 @@ if ($type === 'smart_all') {
     // expensive thing here, and the person asked for it exactly when they press
     // Refresh (which unlinks the cache above) — not on a timer.
     $cached = smart_cache_read();
-    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age()); exit; }
+    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles()); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -276,7 +285,7 @@ function smart_state_color(string $state): string {
    that collection is; it is printed above the table because the cache is now
    kept until someone refreshes it, and an unlabelled table of week-old
    temperatures reads exactly like a live one. */
-function renderSmartTable(array $data, ?int $ageSecs = null): string {
+function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []): string {
     $drives = $data['drives'] ?? [];
     if (!$drives) return '<p class="lu-muted">No drives found.</p>';
     $age = $ageSecs === null ? '' :
@@ -294,6 +303,7 @@ function renderSmartTable(array $data, ?int $ageSecs = null): string {
         $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;
         $rows[] = [
             '<code>' . htmlspecialchars($d['dev'] ?? '') . '</code>',
+            lsi_role_cell($d['dev'] ?? null, $roles),
             htmlspecialchars($d['model'] ?? ''),
             ($s['transport'] ?? '') !== '' ? htmlspecialchars(strtoupper($s['transport'])) : $dash,
             '<code>' . htmlspecialchars($d['serial'] ?? '') . '</code>',
@@ -304,7 +314,7 @@ function renderSmartTable(array $data, ?int $ageSecs = null): string {
             ($s['power_on_hours'] ?? '') !== '' ? number_format((int) $s['power_on_hours']) . 'h' : $dash,
         ];
     }
-    return $age . luTable(['Device', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
+    return $age . luTable(['Device', 'Unraid', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
 }
 
 /* Render the Overview cards (one per controller) — same markup the Monitor page
@@ -440,6 +450,14 @@ function drive_dev_name(array $d, array $devBySerial): ?string {
     return $sn !== '' ? ($devBySerial[$sn] ?? null) : null;
 }
 
+/* The Unraid slot cell for a table: "Parity", "Disk 1", or an em dash for a
+   drive the array does not use. One renderer so the four tables that show it
+   cannot drift apart in spelling or in what they do with a miss. */
+function lsi_role_cell(?string $dev, array $roles): string {
+    $r = $dev !== null ? ($roles[$dev] ?? '') : '';
+    return $r !== '' ? htmlspecialchars($r) : '<span class="lu-muted">—</span>';
+}
+
 /* Which drive sits behind this PHY? Two backends, two keys:
      lsiutil  - drives carry `phy`; match it directly.
      storcli  - drives carry no `phy` at all. The PHY's `sas_addr` and the
@@ -518,7 +536,7 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
    the decoded `drives` payload (the same shape $data carries), added last and
    defaulting to empty so every existing caller still renders exactly what it
    rendered before this plan. */
-function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = []): string {
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -542,6 +560,10 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             $d = phy_drive($ctlDrives, $p);
             $n = $d !== null ? drive_dev_name($d, $devBySerial) : null;
             return $n !== null ? '<code>' . htmlspecialchars($n) . '</code>' : '<span class="lu-muted">—</span>';
+        };
+        $roleCell = function (array $p) use ($ctlDrives, $devBySerial, $roles): string {
+            $d = phy_drive($ctlDrives, $p);
+            return lsi_role_cell($d !== null ? drive_dev_name($d, $devBySerial) : null, $roles);
         };
 
         // Resolve every PHY's delta first: a reboot or driver reload zeroes the
@@ -606,13 +628,14 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     $devCell($p),
+                    $roleCell($p),
                     luLinkBadge($p['link']),
                     htmlspecialchars($p['speed']),
                     !empty($p['sas_addr']) ? '<code>' . htmlspecialchars(strtoupper($p['sas_addr'])) . '</code>' : '<span class="lu-muted">—</span>',
                     $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
-            $out .= luTable(['PHY', 'Device', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
+            $out .= luTable(['PHY', 'Device', 'Unraid', 'Link', 'Speed', 'Attached SAS Address', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         } else {
             // lsiutil backend: SAS error counters
             $rows = [];
@@ -623,11 +646,12 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     $devCell($p),
+                    $roleCell($p),
                     luLinkBadge($p['link']),
                     $ec('inv'), $ec('disp'), $ec('sync'), $ec('reset'),
                 ];
             }
-            $out .= luTable(['PHY', 'Device', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
+            $out .= luTable(['PHY', 'Device', 'Unraid', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
         $out .= '</div>';
     }
@@ -649,12 +673,12 @@ if ($type === 'phy') {
     $ddec  = json_decode((string) shell_exec(
         'bash ' . escapeshellarg("$scripts/get_attached_drives.sh") . ' 2>/dev/null'), true);
     $ddata = is_array($ddec) ? $ddec : [];
-    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial());
+    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial(), unraid_disk_roles());
     exit;
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
-function renderDrivesTables(array $data, array $devBySerial = []): string {
+function renderDrivesTables(array $data, array $devBySerial = [], array $roles = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -712,6 +736,7 @@ function renderDrivesTables(array $data, array $devBySerial = []): string {
                     : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     $devCell($d),
+                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
                     htmlspecialchars($d['slot']),
                     ($d['port'] ?? '') !== '' ? htmlspecialchars($d['port']) : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['model']),
@@ -724,7 +749,7 @@ function renderDrivesTables(array $data, array $devBySerial = []): string {
                     $smart,
                 ];
             }
-            $out .= luTable(['Device', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
         } else {
             // lsiutil backend: device, bus:target, port, SAS address. The /dev
             // name was already here as a trailing "OS Device" column; it moves
@@ -735,18 +760,19 @@ function renderDrivesTables(array $data, array $devBySerial = []): string {
                 $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . htmlspecialchars((string) $d['phy'])              : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     $devCell($d),
+                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
                     htmlspecialchars((string) $d['bus']) . ':' . htmlspecialchars((string) $d['target']),
                     $phy, $sas,
                 ];
             }
-            $out .= luTable(['Device', 'Bus:Tgt', 'Port', 'SAS Address'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address'], $rows);
         }
         $out .= '</div>';
     }
     return $out;
 }
 
-if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); exit; }
+if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial(), unraid_disk_roles()); exit; }
 
 /* ── Unraid parity rebuild ───────────────────────────────────────────────────
    Which /dev names Unraid has assigned to parity, and whether the array is
@@ -765,21 +791,36 @@ if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); e
      rebuilt.
    Anything unreadable, missing or unrecognised means "no rebuild" — this only
    ever claims one on positive evidence. */
-const UNRAID_VARINI  = '/var/local/emhttp/var.ini';
-const UNRAID_DISKINI = '/var/local/emhttp/disks.ini';
-
-function unraid_parity_devs(string $disksIni = UNRAID_DISKINI): array {
+/* Which slot Unraid has each device in: "/dev/sdp" => "Parity", "/dev/sdg" =>
+   "Disk 1". This is the identifier every OTHER Unraid screen uses, and until
+   now none of this plugin's tables carried it — so matching a row here against
+   the Main page meant tracking /dev/sdX by eye.
+   Labels are spelled the way Main spells them, so the two can be read side by
+   side. A slot with no disk assigned (parity2 on a single-parity array reports
+   device="") is skipped rather than becoming "/dev/". */
+function unraid_disk_roles(string $disksIni = UNRAID_DISKINI): array {
     if (!is_file($disksIni)) return [];
     $ini = @parse_ini_file($disksIni, true);
     if (!is_array($ini)) return [];
-    $devs = [];
-    foreach ($ini as $name => $sec) {
-        // "parity" and "parity2"; data disks are disk1..disk28, caches are cache*.
-        if (!is_array($sec) || stripos((string) $name, 'parity') !== 0) continue;
-        $d = trim((string) ($sec['device'] ?? ''));
-        if ($d !== '') $devs[] = str_starts_with($d, '/dev/') ? $d : '/dev/' . $d;
+    $roles = [];
+    foreach ($ini as $section => $sec) {
+        if (!is_array($sec)) continue;
+        $dev = trim((string) ($sec['device'] ?? ''));
+        if ($dev === '') continue;
+        $name = trim((string) ($sec['name'] ?? '')) !== '' ? (string) $sec['name'] : (string) $section;
+        if (preg_match('/^disk(\d+)$/i', $name, $m))       $label = 'Disk ' . (int) $m[1];
+        elseif (preg_match('/^parity(\d*)$/i', $name, $m)) $label = 'Parity' . ($m[1] !== '' ? ' ' . (int) $m[1] : '');
+        else                                               $label = ucfirst($name);   // cache, and any named pool
+        $roles[str_starts_with($dev, '/dev/') ? $dev : '/dev/' . $dev] = $label;
     }
-    return $devs;
+    return $roles;
+}
+
+/* Parity is just the slots whose label says so — one reader for disks.ini, not
+   two that could disagree about which device is parity. */
+function unraid_parity_devs(string $disksIni = UNRAID_DISKINI): array {
+    return array_keys(array_filter(unraid_disk_roles($disksIni),
+        fn($label) => str_starts_with($label, 'Parity')));
 }
 
 function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
@@ -800,7 +841,7 @@ function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
    which is a state of its own and never renders as healthy. */
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
                           array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
-                          ?int $smartAge = null, array $rebuildDevs = []): array {
+                          ?int $smartAge = null, array $rebuildDevs = [], array $roles = []): array {
     // Serial is the join key the SMART collector already emits per drive; it is
     // also the only identifier both payloads share (storcli's WWN differs by a
     // nibble from /dev's — see lsi_dev_by_serial).
@@ -841,6 +882,10 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 'cap'    => preg_match('/^\s*([0-9.]+)\s*([A-Za-z]+)/', (string) ($d['size'] ?? ''), $cm) ? $cm[1] : ($d['size'] ?? ''),
                 'cap_unit' => $cm[2] ?? '',
                 'slot'   => $d['slot'] ?? (isset($d['phy']) ? 'PHY ' . $d['phy'] : ''),
+                // What Unraid calls this disk — the name on its Main page, and
+                // the one identifier a person already knows before they look
+                // here. Empty for a drive the array does not use.
+                'role'   => $dev !== null ? ($roles[$dev] ?? '') : '',
                 // Display-ready, because the two backends key on different
                 // wires and the word has to match: "Port 14" is storcli's
                 // Connected Port Number, "PHY 2" is lsiutil's PHY index.
@@ -885,7 +930,7 @@ if ($type === 'baymap') {
         $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
         lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP'],
         smart_cache_age(),
-        unraid_rebuilding() ? unraid_parity_devs() : []
+        unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles()
     ));
     exit;
 }

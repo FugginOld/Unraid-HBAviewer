@@ -967,6 +967,9 @@ if ($enableFlash) {
                     // 4. Reference rows, one left edge for every value.
                     var ref = document.createElement('div');
                     ref.className = 'lu-bay-ref';
+                    // First, because it is the identifier the person already
+                    // knows: what this disk is called everywhere else in Unraid.
+                    if (drv.role) luBayRef(ref, 'UNRAID', drv.role);
                     luBayRef(ref, 'PORT',   drv.port);
                     luBayRef(ref, 'MODEL',  drv.model);
                     luBayRef(ref, 'SERIAL', drv.serial, true);
@@ -991,10 +994,10 @@ if ($enableFlash) {
             // No key = the drive reported neither a port nor a PHY, so there is
             // nothing stable to remember it by. Shown, but not placeable.
             chip.className = 'lu-bay-chip' + (u.key === null ? ' dead' : (luBay.sel === u.key ? ' sel' : ''));
-            chip.textContent = u.dev || u.slot || u.serial || '?';
+            chip.textContent = (u.dev || u.slot || u.serial || '?') + (u.role ? '  ' + u.role : '');
             chip.title = u.key === null
                 ? 'This drive reports no port or PHY, so it cannot be assigned to a bay.'
-                : [u.model, u.serial, u.size].filter(Boolean).join(' · ');
+                : [u.role, u.model, u.serial, u.size].filter(Boolean).join(' · ');
             if (u.key !== null && !d.locked) {
                 chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
             }

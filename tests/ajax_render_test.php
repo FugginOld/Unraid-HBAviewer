@@ -308,6 +308,35 @@ check('drives device column leads the row',
 
 $h = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg']);
 check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>'));
+
+/* The Unraid column: the same slot name on all four surfaces, so a row here can
+   be matched against Main without tracking /dev/sdX by eye. */
+$hRole = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
+check('drives table has an Unraid column',  str_contains($hRole, '<th>Unraid</th>'));
+check('drives table names the slot',        str_contains($hRole, '<td>Disk 1</td>'));
+check('drives lsiutil has an Unraid column',
+      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<th>Unraid</th>'));
+check('drives lsiutil names the slot',
+      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<td>Parity</td>'));
+// A drive the array does not use gets an em dash, never a blank cell that reads
+// as "not looked up".
+check('an unassigned drive shows an em dash',
+      substr_count(renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], []), '<span class="lu-muted">—</span>') > 0);
+
+$hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
+                               null, ['/dev/sdp' => 'Parity']);
+check('SMART table has an Unraid column', str_contains($hSmartRole, '<th>Unraid</th>'));
+check('SMART table names the slot',       str_contains($hSmartRole, '<td>Parity</td>'));
+
+$hPhyRole = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
+check('PHY table has an Unraid column', str_contains($hPhyRole, '<th>Unraid</th>'));
+check('PHY table names the slot',       str_contains($hPhyRole, '<td>Disk 1</td>'));
+check('PHY lsiutil table has an Unraid column',
+      str_contains(renderPhyTables($phyLsi, [], null, null,
+          ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]], [], ['/dev/sdb' => 'Parity']),
+          '<td>Parity</td>'));
 check('drives storcli device leads the row',
       strpos($h, '<th>Device</th>') < strpos($h, '<th>Encl:Slot</th>'));
 // Serials come off lsblk in whatever case the drive reports; the map is keyed
@@ -367,6 +396,12 @@ check('baymap passes an unparseable size through whole',
       bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'1','size'=>'unknown']]]]], null, [], 6, 4)
           ['unassigned'][0]['cap'] === 'unknown');
 check('baymap carries the warn temperature', $bm['warn_temp'] === 45);
+// The Unraid slot name reaches the bay card and the tray chip.
+$bmRole = bay_map_assemble($bmDrives, null, [], 6, 4, ['PLACED01'=>'/dev/sdp'], false, 45, null, [],
+                           ['/dev/sdp' => 'Parity']);
+$roleBySerial = array_column($bmRole['unassigned'], null, 'serial');
+check('baymap carries the Unraid slot name', $roleBySerial['PLACED01']['role'] === 'Parity');
+check('baymap leaves a non-array drive roleless', $roleBySerial['NOSMART1']['role'] === '');
 check('baymap warn temperature is injectable',
       bay_map_assemble($bmDrives, null, [], 6, 4, [], false, 52)['warn_temp'] === 52);
 /* Rebuild is the ONE thing read from storcli's `state` field. That field is a
@@ -442,6 +477,20 @@ foreach ($mc[1] as [$cname, $declAt]) {
     check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
 }
 
+/* A const used as a DEFAULT PARAMETER VALUE is the worse version of the same
+   trap: the function is hoisted and callable from anywhere, but its default
+   resolves at CALL time, so an endpoint above the const's declaration fatals on
+   a function that looks perfectly well-defined. Any const in a signature must
+   therefore live above the dispatch guard — where the CLI test runner can see
+   it, which is what this check is standing in for. */
+preg_match_all('/^function\s+\w+\s*\(([^)]*)\)/m', $aj, $sigs);
+foreach ($sigs[1] as $params) {
+    preg_match_all('/=\s*([A-Z][A-Z0-9_]{2,})\b/', $params, $defs);
+    foreach (array_unique($defs[1]) as $cname) {
+        check("const $cname is declared above the dispatch guard (used as a default parameter)", defined($cname));
+    }
+}
+
 /* ── Unraid parity rebuild ────────────────────────────────────────────────────
    Read from the same two files Unraid's webGui renders from. The load-bearing
    check is the parity-CHECK one: a check reads the array and writes nothing, so
@@ -460,6 +509,22 @@ check('parity devices come off disks.ini', unraid_parity_devs($disks) === ['/dev
 $disks2 = $mkIni('disks2.ini', "[\"parity\"]\ndevice=\"sdp\"\n[\"parity2\"]\ndevice=\"sdq\"\n");
 check('dual parity is both disks', unraid_parity_devs($disks2) === ['/dev/sdp', '/dev/sdq']);
 check('a missing disks.ini is no parity', unraid_parity_devs("$iniDir/nope.ini") === []);
+
+/* The array slot names — the identifier every other Unraid screen uses, and
+   the one a person already knows before they come here. Spelled the way Main
+   spells them so the two screens can be read side by side. */
+$roles = unraid_disk_roles($disks);
+check('parity is named Parity',   ($roles['/dev/sdp'] ?? '') === 'Parity');
+check('disk1 is named Disk 1',    ($roles['/dev/sdb'] ?? '') === 'Disk 1');
+check('a pool keeps its own name', ($roles['/dev/nvme0n1'] ?? '') === 'Cache');
+check('the second parity is Parity 2',
+      (unraid_disk_roles($disks2)['/dev/sdq'] ?? '') === 'Parity 2');
+check('a drive outside the array has no role', !isset($roles['/dev/sdzz']));
+check('a missing disks.ini has no roles', unraid_disk_roles("$iniDir/nope.ini") === []);
+/* Double digits must not sort or read as "Disk 1" — the whole point is telling
+   two disks apart at a glance. */
+check('disk10 is Disk 10',
+      (unraid_disk_roles($mkIni('d10.ini', "[\"disk10\"]\nname=\"disk10\"\ndevice=\"sdk\"\n"))['/dev/sdk'] ?? '') === 'Disk 10');
 
 check('recon while resyncing is a rebuild',
       unraid_rebuilding($mkIni('v1.ini', "mdResync=\"1234\"\nmdResyncAction=\"recon P\"\n")) === true);
