@@ -170,21 +170,27 @@ itself. A silent permanent failure is the part that hurt.
 
 ## Steps
 
-### Step 1: Confirm the collision on the maintainer's box
+### Step 1: ALREADY DONE — do not attempt, no hardware is available to you
 
-The maintainer reports the same symptom. One command says whether it is the
-same cause:
+This step was a hardware check, and it has been run on two boxes. Both answers
+are recorded here so the executor does not need a controller:
 
-```bash
-ls -d /sys/class/sas_phy/phy-*/ | awk -F/ '{print $5}' \
-  | awk -F: '{print NF==2 ? "own-phy" : "expander-phy"}' | sort | uniq -c
-php -r '$a=json_decode(file_get_contents("/tmp/hbav_health_c0.json"),true); echo "Samples: ".count($a).PHP_EOL;'
+```text
+Reporter (issue #12, Dell HBA355i / SAS3816, has an expander):
+    29 entries named phy-H:N      (the HBA's own PHYs)
+    76 entries named phy-H:N:M    (PHYs on the expander)
+    /tmp/hbav_health_c0.json → "Samples: 1" no matter how long the tab is open
+    04-parsed/get_hba_health.json → "idx":7 appears 4 times (likewise 6, 5, 4, 3)
+
+Maintainer (9400-16i + 9400-8i, no expander):
+    32 entries named phy-H:N
+     0 entries named phy-H:N:M
+    both rings healthy — 9 samples spanning 12.83 h
 ```
 
-**Expected on an affected box**: a non-zero `expander-phy` count and
-`Samples: 1` however long the tab has been open. If `expander-phy` is 0 and
-samples still never reach 2, **STOP** — the cause is something else and this
-plan does not cover it.
+That is the whole shape of the bug: the reporter's box has expander PHYs whose
+names collapse onto the HBA's own PHY indexes; the maintainer's has none and is
+unaffected. **Start at Step 2.**
 
 ### Step 2: Narrow the glob to the controller's own PHYs
 
@@ -215,22 +221,50 @@ bash scripts/get_hba_health.sh | tr ',' '\n' | grep -o '"idx":[0-9]*' | sort | u
 
 **Expected**: no output.
 
-### Step 3: Fixture test from the reporter's bundle
+### Step 3: Fixture test — build the sysfs tree in the test itself
 
-`03-sysfs/sas_phy.txt` in the bundle is a full listing of that box's PHYs.
-Build a fake sysfs tree from it under a temp dir (`tests/fixtures/sas_phy_expander.txt`
-plus a small builder in the test), point `_phys_json` at it, and assert:
+**Do not look for the reporter's diagnostic bundle. It is not in this repo and
+you do not need it** — the shape it proved is written out below, and the test
+constructs its own tree from that shape.
 
-- every emitted `idx` is unique
-- the count equals the host's own-PHY count (8 for host 0 in that capture)
-- no emitted entry corresponds to an `phy-H:N:M` name
+First make the sysfs root overridable in `_phys_json`, following the convention
+already used twice in the same file (`SYS_SCSI_HOST`, `SYS_PCI_ROOT`):
 
-`_phys_json` currently hardcodes `/sys/class/sas_phy`; make that path
-overridable the way `get_hba_health.sh` already overrides `SYS_SCSI_HOST` and
-`SYS_PCI_ROOT`, so the test needs no root and no hardware.
+```bash
+for p in "${SYS_SAS_PHY:-/sys/class/sas_phy}"/phy-"${1}":*/; do
+```
 
-**Verify**: the test fails against the current glob and passes after Step 2.
-Run it both ways before committing.
+Then add `tests/phys_json_test.sh`, modelled on the existing
+`tests/health_sh_test.sh` (read it first — same `ok`/`bad` helpers, same
+`sed`-out-the-function trick for testing one function of a script that would
+otherwise run hardware commands at load).
+
+The tree the test builds, matching the reporter's capture:
+
+| Directory | Counter files | Represents |
+| --- | --- | --- |
+| `phy-0:0` … `phy-0:7` | populated, non-zero (e.g. `invalid_dword_count` = 5) | the HBA's own 8 PHYs |
+| `phy-0:0:0` … `phy-0:0:7` | present but **empty** | expander PHYs — the collision |
+| `phy-0:1:0` … `phy-0:1:3` | present but **empty** | a second expander, same collision |
+| `phy-1:0` … `phy-1:3` | populated | a different controller — must not appear |
+
+Each directory needs the five files `_phys_json` reads:
+`invalid_dword_count`, `running_disparity_error_count`,
+`loss_of_dword_sync_count`, `phy_reset_problem_count`, `negotiated_linkrate`.
+The empty ones are created with `: > "$d/invalid_dword_count"` — an existing
+but empty file is exactly what an expander PHY reports, and it is why the
+phantoms all read as zero rather than being skipped.
+
+Assertions, running `_phys_json 0` against that tree:
+
+1. every emitted `"idx"` value is unique (`sort | uniq -d` is empty)
+2. exactly 8 entries are emitted
+3. the emitted indexes are 0–7
+4. no entry carries a counter from host 1
+
+**Verify**: the test FAILS before Step 2's filter (assertion 1 reports
+duplicates and assertion 2 sees 20 entries) and PASSES after. Run it both ways
+and say so in your report — a test that has never been seen red proves nothing.
 
 ### Step 4: The ring must degrade, not wipe
 
@@ -254,9 +288,10 @@ index keeps **both** samples (`count($ring) === 2`) instead of resetting, and a
 genuine counter decrease on a *unique* index still resets. Both cases must be
 in `tests/health_test.php`.
 
-### Step 5: Confirm on hardware
+### Step 5: NOT YOURS — hardware confirmation by the maintainer
 
-On the reporter's box and the maintainer's:
+Recorded for whoever runs it on real hardware after this lands; **the executor
+must not attempt it and must not block on it**:
 
 ```bash
 rm -f /tmp/hbav_health_c*.json      # discard the poisoned rings
@@ -264,7 +299,7 @@ rm -f /tmp/hbav_health_c*.json      # discard the poisoned rings
 php -r '$a=json_decode(file_get_contents("/tmp/hbav_health_c0.json"),true); echo "Samples: ".count($a).PHP_EOL;'
 ```
 
-**Expected**: `Samples: 2` (or more), and Link Integrity showing a rate rather
+**Expected**: `Samples: 2` or more, and Link Integrity showing a rate rather
 than "Not enough samples yet".
 
 ## Test plan
@@ -277,14 +312,14 @@ than "Not enough samples yet".
 
 ## Done criteria
 
-- [ ] Step 1 run on the maintainer's box, result recorded in the status row
+- [ ] (Step 1 — already done, see above; nothing for the executor)
 - [ ] No emitted PHY index is duplicated, asserted against the bundle's real
       sysfs listing
 - [ ] Expander PHYs appear in none of the three collectors' output
 - [ ] `get_phy_health.sh` output is byte-identical before and after
 - [ ] A duplicate index no longer wipes the health ring (unit test)
 - [ ] A genuine counter decrease on a unique index still wipes it (unit test)
-- [ ] `Samples: 2` on both affected boxes, Link Integrity resolving
+- [ ] (hardware confirmation — the maintainer's, not the executor's)
 - [ ] `bash tests/run.sh` → `--- all pass ---`
 
 ## STOP conditions
