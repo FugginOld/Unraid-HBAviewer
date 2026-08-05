@@ -36,14 +36,19 @@ drv_lsiutil() {
     hba_query -p"$PORT" -a 42,0 2>/dev/null | bash "$DIR/parse/drives_osmap.sh" > "$TMPOS"
 
     # ── Stage 2: SAS address + PHY from sysfs ────────────────────────────────────
-    # /sys/class/sas_end_device/ exists on kernels with SAS transport (mpt3sas).
-    if [ -d "/sys/class/sas_end_device" ]; then
-        for ed in /sys/class/sas_end_device/end_device-*/; do
+    # /sys/class/sas_device/ exists on kernels with SAS transport (mpt3sas) and
+    # carries sas_address + phy_identifier. Its sibling class sas_end_device/
+    # shares the exact same end_device-H:B naming but holds only end-device
+    # *role* attributes (I_T_nexus_loss_timeout, tlr_enabled, ...) -- neither
+    # sas_address nor phy_identifier lives there, which is what makes reading
+    # the wrong class here such an easy mistake to ship.
+    if [ -d "/sys/class/sas_device" ]; then
+        for ed in /sys/class/sas_device/end_device-*/; do
             [ -e "$ed" ] || continue
             sas=$(sed 's/0x//' "${ed}sas_address" 2>/dev/null | tr '[:lower:]' '[:upper:]' | tr -d ' \n')
             phy=$(tr -d ' \n' < "${ed}phy_identifier" 2>/dev/null)
             [ -n "$sas" ] || continue
-            blk_dir=$(find -L "${ed}device" -maxdepth 12 -type d -name 'block' 2>/dev/null | head -1)
+            blk_dir=$(find "$(readlink -f "${ed}device")" -maxdepth 12 -type d -name 'block' 2>/dev/null | head -1)
             blk=$(ls "$blk_dir" 2>/dev/null | head -1)
             [ -n "$blk" ] || continue
             printf "/dev/%s %s %s\n" "$blk" "$sas" "${phy:-0}"
