@@ -236,6 +236,95 @@ check('phy_top_offenders empty input stays quiet', $warned === false);
 $off = phy_top_offenders([['phy' => 5, 'sas_addr' => '5000CCA25319FB45']], [0 => $rate(3)], []);
 check('phy_top_offenders unresolved drive still ranks', count($off) === 1 && $off[0]['drive'] === null);
 
+/* ── PHY tab (plan 050): the baseline rate is a long-run average, and the
+   Health tab's own ring, read READ-ONLY, can show a far more recent one
+   beside it. luPhyCell tested directly with fixture $recent/$ringSpanSecs —
+   no disk I/O needed, the whole point of keeping the data assembly
+   (phy_recent_rate) separate from the HTML (luPhyCell). ────────────────── */
+check('luPhyCell fn exists',       function_exists('luPhyCell'));
+check('phy_recent_rate fn exists', function_exists('phy_recent_rate'));
+
+$dBase = ['reset' => false, 'delta' => ['inv' => 115], 'rate' => ['inv' => 1.9]];
+
+// No ring at all (null/null): the average prints with its "since baseline"
+// label, and nothing about a recent window is claimed.
+$cell = luPhyCell(115, false, $dBase, 'inv', null, null);
+check('luPhyCell labels the rate as an average since baseline', str_contains($cell, '1.9/hr since baseline'));
+check('luPhyCell omits the recent column with no ring', !str_contains($cell, 'in the last'));
+
+// Ring usable, this PHY quiet lately: the historical average survives
+// alongside the recent figure — the fix is MORE context, never less.
+$recentQuiet = ['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
+$cell = luPhyCell(115, false, $dBase, 'inv', $recentQuiet, 46189);
+check('luPhyCell recent column appears when the ring is usable', str_contains($cell, '0/hr in the last'));
+check('luPhyCell keeps the historical average alongside the recent one',
+    str_contains($cell, '1.9/hr since baseline') && str_contains($cell, '0/hr in the last'));
+
+// Recent WORSE than historical (a fault that just started): both numbers
+// still print, correctly, in the order historical-then-recent.
+$dQuietHistory = ['reset' => false, 'delta' => ['inv' => 1], 'rate' => ['inv' => 0.1]];
+$recentHot     = ['idx' => 5, 'inv' => 40.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
+$cell = luPhyCell(1, false, $dQuietHistory, 'inv', $recentHot, 600);
+check('luPhyCell reads correctly when recent exceeds historical',
+    str_contains($cell, '0.1/hr since baseline') && str_contains($cell, '40/hr in the last'));
+
+// The 'reset' counter is named 'rst' in the Health ring's own rows (sysfs'
+// field name) but 'reset' in phy_baseline's (the PHY tab's own field name) —
+// luPhyCell must bridge that, not silently show nothing for that column.
+$dReset    = ['reset' => false, 'delta' => ['reset' => 2], 'rate' => ['reset' => 0.5]];
+$recentRst = ['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 3.0];
+$cell = luPhyCell(2, false, $dReset, 'reset', $recentRst, 600);
+check('luPhyCell maps the reset counter onto the ring\'s rst key', str_contains($cell, '3.0/hr in the last'));
+
+// No baseline at all: unchanged (no lu-phy-delta div at all) regardless of
+// whether a recent rate is available — a raw counter with no reference point
+// must not sprout a rate from the ring alone.
+check('luPhyCell omits the delta entirely with no baseline',
+    luPhyCell(9, false, null, 'inv', $recentHot, 600) === '9');
+
+// phy_recent_rate(): the pure ring lookup, keyed by PHY index, that feeds
+// the cells above in renderPhyTables().
+$hSample = function (int $t, int $uptime, int $idx, int $inv): array {
+    return ['t' => $t, 'uptime' => $uptime, 'phys' => [['idx' => $idx, 'inv' => $inv, 'disp' => 0, 'sync' => 0, 'rst' => 0]]];
+};
+$ringUsable = [$hSample(1000, 100, 5, 0), $hSample(1000 + 3600, 3700, 5, 36)];
+check('phy_recent_rate finds the matching PHY index', phy_recent_rate($ringUsable, 5)['inv'] === 36.0);
+check('phy_recent_rate null for a PHY the ring never saw', phy_recent_rate($ringUsable, 9) === null);
+check('phy_recent_rate null on an empty ring', phy_recent_rate([], 5) === null);
+$ringTooShort = [$hSample(1000, 100, 5, 0), $hSample(1030, 130, 5, 10)];
+check('phy_recent_rate null under a 60s ring span', phy_recent_rate($ringTooShort, 5) === null);
+
+// Wiring: renderPhyTables must key the ring read by the CONTROLLER the row
+// belongs to (health_store_path($i)), never by position — controller 1's
+// recent rate must never leak onto controller 0's row, or vice versa.
+$phyRing0 = health_store_path(0);
+$phyRing1 = health_store_path(1);
+$phyRingSaved0 = is_file($phyRing0) ? file_get_contents($phyRing0) : null;
+$phyRingSaved1 = is_file($phyRing1) ? file_get_contents($phyRing1) : null;
+health_store_write($phyRing0, [$hSample(1000, 100, 0, 0), $hSample(1000 + 3600, 3700, 0, 72)]);  // ctl 0: 72/hr recent
+health_store_write($phyRing1, [$hSample(1000, 100, 0, 0), $hSample(1000 + 3600, 3700, 0, 15)]);  // ctl 1: 15/hr recent
+
+$twoCtlPhy = ['backend' => 'storcli', 'controllers' => [
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0]]],
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0]]],
+]];
+$blBothPhy = ['0:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000],
+              '1:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
+$h = renderPhyTables($twoCtlPhy, $blBothPhy, 1000 + 3600, 5000 + 3600);
+check('phy recent rate keyed per controller, not position',
+    str_contains($h, '72/hr in the last') && str_contains($h, '15/hr in the last'));
+
+if ($phyRingSaved0 === null) @unlink($phyRing0); else file_put_contents($phyRing0, $phyRingSaved0);
+if ($phyRingSaved1 === null) @unlink($phyRing1); else file_put_contents($phyRing1, $phyRingSaved1);
+
+// Top offenders header now says what the rate answers (plan 050 Step 2) —
+// wording, not a golden file, so it belongs beside the offenders it labels.
+$offHdr = renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => [
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], $bl, 1000 + 3600, 5000 + 3600);
+check('top offenders header states the rate is an average since baseline',
+    str_contains($offHdr, 'Errors/hr — average since baseline'));
+
 /* ── Drives: backend picks columns; enclosure summary renders ────────────── */
 $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
     'enclosures' => [['eid'=>'8','product'=>'VirtualSES','vendor'=>'LSI','slots'=>'8','drives'=>'4','direct'=>1]],
@@ -808,8 +897,11 @@ $hs = function (int $t, int $uptime, $temp, string $band): array {
             'link' => ['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s'],
             'phys' => [['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']]];
 };
-// Two samples 120s apart with flat counters: link_integrity needs >= 60s of ring
-// to be anything but `unknown`, and identical counters make it `ok`.
+// Two samples 2000s apart with flat counters: link_integrity needs >= 60s of
+// ring to be anything but `unknown` at all, and (plan 050) >= HEALTH_MIN_CLEAR_SECS
+// (30 min) of it clean before a bare "0/hr" counts as the all-clear rather than
+// "too short to have seen a slow fault yet" — 2000s clears that floor, and
+// identical counters make it `ok`.
 $hRender = function (array $ctl, array $seed) use ($hRing): string {
     health_store_write($hRing, [$seed]);
     return renderHealthTables(['controllers' => [$ctl]]);
@@ -819,7 +911,7 @@ $rowsOf  = fn(string $h) => substr_count($h, 'class="lu-indicator-row"');
 $greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-dot" style="--gd:' . $okDark . ';');
 
 $now = time();
-$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 120, 3480, '76', 'warning'));
+$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 2000, 1600, '76', 'warning'));
 
 check('health five rows render', $rowsOf($h) === 5);
 foreach (['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health'] as $lbl) {
@@ -869,7 +961,7 @@ check('health warning row not green', $greenOf($h) === 4);
 /* No temperature sensor at all — the common SAS2008/9211 case. thermal is
    `unknown`, which must still render a row (with an em dash) and must NOT be
    counted as ok. */
-$h = $hRender($hs($now, 3600, null, ''), $hs($now - 120, 3480, null, ''));
+$h = $hRender($hs($now, 3600, null, ''), $hs($now - 2000, 1600, null, ''));
 check('health unknown thermal still rows', $rowsOf($h) === 5);
 check('health unknown thermal em dash', str_contains($h, '<span class="lu-indicator-value">—</span>'));
 check('health unknown thermal not green', $greenOf($h) === 4);
@@ -882,7 +974,7 @@ check('health unknown gauge total == rows rendered',  (int) ($m[2] ?? -1) === $r
    orientation where the numerator assertion, not the denominator, does the work. */
 $down = $hs($now, 3600, '45', 'normal');
 $down['link']['width'] = 4;                       // x4 in an x8 slot -> host_link warning
-$h = $hRender($down, $hs($now - 120, 3480, '45', 'normal'));
+$h = $hRender($down, $hs($now - 2000, 1600, '45', 'normal'));
 preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
 check('health downtrain gauge reads 4 / 5', ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
 check('health downtrain numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));
