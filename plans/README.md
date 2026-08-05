@@ -18,27 +18,41 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-Active plans (still in `plans/`) — all four are blocked on something only a
-person can supply, or not yet started:
+Active plans (still in `plans/`):
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **047** | **executed** on `dev`, suite green | one pass on real hardware — see below |
 
-**047 (drive bay map), executed 2026-08-04 on `dev`.** Re-stamped `8286fe7` →
-`d7d7fa7` first: issues #10 and #11 had moved 800+ lines through the same
-files, but every contract the plan quotes was re-verified and holds. Two
-corrections are recorded inline in the plan itself — its `bay_map_dims_set()`
-snippet would have reset every other config key to defaults, and Step 1's
-open question was already answered by shipped code (`phy_drive()`). What is
-left is one pass on real hardware: place a drive, shrink the grid past it, and
-confirm it comes back to the tray rather than vanishing. The store, the
-three-way join and the clamp are unit-tested (`tests/bay_map_test.php`, plus
-the bay-map block in `tests/ajax_render_test.php`); the grid and the two-click
-assignment are browser-only and have not been driven by a person yet.
+**047 (drive bay map) — DONE, archived 2026-08-04.** Executed on `dev`,
+verified on the maintainer's 24-bay box, and shipped. Worth keeping from its
+history:
 
-Archived to `archive/` on merge: **041** (merged 2026-08-04, hardware-passed),
+- **Re-stamped `8286fe7` → `d7d7fa7` before execution.** Issues #10 and #11 had
+  moved 800+ lines through the same files, so the drift check fired — but every
+  contract the plan quoted still held, and the excerpts were updated in place.
+  Re-stamping a plan whose evidence survives is cheaper than rewriting it, and
+  leaves the next executor a drift check that means something.
+- **Two errors in the plan were corrected rather than followed.** Its
+  `bay_map_dims_set()` snippet would have reset every other config key to its
+  default on each write, and Step 1's open question was already answered by
+  shipped code (`phy_drive()`). Both corrections are recorded inline in the
+  archived plan.
+- **The design was then replaced wholesale** by the maintainer's `1b` handoff
+  (health-as-colour), archived beside the plan in
+  [`archive/047-design-handoff-drive-bay-map/`](archive/047-design-handoff-drive-bay-map/).
+  Four things shipped that the plan never specified: the lock, double-click to
+  clear one bay, Unraid slot names on every table, and a SMART cache with no
+  TTL. The plan is still accurate about the store, the identity key and the
+  SMART join — read it for the mechanism, the handoff for the appearance.
+- **A bug the tests were structurally blind to shipped and was fixed**: a
+  top-level `const` used by an endpoint above its declaration is undefined at
+  that point (functions hoist, consts do not), which blanked the SMART tab
+  while every test passed. `ARCHITECTURE.md` now carries the rule and
+  `tests/ajax_render_test.php` asserts it in both forms.
+
+Archived to `archive/` on merge: **047** (done 2026-08-04, with its design bundle),
+**041** (merged 2026-08-04, hardware-passed),
 **042** (merged `514ae74`), **044** (merged `bd77c0a`), **045** (merged `f53e161`), **046** and **043**. **028** is archived too, though its code was deliberately
 **not** merged — it was executed and definitively resolved as a *negative
 result* (the check it proposed cannot be built), so nothing further will

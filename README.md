@@ -53,11 +53,27 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   since the baseline, each **named by the drive it serves** (enclosure/slot, or
   `/dev/sdX` on SAS2). PHYs with no baseline are excluded rather than ranked at
   zero — zero would read as "measured and clean" when it means "never measured".
-- **Attached Drives** — enclosure/slot, HBA port, model, serial, state, size,
-  SAS address, link speed, firmware, and a **per-drive SMART** button.
+- **Attached Drives** — `/dev` name, **what Unraid calls the disk** (`Parity`,
+  `Disk 1`, `Cache`), enclosure/slot, HBA port, model, serial, state, size,
+  SAS address, link speed, firmware, and a **per-drive SMART** button. The
+  `/dev` name and the Unraid slot appear on the PHY and SMART tables too, so a
+  row here can be matched against the Main page without tracking `sdX` by eye.
+- **Drive bay map** — a grid of the physical bays, arranged the way they sit in
+  the chassis, so a problem drive is a place you can walk to rather than a slot
+  number. You place each drive once (click a drive, click a bay) and the layout
+  is saved to `/boot`; **lock it** when you are done so a stray click cannot
+  undo it. Colour is the signal: bays stay neutral until something needs
+  attention, a temperature bar makes a hot row visible without reading every
+  number, empty bays are drawn as empty bays, and a disk being rebuilt into
+  parity shows as such. Nothing on the machine knows your chassis layout — on a
+  direct-attach backplane the enclosure/slot addressing is invented by the
+  controller — so this is the one thing the plugin cannot work out for you.
 - **SMART tab** — health, temperature, grown defects, pending sectors, and
   power-on hours for every drive, collected **in the background** so it never
-  blocks the UI and (on SAS) **never spins up a standby drive**.
+  blocks the UI and (on SAS) **never spins up a standby drive**. The collection
+  is **kept until you press Refresh** rather than expiring on a timer — reading
+  every drive takes ~1 s each and the numbers change over weeks — and every
+  screen that shows it states how old it is.
 - **Event Log** — the firmware event log, **archived to `/boot`** so history
   survives reboots and firmware ring-buffer wrap, with copy-to-clipboard for
   support tickets.
@@ -151,8 +167,8 @@ appears on the Monitor.
 
 | Document | What it covers |
 | --- | --- |
-| **[HOWTO.md](HOWTO.md)** | Task-oriented guide — install, first run, finding the drive behind a failing PHY, baselines, the export endpoint, generating a bug-report bundle, and troubleshooting. |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the plugin is built — backend selection, the parse layer, request lifecycle, caching, the one mutating path, and the test strategy. Read this before changing code. |
+| **[HOWTO.md](HOWTO.md)** | Task-oriented guide — install, first run, finding the drive behind a failing PHY, mapping your drive bays, baselines, the export endpoint, generating a bug-report bundle, and troubleshooting. |
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | How the plugin is built — backend selection, the parse layer, request lifecycle, caching, the mutating paths, and the test strategy. Read this before changing code. |
 | `source/.../CONTEXT.md` | Module vocabulary — the short definitions the code assumes you already know. |
 
 ## Requirements
@@ -187,6 +203,8 @@ Tools
     └── HBA Monitor   (tabs: Overview · HBA Health · PHY Health · Drives · SMART
                               · Event Log · Performance · Firmware/BIOS Update*)
                               *opt-in, off by default
+                              Drives has a Map button — the drive bay map,
+                              with its own Rows/Columns and Lock controls
 
 User Utilities
 └── HBAviewer         (full settings page)
@@ -213,6 +231,12 @@ right backend is in use before opening the Monitor.
 | Show Performance | On | Performance tab — real-time throughput / IOPS / %util / latency / PHY-error-rate / temperature graphs (in-browser, resets on reload). |
 | Enable notifications | **Off** | Sends an Unraid notification when a controller's health status changes (checked every 10 minutes). One notification per change, never a repeat while it persists. |
 | Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
+
+The **drive bay map** deliberately has no row on this page. Its grid size and
+its lock live with the map itself (**Drives → Map**), because a layout is
+something you build while looking at it, not a number you set on one page and
+go check on another. They are still persisted the same way everything else here
+is.
 
 Save your settings, then click **Open HBAviewer Monitor**. The Monitor page opens
 immediately with a **"Loading HBA information"** banner and reads the hardware in

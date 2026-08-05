@@ -71,11 +71,12 @@ installs it; Unraid's Slackware base ships it.
 
 | File | Role |
 | --- | --- |
-| `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
+| `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
 | `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
 | `health.php` | The five indicators, the rolling sample ring, the rollup. |
 | `phy_baseline.php` | The `/boot` baseline store, delta and rate maths, reset detection. |
+| `bay_map.php` | The `/boot` drive-bay assignment store, the identity key, the grid size and the lock. Second mutating path after `flash.php` — see below. |
 | `event_archive.php` | Persists the firmware event ring to `/boot`; pure `event_merge()`. |
 | `export.php` | Read-only JSON / Prometheus snapshot. |
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
@@ -89,6 +90,17 @@ the top, `if (PHP_SAPI === 'cli') return;` in the middle, HTTP dispatch at the
 bottom. PHP hoists top-level function declarations, so the test runner can
 `require` the file and get the functions without ever reaching the dispatch.
 `ajax_info.php` includes several of these purely for their helpers.
+
+**A `const` used by an endpoint must be declared ABOVE the dispatch guard.**
+Function declarations are hoisted; top-level `const` statements are not — they
+exist only once execution reaches them. A const declared next to the functions
+that use it is therefore undefined for every endpoint above it, and the failure
+is a fatal on a function that looks perfectly well defined. This shipped once
+and blanked the SMART tab. It is worse for a const used as a **default
+parameter value**, which resolves at call time, so the call site's position is
+what matters rather than the function's. Both cases are asserted in
+`tests/ajax_render_test.php`; the guard is that anything visible to the CLI test
+runner is by definition above the dispatch.
 
 **CSRF is not checked in plugin code, deliberately.** Unraid auto-prepends
 `local_prepend.php`, which `hash_equals`-checks every POST and then unsets the
@@ -110,7 +122,18 @@ truncated result is never served; and the cache is invalidated by **code mtime**
 as well as age, so pushing new files takes effect immediately instead of after
 60 seconds.
 
-## The one mutating path
+## The mutating paths
+
+Two, and only one of them touches hardware.
+
+`bay_map.php` writes the drive-bay layout to `/boot` on a POST. It is not a
+hardware path, but it holds the one thing here that **cannot be regenerated**:
+where each drive physically sits, which a person established by walking to the
+rack. So it fails safe in its own way — the lock is enforced in the dispatch
+rather than by greying out the UI (a stale tab can still POST), keys are
+validated against the shape `bay_map_key()` produces before they become object
+keys in a file on flash, and a position outside the current grid is rejected
+rather than clamped.
 
 `flash.php` + `scripts/flash_hba.sh` is the only code that writes to hardware,
 and it is kept off the read-only path on purpose. Guards are pure functions,
@@ -134,6 +157,7 @@ client-side state load-bearing, the safety model has been inverted.
 | `/boot/config/plugins/hbaviewer/hbaviewer.cfg` | Settings | Survives reinstall |
 | `/boot/.../phy_baseline.json` | User-set PHY baselines | A deliberate reference point must outlive a reboot |
 | `/boot/.../events_c*.json` | Firmware event archive | History survives ring-buffer wrap |
+| `/boot/.../bay_map.json` | Drive bay assignments | The only state here that cannot be re-read from hardware — a person put it there |
 | `/tmp/hbav_*`, `/tmp/lsiutil_*` | Caches, health ring | RAM; no flash wear, dies with the boot |
 
 Everything under `/usr/local/emhttp/plugins/hbaviewer/` is **tmpfs** — a reboot

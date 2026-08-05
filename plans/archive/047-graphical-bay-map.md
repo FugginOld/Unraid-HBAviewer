@@ -1,5 +1,17 @@
 # Plan 047: Graphical drive bay map on the Drives tab
 
+> **DONE — executed, hardware-verified and archived 2026-08-04.** Every done
+> criterion below is met. The design was then replaced wholesale by the
+> maintainer's `1b` handoff (health-as-colour), which is archived beside this
+> file in [`047-design-handoff-drive-bay-map/`](047-design-handoff-drive-bay-map/)
+> — read that for what the map actually looks like now; this plan is the
+> mechanism underneath it and is still accurate about the store, the identity
+> key and the SMART join. Four things shipped after it that this plan never
+> specified: the lock, double-click-to-clear, Unraid slot names on every table,
+> and a SMART cache with no TTL. See `plans/README.md` for the one-line history.
+
+---
+
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
 > next step. If anything in the "STOP conditions" section occurs, stop and
