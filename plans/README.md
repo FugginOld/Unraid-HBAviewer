@@ -23,7 +23,6 @@ Active plans (still in `plans/`):
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **048** | **done** — executed and hardware-verified 2026-08-05 | nothing |
 | **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box (issue #12) |
 | **050** | written 2026-08-05, **not started** | nothing |
 
@@ -55,7 +54,7 @@ which is the evidence for fixing it at the source rather than pairing HBA PHYs
 with expander PHYs. The plan keeps the reporter's insight as a consumer guard
 so a duplicate can never again silently destroy hours of history.
 
-**048 (activity-light locate), executed 2026-08-05 on `dev`.** Step 1's mapping
+**048 (activity-light locate) — DONE, archived 2026-08-05.** Step 1's mapping
 was confirmed on the maintainer's box before any code was written: every `sdX`
 resolves to an `H:C:T:L` that exists under `/dev/bsg/`. Two findings from that
 capture are recorded in the plan — `0:0:0:0` is a bsg node with no block device
@@ -111,7 +110,8 @@ history:
   while every test passed. `ARCHITECTURE.md` now carries the rule and
   `tests/ajax_render_test.php` asserts it in both forms.
 
-Archived to `archive/` on merge: **047** (done 2026-08-04, with its design bundle),
+Archived to `archive/` on merge: **048** (done 2026-08-05, activity-light locate),
+**047** (done 2026-08-04, with its design bundle),
 **041** (merged 2026-08-04, hardware-passed),
 **042** (merged `514ae74`), **044** (merged `bd77c0a`), **045** (merged `f53e161`), **046** and **043**. **028** is archived too, though its code was deliberately
 **not** merged — it was executed and definitively resolved as a *negative

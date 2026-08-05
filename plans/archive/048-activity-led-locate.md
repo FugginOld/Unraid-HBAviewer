@@ -1,5 +1,21 @@
 # Plan 048: Locate a drive by its activity LED (no SES, no GPIO)
 
+> **DONE — executed, hardware-verified and archived 2026-08-05.** Shipped on
+> `dev`. Two things shipped after the plan and are not described below: the
+> Locate button became its own STOP control (the separate "Stop blinking"
+> toolbar button and the `stop_all` action were deleted), and the stop path
+> gained two fixes after the maintainer found the bay still flashing over a
+> stopped drive — the dispatch now waits for the process to die before
+> answering, and the loop uses `sleep & wait` so a bash trap is not deferred
+> until the sleep expires.
+>
+> Three done criteria rest on code inspection rather than a test or an observed
+> run, recorded so nobody assumes otherwise: the UI stating both limits before
+> the first blink, the locating state surviving a page reload, and two locates
+> on one address leaving one process. Everything else is backed by
+> `tests/locate_sh_test.sh` (14 assertions), `tests/locate_test.php` (34), or
+> the maintainer's hardware.
+
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
 > next step. If anything in the "STOP conditions" section occurs, stop and
