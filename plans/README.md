@@ -24,7 +24,21 @@ Active plans (still in `plans/`):
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **048** | **done** — executed and hardware-verified 2026-08-05 | nothing |
-| **049** | written 2026-08-05, **not started** | Step 1 on the maintainer's box (one command) |
+| **049** | written 2026-08-05, **not started** | nothing — Step 1 confirmed the reporter's box is affected and the maintainer's is not |
+| **050** | written 2026-08-05, **not started** | nothing |
+
+**050 (two meanings of errors/hr), written 2026-08-05.** PHY Health showed PHY
+5 at 3.3/hr while HBA Health said "no new cabling errors" on the same
+controller at the same moment. The first explanation — the health ring's window
+is too short to see a slow fault — was plausible and **wrong**: the ring turned
+out to span **12.83 h with zero growth on every counter**. So the Health tab is
+right and the link is currently clean; the PHY tab's rate is Δ-since-baseline
+divided by time-since-baseline, a long-run average that keeps reporting a burst
+which ended days ago. Neither number is wrong and neither says which question
+it answered. The plan adds the period to both and shows a recent rate beside
+the historical one, rather than changing either. Recorded because the wrong
+first diagnosis is the reusable part: the divisor is as much of a rate as the
+count, and one command measuring the actual window settled it.
 
 **049 (duplicate PHY indexes), written 2026-08-05 — issue #12.** Link Integrity
 never leaves "not enough samples" on a box with an **expander**. The reporter
