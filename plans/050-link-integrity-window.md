@@ -7,9 +7,16 @@
 > in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat cc6def6..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/health.php source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php source/usr/local/emhttp/plugins/hbaviewer/phy_baseline.php`
-> Expected output: **nothing**. Every excerpt below is quoted from `cc6def6`
+> `git diff --stat 4749006..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/health.php source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php source/usr/local/emhttp/plugins/hbaviewer/phy_baseline.php`
+> Expected output: **nothing**. Every excerpt below is quoted from `4749006`
 > (`dev` tip, 2026-08-05). Any difference is a STOP condition.
+>
+> **Re-stamped `cc6def6` → `4749006`.** Plan 049 landed in between and changed
+> `health.php`: `health_ingest()` and `health_rates()` now count how often each
+> PHY index appears in each sample and skip the comparison for any index that is
+> not unique in both, so a duplicate index can never again be read as a counter
+> reset. The excerpt below is refreshed to match. **Do not remove or weaken
+> those guards** — see STOP conditions.
 
 ## Status
 
@@ -85,10 +92,22 @@ The Health tab's rate, from the two ends of the ring:
    sample in $ring — not a sliding average, the two ends of whatever window
    the ring currently holds. */
 function health_rates(array $ring): array {
-    ...
+    if (count($ring) < 2) return [];
+    $oldest = $ring[0];
+    $newest = $ring[count($ring) - 1];
     $dtSecs = ($newest['t'] ?? 0) - ($oldest['t'] ?? 0);
     if ($dtSecs < 60) return [];
+    $dtHours = $dtSecs / 3600.0;
+
+    $oldByIdx = [];
+    $oldCount = [];
+    foreach ($oldest['phys'] ?? [] as $p) { $oldByIdx[$p['idx']] = $p; $oldCount[$p['idx']] = ($oldCount[$p['idx']] ?? 0) + 1; }
+    $newCount = [];
+    foreach ($newest['phys'] ?? [] as $p) $newCount[$p['idx']] = ($newCount[$p['idx']] ?? 0) + 1;
 ```
+
+(The `$oldCount` / `$newCount` bookkeeping is plan 049's duplicate-index guard,
+merged 2026-08-05. It is not part of this plan and must survive it.)
 
 Both render a bare `N/hr`. The PHY tab shows `Δ115 · 1.9/hr`, which at least
 hints at "since something"; the Health tab shows `1.9/hr`-style values with no
@@ -222,6 +241,10 @@ this very issue down the wrong path.
 ## STOP conditions
 
 - Either rate's arithmetic changes.
+- Plan 049's duplicate-index guards in `health_ingest()` / `health_rates()` are
+  removed, weakened, or bypassed. They are the fix for issue #12 and are pinned
+  by two mutation-verified tests in `tests/health_test.php`; if either of those
+  tests goes red, you have broken something that is not yours to touch.
 - The recent-rate lookup writes to the ring, or moves ingestion out of the
   Health tab.
 - A real error rate is delayed, suppressed or downgraded by Step 4's threshold.
