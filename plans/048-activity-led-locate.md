@@ -31,6 +31,28 @@
   reason this plan exists rather than another speculative LED feature — see
   "Why this matters".
 
+## Step 1 result — confirmed on hardware 2026-08-05
+
+The mapping holds on the maintainer's box. Every `sdX` resolves to an
+`H:C:T:L` that exists under `/dev/bsg/`:
+
+```text
+sda -> 0:0:1:0   …  sdo -> 0:0:15:0   sdq -> 0:0:16:0     (host 0 = /c0, 16 drives)
+sdp -> 1:0:0:0   …  sdx -> 1:0:7:0                        (host 1 = /c1, 8 drives)
+sdy -> 22:0:0:0  sdz -> 23:0:0:0                          (not on the HBAs)
+```
+
+Two things worth keeping from that capture:
+
+- **`0:0:0:0` exists in `/dev/bsg` with no block device behind it.** That is
+  the synthesised `VirtualSES` enclosure — the exact thing plan 024 died on.
+  It confirms `/dev/bsg` carries non-block SCSI devices, so the locate button
+  must be offered from the *drive* list (which never contains it) rather than
+  from a `/dev/bsg` listing.
+- **Parity is on the second controller** (`sdp` = `1:0:0:0`), so the host
+  index is not a controller-ordering assumption this feature can make. It does
+  not need to: the address comes from the device, not from the controller.
+
 ## Why this matters
 
 **Plan 024 is the reason to care.** It implemented a Locate button on the
@@ -143,6 +165,7 @@ it is used, not merely escaped.
 ```php
 shell_exec("pkill -f \"smartlocate " . escapeshellarg($_GET["disklocation"] . "\""));
 ```
+
 The closing quote is concatenated **before** `escapeshellarg`, so the shell
 receives `pkill -f "smartlocate 'sda"'` — an unterminated quote. Not
 injectable (escapeshellarg holds), just unreliable. A PID file removes the need
@@ -151,6 +174,7 @@ for pattern-matching `pkill` entirely.
 ```php
 else if(isset($_GET["cmd"]) == "killall") {
 ```
+
 `isset()` returns a bool, and in PHP 8 `true == "killall"` is **true** — so any
 `cmd` that is not start/stop takes this branch. Harmless there; a real logic
 error worth not repeating.

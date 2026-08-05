@@ -422,6 +422,20 @@ if ($enableFlash) {
 /* Locked: still fully readable, just inert. Dimming the map would punish the
    state you are meant to leave it in. */
 .lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
+/* Locate (plan 048). The blinking bay pulses so the screen and the rack agree
+   about which drive is being pointed at. Motion is the whole signal here, so
+   under prefers-reduced-motion it becomes a steady outline rather than nothing
+   — the same trade the rebuild stripe makes. */
+.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
+.lu-refresh-btn.locating { border-color: #58a6ff; color: #58a6ff; }
+.lu-bay-cell.locating { animation: lu-locate-pulse 1s ease-in-out infinite; }
+@keyframes lu-locate-pulse {
+    0%, 100% { box-shadow: inset 3px 0 0 var(--rail, transparent); }
+    50%      { box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lu-bay-cell.locating { animation: none; box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
+}
 
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 /* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
@@ -552,6 +566,7 @@ if ($enableFlash) {
 <div id="tab-drives" class="lu-tab-pane">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
+    <button class="lu-refresh-btn" id="lu-locate-bar" onclick="luLocateStopAll()" style="display:none">Stop blinking</button>
     <button class="lu-refresh-btn" id="baymap-toggle" onclick="luBayToggle()">Map</button>
     <button class="lu-refresh-btn" onclick="luBayRefresh()">Refresh</button>
   </div>
@@ -661,6 +676,9 @@ if ($enableFlash) {
             .then(function (html) {
                 el.innerHTML = html;
                 loaded[name] = true;
+                // The fragment carries the state at render time; this catches a
+                // locate that started or expired since (plan 048).
+                if (name === 'drives' && window.luLocateSync) luLocateSync();
             })
             .catch(function () {
                 el.innerHTML = '<div class="lu-error">Request failed.</div>';
@@ -813,6 +831,7 @@ if ($enableFlash) {
             .then(function (d) {
                 if (d.error) { el.innerHTML = '<div class="lu-error"></div>'; el.firstChild.textContent = d.error; return; }
                 luBay.data = d; luBay.sel = null; luBayRender();
+                if (window.luLocateSync) luLocateSync();
             })
             .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
     }
@@ -975,6 +994,20 @@ if ($enableFlash) {
                     luBayRef(ref, 'SERIAL', drv.serial, true);
                     body.appendChild(ref);
 
+                    // Locate lives inside the cell but is not part of
+                    // click-to-move — its handler stops propagation.
+                    if (drv.addr) {
+                        var lb = document.createElement('button');
+                        lb.className = 'lu-refresh-btn lu-bay-loc' + (drv.locating ? ' locating' : '');
+                        lb.setAttribute('data-locate', drv.addr);
+                        lb.textContent = drv.locating ? 'Blinking' : 'Locate';
+                        lb.onclick = (function (a, dv) {
+                            return function (ev) { luLocate(ev, this, a, dv); };
+                        })(drv.addr, drv.dev);
+                        body.appendChild(lb);
+                        if (drv.locating) cell.classList.add('locating');
+                    }
+
                     cell.appendChild(body);
                 }
 
@@ -1004,6 +1037,62 @@ if ($enableFlash) {
             tray.appendChild(chip);
         });
     }
+
+    /* ── Locate: blink one drive's activity light (plan 048) ──────────────────
+       The confirm fires once per page load, not once per press: the two things
+       it says are properties of the technique, so a person needs them the first
+       time and would resent them the tenth. */
+    var luLocateWarned = false;
+
+    window.luLocate = function (ev, btn, addr, dev) {
+        // Bay cells are click-to-move and double-click-to-clear; this button
+        // lives inside one and must not trigger either.
+        if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+        var on = /locating/.test(btn.className);
+        if (!on && !luLocateWarned) {
+            if (!confirm('Locate blinks ' + (dev || 'this drive') + '’s ACTIVITY light by reading it '
+                       + 'twice a second.\n\n'
+                       + '• It is the activity light, not a dedicated locate LED. On a busy array other '
+                       + 'drives blink too — look for the steady rhythm.\n'
+                       + '• It wakes the drive and keeps it awake until you stop it, or it stops itself.\n\n'
+                       + 'Start blinking?')) return;
+            luLocateWarned = true;
+        }
+        luLocatePost(on ? 'stop' : 'start', addr);
+    };
+
+    window.luLocateStopAll = function () { luLocatePost('stop_all', null); };
+
+    function luLocatePost(action, addr) {
+        var body = {action: action, csrf_token: flashCsrf};
+        if (addr) body.addr = addr;
+        fetch('/plugins/hbaviewer/locate.php', {method: 'POST', body: new URLSearchParams(body)})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { alert(j.error || 'Locate failed.'); return; }
+                luLocateApply(j.active || []);
+            })
+            .catch(function () { alert('Locate request failed.'); });
+    }
+
+    /* Paint every Locate control from one list of blinking addresses — the
+       table's buttons and the map's bays are two views of the same server-side
+       state, so neither is ever guessed at from what was just clicked. */
+    function luLocateApply(active) {
+        document.querySelectorAll('[data-locate]').forEach(function (el) {
+            var on = active.indexOf(el.getAttribute('data-locate')) !== -1;
+            el.classList.toggle('locating', on);
+            if (el.tagName === 'BUTTON') el.textContent = on ? 'Blinking' : 'Locate';
+            var cell = el.closest('.lu-bay-cell');
+            if (cell) cell.classList.toggle('locating', on);
+        });
+        var bar = document.getElementById('lu-locate-bar');
+        if (bar) bar.style.display = active.length ? '' : 'none';
+    }
+
+    // On load, ask the server what is already blinking — a locate started in
+    // another tab, or before this reload, must still show as running.
+    window.luLocateSync = function () { luLocatePost('status', null); };
 
     function luBayLegend(color, label) {
         return '<span class="lu-bay-lg"><i style="background:' + color + '"></i>' + label + '</span>';

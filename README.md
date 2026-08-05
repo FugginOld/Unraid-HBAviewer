@@ -68,6 +68,12 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   parity shows as such. Nothing on the machine knows your chassis layout — on a
   direct-attach backplane the enclosure/slot addressing is invented by the
   controller — so this is the one thing the plugin cannot work out for you.
+- **Locate a drive** — blink one drive's **activity light** from the Drives
+  table or a bay on the map, so a row becomes a bay you can walk to. Needs no
+  SES, no enclosure processor and no GPIO — it works by reading the drive twice
+  a second, so anything with a tray light can be found, including plain HBAs on
+  dumb backplanes. Stops itself after five minutes so a forgotten blink cannot
+  keep a disk awake indefinitely.
 - **SMART tab** — health, temperature, grown defects, pending sectors, and
   power-on hours for every drive, collected **in the background** so it never
   blocks the UI and (on SAS) **never spins up a standby drive**. The collection

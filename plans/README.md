@@ -23,7 +23,26 @@ Active plans (still in `plans/`):
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **048** | written 2026-08-05, **not started** | nothing — Step 1 is a hardware check the maintainer can run in a minute |
+| **048** | **executed** on `dev` 2026-08-05, suite green | one hardware pass — see below |
+
+**048 (activity-light locate), executed 2026-08-05 on `dev`.** Step 1's mapping
+was confirmed on the maintainer's box before any code was written: every `sdX`
+resolves to an `H:C:T:L` that exists under `/dev/bsg/`. Two findings from that
+capture are recorded in the plan — `0:0:0:0` is a bsg node with no block device
+(the `VirtualSES` that killed plan 024, so the button is offered from the drive
+list rather than a bsg listing), and parity sits on the second controller, so
+host index is not a controller-ordering assumption this feature makes.
+
+The shell test earned its place immediately: it caught a **real bug in the
+first implementation**, where `trap 'rm -f "$PIDFILE"' EXIT INT TERM` removed
+the marker on Stop but did not *stop the loop* — the drive would have kept
+being read with nothing left to stop it by, since the marker was gone. The trap
+now exits.
+
+What remains is one hardware pass: press Locate and confirm the bay blinks,
+then run a SMART Refresh while it blinks and confirm the cache comes back
+complete (the plan's third done criterion, and the reason `pkill -f smartctl`
+was not copied).
 
 **047 (drive bay map) — DONE, archived 2026-08-04.** Executed on `dev`,
 verified on the maintainer's 24-bay box, and shipped. Worth keeping from its

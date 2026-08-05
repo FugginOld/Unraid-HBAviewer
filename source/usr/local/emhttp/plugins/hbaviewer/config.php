@@ -29,6 +29,10 @@ const LSI_SCHEMA = [
     // Locks the finished map against edits. Persisted, because the accident it
     // prevents is a stray click on a map somebody spent time building.
     'BAY_LOCK'        => [0,  0, 1],
+    // How long a drive-locate blink runs before stopping itself, in seconds.
+    // Bounded by default rather than by the user remembering: the technique
+    // keeps the drive awake for as long as it runs (plan 048).
+    'LOCATE_MAX_SECS'  => [300, 30, 1800],
     // Drive temperature the bay map calls hot, in °C. NOT ALERT_THRESHOLD:
     // that one is the HBA controller chip's band floor, and a chip at 76°C is
     // ordinary while a spinning disk at 76°C is an emergency.

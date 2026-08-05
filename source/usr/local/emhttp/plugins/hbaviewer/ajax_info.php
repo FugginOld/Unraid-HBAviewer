@@ -16,6 +16,8 @@ require_once __DIR__ . '/health.php';
 require_once __DIR__ . '/phy_baseline.php';
 // Same posture: bay_map.php's dispatch fires only on a POST carrying an action.
 require_once __DIR__ . '/bay_map.php';
+// And locate.php's, so the tables can ask which drives are currently blinking.
+require_once __DIR__ . '/locate.php';
 
 /* Where the background SMART collector writes. ABOVE the dispatch on purpose:
    a `function` is hoisted and can be called from anywhere in the file, but a
@@ -450,6 +452,24 @@ function drive_dev_name(array $d, array $devBySerial): ?string {
     return $sn !== '' ? ($devBySerial[$sn] ?? null) : null;
 }
 
+/* "/dev/sdb" => "0:0:2:0" for every SCSI block device — the SCSI H:C:T:L
+   address, which is also the name of the device's node under /dev/bsg. That is
+   what the locate blink reads (plan 048), and it comes straight out of sysfs:
+   /sys/block/sdb/device is a symlink whose last component IS the address. No
+   lookup table, no extra tool, no cache to go stale.
+   Anything that does not look like an address is dropped rather than passed
+   on — the value ends up in a device path. */
+function lsi_scsi_addr_by_dev(string $sysBlock = '/sys/block'): array {
+    $map = [];
+    foreach (glob("$sysBlock/sd*") ?: [] as $d) {
+        $target = @readlink("$d/device");
+        if ($target === false) continue;
+        $addr = basename($target);
+        if (preg_match('/^\d+:\d+:\d+:\d+$/', $addr)) $map['/dev/' . basename($d)] = $addr;
+    }
+    return $map;
+}
+
 /* The Unraid slot cell for a table: "Parity", "Disk 1", or an em dash for a
    drive the array does not use. One renderer so the four tables that show it
    cannot drift apart in spelling or in what they do with a miss. */
@@ -678,7 +698,8 @@ if ($type === 'phy') {
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
-function renderDrivesTables(array $data, array $devBySerial = [], array $roles = []): string {
+function renderDrivesTables(array $data, array $devBySerial = [], array $roles = [],
+                            array $addrByDev = [], array $locating = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
     $multi   = count($ctls) > 1;
@@ -724,6 +745,26 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             $n = drive_dev_name($d, $devBySerial);
             return $n !== null ? '<code>' . htmlspecialchars($n) . '</code>' : '<span class="lu-muted">—</span>';
         };
+        /* Locate blinks the drive's own activity light (plan 048). Offered only
+           where an H:C:T:L address resolved — no address, no device to read, so
+           the cell says why rather than presenting a button that cannot work. */
+        $locCell = function (array $d) use ($devBySerial, $addrByDev, $locating): string {
+            $dev  = drive_dev_name($d, $devBySerial);
+            $addr = $dev !== null ? ($addrByDev[$dev] ?? '') : '';
+            if ($addr === '') return '<span class="lu-muted" title="No SCSI address for this drive">—</span>';
+            $on = in_array($addr, $locating, true);
+            // The address is [0-9:] by construction (lsi_scsi_addr_by_dev drops
+            // anything else) and the /dev name comes from lsblk, so neither can
+            // carry a quote into the handler — htmlspecialchars is the belt.
+            return sprintf(
+                '<button class="lu-refresh-btn%s" data-locate="%s" onclick="luLocate(event, this, \'%s\', \'%s\')">%s</button>',
+                $on ? ' locating' : '',
+                htmlspecialchars($addr, ENT_QUOTES),
+                htmlspecialchars($addr, ENT_QUOTES),
+                htmlspecialchars((string) $dev, ENT_QUOTES),
+                $on ? 'Blinking' : 'Locate'
+            );
+        };
 
         // storcli backend if stamped; fall back to key-sniff pre-rollout.
         if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
@@ -747,9 +788,10 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     htmlspecialchars($d['link']),
                     htmlspecialchars($d['firmware']),
                     $smart,
+                    $locCell($d),
                 ];
             }
-            $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART', 'Locate'], $rows);
         } else {
             // lsiutil backend: device, bus:target, port, SAS address. The /dev
             // name was already here as a trailing "OS Device" column; it moves
@@ -763,16 +805,21 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
                     htmlspecialchars((string) $d['bus']) . ':' . htmlspecialchars((string) $d['target']),
                     $phy, $sas,
+                    $locCell($d),
                 ];
             }
-            $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address', 'Locate'], $rows);
         }
         $out .= '</div>';
     }
     return $out;
 }
 
-if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial(), unraid_disk_roles()); exit; }
+if ($type === 'drives') {
+    echo renderDrivesTables($data, lsi_dev_by_serial(), unraid_disk_roles(),
+                            lsi_scsi_addr_by_dev(), locate_active());
+    exit;
+}
 
 /* ── Unraid parity rebuild ───────────────────────────────────────────────────
    Which /dev names Unraid has assigned to parity, and whether the array is
@@ -841,7 +888,8 @@ function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
    which is a state of its own and never renders as healthy. */
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
                           array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
-                          ?int $smartAge = null, array $rebuildDevs = [], array $roles = []): array {
+                          ?int $smartAge = null, array $rebuildDevs = [], array $roles = [],
+                          array $addrByDev = [], array $locating = []): array {
     // Serial is the join key the SMART collector already emits per drive; it is
     // also the only identifier both payloads share (storcli's WWN differs by a
     // nibble from /dev's — see lsi_dev_by_serial).
@@ -886,6 +934,12 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 // the one identifier a person already knows before they look
                 // here. Empty for a drive the array does not use.
                 'role'   => $dev !== null ? ($roles[$dev] ?? '') : '',
+                // The SCSI address the locate blink reads, and whether it is
+                // blinking right now (plan 048). Empty address = no Locate
+                // button on this bay, rather than one that cannot work.
+                'addr'   => $dev !== null ? ($addrByDev[$dev] ?? '') : '',
+                'locating' => $dev !== null && ($addrByDev[$dev] ?? '') !== ''
+                              && in_array($addrByDev[$dev], $locating, true),
                 // Display-ready, because the two backends key on different
                 // wires and the word has to match: "Port 14" is storcli's
                 // Connected Port Number, "PHY 2" is lsiutil's PHY index.
@@ -930,7 +984,8 @@ if ($type === 'baymap') {
         $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
         lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP'],
         smart_cache_age(),
-        unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles()
+        unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles(),
+        lsi_scsi_addr_by_dev(), locate_active()
     ));
     exit;
 }
