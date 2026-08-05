@@ -23,6 +23,7 @@ Active plans (still in `plans/`):
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **048** | written 2026-08-05, **not started** | nothing — Step 1 is a hardware check the maintainer can run in a minute |
 
 **047 (drive bay map) — DONE, archived 2026-08-04.** Executed on `dev`,
 verified on the maintainer's 24-bay box, and shipped. Worth keeping from its
