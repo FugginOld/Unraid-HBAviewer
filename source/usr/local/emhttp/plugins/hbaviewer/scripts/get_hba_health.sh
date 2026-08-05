@@ -58,18 +58,28 @@ _phys_json() {   # $1 = controller host index
     printf '[%s]' "$out"
 }
 
-# Drives behind one SAS host, from sysfs. The shape is get_attached_drives.sh's
-# stage-3 fallback (target*/lun*/block/*), minus the lsiutil OS-map join that
-# script needs to NAME each drive — topology only needs how many, so one glob is
-# the whole read. Enclosure/SES targets carry no `block/` and are skipped, which
-# is why this counts 8 on a 9207-8i with 8 disks and not 9 (issue #11: the
-# lsiutil backend previously hardcoded 0, so Topology read "0 drives" on a card
-# with a full backplane attached).
+# Drives behind one SAS host, from sysfs. Depth-agnostic because SAS transport
+# inserts port-H:P/end_device-H:P/ between a host's device/ dir and its
+# target* entries, and non-SAS hosts (AHCI etc.) do not — a fixed-depth glob
+# matches one shape and silently returns 0 on the other. Resolve the host
+# device once and find target dirs by name, then list each LUN's block/
+# non-recursively: `find -path` with a wildcard that crosses `/` overcounts
+# a single drive's queue/, holders/, slaves/, power/ and partition subdirs.
+# Enclosure/SES targets carry no `block/` and are still skipped. Issue #11
+# fixed this returning a hardcoded 0; issue #14 fixed the glob that replaced
+# it — it matched neither real SAS-transport nor flat sysfs depth correctly —
+# and the fixture that had certified the wrong depth as correct.
 _drive_count() {   # $1 = controller host index
-    local b n=0
-    for b in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host"$1"/device/target"$1":*/*/block/*/; do
-        [ -d "$b" ] && n=$((n + 1))
-    done
+    local host_dir t l blk n=0
+    host_dir=$(readlink -f "${SYS_SCSI_HOST:-/sys/class/scsi_host}/host$1/device" 2>/dev/null)
+    [ -n "$host_dir" ] && [ -d "$host_dir" ] || { printf '0'; return; }
+    while IFS= read -r -d '' t; do
+        for l in "$t"/*/; do
+            [ -d "$l" ] || continue
+            blk=$(ls "${l}block/" 2>/dev/null | head -1)
+            [ -n "$blk" ] && n=$((n + 1))
+        done
+    done < <(find "$host_dir" -maxdepth 10 -type d -name "target$1:*" -print0 2>/dev/null)
     printf '%d' "$n"
 }
 
