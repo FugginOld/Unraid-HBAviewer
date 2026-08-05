@@ -228,8 +228,14 @@ if (!$data || isset($data['error'])) {
 }
 
 /* ── Shared helpers ────────────────────────────────────────────────────────── */
+/* Wrapped in its own scroller, not left to overflow the card. Plan 050 added
+   "· N/hr in the last 10 min" to every error cell on the PHY tab, which roughly
+   doubled the width of four columns and pushed the table out through the right
+   edge of its panel — the data was rendered and unreachable. The wrapper is on
+   luTable rather than on that one tab because every wide table has the same
+   exposure, and overflow-x:auto costs nothing on a table that already fits. */
 function luTable(array $headers, array $rows): string {
-    $h = '<table class="lu-table"><thead><tr>';
+    $h = '<div class="lu-tscroll"><table class="lu-table"><thead><tr>';
     foreach ($headers as $hdr) $h .= '<th>' . htmlspecialchars($hdr) . '</th>';
     $h .= '</tr></thead><tbody>';
     foreach ($rows as $cols) {
@@ -237,7 +243,7 @@ function luTable(array $headers, array $rows): string {
         foreach ($cols as $cell) $h .= '<td>' . $cell . '</td>';
         $h .= '</tr>';
     }
-    return $h . '</tbody></table>';
+    return $h . '</tbody></table></div>';
 }
 
 /* ── The background SMART cache: one reader, one health rule ────────────────

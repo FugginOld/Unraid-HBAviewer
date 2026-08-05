@@ -177,6 +177,7 @@ if ($enableFlash) {
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
+.lu-tscroll { overflow-x: auto; }
 .lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-table th {
     text-align: left; padding: 8px 12px; color: var(--faint);

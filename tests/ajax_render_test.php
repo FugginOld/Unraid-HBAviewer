@@ -791,6 +791,11 @@ check('smart no transport is not guessed', !str_contains($hNoTran, 'SATA'));
 $t = luTable(['A & B'], [['<code>x</code>']]);
 check('luTable escapes headers', str_contains($t, 'A &amp; B'));
 check('luTable cells are html',  str_contains($t, '<code>x</code>'));
+/* Plan 050's per-cell rates made the PHY table wider than its card, and the
+   overflow columns were unreachable rather than merely ugly. The scroller is
+   what makes a wide table readable, so it is pinned here. */
+check('luTable is wrapped in a horizontal scroller',
+      str_starts_with($t, '<div class="lu-tscroll"><table') && str_ends_with($t, '</table></div>'));
 
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of
