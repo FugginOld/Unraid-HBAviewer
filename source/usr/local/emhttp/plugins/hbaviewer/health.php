@@ -14,8 +14,20 @@
  * appended unconditionally (see plan 020, "Write policy").
  */
 
-const HEALTH_RING_CAP   = 240;   // ~4h at the 60s page refresh; RAM, so no wear budget
+require_once __DIR__ . '/view.php';   // lsi_age_str(): the one "how old" formatter, reused for "how long"
+
+// One sample per Health-tab render, not a timer -- there is no cron or daemon
+// here, so the ring's span is however often someone actually opens the tab
+// (open today, open tomorrow, and the ring is 24h wide; refresh twice in a
+// minute, and it's seconds wide). The cap exists to bound RAM, not to encode
+// a cadence.
+const HEALTH_RING_CAP   = 240;
 const HEALTH_STALE_SECS = 900;   // newest sample older than this -> unknown
+// Below this span, a "0/hr" all-clear is not evidence: a PHY logging 2
+// events/hour is expected to log zero in a ten-minute window. Growth is
+// exempt -- a single counter tick still warns immediately no matter how
+// young the ring is (see health_indicators()'s link_integrity block; plan 050).
+const HEALTH_MIN_CLEAR_SECS = 1800;
 
 /* /tmp, not /boot: the ring is only meaningful within one boot (PHY error
    counters reset to zero on driver reload, which is what a reboot does — a
@@ -110,6 +122,18 @@ function health_rates(array $ring): array {
     return $rates;
 }
 
+/* The ring's outer span in seconds, or null exactly when health_rates()
+   would also return [] for it (fewer than two samples, or under 60s apart —
+   same gate, kept in sync deliberately: a caller uses this span to LABEL the
+   very window health_rates() measured over, so the two must agree on what
+   "not enough yet" means). Does not touch health_rates() itself — this is a
+   read-only sibling, not a refactor of the pinned rate arithmetic. */
+function health_ring_span_secs(array $ring): ?int {
+    if (count($ring) < 2) return null;
+    $dt = (end($ring)['t'] ?? 0) - ($ring[0]['t'] ?? 0);
+    return $dt >= 60 ? $dt : null;
+}
+
 /* Severity ordering, one place, so it cannot drift between the five
    indicators and the rollup. `unknown` deliberately has NO rank — it is
    handled separately in health_rollup(): it wins only when nothing else is
@@ -181,9 +205,20 @@ function health_indicators(array $ring, array $rates, int $now): array {
     if (empty($rates)) {
         $link_integrity = ['state' => 'unknown', 'reason' => 'Not enough samples yet — needs two reads at least a minute apart', 'value' => '—'];
     } else {
+        // In production $rates is always health_rates($ring), so this span
+        // resolves whenever $rates is non-empty (health_ring_span_secs() gates
+        // on the same >= 2 samples / >= 60s rule). Tests are allowed to pass a
+        // synthetic $rates decoupled from $ring (see this function's header
+        // comment) precisely so history need not be faked — that combination
+        // can leave no real span to report, hence the null fallback: "just
+        // now", and the all-clear floor below treats "no span" the same as
+        // "too short", which is the conservative reading either way.
+        $spanSecs = health_ring_span_secs($ring);
+        $spanStr  = lsi_age_str($spanSecs ?? 0);
+
         $labels = ['inv' => 'invalid dword', 'disp' => 'disparity', 'sync' => 'loss of sync', 'rst' => 'reset problem'];
         $worstState = 'ok'; $worstRank = 0; $worstValue = '0/hr';
-        $worstReason = 'No new cabling errors on any PHY (0 per hour)';
+        $worstReason = "No new cabling errors on any PHY in the last {$spanStr}";
         foreach ($rates as $r) {
             foreach ($labels as $k => $label) {
                 $s = health_rate_state($k, $r[$k]);
@@ -191,11 +226,21 @@ function health_indicators(array $ring, array $rates, int $now): array {
                 if ($rank > $worstRank) {
                     $worstRank  = $rank;
                     $worstState = $s;
-                    $worstReason = sprintf('PHY %s %s errors rising (%s)', $r['idx'], $label, health_rate_str($r[$k]));
+                    $worstReason = sprintf('PHY %s %s errors rising (%s over the last %s)', $r['idx'], $label, health_rate_str($r[$k]), $spanStr);
                     $worstValue  = health_rate_str($r[$k]);
                 }
             }
         }
+
+        // The all-clear floor: growth already set $worstState above and is
+        // NEVER touched here, at any window length. Only a still-'ok' result
+        // gets downgraded, and only because the window was too short to have
+        // seen a slow fault yet -- silence is not the same claim as "clean".
+        if ($worstState === 'ok' && ($spanSecs === null || $spanSecs < HEALTH_MIN_CLEAR_SECS)) {
+            $worstState = 'unknown';
+            $worstReason = "Watched for {$spanStr} — too short to rule out a slow fault";
+        }
+
         $link_integrity = ['state' => $worstState, 'reason' => $worstReason, 'value' => $worstValue];
     }
 

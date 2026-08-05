@@ -264,6 +264,46 @@ check('link_integrity floor rate value is <0.1/hr', $indFloor['link_integrity'][
 check('link_integrity floor rate reason has <0.1/hr', str_contains($indFloor['link_integrity']['reason'], '<0.1/hr'));
 check('link_integrity floor rate reason has no (0.0/hr)', !str_contains($indFloor['link_integrity']['reason'], '(0.0/hr)'));
 
+// ── health_ring_span_secs: the one span calculation Step 1 and Step 4 share ──
+check('health_ring_span_secs fn exists', function_exists('health_ring_span_secs'));
+check('health_ring_span_secs null on a single sample', health_ring_span_secs([sample(1000, 100, 0)]) === null);
+check('health_ring_span_secs null under a 60s span',
+    health_ring_span_secs([sample(1000, 100, 0), sample(1030, 130, 5)]) === null);
+check('health_ring_span_secs returns the real span',
+    health_ring_span_secs([sample(1000, 100, 0), sample(1000 + 3600, 100 + 3600, 5)]) === 3600);
+
+// ── Step 1 (plan 050): the Health row states the window it measured over,
+// not a bare rate — "0/hr" and "1.9/hr" mean nothing without it. Both the
+// clean default and the dirty (worst-PHY) reason must carry it. ────────────
+$ringHourLong = [sample(9000, 900, 0), sample(9000 + 3600, 900 + 3600, 0)];   // 1h apart, >= the Step 4 floor
+$ratesClean1h = [['idx' => 0, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0]];
+$indClean1h   = health_indicators($ringHourLong, $ratesClean1h, 9000 + 3600);
+check('clean reason states the measured window', str_contains($indClean1h['link_integrity']['reason'], '1 h'));
+check('clean reason still reads as an all-clear', str_contains($indClean1h['link_integrity']['reason'], 'No new cabling errors'));
+
+$ratesDirty1h = [['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.4, 'rst' => 0.0]];
+$indDirty1h   = health_indicators($ringHourLong, $ratesDirty1h, 9000 + 3600);
+check('dirty reason states the measured window', str_contains($indDirty1h['link_integrity']['reason'], '1 h'));
+check('dirty reason still names the offending PHY', str_contains($indDirty1h['link_integrity']['reason'], 'PHY 5'));
+
+// ── Step 4 (plan 050): a "0/hr" all-clear from a window too short to have
+// caught a slow fault is not evidence — it must read `unknown`, not `ok`.
+// Growth is exempt from the floor at ANY window length (the load-bearing
+// rule of this step): a real rate must never be delayed or downgraded. ────
+$ringShort4m = [sample(9000, 900, 0), sample(9000 + 240, 900 + 240, 0)];   // 4 min apart, < HEALTH_MIN_CLEAR_SECS
+
+$indShortClean = health_indicators($ringShort4m, $ratesClean1h, 9000 + 240);
+check('short window + clean -> unknown, not ok', $indShortClean['link_integrity']['state'] === 'unknown');
+check('short window + clean reason names the window', str_contains($indShortClean['link_integrity']['reason'], '4 min'));
+check('short window + clean reason explains why', str_contains($indShortClean['link_integrity']['reason'], 'too short to rule out a slow fault'));
+
+$indLongClean = health_indicators($ringHourLong, $ratesClean1h, 9000 + 3600);
+check('long window + clean -> ok', $indLongClean['link_integrity']['state'] === 'ok');
+
+$ratesDirtyShort = [['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.4, 'rst' => 0.0]];
+$indShortDirty = health_indicators($ringShort4m, $ratesDirtyShort, 9000 + 240);
+check('short window + growth still warns immediately', $indShortDirty['link_integrity']['state'] === 'warning');
+
 // ── health_rank: single source of truth, unknown unranked ──────────────────
 check('rank ok < watch < warning < critical',
     health_rank('ok') < health_rank('watch')

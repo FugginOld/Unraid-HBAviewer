@@ -416,14 +416,33 @@ function luPhyBaselineBar(int $ctl, ?int $ts, bool $stale): string {
    when there is none — a "0" there would read as "no errors" rather than "no
    reference point". A negative delta can never reach this: phy_baseline_delta()
    reports a counter restart as `reset`, and the controller then renders
-   raw-only behind the bar's re-baseline prompt. */
-function luPhyCell($v, bool $err, ?array $d, string $k): string {
+   raw-only behind the bar's re-baseline prompt.
+
+   That rate is an AVERAGE spanning however long ago the baseline was set —
+   not a current condition. A burst of errors from days ago still divides down
+   to a small "X/hr" that never reaches zero, while the Health tab's much more
+   recent ring can show the link is clean right now (issue: two tabs disagreed
+   with no explanation, plan 050). "since baseline" plus the title tooltip say
+   what the number answers; $recent, when the Health tab's own ring is usable
+   for this PHY, says what has happened lately, side by side rather than in
+   place of the average — never hide the historical number, only add to it.
+   $recent is health_rates()'s per-PHY row (keyed 'rst', not 'reset' — the two
+   subsystems name that counter differently, see phy_top_offenders() and
+   health.php's header) or null when the ring cannot support one yet:
+   $ringSpanSecs travels with it purely to word "in the last N" — absence
+   prints nothing extra, never a misleading zero. */
+function luPhyCell($v, bool $err, ?array $d, string $k, ?array $recent = null, ?int $ringSpanSecs = null): string {
     $s    = htmlspecialchars((string) $v);
     $cell = $err ? '<span class="lu-err-val">' . $s . '</span>' : $s;
     if ($d === null || !empty($d['reset'])) return $cell;
-    $r = $d['rate'][$k];
-    return $cell . '<div class="lu-phy-delta">&Delta;' . (int) $d['delta'][$k]
-         . ' &middot; ' . health_rate_str($r) . '</div>';
+    $r    = $d['rate'][$k];
+    $body = '&Delta;' . (int) $d['delta'][$k] . ' &middot; ' . health_rate_str($r) . ' since baseline';
+    if ($recent !== null && $ringSpanSecs !== null) {
+        $rk = $k === 'reset' ? 'rst' : $k;
+        $body .= ' &middot; ' . health_rate_str($recent[$rk]) . ' in the last ' . lsi_age_str($ringSpanSecs);
+    }
+    return $cell . '<div class="lu-phy-delta" title="Average rate since the baseline was set — a past burst of errors still shows here, decaying toward zero rather than reflecting the link right now.">'
+         . $body . '</div>';
 }
 
 /* SERIAL -> /dev/NAME for every SCSI block device, from ONE lsblk call.
@@ -524,6 +543,20 @@ function phy_drive_label(array $drives, array $phy, array $devBySerial = []): ?s
     return $dev ?? $slot;
 }
 
+/* The Health tab's own ring for this controller, read READ-ONLY — this never
+   calls health_ingest(); writing the ring stays the Health tab's job alone
+   (plan 050's STOP conditions). Returns the matching PHY's rate row from
+   health_rates(), or null when there is nothing usable for THIS PHY: no ring,
+   too short a span, or (issue #12) an unpairable duplicate index that
+   health_rates() already excludes. Absence is deliberate — the caller must
+   print nothing extra rather than a "0/hr" that looks measured but isn't. */
+function phy_recent_rate(array $ring, int $phyIdx): ?array {
+    foreach (health_rates($ring) as $r) {
+        if ((int) $r['idx'] === $phyIdx) return $r;
+    }
+    return null;
+}
+
 /* $phys and $deltas share indices, exactly as renderPhyTables builds them.
    Rank by TOTAL errors/hour — the plain sum of the four counters' rates. No
    weighting is invented here: the per-counter thresholds used to color the
@@ -586,6 +619,15 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             return lsi_role_cell($d !== null ? drive_dev_name($d, $devBySerial) : null, $roles);
         };
 
+        // The Health tab's ring for THIS controller (read-only — see
+        // phy_recent_rate()), keyed by $i exactly as the Health tab itself
+        // keys its store: never by position in $phys, or a multi-controller
+        // box would show one card's recent rate on another's row (plan 050).
+        // A missing or too-short ring degrades to null/null below, and the
+        // cells simply omit the recent figure — absence, not a false zero.
+        $ctlRing     = health_store_read(health_store_path((int) $i));
+        $ctlRingSpan = health_ring_span_secs($ctlRing);
+
         // Resolve every PHY's delta first: a reboot or driver reload zeroes the
         // whole controller's counters at once, so one invalidated PHY condemns
         // the controller's baseline rather than just its own row.
@@ -622,6 +664,9 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                     $rows[] = [
                         (string) ($rank + 1),
                         'PHY ' . htmlspecialchars((string) $o['phy']) . ' &mdash; ' . $drvLabel,
+                        // Same average-since-baseline as the per-counter cells (see
+                        // luPhyCell) — the tooltip repeats that in the column header
+                        // instead of per-cell, since this is a table with one.
                         number_format($o['rate_total'], 1) . '/hr',
                         // lu-muted, not lu-phy-delta: the latter's count is asserted
                         // 1:1 against the main table's per-counter cells elsewhere in
@@ -633,7 +678,7 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                             . ' &middot; reset ' . number_format($o['rate']['reset'], 1) . '</span>',
                     ];
                 }
-                $out .= luTable(['#', 'PHY', 'Errors/hr', 'Breakdown'], $rows);
+                $out .= luTable(['#', 'PHY', 'Errors/hr — average since baseline', 'Breakdown'], $rows);
             }
         }
 
@@ -643,8 +688,9 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             $rows = [];
             foreach ($phys as $n => $p) {
                 $hasErr = (($p['inv'] ?? 0) + ($p['disp'] ?? 0) + ($p['sync'] ?? 0) + ($p['reset'] ?? 0)) > 0;
-                $d  = $deltas[$n];
-                $ec = fn($k) => luPhyCell($p[$k] ?? 0, $hasErr && ($p[$k] ?? 0) > 0, $d, $k);
+                $d      = $deltas[$n];
+                $recent = $ctlRingSpan !== null ? phy_recent_rate($ctlRing, (int) ($p['phy'] ?? -1)) : null;
+                $ec = fn($k) => luPhyCell($p[$k] ?? 0, $hasErr && ($p[$k] ?? 0) > 0, $d, $k, $recent, $ctlRingSpan);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     $devCell($p),
@@ -661,8 +707,9 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             $rows = [];
             foreach ($phys as $n => $p) {
                 $hasErr = ($p['inv'] + $p['disp'] + $p['sync'] + $p['reset']) > 0;
-                $d  = $deltas[$n];
-                $ec = fn($k) => luPhyCell($p[$k], $hasErr, $d, $k);
+                $d      = $deltas[$n];
+                $recent = $ctlRingSpan !== null ? phy_recent_rate($ctlRing, (int) ($p['phy'] ?? -1)) : null;
+                $ec = fn($k) => luPhyCell($p[$k], $hasErr, $d, $k, $recent, $ctlRingSpan);
                 $rows[] = [
                     htmlspecialchars((string) $p['phy']),
                     $devCell($p),
