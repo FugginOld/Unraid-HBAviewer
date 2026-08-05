@@ -34,6 +34,13 @@ file_put_contents($path, 'not json at all');
 check('corrupt file reads as empty', bay_map_read($path) === []);
 file_put_contents($path, '"a string"');
 check('non-array JSON reads as empty', bay_map_read($path) === []);
+/* Per entry, not just the top level. Every consumer indexes $pos['row'], so
+   one bad value in a hand-edited file used to be a TypeError that took the
+   whole tab down — the map that cannot be regenerated is exactly the one
+   somebody is most likely to have edited by hand. */
+file_put_contents($path, '{"c0:p1": "x", "c0:p2": 7, "c0:p3": {"row": 1}, "c0:p4": {"row": 1, "col": 2}}');
+check('malformed entries drop, good ones survive',
+      bay_map_read($path) === ['c0:p4' => ['row' => 1, 'col' => 2]]);
 
 /* ── 2. Round-trip ───────────────────────────────────────────────────────── */
 $reset();

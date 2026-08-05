@@ -34,12 +34,18 @@ const BAY_MAP_PATH = '/boot/config/plugins/hbaviewer/bay_map.json';
 
 /* Stored shape: "c0:p14" => {"row": 2, "col": 1}, both 0-indexed. A missing or
    unparseable file reads as "nothing placed yet" — a corrupt file must degrade
-   to an empty grid the user can re-populate, never to a fatal on the tab. */
+   to an empty grid the user can re-populate, never to a fatal on the tab.
+   That promise is kept PER ENTRY, not just at the top level: every consumer
+   indexes $pos['row'], and on a hand-edited file one bad value ("c0:p1": "x")
+   is a TypeError that takes down the whole tab. A malformed entry is dropped
+   rather than defaulted to 0,0 — a drive parked in a bay nobody put it in
+   reads as a placement, and the tray is where an unplaced drive belongs. */
 function bay_map_read(?string $path = null): array {
     $path ??= BAY_MAP_PATH;
     if (!is_file($path)) return [];
     $data = json_decode((string) @file_get_contents($path), true);
-    return is_array($data) ? $data : [];
+    if (!is_array($data)) return [];
+    return array_filter($data, fn($pos) => is_array($pos) && isset($pos['row'], $pos['col']));
 }
 
 function bay_map_write(array $map, ?string $path = null): void {
@@ -94,19 +100,19 @@ function bay_map_key_valid(string $key): bool {
     return (bool) preg_match('/^c\d{1,3}:[ph]\d{1,4}$/', $key);
 }
 
-/* Grid dimensions. Read is a plain config read; the write MERGES over the
-   current config, because lsi_config_write() writes every schema key and falls
-   back to the default for anything the array omits — passing only the two bay
-   keys would reset HBA_PORT, ALERT_THRESHOLD and every SHOW_* toggle every
-   time someone nudged the grid size. Clamping is lsi_config_write()'s job,
-   the same clamp the Settings page goes through. */
+/* Grid dimensions. Read is a plain config read; the write goes through
+   lsi_config_update(), which merges over the current config — a plain
+   lsi_config_write() of just the two bay keys would reset HBA_PORT,
+   ALERT_THRESHOLD and every SHOW_* toggle every time someone nudged the grid
+   size. Clamping is lsi_config_write()'s job, the same clamp the Settings page
+   goes through. */
 function bay_map_dims(?string $path = null): array {
     $cfg = lsi_config_read($path);
     return ['rows' => (int) $cfg['BAY_ROWS'], 'cols' => (int) $cfg['BAY_COLS']];
 }
 
 function bay_map_dims_set(int $rows, int $cols, ?string $path = null): void {
-    lsi_config_write(['BAY_ROWS' => $rows, 'BAY_COLS' => $cols] + lsi_config_read($path), $path);
+    lsi_config_update(['BAY_ROWS' => $rows, 'BAY_COLS' => $cols], $path);
 }
 
 /* The lock. Enforced HERE, in the dispatch below, not only by greying out the
@@ -119,7 +125,7 @@ function bay_map_locked(?string $path = null): bool {
 }
 
 function bay_map_lock_set(bool $locked, ?string $path = null): void {
-    lsi_config_write(['BAY_LOCK' => $locked ? 1 : 0] + lsi_config_read($path), $path);
+    lsi_config_update(['BAY_LOCK' => $locked ? 1 : 0], $path);
 }
 
 /* ── POST dispatch (served only; skipped under the CLI test runner) ──────────

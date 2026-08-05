@@ -74,3 +74,13 @@ function lsi_config_write(array $raw, ?string $path = null): void {
     @mkdir(dirname($path), 0755, true);
     file_put_contents($path, implode("\n", $lines) . "\n");
 }
+
+/* Change some keys and keep the rest. Every partial write must come through
+   here: lsi_config_write() writes EVERY schema key and defaults anything the
+   array omits, so a caller that names only the keys it cares about silently
+   resets the others. That is not hypothetical — the Settings page named its
+   nine form keys and so wiped the bay map's grid size and lock on every save.
+   A merge open-coded at each call site is a merge the next call site forgets. */
+function lsi_config_update(array $changes, ?string $path = null): void {
+    lsi_config_write($changes + lsi_config_read($path), $path);
+}
