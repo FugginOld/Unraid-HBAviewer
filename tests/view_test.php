@@ -89,6 +89,19 @@ check('alert color',    $bare['color'] === '#e74c3c');
 // multi-controller contract normalizer
 $multi = lsi_controllers(['controllers' => [['temp' => 72], ['temp' => 77]]]);
 check('controllers array', count($multi) === 2 && $multi[1]['temp'] === 77);
+/* lsi_age_str: how old a cached reading is. The SMART cache is now kept until
+   someone refreshes it, so every surface that renders it states its age —
+   without that, a week-old temperature reads exactly like a live one. One
+   coarse unit on purpose; the caller supplies the sentence. */
+check('age just now',       lsi_age_str(0) === 'just now');
+check('age under a minute', lsi_age_str(59) === 'just now');
+check('age minutes',        lsi_age_str(60) === '1 min');
+check('age rounds down',    lsi_age_str(119) === '1 min');
+check('age hours at 3600',  lsi_age_str(3600) === '1 h');
+check('age hours',          lsi_age_str(7200) === '2 h');
+check('age days at 86400',  lsi_age_str(86400) === '1 d');
+check('age days',           lsi_age_str(86400 * 3 + 5) === '3 d');
+
 $flat = lsi_controllers(['temp' => 50, 'status' => 'ok']);   // legacy flat -> 1 element
 check('flat wraps to one', count($flat) === 1 && $flat[0]['temp'] === 50);
 

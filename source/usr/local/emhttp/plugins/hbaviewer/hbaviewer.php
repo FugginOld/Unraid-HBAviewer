@@ -852,9 +852,16 @@ if ($enableFlash) {
           + '</div>'
           + '<div class="lu-bay-legend">'
           +   luBayLegend('#3fb950', 'Healthy')     + luBayLegend('#d29922', 'High temp')
-          +   luBayLegend('#f85149', 'Failed')      + luBayLegend('#58a6ff', 'Resilvering')
+          +   luBayLegend('#f85149', 'Failed')      + luBayLegend('#58a6ff', 'Parity rebuild')
           +   luBayLegend('#6e7681', 'No SMART data')
           +   '<span class="lu-bay-lg"><i class="dashed"></i>Empty bay</span>'
+          /* The colours and temperatures above are only as current as the
+             collection behind them, and that collection is now kept until
+             someone refreshes it. Say its age here rather than letting a
+             three-day-old temperature pass for a live one. */
+          +   '<span class="lu-bay-lg" style="margin-left:auto">' + (d.smart_age
+                  ? 'SMART data collected ' + d.smart_age + ' ago — refresh it on the SMART tab'
+                  : 'No SMART data yet — open the SMART tab to collect it') + '</span>'
           + '</div>'
           + '<div class="lu-bay-scroll"><div class="lu-bay-grid" id="bay-grid"></div></div>'
           + '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Unassigned drives</p>'
@@ -1019,7 +1026,10 @@ if ($enableFlash) {
        also hot is failed. */
     function luBayState(drv, warn) {
         if (drv.state === 'fail')    return {cls: 'fail',    col: '#f85149', label: 'FAILED'};
-        if (drv.state === 'rebuild') return {cls: 'rebuild', col: '#58a6ff', label: 'RESILVER'};
+        // The server says WHICH rebuild — Unraid's parity reconstruct, or a
+        // controller-level one. It is never blank while the state is 'rebuild'.
+        if (drv.state === 'rebuild') return {cls: 'rebuild', col: '#58a6ff',
+                                             label: drv.rebuild_label || 'REBUILDING'};
         if (drv.temp !== null && drv.temp >= warn)
                                      return {cls: 'warn',    col: '#d29922', label: 'HIGH TEMP'};
         // Amber for a reallocated/pending sector count too — but never labelled

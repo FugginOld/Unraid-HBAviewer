@@ -17,16 +17,24 @@ require_once __DIR__ . '/phy_baseline.php';
 // Same posture: bay_map.php's dispatch fires only on a POST carrying an action.
 require_once __DIR__ . '/bay_map.php';
 
-/* Where the background SMART collector writes, and how long a collection stays
-   good for. ABOVE the dispatch on purpose: a `function` is hoisted and can be
-   called from anywhere in the file, but a top-level `const` is an ordinary
-   statement that only exists once execution reaches it — so a const declared
-   next to the functions that use it is undefined for every endpoint above,
-   which is exactly how the SMART tab broke. Declared here, they are defined
-   before the first endpoint runs AND under the CLI test runner, which returns
-   below. */
+/* Where the background SMART collector writes. ABOVE the dispatch on purpose:
+   a `function` is hoisted and can be called from anywhere in the file, but a
+   top-level `const` is an ordinary statement that only exists once execution
+   reaches it — so a const declared next to the functions that use it is
+   undefined for every endpoint above, which is exactly how the SMART tab broke.
+   Declared here, it is defined before the first endpoint runs AND under the CLI
+   test runner, which returns below.
+
+   THERE IS NO TTL. A collection reads every drive with smartctl, which takes
+   ~1s per drive and can wake nothing but still costs 20-30s on a full shelf —
+   paying that on a timer, for data that changes over weeks, made both the SMART
+   tab and the bay map feel broken. The cache is now kept until the person
+   presses Refresh. What replaces the TTL is honesty: every surface that renders
+   this data states how old it is (lsi_age_str), so nobody reads a three-day-old
+   temperature as current.
+   Still /tmp, not /boot: a reboot costing one re-collect is a fair price for
+   never writing this to the flash drive. */
 const SMART_CACHE_PATH = '/tmp/lsiutil_smart.json';
-const SMART_CACHE_TTL  = 600;
 
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
@@ -70,8 +78,11 @@ if ($type === 'smart_all') {
     $prog  = $cache . '.progress';
     if (($_GET['refresh'] ?? '') === '1') { @unlink($cache); @unlink($prog); }
 
+    // Any cache at all is served, however old. Re-reading every drive is the
+    // expensive thing here, and the person asked for it exactly when they press
+    // Refresh (which unlinks the cache above) — not on a timer.
     $cached = smart_cache_read();
-    if ($cached !== null) { echo renderSmartTable($cached); exit; }
+    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age()); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -227,12 +238,20 @@ function luTable(array $headers, array $rows): string {
    collected-and-genuinely-empty cache (a box with no drives) has to be
    distinguishable from one that was never collected, or the SMART tab would
    relaunch its collector on every visit forever. */
-function smart_cache_read(?string $path = null, ?int $ttl = null): ?array {
+function smart_cache_read(?string $path = null): ?array {
     $path ??= SMART_CACHE_PATH;
-    $ttl  ??= SMART_CACHE_TTL;
-    if (!is_file($path) || (time() - filemtime($path)) >= $ttl) return null;
+    if (!is_file($path)) return null;
     $d = json_decode((string) file_get_contents($path), true);
     return is_array($d) ? $d : null;
+}
+
+/* Seconds since the cache was written, or null when there is none. Every
+   caller that renders cached SMART data must show this — a reading with no
+   stated age is a reading the reader assumes is live. */
+function smart_cache_age(?string $path = null, ?int $now = null): ?int {
+    $path ??= SMART_CACHE_PATH;
+    if (!is_file($path)) return null;
+    return max(0, ($now ?? time()) - (int) filemtime($path));
 }
 
 /* One drive's SMART verdict: 'ok' | 'warn' | 'fail' | 'nodata'.
@@ -253,10 +272,16 @@ function smart_state_color(string $state): string {
     return ['fail' => '#e74c3c', 'warn' => '#f39c12', 'ok' => '#2ecc71'][$state] ?? '';
 }
 
-/* Render the background-collected SMART cache as a table. */
-function renderSmartTable(array $data): string {
+/* Render the background-collected SMART cache as a table. $ageSecs is how old
+   that collection is; it is printed above the table because the cache is now
+   kept until someone refreshes it, and an unlabelled table of week-old
+   temperatures reads exactly like a live one. */
+function renderSmartTable(array $data, ?int $ageSecs = null): string {
     $drives = $data['drives'] ?? [];
     if (!$drives) return '<p class="lu-muted">No drives found.</p>';
+    $age = $ageSecs === null ? '' :
+        '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">Collected ' . htmlspecialchars(lsi_age_str($ageSecs))
+        . ' ago &middot; kept until you press Refresh</p>';
     $dash = '<span class="lu-muted">—</span>';
     $rows = [];
     foreach ($drives as $d) {
@@ -279,7 +304,7 @@ function renderSmartTable(array $data): string {
             ($s['power_on_hours'] ?? '') !== '' ? number_format((int) $s['power_on_hours']) . 'h' : $dash,
         ];
     }
-    return luTable(['Device', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
+    return $age . luTable(['Device', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
 }
 
 /* Render the Overview cards (one per controller) — same markup the Monitor page
@@ -723,6 +748,43 @@ function renderDrivesTables(array $data, array $devBySerial = []): string {
 
 if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); exit; }
 
+/* ── Unraid parity rebuild ───────────────────────────────────────────────────
+   Which /dev names Unraid has assigned to parity, and whether the array is
+   currently reconstructing. Read from the same two files Unraid's own webGui
+   renders from, with parse_ini_file — the identical approach flash.php already
+   uses for mdState (`flash_array_stopped`).
+
+   NARROW ON PURPOSE. Only `recon` counts: mdResyncAction is also "check P" for
+   a parity CHECK, which reads the array and writes nothing. Painting a check as
+   a rebuild would put an animated "PARITY REBUILD" on a disk that is not being
+   rebuilt, which is worse than showing nothing. Anything unreadable, missing or
+   unrecognised means "no rebuild" — this only ever claims a rebuild on positive
+   evidence. */
+const UNRAID_VARINI  = '/var/local/emhttp/var.ini';
+const UNRAID_DISKINI = '/var/local/emhttp/disks.ini';
+
+function unraid_parity_devs(string $disksIni = UNRAID_DISKINI): array {
+    if (!is_file($disksIni)) return [];
+    $ini = @parse_ini_file($disksIni, true);
+    if (!is_array($ini)) return [];
+    $devs = [];
+    foreach ($ini as $name => $sec) {
+        // "parity" and "parity2"; data disks are disk1..disk28, caches are cache*.
+        if (!is_array($sec) || stripos((string) $name, 'parity') !== 0) continue;
+        $d = trim((string) ($sec['device'] ?? ''));
+        if ($d !== '') $devs[] = str_starts_with($d, '/dev/') ? $d : '/dev/' . $d;
+    }
+    return $devs;
+}
+
+function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
+    if (!is_file($varini)) return false;
+    $ini = @parse_ini_file($varini);
+    if (!is_array($ini)) return false;
+    return (int) ($ini['mdResync'] ?? 0) > 0
+        && stripos((string) ($ini['mdResyncAction'] ?? ''), 'recon') !== false;
+}
+
 /* ── Drive bay map: drives × stored positions × SMART health (plan 047) ──────
    The data half only. It returns the payload the map view renders client-side
    — the grid is interactive (click a drive, click a bay), so its state lives
@@ -732,7 +794,8 @@ if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); e
    "collected but this drive is not in it" are the same thing here — no data,
    which is a state of its own and never renders as healthy. */
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
-                          array $devBySerial = [], bool $locked = false, int $warnTemp = 45): array {
+                          array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
+                          ?int $smartAge = null, array $rebuildDevs = []): array {
     // Serial is the join key the SMART collector already emits per drive; it is
     // also the only identifier both payloads share (storcli's WWN differs by a
     // nibble from /dev's — see lsi_dev_by_serial).
@@ -749,13 +812,20 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
             $sn = strtoupper(trim((string) ($d['serial'] ?? '')));
             $s  = $bySerial[$sn] ?? [];
             $key = bay_map_key((int) $i, $d);
+            $dev = drive_dev_name($d, $devBySerial);
+            /* Two different rebuilds can reach the same cell. Unraid's parity
+               reconstruct wins, because on an Unraid box it is the one the
+               person is actually waiting on — and on an IT-mode HBA (which is
+               most of them) storcli's Rbld can never fire at all. */
+            $rebuild = $dev !== null && in_array($dev, $rebuildDevs, true) ? 'PARITY REBUILD'
+                     : (str_starts_with((string) ($d['state'] ?? ''), 'Rbld') ? 'RESILVER' : null);
             $entry = [
                 // null key = this drive reported neither a port nor a PHY, so it
                 // cannot be placed. It still appears in the tray, greyed: a drive
                 // silently missing from both lists reads as a detection bug.
                 'key'    => $key,
                 'ctl'    => (int) $i,
-                'dev'    => drive_dev_name($d, $devBySerial),
+                'dev'    => $dev,
                 'serial' => $d['serial'] ?? '',
                 'model'  => $d['model'] ?? '',
                 'size'   => $d['size'] ?? '',
@@ -777,10 +847,13 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 /* Health comes from SMART, never from storcli's `state` field,
                    which is a RAID-topology role rather than a verdict (plan
                    047). Rebuild is the one exception, and it is not an
-                   exception to that rule: "Rbld" is not a health claim, it IS
-                   the topology role, and it is the only place the rebuild is
-                   reported at all. IT-mode cards never emit it. */
-                'state'  => str_starts_with((string) ($d['state'] ?? ''), 'Rbld') ? 'rebuild' : smart_state($s),
+                   exception to that rule: neither "Rbld" nor Unraid's resync is
+                   a health claim — a rebuilding disk is not a sick disk, it is
+                   a busy one, and nothing else reports it. */
+                'state'  => $rebuild !== null ? 'rebuild' : smart_state($s),
+                // Which rebuild, for the chip. Null on every drive that is not
+                // rebuilding, so the view never has to guess a default.
+                'rebuild_label' => $rebuild,
             ];
             $pos = $key !== null ? ($map[$key] ?? null) : null;
             // An out-of-grid position falls back to the tray rather than being
@@ -794,6 +867,9 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
         }
     }
     return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked, 'warn_temp' => $warnTemp,
+            // Rendered in the legend row: the map's colours and temperatures are
+            // only as current as the collection behind them.
+            'smart_age' => $smartAge === null ? null : lsi_age_str($smartAge),
             'placed' => $placed, 'unassigned' => $tray];
 }
 
@@ -802,7 +878,9 @@ if ($type === 'baymap') {
     $d = bay_map_dims();
     echo json_encode(bay_map_assemble(
         $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
-        lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP']
+        lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP'],
+        smart_cache_age(),
+        unraid_rebuilding() ? unraid_parity_devs() : []
     ));
     exit;
 }

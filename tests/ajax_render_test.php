@@ -434,14 +434,79 @@ check('baymap unplaceable drive still appears, with a null key',
    CLI returns at the dispatch guard and never reaches an endpoint.
    Two checks: the specific constants are visible under CLI (so they are above
    that guard), and no constant in the file is used before its declaration. */
-check('SMART cache constants are declared above the dispatch guard',
-      defined('SMART_CACHE_PATH') && defined('SMART_CACHE_TTL'));
+check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
 
 $aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
 preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
 foreach ($mc[1] as [$cname, $declAt]) {
     check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
 }
+
+/* ── Unraid parity rebuild ────────────────────────────────────────────────────
+   Read from the same two files Unraid's webGui renders from. The load-bearing
+   check is the parity-CHECK one: a check reads the array and writes nothing, so
+   painting it as a rebuild would put an animated "PARITY REBUILD" on a disk
+   that is not being rebuilt. Only positive evidence of a reconstruct counts. */
+$iniDir = sys_get_temp_dir() . '/hbav_ini_' . getmypid();
+@mkdir($iniDir, 0755, true);
+$mkIni = function (string $name, string $body) use ($iniDir): string {
+    file_put_contents("$iniDir/$name", $body);
+    return "$iniDir/$name";
+};
+$disks = $mkIni('disks.ini', "[\"parity\"]\nname=\"parity\"\ndevice=\"sdp\"\n"
+                           . "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdb\"\n"
+                           . "[\"cache\"]\nname=\"cache\"\ndevice=\"nvme0n1\"\n");
+check('parity devices come off disks.ini', unraid_parity_devs($disks) === ['/dev/sdp']);
+$disks2 = $mkIni('disks2.ini', "[\"parity\"]\ndevice=\"sdp\"\n[\"parity2\"]\ndevice=\"sdq\"\n");
+check('dual parity is both disks', unraid_parity_devs($disks2) === ['/dev/sdp', '/dev/sdq']);
+check('a missing disks.ini is no parity', unraid_parity_devs("$iniDir/nope.ini") === []);
+
+check('recon while resyncing is a rebuild',
+      unraid_rebuilding($mkIni('v1.ini', "mdResync=\"1234\"\nmdResyncAction=\"recon P\"\n")) === true);
+check('a parity CHECK is not a rebuild',
+      unraid_rebuilding($mkIni('v2.ini', "mdResync=\"1234\"\nmdResyncAction=\"check P\"\n")) === false);
+check('recon with no resync running is not a rebuild',
+      unraid_rebuilding($mkIni('v3.ini', "mdResync=\"0\"\nmdResyncAction=\"recon P\"\n")) === false);
+check('an idle array is not a rebuild',
+      unraid_rebuilding($mkIni('v4.ini', "mdState=\"STARTED\"\n")) === false);
+check('a missing var.ini is not a rebuild', unraid_rebuilding("$iniDir/nope.ini") === false);
+
+// End to end: the parity disk gets the chip, its neighbour does not.
+$bmPar = bay_map_assemble(['controllers'=>[['drives'=>[
+    ['port'=>'1','serial'=>'PARITY01'], ['port'=>'2','serial'=>'DATA0001'],
+]]]], null, [], 6, 4, ['PARITY01'=>'/dev/sdp','DATA0001'=>'/dev/sdb'], false, 45, null, ['/dev/sdp']);
+$byDev = array_column($bmPar['unassigned'], null, 'dev');
+check('the rebuilding parity disk reads as rebuild',
+      $byDev['/dev/sdp']['state'] === 'rebuild' && $byDev['/dev/sdp']['rebuild_label'] === 'PARITY REBUILD');
+check('a data disk beside it is untouched',
+      $byDev['/dev/sdb']['state'] !== 'rebuild' && $byDev['/dev/sdb']['rebuild_label'] === null);
+// storcli's own Rbld still reports, and says which kind it is.
+check('a controller rebuild is labelled RESILVER',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'3','serial'=>'S','state'=>'Rbld']]]]],
+          null, [], 6, 4)['unassigned'][0]['rebuild_label'] === 'RESILVER');
+array_map('unlink', glob("$iniDir/*") ?: []);
+@rmdir($iniDir);
+
+/* ── The SMART cache is kept until someone refreshes it ───────────────────────
+   Re-reading every drive costs ~1s per drive, and the data changes over weeks,
+   so a TTL made both the SMART tab and the bay map feel broken. What replaces
+   it is that every surface states the collection's age. */
+$sc = sys_get_temp_dir() . '/hbav_smartcache_' . getmypid() . '.json';
+file_put_contents($sc, '{"drives":[{"dev":"/dev/sda","serial":"X","smart":{"health":"PASSED"}}]}');
+touch($sc, time() - 86400 * 3);
+check('a three-day-old cache is still served', smart_cache_read($sc) !== null);
+check('cache age is reported in seconds', abs((int) smart_cache_age($sc) - 86400 * 3) < 5);
+check('no cache reads as null, not empty', smart_cache_read("$sc.nope") === null);
+check('no cache has no age', smart_cache_age("$sc.nope") === null);
+file_put_contents($sc, 'not json');
+check('a corrupt cache reads as null', smart_cache_read($sc) === null);
+@unlink($sc);
+// The table says how old it is, so week-old temperatures cannot pass for live.
+$smartHtml = renderSmartTable(['drives'=>[['dev'=>'/dev/sda','serial'=>'X','smart'=>['health'=>'PASSED']]]], 7200);
+check('the SMART table states its age', str_contains($smartHtml, 'Collected 2 h ago'));
+check('the SMART table says how to update it', str_contains($smartHtml, 'until you press Refresh'));
+check('no age given, no age line',
+      !str_contains(renderSmartTable(['drives'=>[['dev'=>'/dev/sda','serial'=>'X','smart'=>[]]]]), 'Collected'));
 
 /* smart_state is the one health rule the SMART tab, the per-drive line and the
    bay map all share (plan 047 STOP condition). */
