@@ -13,6 +13,15 @@
 
 ## Status
 
+- **State**: **EXECUTED and REVIEW-APPROVED 2026-08-05**, on worktree branch
+  `worktree-agent-af17ec00b418589a8` (commit `879094a`). **Not merged** — that
+  is the maintainer's call. Step 5 (hardware confirmation on the reporter's
+  box) is still outstanding and is the only thing between this and done.
+  Review went one REVISE round: the first duplicate-idx unit test passed with
+  the fix removed, because this plan's own description of the mechanism was
+  wrong (see the correction note under "Root cause"). Both new tests are now
+  mutation-verified in both directions — removing the guard reddens the
+  duplicate test, over-broadening it reddens the unique-index test.
 - **Priority**: **P1** — the HBA Health tab's Link Integrity indicator never
   works at all on affected hardware, and the failure is silent: it reads
   "Not enough samples yet", which is indistinguishable from a box that has
