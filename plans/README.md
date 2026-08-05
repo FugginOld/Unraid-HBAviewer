@@ -23,7 +23,7 @@ Active plans (still in `plans/`):
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **048** | **executed** on `dev` 2026-08-05, suite green | one hardware pass — see below |
+| **048** | **done** — executed and hardware-verified 2026-08-05 | nothing |
 
 **048 (activity-light locate), executed 2026-08-05 on `dev`.** Step 1's mapping
 was confirmed on the maintainer's box before any code was written: every `sdX`
@@ -39,10 +39,20 @@ the marker on Stop but did not *stop the loop* — the drive would have kept
 being read with nothing left to stop it by, since the marker was gone. The trap
 now exits.
 
-What remains is one hardware pass: press Locate and confirm the bay blinks,
-then run a SMART Refresh while it blinks and confirm the cache comes back
-complete (the plan's third done criterion, and the reason `pkill -f smartctl`
-was not copied).
+**Hardware-verified 2026-08-05.** The blink works, and the load-bearing done
+criterion holds: a full SMART Refresh run *while a locate is blinking* comes
+back complete. That is the criterion the whole `timeout`-instead-of-`pkill`
+decision was made for, and it is now measured rather than argued.
+
+One bug surfaced in that session and is worth keeping: pressing STOP stopped
+the drive but left the bay flashing. `stop` killed the loop and then listed
+what was still running in the same breath, catching the process between the
+signal and its exit — and since the client paints from that reply and has
+nothing to re-poll with, the graphic outlived the blink. Fixed in both halves:
+the dispatch waits (bounded) for the process to go, and the loop uses
+`sleep & wait` so a bash trap is not deferred until the sleep expires. The
+shell test now pins the stop at ~300ms and was confirmed red against the bare
+sleep first.
 
 **047 (drive bay map) — DONE, archived 2026-08-04.** Executed on `dev`,
 verified on the maintainer's 24-bay box, and shipped. Worth keeping from its
