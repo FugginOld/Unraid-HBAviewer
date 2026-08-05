@@ -73,10 +73,22 @@ for p in /sys/class/sas_phy/phy-"${1}":*/; do
   "idx":7 appears 4 times   (and 6, 5, 4, 3 … likewise)
 ```
 
-So each real PHY is joined by three phantoms carrying the same index. The
-expander entries also report **empty** counter files (`invalid_dword_count = `
-with no value), which `printf '%d'` turns into `0` — so the phantoms all look
-like a PHY with zero errors.
+So each real PHY is joined by three phantoms carrying the same index.
+
+**The phantoms are not all zero, and that is what makes this destructive.**
+Some expander PHYs report empty counter files (`invalid_dword_count = ` with no
+value, which `printf '%d'` turns into `0`); others report real counts of their
+own — `phy-0:0:10` and `phy-0:0:11` both read `invalid_dword_count = 4` in the
+capture, while the controller's own `phy-0:10` reads its own separate value.
+A collapsed slot therefore ends up holding a counter that belongs to a
+**different device**, and the next sample compares the real PHY against it.
+When the phantom's number is the higher one — a quiet HBA PHY behind a
+chattier expander PHY — that reads as a decrease.
+
+(An earlier draft of this plan said the phantoms "all look like a PHY with zero
+errors". That was wrong and it matters: with every phantom at zero, no
+comparison can ever yield a decrease and the bug does not reproduce. It was
+caught when a test written from that description passed with the fix removed.)
 
 From there the reported failure follows exactly:
 
@@ -283,10 +295,18 @@ Implement by counting indexes per sample and skipping the comparison for any
 index that is not unique in **both** samples. Do the same in `health_rates()`,
 which builds `$oldByIdx` the same way.
 
-**Verify**: unit test — a two-sample ring whose samples contain a duplicated
-index keeps **both** samples (`count($ring) === 2`) instead of resetting, and a
-genuine counter decrease on a *unique* index still resets. Both cases must be
-in `tests/health_test.php`.
+**Verify**: unit tests in `tests/health_test.php`.
+
+The duplicate-idx fixture must reproduce the real mechanism or it cannot fail:
+the phantom entry goes **last** and carries a **higher** counter than the real
+PHY (e.g. real `inv 0`, phantom `inv 4` — the reporter's actual shape). Without
+the guard, the phantom's 4 is what survives the overwrite, the real PHY's 0 is
+compared against it, and the ring is wiped. With the guard, both samples keep
+their two entries.
+
+A fixture where every duplicate reads zero passes with or without the fix.
+**Mutation-test both new cases** — delete the guard line, watch them go red,
+restore it — and record both outputs. A test never seen red proves nothing.
 
 ### Step 5: NOT YOURS — hardware confirmation by the maintainer
 
