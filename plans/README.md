@@ -25,7 +25,47 @@ Active plans (still in `plans/`):
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box (issue #12) |
 | **050** | **merged to `dev`** (`1fb2590`, from `7400339`), suite green | pushing `dev`, then the hardware check — see below |
-| **051** | **TODO**, written 2026-08-05 against `1fb2590` — issue #14 | dispatch; then @jac2424's confirmation on the 9207-8i |
+| **051** | **merged to `dev`**, suite green — issue #14 | @jac2424's confirmation on the 9207-8i |
+
+**051 executed, review-approved and merged 2026-08-05.** The worktree-resets-to-
+`main` trap recorded under 050 was pre-empted this time: the dispatch's first
+instruction was `git reset --hard` onto the plan's baseline, and the executor
+confirmed the SHA before reading anything. That is the second run of that
+workaround and it should be treated as standard for every future `execute`.
+
+**Review mutation-tested one case the executor did not**: reverting *only*
+Stage 3's depth fix, leaving the trailing-slash fix in place. Exactly one
+assertion reddened — the Stage 3 target-id case — while the two Stage 2
+assertions stayed green, which is the evidence that the new test isolates the
+two defects rather than passing on aggregate. Also verified the
+`local V="${V:-default}"` seam really does inherit an outer value (it does;
+argument expansion precedes the builtin), since a silent failure there would
+have left Stage 2 reading nothing while every test still passed.
+
+**Three deviations, all documented by the executor, all correct — and all
+caused by defects in the plan I wrote:**
+
+1. **The plan contradicted itself.** Step 2 instructs the new comment to
+   explain that `sas_end_device` is the wrong class and why, while the done
+   criteria demand `grep "sas_end_device"` return no matches. The executor kept
+   the explanatory comment and flagged the conflict instead of silently
+   choosing. Right call: no code path reads that class (verified — the only
+   remaining hits are the comment and `bundle_support.sh`, which *should* dump
+   both classes, since that dump is how the layout was established in the first
+   place). The criterion should have read `grep '/sys/class/sas_end_device'`.
+2. **Step 5 could not run before Step 6.** Mutation 3 requires the test file
+   Step 6 creates. The executor swapped the order; the plan should have
+   numbered them the other way.
+3. **Added `host5` to the fixture**, not enumerated in the plan, to isolate the
+   overcount trap on a single-drive host so a failure there cannot be masked by
+   host3's seven other correctly-counted disks. A genuine improvement on what
+   was specified — and it paid off immediately: under the `find -path` mutation
+   host3 reported 13 and host5 reported 6, and only the second of those numbers
+   is diagnostic.
+
+**Not verifiable here.** Every line is on the lsiutil path; the maintainer's box
+is SAS3/storcli. The fixture is the whole safety net, which is why the mutation
+testing was a done criterion. Awaiting @jac2424 on issue #14.
 
 **051 (SAS transport sysfs depth), written 2026-08-05 — issue #14.** Four sysfs
 reads on the lsiutil path were written against a directory layout that
