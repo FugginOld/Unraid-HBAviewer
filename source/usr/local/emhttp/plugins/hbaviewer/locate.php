@@ -86,7 +86,16 @@ if (!locate_addr_valid($addr)) {
 if ($action === 'stop') {
     $pid = locate_pid($addr);
     // kill by PID only — never by name, never by pattern.
-    if ($pid !== null) shell_exec('kill ' . $pid . ' 2>/dev/null');
+    if ($pid !== null) {
+        shell_exec('kill ' . $pid . ' 2>/dev/null');
+        /* Then WAIT for it to actually go. A signal is asynchronous: the loop
+           handles it, clears its marker and exits a moment later. Answering
+           before that is answering "still blinking", and since the client
+           paints itself from this reply and has nothing to re-poll with, the
+           UI would keep flashing over a drive that had already stopped.
+           Bounded so a wedged process cannot hold the request open. */
+        for ($i = 0; $i < 20 && locate_running($addr); $i++) usleep(50000);   // ≤1s
+    }
     echo json_encode(['ok' => true, 'active' => locate_active()]);
     exit;
 }

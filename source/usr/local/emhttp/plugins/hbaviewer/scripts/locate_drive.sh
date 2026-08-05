@@ -58,5 +58,9 @@ trap 'exit 143' INT TERM
 END=$(( $(date +%s) + MAX ))
 while [ "$(date +%s)" -lt "$END" ]; do
     timeout 0.4 smartctl -x "$BSG_DIR/$ADDR" >/dev/null 2>&1
-    sleep 0.5
+    # `sleep &` + `wait`, not a bare `sleep`: bash defers a trap until the
+    # foreground command finishes, so a plain sleep would swallow Stop for up
+    # to half a second. `wait` is interruptible, so TERM is acted on at once —
+    # the UI reports the stop from the same request that asked for it.
+    sleep 0.5 & wait $!
 done

@@ -102,9 +102,25 @@ fi
 # wrapper that launched it. Killing the launcher leaves the script orphaned and
 # still reading the drive, which is the whole reason stopping is by stored PID.
 kill "$held" 2>/dev/null
-sleep 2      # the trap runs after the in-flight `sleep 0.5` returns
+
+# Stop must be PROMPT, not merely eventual. locate.php answers the request that
+# asked for the stop, and the UI paints itself from that answer with nothing to
+# re-poll — so a loop that only notices the signal when its sleep expires shows
+# a bay still flashing over a drive that has already stopped. That was a real
+# bug: a bare `sleep 0.5` defers the trap, `sleep & wait` does not.
+gone=0
+for i in $(seq 1 20); do
+    kill -0 "$held" 2>/dev/null || { gone=$i; break; }
+    sleep 0.1
+done
+if [ "$gone" -gt 0 ] && [ "$gone" -le 3 ]; then
+    ok "stops within ${gone}00ms of the signal"
+elif [ "$gone" -gt 0 ]; then
+    bad "stops promptly" "took ${gone}00ms — the trap is being deferred by the sleep"
+else
+    bad "stops at all" "pid $held still alive after 2s"
+fi
 if [ -f "$pidfile" ]; then bad "marker removed when stopped" "still at $pidfile"; else ok "marker removed when stopped"; fi
-if kill -0 "$held" 2>/dev/null; then bad "the loop is gone after stop" "pid $held still alive"; else ok "the loop is gone after stop"; fi
 wait "$bg" 2>/dev/null
 
 # ── 6. Bad input refuses rather than building a path out of it ───────────────
