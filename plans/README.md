@@ -24,6 +24,22 @@ Active plans (still in `plans/`):
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **048** | **done** — executed and hardware-verified 2026-08-05 | nothing |
+| **049** | written 2026-08-05, **not started** | Step 1 on the maintainer's box (one command) |
+
+**049 (duplicate PHY indexes), written 2026-08-05 — issue #12.** Link Integrity
+never leaves "not enough samples" on a box with an **expander**. The reporter
+diagnosed the damage precisely (`health_ingest()` overwrites same-index PHYs, a
+real counter is then compared against a phantom, reads as a decrease, and the
+ring is wiped every sample) and posted a working FIFO-pairing fix. His bundle
+showed the cause is one layer further down and is ours, not the controller's:
+`/sys/class/sas_phy/phy-<host>:*` matches both `phy-H:N` (the HBA's own PHYs)
+and `phy-H:N:M` (PHYs on an expander behind it), and `${idx##*:}` collapses them
+onto the same index — measured at 29 own PHYs against 76 expander PHYs, with
+every index appearing four times in the parsed output. Three collectors share
+that glob; `get_phy_health.sh` does not, because it joins on the SAS address,
+which is the evidence for fixing it at the source rather than pairing HBA PHYs
+with expander PHYs. The plan keeps the reporter's insight as a consumer guard
+so a duplicate can never again silently destroy hours of history.
 
 **048 (activity-light locate), executed 2026-08-05 on `dev`.** Step 1's mapping
 was confirmed on the maintainer's box before any code was written: every `sdX`
