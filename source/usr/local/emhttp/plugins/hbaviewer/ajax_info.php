@@ -754,12 +754,17 @@ if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); e
    renders from, with parse_ini_file — the identical approach flash.php already
    uses for mdState (`flash_array_stopped`).
 
-   NARROW ON PURPOSE. Only `recon` counts: mdResyncAction is also "check P" for
-   a parity CHECK, which reads the array and writes nothing. Painting a check as
-   a rebuild would put an animated "PARITY REBUILD" on a disk that is not being
-   rebuilt, which is worse than showing nothing. Anything unreadable, missing or
-   unrecognised means "no rebuild" — this only ever claims a rebuild on positive
-   evidence. */
+   NARROW ON PURPOSE, and BOTH halves of the test are load-bearing:
+   - mdResyncAction is STICKY. A live idle array still reports the operation it
+     last ran ("check P" on the reference box, with mdResync="0" and no
+     operation running for weeks). Matching on the action alone would paint a
+     permanent rebuild on the parity disk of every array that has ever run one.
+     Hence mdResync > 0, which is the "something is running now" signal.
+   - Only `recon` counts. A parity CHECK reads the array and writes nothing;
+     animating it as a rebuild would be a claim about a disk that is not being
+     rebuilt.
+   Anything unreadable, missing or unrecognised means "no rebuild" — this only
+   ever claims one on positive evidence. */
 const UNRAID_VARINI  = '/var/local/emhttp/var.ini';
 const UNRAID_DISKINI = '/var/local/emhttp/disks.ini';
 

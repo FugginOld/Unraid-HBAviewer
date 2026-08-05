@@ -471,6 +471,26 @@ check('an idle array is not a rebuild',
       unraid_rebuilding($mkIni('v4.ini', "mdState=\"STARTED\"\n")) === false);
 check('a missing var.ini is not a rebuild', unraid_rebuilding("$iniDir/nope.ini") === false);
 
+/* Verbatim from a live box (Golem, 2026-08-04), and the reason mdResync is
+   checked at all: mdResyncAction is STICKY. This array is idle and has been for
+   some time, yet still reports the "check P" it last ran. Matching on the
+   action alone would paint a permanent rebuild on the parity disk of every
+   array that has ever run an operation.
+   The same capture shows the second parity slot present but unassigned
+   (device=""), which must not become "/dev/". */
+$golemVar = $mkIni('golem_var.ini',
+    "mdResync=\"0\"\nmdResyncCorr=\"0\"\nmdResyncPos=\"0\"\nmdResyncDb=\"0\"\n"
+  . "mdResyncDt=\"0\"\nmdResyncAction=\"check P\"\nmdResyncSize=\"13672382412\"\nmdState=\"STARTED\"\n");
+$golemDisks = $mkIni('golem_disks.ini',
+    "[\"parity\"]\nidx=\"0\"\nname=\"parity\"\ndevice=\"sdp\"\n"
+  . "[\"parity2\"]\nidx=\"29\"\nname=\"parity2\"\ndevice=\"\"\n"
+  . "[\"disk1\"]\nidx=\"1\"\nname=\"disk1\"\ndevice=\"sdb\"\n");
+check('a live idle array with a stale action is not rebuilding', unraid_rebuilding($golemVar) === false);
+check('an unassigned parity2 is not a device', unraid_parity_devs($golemDisks) === ['/dev/sdp']);
+// Section headers in Unraid's ini files are quoted (["parity"]); the parser
+// must see through that or every disk section is skipped.
+check('quoted ini section names still match', unraid_parity_devs($golemDisks) !== []);
+
 // End to end: the parity disk gets the chip, its neighbour does not.
 $bmPar = bay_map_assemble(['controllers'=>[['drives'=>[
     ['port'=>'1','serial'=>'PARITY01'], ['port'=>'2','serial'=>'DATA0001'],
