@@ -14,9 +14,11 @@
 ## Status
 
 - **State**: **EXECUTED and REVIEW-APPROVED 2026-08-05**, on worktree branch
-  `worktree-agent-af17ec00b418589a8` (commit `879094a`). **Not merged** — that
-  is the maintainer's call. Step 5 (hardware confirmation on the reporter's
-  box) is still outstanding and is the only thing between this and done.
+  `worktree-agent-af17ec00b418589a8` (commit `879094a`), **merged to `dev`**
+  as `b45be77` with the suite green. Step 5 (confirmation on the reporter's
+  box) is the only thing between this and done. The merge took one trivial
+  conflict in `tests/run.sh` — the executor's worktree predated the drive-locate
+  test, so both wanted the same spot in the runner; both were kept.
   Review went one REVISE round: the first duplicate-idx unit test passed with
   the fix removed, because this plan's own description of the mechanism was
   wrong (see the correction note under "Root cause"). Both new tests are now

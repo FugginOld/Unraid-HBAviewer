@@ -24,7 +24,7 @@ Active plans (still in `plans/`):
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **048** | **done** — executed and hardware-verified 2026-08-05 | nothing |
-| **049** | **executed + review-approved**, on `worktree-agent-af17ec00b418589a8` (`879094a`), **not merged** | the maintainer's merge decision, then Step 5 on the reporter's box |
+| **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box (issue #12) |
 | **050** | written 2026-08-05, **not started** | nothing |
 
 **050 (two meanings of errors/hr), written 2026-08-05.** PHY Health showed PHY
