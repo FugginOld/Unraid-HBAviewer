@@ -29,7 +29,7 @@
   ring means. Both touch `health.php`; execute 049 first if both are in
   flight.
 - **Category**: bug (misleading display, not a wrong number)
-- **Planned at**: `cc6def6`, 2026-08-05
+- **Planned at**: `cc6def6`, re-stamped to `4749006`, 2026-08-05
 - **Found by**: the maintainer, comparing his own two tabs — and then
   **falsifying the first explanation** with the measurement in the next
   section. That sequence is why this plan says what it does.
