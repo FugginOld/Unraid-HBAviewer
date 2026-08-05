@@ -24,7 +24,20 @@ Active plans (still in `plans/`):
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box (issue #12) |
-| **050** | written 2026-08-05, **not started** | nothing |
+| **050** | **executed + review-approved**, on `worktree-agent-050exec` (`7400339`), **not merged** | the maintainer's merge decision |
+
+**050 (two meanings of errors/hr) — executed and review-approved 2026-08-05**,
+awaiting a merge decision. Two process notes worth keeping. The first dispatch
+**STOPPED on its own drift check**: `isolation: worktree` branches from the
+repo's default branch (`main`), not from the branch the plan was written
+against (`dev`), so the executor found itself missing plan 049's guard
+entirely and refused to rebase itself — correctly, since that would have been
+the improvisation the plan forbids. That same wrong base is what caused 049's
+`tests/run.sh` merge conflict. **Any future `execute` must reset the worktree
+to the plan's baseline commit before starting.** Second: review mutation-tested
+three ways, including one the executor did not run — widening the all-clear
+floor to also swallow *growth* reddens five link_integrity tests, which is the
+plan's load-bearing STOP condition holding.
 
 **050 (two meanings of errors/hr), written 2026-08-05.** PHY Health showed PHY
 5 at 3.3/hr while HBA Health said "no new cabling errors" on the same
