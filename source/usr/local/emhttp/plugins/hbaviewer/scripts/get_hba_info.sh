@@ -36,9 +36,16 @@ fi
 # ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
 # SAS correlation, this cheaper host index is only for the rollup.
 ov_storcli() {   # $1 = controller index
-    local perr=0 p f v out pci dom bus dev fn dir width speed power chip
+    local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip
     for p in /sys/class/sas_phy/phy-"${1}":*/; do
         [ -d "$p" ] || continue
+        idx=$(basename "$p")
+        # phy-H:N is this controller's own PHY; phy-H:N:M is a PHY on an expander
+        # BEHIND it — a different device, with counters this controller does not
+        # own and (measured) no counter values at all. Rolling those in inflated
+        # the PHY error count with phantom entries that always read zero, but a
+        # future backplane could report nonzero and pad the rollup (issue #12).
+        case "${idx#phy-}" in *:*:*) continue ;; esac
         for f in invalid_dword_count running_disparity_error_count loss_of_dword_sync_count phy_reset_problem_count; do
             v=$(cat "$p/$f" 2>/dev/null); perr=$(( perr + ${v:-0} ))
         done

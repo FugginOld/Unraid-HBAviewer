@@ -63,6 +63,43 @@ $ringOk = health_ingest([], sample(1000, 500, 0));
 $ringOk = health_ingest($ringOk, sample(1100, 600, 5));
 check('monotonic ingest does not reset', count($ringOk) === 2);
 
+// ── 4b. Duplicate idx (issue #12): an expander PHY collapses onto the same
+//    idx as the controller's own PHY -- NOT as a zero reading, but carrying
+//    its OWN, DIFFERENT counter from a device the controller doesn't own
+//    (measured on the reporter's capture: phy-0:0:10 and phy-0:0:11 both
+//    read invalid_dword_count=4 while the real phy-0:10 reads its own
+//    number). $prevByIdx keeps whichever entry enumerates last, so the real
+//    PHY's own reading gets compared against the expander's -- and when the
+//    expander's number is the higher one, that reads as a decrease and
+//    wipes the ring on every single sample. Both samples below are
+//    identical (a quiet real PHY, idx 0 inv=0, behind a chattier expander
+//    PHY that also collapses to idx 0, inv=4) -- nothing actually changed,
+//    but without the guard the unpairable idx 0 still looks like a reset. ──
+$dupPhys = function (): array {
+    return [
+        ['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit'], // controller's own PHY -- quiet
+        ['idx' => 0, 'inv' => 4, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => ''],           // expander PHY collapsed onto the same idx -- its own counter, unrelated to the real PHY's
+    ];
+};
+$ringDup = health_ingest([], sample(1000, 500, 0, 0, 0, 0, ['phys' => $dupPhys()]));
+$ringDup = health_ingest($ringDup, sample(1100, 600, 0, 0, 0, 0, ['phys' => $dupPhys()]));
+check('duplicate idx does not wipe the ring', count($ringDup) === 2);
+
+// a genuine decrease on a UNIQUE index still resets even when some other,
+// unrelated index in the same samples happens to be duplicated
+$mixedPhys = function (int $uniqueInv): array {
+    return array_merge(
+        [['idx' => 1, 'inv' => $uniqueInv, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']],
+        [
+            ['idx' => 0, 'inv' => 5, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit'],
+            ['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => ''],
+        ]
+    );
+};
+$ringMixed = health_ingest([], sample(1000, 500, 0, 0, 0, 0, ['phys' => $mixedPhys(100)]));
+$ringMixed = health_ingest($ringMixed, sample(1100, 600, 0, 0, 0, 0, ['phys' => $mixedPhys(10) /* idx 1 dropped: real reset */]));
+check('unique-index decrease still resets despite an unrelated duplicate', count($ringMixed) === 1);
+
 // ── 5. Ring cap: 300 ingested samples leave exactly HEALTH_RING_CAP ────────
 $ringCap = [];
 for ($i = 0; $i < 300; $i++) $ringCap = health_ingest($ringCap, sample(1000 + $i, 500 + $i, $i));

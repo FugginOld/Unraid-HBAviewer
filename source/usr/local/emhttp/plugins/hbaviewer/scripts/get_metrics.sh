@@ -61,9 +61,15 @@ temps=()
 [ -s "$CACHE" ] && mapfile -t temps < <(bash "$DIR/parse/cache_temps.sh" < "$CACHE" 2>/dev/null)
 
 phy_sum() {   # $1 = host number; echoes "inv disp sync reset"
-    local host=$1 inv=0 disp=0 sync=0 reset=0 p v
+    local host=$1 inv=0 disp=0 sync=0 reset=0 p idx v
     for p in /sys/class/sas_phy/phy-"${host}":*/; do
         [ -d "$p" ] || continue
+        idx=$(basename "$p")
+        # phy-H:N is this controller's own PHY; phy-H:N:M is a PHY on an expander
+        # BEHIND it — a different device whose counters this controller does not
+        # own. Summing those in mis-pairs the Performance tab's error-rate series
+        # across polls once the phantom set changes shape (issue #12).
+        case "${idx#phy-}" in *:*:*) continue ;; esac
         v=$(cat "$p/invalid_dword_count"           2>/dev/null); inv=$((inv+${v:-0}))
         v=$(cat "$p/running_disparity_error_count" 2>/dev/null); disp=$((disp+${v:-0}))
         v=$(cat "$p/loss_of_dword_sync_count"      2>/dev/null); sync=$((sync+${v:-0}))

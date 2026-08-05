@@ -206,6 +206,10 @@ echo "=== drive locate tests ==="
 bash locate_sh_test.sh; locate_sh_fail=$?
 
 echo
+echo "=== phys_json expander-collision tests ==="
+bash phys_json_test.sh; phys_json_fail=$?
+
+echo
 echo "=== bundle coverage tests ==="
 bash bundle_coverage_test.sh; bundle_coverage_fail=$?
 
@@ -214,7 +218,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

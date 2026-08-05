@@ -36,9 +36,15 @@ band_of() {
 # controller's phys, not a global SAS-address join.
 _phys_json() {   # $1 = controller host index
     local p idx first=1 out=""
-    for p in /sys/class/sas_phy/phy-"${1}":*/; do
+    for p in "${SYS_SAS_PHY:-/sys/class/sas_phy}"/phy-"${1}":*/; do
         [ -d "$p" ] || continue
-        idx=$(basename "$p"); idx=${idx##*:}
+        idx=$(basename "$p")
+        # phy-H:N is this controller's own PHY; phy-H:N:M is a PHY on an expander
+        # BEHIND it — a different device, with counters this controller does not
+        # own and (measured) no counter values at all. Including them collapsed
+        # four entries onto every index (issue #12).
+        case "${idx#phy-}" in *:*:*) continue ;; esac
+        idx=${idx##*:}
         [ "$first" -eq 1 ] || out+=","
         first=0
         out+=$(printf '{"idx":%d,"inv":%d,"disp":%d,"sync":%d,"rst":%d,"rate":"%s"}' \

@@ -44,10 +44,17 @@ function health_ingest(array $ring, array $sample): array {
         $reset = ($sample['uptime'] ?? 0) < ($newest['uptime'] ?? 0);
         if (!$reset) {
             $prevByIdx = [];
-            foreach ($newest['phys'] ?? [] as $p) $prevByIdx[$p['idx']] = $p;
+            $prevCount = [];
+            foreach ($newest['phys'] ?? [] as $p) { $prevByIdx[$p['idx']] = $p; $prevCount[$p['idx']] = ($prevCount[$p['idx']] ?? 0) + 1; }
+            $curCount = [];
+            foreach ($sample['phys'] ?? [] as $p) $curCount[$p['idx']] = ($curCount[$p['idx']] ?? 0) + 1;
             foreach ($sample['phys'] ?? [] as $p) {
                 $prev = $prevByIdx[$p['idx']] ?? null;
                 if ($prev === null) continue;
+                /* A duplicate index means the two samples cannot be paired PHY-for-PHY, so a
+                   "decrease" is not evidence of anything. Skip the reset check for that index
+                   rather than wiping a ring that may be hours old (issue #12). */
+                if (($prevCount[$p['idx']] ?? 0) > 1 || ($curCount[$p['idx']] ?? 0) > 1) continue;
                 foreach (['inv', 'disp', 'sync', 'rst'] as $k) {
                     if (($p[$k] ?? 0) < ($prev[$k] ?? 0)) { $reset = true; break 2; }
                 }
@@ -79,12 +86,19 @@ function health_rates(array $ring): array {
     $dtHours = $dtSecs / 3600.0;
 
     $oldByIdx = [];
-    foreach ($oldest['phys'] ?? [] as $p) $oldByIdx[$p['idx']] = $p;
+    $oldCount = [];
+    foreach ($oldest['phys'] ?? [] as $p) { $oldByIdx[$p['idx']] = $p; $oldCount[$p['idx']] = ($oldCount[$p['idx']] ?? 0) + 1; }
+    $newCount = [];
+    foreach ($newest['phys'] ?? [] as $p) $newCount[$p['idx']] = ($newCount[$p['idx']] ?? 0) + 1;
 
     $rates = [];
     foreach ($newest['phys'] ?? [] as $p) {
         $prev = $oldByIdx[$p['idx']] ?? null;
         if ($prev === null) continue;
+        /* Same pairing guard as health_ingest(): a duplicate index cannot be
+           matched PHY-for-PHY between the two samples, so no rate can be
+           trusted for it (issue #12). */
+        if (($oldCount[$p['idx']] ?? 0) > 1 || ($newCount[$p['idx']] ?? 0) > 1) continue;
         $rates[] = [
             'idx'  => $p['idx'],
             'inv'  => max(0, ($p['inv']  ?? 0) - ($prev['inv']  ?? 0)) / $dtHours,
