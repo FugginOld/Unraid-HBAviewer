@@ -32,18 +32,23 @@ drv_lsiutil() {
     TMPOS=$(mktemp); TMPSAS=$(mktemp)
     trap 'rm -f "$TMPOS" "$TMPSAS"' EXIT
 
+    # SYS_SAS_DEVICE / SYS_SCSI_HOST are overridable so the suite can point
+    # them at a fixture tree.
+    local SYS_SAS_DEVICE="${SYS_SAS_DEVICE:-/sys/class/sas_device}"
+    local SYS_SCSI_HOST="${SYS_SCSI_HOST:-/sys/class/scsi_host}"
+
     # ── Stage 1: OS device map from lsiutil (pure parse of query text) ───────────
     hba_query -p"$PORT" -a 42,0 2>/dev/null | bash "$DIR/parse/drives_osmap.sh" > "$TMPOS"
 
     # ── Stage 2: SAS address + PHY from sysfs ────────────────────────────────────
-    # /sys/class/sas_device/ exists on kernels with SAS transport (mpt3sas) and
+    # $SYS_SAS_DEVICE exists on kernels with SAS transport (mpt3sas) and
     # carries sas_address + phy_identifier. Its sibling class sas_end_device/
     # shares the exact same end_device-H:B naming but holds only end-device
     # *role* attributes (I_T_nexus_loss_timeout, tlr_enabled, ...) -- neither
     # sas_address nor phy_identifier lives there, which is what makes reading
     # the wrong class here such an easy mistake to ship.
-    if [ -d "/sys/class/sas_device" ]; then
-        for ed in /sys/class/sas_device/end_device-*/; do
+    if [ -d "$SYS_SAS_DEVICE" ]; then
+        for ed in "$SYS_SAS_DEVICE"/end_device-*/; do
             [ -e "$ed" ] || continue
             sas=$(sed 's/0x//' "${ed}sas_address" 2>/dev/null | tr '[:lower:]' '[:upper:]' | tr -d ' \n')
             phy=$(tr -d ' \n' < "${ed}phy_identifier" 2>/dev/null)
@@ -57,21 +62,23 @@ drv_lsiutil() {
 
     # ── Stage 3: sysfs fallback if lsiutil -a 42,0 returned nothing ──────────────
     if [ ! -s "$TMPOS" ]; then
-        for h in /sys/class/scsi_host/host*/; do
+        for h in "$SYS_SCSI_HOST"/host*/; do
             proc=$(cat "${h}proc_name" 2>/dev/null)
             case "$proc" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
             hn=${h%/}; hn=${hn##*host}
-            for t in "${h}device/target${hn}:"[0-9]*/; do
-                [ -d "$t" ] || continue
-                IFS=':' read -r _ ch tg <<< "${t##*/target}"
-                for l in "${t}"*/; do
+            host_dir=$(readlink -f "${h}device" 2>/dev/null)
+            [ -n "$host_dir" ] && [ -d "$host_dir" ] || continue
+            while IFS= read -r -d '' t; do
+                tgt="${t%/}"                       # find gives no trailing slash, but glob callers might
+                IFS=':' read -r _ ch tg <<< "${tgt##*/target}"
+                for l in "$tgt"/*/; do
                     [ -d "$l" ] || continue
                     IFS=':' read -r _ _ _ lu <<< "$(basename "$l")"
                     [ "${lu:-0}" = "0" ] || continue
                     blk=$(ls "${l}block/" 2>/dev/null | head -1)
                     [ -n "$blk" ] && printf "%d_%d /dev/%s\n" "${ch:-0}" "${tg:-0}" "$blk" >> "$TMPOS"
                 done
-            done
+            done < <(find "$host_dir" -maxdepth 10 -type d -name "target${hn}:*" -print0 2>/dev/null)
         done
     fi
 
