@@ -63,7 +63,7 @@ per-controller. The corrected check parses the JSON and counts duplicates
 within each controller separately. Worth remembering before asking any reporter
 to run an aggregate grep over a multi-controller payload — a false positive
 sent to a reporter costs more than one caught at home.
-| **050** | **merged to `dev`** (`1fb2590`, from `7400339`), suite green | pushing `dev`, then the hardware check — see below |
+| **050** | **DONE — hardware-verified 2026-08-05** (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05. Archive after release |
 | **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
 
 **051 hardware-confirmed on the 9207-8i, both directions (2026-08-05).**
@@ -160,6 +160,32 @@ suite that was structurally incapable of seeing the defect.
 pasted by the reporter, who ran the hardware commands. The hardware evidence is
 solid; the reasoning around it was wrong in two of four places. The plan says so
 where it quotes it, so the next reader calibrates rather than copies.
+
+**050 verified on Golem 2026-08-05, and it broke the frame doing it.** Adding
+`· N/hr in the last 10 min` to every error cell roughly doubled the width of
+four columns; `.lu-table` is `width:100%` with no scroller above it, so the
+overflow left the card and the last columns could not be reached at all. Fixed
+in `a65abc1` by wrapping `luTable()` — every table, not that one tab, since
+Drives and SMART are narrower only by accident. **The lesson is that adding
+text to a table cell is a layout change, and the suite cannot see it**: every
+render test asserts on substrings, so a table that renders perfectly and
+displays off-screen is green. Shortening the text was rejected — 050's own STOP
+condition says the fix is more context, not less.
+
+**The verification also reproduced the exact confusion 050 exists to fix, one
+level up.** Reading the tab, the maintainer's assistant concluded PHY 5 was
+accruing new errors: the top-offenders line showed `2.5/hr` where the plan had
+recorded `1.9/hr`, and an average-since-baseline can only rise if the counter
+grew. It had not — `invalid_dword_count` still read 115, unchanged since 08-02.
+The `2.5` is the **combined** rate across all four counters
+(`inv 1.4 · disp 0.7 · sync 0.3 · reset 0.0`); the plan's `1.9` was `inv`
+alone, at 60.5 h elapsed. Aggregate compared against per-counter. Checked
+properly, `inv` had *fallen* to 1.445/hr over 79.6 h, exactly as a fixed
+numerator over growing elapsed time must. **So the column header
+`Errors/hr — average since baseline` still does not say what the number is a
+rate *of*, and that is the same defect class the plan was written to close —
+made this time by a reader holding the plan.** Cheap follow-up if it recurs:
+say `combined` in that cell, or name the counters in the header. Not planned.
 
 **050 (two meanings of errors/hr) — executed, review-approved and merged
 2026-08-05** as `1fb2590`. Its hardware check is the only one of the three that
@@ -370,7 +396,7 @@ box" is not actionable a month from now.
 
 | Plan | What is unverified | How to exercise it |
 |---|---|---|
-| **050** | The window labels and the recent-vs-historical rate pair, on screen. **The maintainer's own box is enough** — 050 changes what the two tabs *say*, not what they compute, so no reporter is needed. Its done criteria quote `~1.9/hr` and `~12.8 h`; those were a reading taken at writing time and **will not reproduce** — the ring only advances while the Health tab renders. Check the shape, not the numbers. | 050 touches `ajax_info.php` and `health.php`, but those two files on `dev` also carry 047/048 — patching them alone onto a released install breaks, they need `bay_map.php`, `locate.php`, the new `config.php` keys and `hbaviewer.php`'s JS. Install the **whole** plugin dir instead (`/usr/local/emhttp` is a RAM overlay, so a reboot reverts everything): `cd /tmp && curl -fsSL -o dev.tgz https://github.com/FugginOld/Unraid-HBAviewer/archive/refs/heads/dev.tar.gz && tar xzf dev.tgz && cp -a Unraid-HBAviewer-dev/source/usr/local/emhttp/plugins/hbaviewer/. /usr/local/emhttp/plugins/hbaviewer/` — **push `dev` first or you get pre-`8bbc4d3` code.** Then: (1) HBA Health → Link Integrity states the window it measured, in both the all-clear and the warning wording; (2) PHY Health → the rate reads as an average *since the baseline*, and says when that baseline was; (3) a PHY with history but no recent errors shows **both** numbers, not one; (4) `rm -f /tmp/hbav_health_c*.json`, reload once, and the row must say `unknown` — **not `ok`** — because a seconds-long window with no growth is not evidence of health. That fourth one is the load-bearing check: it is the plan's own STOP condition, and it is the only one that fails loudly if Step 4's threshold was mis-set |
+| **050** | **ANSWERED — verified on Golem 2026-08-05.** All four criteria hold, and the arithmetic was checked against raw sysfs rather than eyeballed: PHY 0:5 `inv` delta 115 over 79.6 h = 1.445/hr against a displayed `1.4`, `sync` 23/79.6 = 0.29 against `0.3`. Link Integrity read grey **Unknown — Watched for 10 min — too short to rule out a slow fault**, which is criterion 4, the load-bearing one, holding on a fresh ring. Only the long-window→`ok` half is untested; it needs the tab rendering for hours and nothing else. **The frame regression this surfaced is fixed in `a65abc1`** — see below. | 050 touches `ajax_info.php` and `health.php`, but those two files on `dev` also carry 047/048 — patching them alone onto a released install breaks, they need `bay_map.php`, `locate.php`, the new `config.php` keys and `hbaviewer.php`'s JS. Install the **whole** plugin dir instead (`/usr/local/emhttp` is a RAM overlay, so a reboot reverts everything): `cd /tmp && curl -fsSL -o dev.tgz https://github.com/FugginOld/Unraid-HBAviewer/archive/refs/heads/dev.tar.gz && tar xzf dev.tgz && cp -a Unraid-HBAviewer-dev/source/usr/local/emhttp/plugins/hbaviewer/. /usr/local/emhttp/plugins/hbaviewer/` — **push `dev` first or you get pre-`8bbc4d3` code.** Then: (1) HBA Health → Link Integrity states the window it measured, in both the all-clear and the warning wording; (2) PHY Health → the rate reads as an average *since the baseline*, and says when that baseline was; (3) a PHY with history but no recent errors shows **both** numbers, not one; (4) `rm -f /tmp/hbav_health_c*.json`, reload once, and the row must say `unknown` — **not `ok`** — because a seconds-long window with no growth is not evidence of health. That fourth one is the load-bearing check: it is the plan's own STOP condition, and it is the only one that fails loudly if Step 4's threshold was mis-set |
 | **049** | The **ring half** — that Link Integrity actually leaves "Not enough samples yet". The collector half is confirmed (29 own PHYs in sysfs, 29 emitted, vs 105 pre-fix), but a correct payload and an accumulating ring are different claims. **Reporter's box only**; Golem has zero expander PHYs | On Waz-Server, @TheIlluminate92: `rm -f /tmp/hbav_health_c*.json` (his existing rings were wiped-and-rewritten every poll, so they hold nothing usable regardless of the fix), open HBA Health in the webGUI, wait 60 s, reload, then count samples per controller — loop over `c*` rather than hardcoding `c0` in case that box has more than one. Expect ≥2 samples and a rate in place of the placeholder |
 | **037** | Whether 0.6 opacity actually reads as "disabled but legible" on a real screen. The contrast numbers are computed against *assumed* palette hex values, not sampled from a running Unraid. Also unverified: that the browser's own disabled styling on top of the dim does not push the button past illegible. | With the array **running**, open Firmware/BIOS on each of the white, azure, black and gray themes: Step 3 dimmed, its checkbox / FLASH field / Flash button all refusing both click **and** Tab-then-Enter, and the amber "Locked while the array is running" line above it at full strength. Confirm Step 1's Verify and Step 2's uploads still work. Then stop the array, reload, and confirm the dimming is gone. **Do not complete a flash to test this** — plan 005's rule stands |
 | **024** | **ANSWERED — NO. Not a pending test; a negative result.** All 24 populated slots set to `locate=1`, all read back `1`, no chassis LED changed. Empty bays will not even hold the flag. This box cannot verify the feature and no further testing here will change that. **Reassigned: needs a reporter with a genuine expander backplane** (not an HBA-synthesised `VirtualSES`). | With the array running, on the maintainer's own box, targeting **bay 21** (holds no array member). Resolve the component by reading `slot` — directory names are not slot numbers, component `7` is slot 12: `E=/sys/class/enclosure/0:0:0:0; C=$(for c in "$E"/*/; do [ "$(cat "$c/slot" 2>/dev/null)" = "21" ] && { echo "$c"; break; }; done); echo 1 > "$C/locate"` and **look at the bay**, then `echo 0 > "$C/locate"`. Bay 21 is an **empty** bay (0–15 populated, 16+ not), so a dark result is ambiguous — some backplanes only light occupied slots. Repeat on a populated slot before concluding; toggling `locate` on an array member is safe, it changes a light and nothing else. Then patch the branch in and confirm the Drives tab's button does the same thing and reverts to "Locate" after Stop. If the write succeeds but no light appears, that is a real finding — record it; the honest response is to keep the button rather than invent a stronger capability signal that does not exist |
