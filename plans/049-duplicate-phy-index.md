@@ -319,7 +319,14 @@ A fixture where every duplicate reads zero passes with or without the fix.
 **Mutation-test both new cases** — delete the guard line, watch them go red,
 restore it — and record both outputs. A test never seen red proves nothing.
 
-### Step 5: NOT YOURS — hardware confirmation by the maintainer
+### Step 5: NOT YOURS — hardware confirmation on the REPORTER's box
+
+> **Corrected 2026-08-05.** This heading said "by the maintainer" when written.
+> It was wrong: Golem has **zero expander PHYs**, so the guard never executes
+> there and a pass proves only no-regression. Only @TheIlluminate92's box (76
+> expander / 29 own) exercises the defect. The collector half is now confirmed
+> there — 29 own PHYs in sysfs, 29 emitted, against 105 pre-fix. The commands
+> below, which test the actual symptom, are still outstanding.
 
 Recorded for whoever runs it on real hardware after this lands; **the executor
 must not attempt it and must not block on it**:
