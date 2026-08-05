@@ -359,6 +359,34 @@ check('baymap keys storcli drives on port',   $placed['PLACED01']['key'] === 'c0
 check('baymap carries model, serial and size',
       $placed['PLACED01']['model'] === 'ST8000NM' && $placed['PLACED01']['serial'] === 'PLACED01'
       && $placed['PLACED01']['size'] === '7.276 TB');
+/* The bay card sets the capacity number and its unit at different sizes, so
+   they are split server-side rather than parsed in the view. */
+check('baymap splits capacity from its unit',
+      $placed['PLACED01']['cap'] === '7.276' && $placed['PLACED01']['cap_unit'] === 'TB');
+check('baymap passes an unparseable size through whole',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'1','size'=>'unknown']]]]], null, [], 6, 4)
+          ['unassigned'][0]['cap'] === 'unknown');
+check('baymap carries the warn temperature', $bm['warn_temp'] === 45);
+check('baymap warn temperature is injectable',
+      bay_map_assemble($bmDrives, null, [], 6, 4, [], false, 52)['warn_temp'] === 52);
+/* Rebuild is the ONE thing read from storcli's `state` field. That field is a
+   RAID-topology role rather than a health verdict — which is exactly why it is
+   right here and wrong for everything else: "Rbld" is not a claim about the
+   drive's health, it IS the role, and nothing else reports a rebuild. */
+$bmRbld = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['port'=>'3','serial'=>'REBUILD1','state'=>'Rbld'],
+    ['port'=>'4','serial'=>'ONLINE01','state'=>'Onln'],
+]]]], ['drives'=>[['serial'=>'REBUILD1','smart'=>['health'=>'PASSED']],
+                  ['serial'=>'ONLINE01','smart'=>['health'=>'PASSED']]]], [], 6, 4);
+$byS = array_column($bmRbld['unassigned'], null, 'serial');
+check('baymap reports a rebuilding drive', $byS['REBUILD1']['state'] === 'rebuild');
+/* Onln/UGood/JBOD are roles, not verdicts: an Onln drive with failing SMART
+   must still read as failed, so only Rbld may override the SMART state. */
+check('baymap does not let Onln override SMART', $byS['ONLINE01']['state'] === 'ok');
+check('baymap keeps a failing Onln drive failed',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'4','serial'=>'S','state'=>'Onln']]]]],
+          ['drives'=>[['serial'=>'S','smart'=>['health'=>'FAILED']]]], [], 6, 4)
+          ['unassigned'][0]['state'] === 'fail');
 /* The wire label is display-ready and backend-specific on purpose: calling an
    lsiutil PHY a "Port" would be a small lie in the exact place someone reads
    before pulling a drive out of a running array. */

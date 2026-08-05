@@ -732,7 +732,7 @@ if ($type === 'drives') { echo renderDrivesTables($data, lsi_dev_by_serial()); e
    "collected but this drive is not in it" are the same thing here — no data,
    which is a state of its own and never renders as healthy. */
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
-                          array $devBySerial = [], bool $locked = false): array {
+                          array $devBySerial = [], bool $locked = false, int $warnTemp = 45): array {
     // Serial is the join key the SMART collector already emits per drive; it is
     // also the only identifier both payloads share (storcli's WWN differs by a
     // nibble from /dev's — see lsi_dev_by_serial).
@@ -759,6 +759,12 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 'serial' => $d['serial'] ?? '',
                 'model'  => $d['model'] ?? '',
                 'size'   => $d['size'] ?? '',
+                // The bay card prints the number and its unit at different
+                // sizes, so they are split once here rather than parsed in the
+                // view. "12.733 TB" -> "12.733" + "TB"; anything that does not
+                // look like a measurement passes through whole as the value.
+                'cap'    => preg_match('/^\s*([0-9.]+)\s*([A-Za-z]+)/', (string) ($d['size'] ?? ''), $cm) ? $cm[1] : ($d['size'] ?? ''),
+                'cap_unit' => $cm[2] ?? '',
                 'slot'   => $d['slot'] ?? (isset($d['phy']) ? 'PHY ' . $d['phy'] : ''),
                 // Display-ready, because the two backends key on different
                 // wires and the word has to match: "Port 14" is storcli's
@@ -768,7 +774,13 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 'port'   => isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . $d['phy']
                           : ((($d['port'] ?? '') !== '') ? 'Port ' . $d['port'] : ''),
                 'temp'   => ($s['temp'] ?? '') !== '' ? (int) $s['temp'] : null,
-                'state'  => smart_state($s),
+                /* Health comes from SMART, never from storcli's `state` field,
+                   which is a RAID-topology role rather than a verdict (plan
+                   047). Rebuild is the one exception, and it is not an
+                   exception to that rule: "Rbld" is not a health claim, it IS
+                   the topology role, and it is the only place the rebuild is
+                   reported at all. IT-mode cards never emit it. */
+                'state'  => str_starts_with((string) ($d['state'] ?? ''), 'Rbld') ? 'rebuild' : smart_state($s),
             ];
             $pos = $key !== null ? ($map[$key] ?? null) : null;
             // An out-of-grid position falls back to the tray rather than being
@@ -781,7 +793,7 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
             }
         }
     }
-    return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked,
+    return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked, 'warn_temp' => $warnTemp,
             'placed' => $placed, 'unassigned' => $tray];
 }
 
@@ -790,7 +802,7 @@ if ($type === 'baymap') {
     $d = bay_map_dims();
     echo json_encode(bay_map_assemble(
         $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
-        lsi_dev_by_serial(), bay_map_locked()
+        lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP']
     ));
     exit;
 }

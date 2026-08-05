@@ -29,6 +29,10 @@ const LSI_SCHEMA = [
     // Locks the finished map against edits. Persisted, because the accident it
     // prevents is a stray click on a map somebody spent time building.
     'BAY_LOCK'        => [0,  0, 1],
+    // Drive temperature the bay map calls hot, in °C. NOT ALERT_THRESHOLD:
+    // that one is the HBA controller chip's band floor, and a chip at 76°C is
+    // ordinary while a spinning disk at 76°C is an emergency.
+    'BAY_WARN_TEMP'   => [45, 20, 80],
 ];
 
 function lsi_clamp(string $key, $val): int {
