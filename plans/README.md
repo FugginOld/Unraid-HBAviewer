@@ -23,7 +23,28 @@ Active plans (still in `plans/`):
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box (issue #12) |
+| **049** | **merged to `dev`** (`b45be77`), suite green | Step 5 — confirmation on the reporter's box only (issue #12); see below |
+
+**049 cannot be confirmed on the maintainer's hardware — measured, not assumed
+(2026-08-05).** Golem reports **32 own PHYs and zero expander PHYs**
+(`phy-H:N:M` count is 0), split c0=21 / c1=11 with no duplicate index within
+either controller. The expander-skip the fix adds therefore never executes
+there: on that box, "correctly skipping expander PHYs" and "having none to
+skip" produce identical output. What the run *does* establish is **no
+regression** — 32 own PHYs in sysfs, 32 emitted by the collector, so the guard
+drops nothing it shouldn't, and c0's ring advanced 2 → 4 samples across
+renders. Only @TheIlluminate92's box (76 expander / 29 own) exercises the
+actual defect.
+
+**A verification command was wrong and the hardware caught it.** The first
+duplicate check grepped `"idx"` across the whole `get_hba_health.sh` payload
+and flagged 11 duplicates — but `hba_each` wraps *per-controller* objects, each
+`phys` array starting at idx 0, so cross-controller collisions are by design:
+the rings are per controller (`hbav_health_c<N>.json`) and 049's guard is
+per-controller. The corrected check parses the JSON and counts duplicates
+within each controller separately. Worth remembering before asking any reporter
+to run an aggregate grep over a multi-controller payload — a false positive
+sent to a reporter costs more than one caught at home.
 | **050** | **merged to `dev`** (`1fb2590`, from `7400339`), suite green | pushing `dev`, then the hardware check — see below |
 | **051** | **merged to `dev`**, suite green — issue #14 | @jac2424's confirmation on the 9207-8i |
 
