@@ -42,6 +42,17 @@ file_put_contents($path, '{"c0:p1": "x", "c0:p2": 7, "c0:p3": {"row": 1}, "c0:p4
 check('malformed entries drop, good ones survive',
       bay_map_read($path) === ['c0:p4' => ['row' => 1, 'col' => 2]]);
 
+/* Clear (the "Clear map" button) writes an empty map. json_encode([]) emits
+   "[]", a JSON *array* rather than an object — so this checks the file it
+   leaves behind still reads back as an empty map instead of tripping the
+   corrupt-file path or, worse, fataling on the tab that has to render it. */
+$reset();
+bay_map_write(['c0:p1' => ['row' => 0, 'col' => 0], 'c0:p2' => ['row' => 1, 'col' => 1]], $path);
+bay_map_write([], $path);
+check('clearing empties the map', bay_map_read($path) === []);
+check('a cleared map is still valid on disk',
+      is_file($path) && bay_map_read($path) === [] && json_decode((string) file_get_contents($path), true) === []);
+
 /* ── 2. Round-trip ───────────────────────────────────────────────────────── */
 $reset();
 bay_map_set('c0:p14', 2, 1, $path);

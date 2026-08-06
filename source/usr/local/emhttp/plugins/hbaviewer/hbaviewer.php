@@ -882,6 +882,12 @@ if ($enableFlash) {
           +     (d.locked ? 'The layout is locked. Unlock it to move drives or resize the grid.'
                           : 'Lock the layout so it cannot be changed by accident.') + '">'
           +     (d.locked ? '&#128274; Unlock' : '&#128275; Lock') + '</button>'
+          /* "Clear map", never "Clear array" — on an Unraid page that second
+             word means the disks, and a button that reads as "erase my array"
+             is a scare nobody needs to survive to use this. */
+          +   '<button class="lu-refresh-btn" id="bay-clear" onclick="luBayClear()"' + dis
+          +     ' title="Send every placed drive back to the unassigned list. Only the map is'
+          +     ' cleared — no drive is touched.">Clear map</button>'
           +   (d.locked ? '' : '<span>Click a drive, then a bay. Double-click a bay to empty it.</span>')
           + '</div>'
           + '<div class="lu-bay-legend">'
@@ -911,6 +917,23 @@ if ($enableFlash) {
         }
         luBayPaint();
     }
+
+    /* The confirm names the COUNT rather than asking "are you sure?", because
+       the number is the thing that makes a person stop: a map of 24 bays was
+       built by walking to the rack and reading labels, and nothing here
+       remembers it once it is written. There is no undo to fall back on, and
+       the server cannot tell an intended clear from a misclick — so this
+       prompt is the only guard the action has. */
+    window.luBayClear = function () {
+        var n = (luBay.data.placed || []).length;
+        // Already empty: say so instead of asking a question whose answer
+        // changes nothing.
+        if (!n) { alert('The bay map is already empty.'); return; }
+        if (!confirm('Clear all ' + n + ' placed drive' + (n === 1 ? '' : 's') + ' from the bay map?\n\n'
+                   + 'They go back to the unassigned list and you will have to place them again.\n'
+                   + 'No drive is touched — only the map. This cannot be undone.')) return;
+        luBayPost({action: 'clear'}, luBayFetch);
+    };
 
     window.luBayLock = function () {
         luBayPost({action: 'lock', locked: luBay.data.locked ? '0' : '1'}, function (j) {

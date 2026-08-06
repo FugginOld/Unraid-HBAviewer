@@ -162,6 +162,18 @@ if (bay_map_locked()) {
     exit;
 }
 
+/* Empty the whole map in one write, rather than the client posting an unassign
+   per drive: a per-drive loop half-succeeds when the browser goes away
+   mid-sweep, and half a cleared map is the state nobody asked for.
+   No key to validate — there is no input here beyond the action itself, which
+   is also why the "are you sure" lives in the client and can only live there.
+   The lock above is the server-side guard, and it is the real one. */
+if ($action === 'clear') {
+    bay_map_write([]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 if ($action === 'dims') {
     // Clamp BEFORE pruning: pruning to an unclamped 9999x9999 would keep every
     // assignment and then the grid would render at the clamped size with drives
