@@ -849,28 +849,49 @@ if ($enableFlash) {
        being dragged until the drop, and the hover highlight needs it sooner. */
     var luBay = { data: null, sel: null, dimTimer: 0, drag: null, over: null };
 
-    window.luBayFetch = function () {
+    /* Two ways in. The loud one blanks the card and rebuilds all of it, which is
+       right on first open and after anything that changes the TOOLBAR — lock,
+       clear, undo, a resize. The quiet one leaves the card standing and repaints
+       only the grid and tray, which is right after moving a single drive: there
+       the full rebuild threw away the whole card and flashed "Loading…" for a
+       change that touched two bays. */
+    function luBayLoad(quiet) {
         var el = document.getElementById('baymap-content');
-        el.innerHTML = '<div class="lu-loading">Loading…</div>';
+        if (!quiet) el.innerHTML = '<div class="lu-loading">Loading…</div>';
         fetch('/plugins/hbaviewer/ajax_info.php?type=baymap')
             .then(function (r) { return r.json(); })
             .then(function (d) {
+                // An error still takes the card, quiet or not: a stale map left
+                // silently on screen is worse than a visible failure.
                 if (d.error) { el.innerHTML = '<div class="lu-error"></div>'; el.firstChild.textContent = d.error; return; }
-                luBay.data = d; luBay.sel = null; luBayRender();
+                luBay.data = d;
+                if (quiet) { luBayPaint(); }
+                else { luBay.sel = null; luBayRender(); }
                 if (window.luLocateSync) luLocateSync();
             })
-            .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
-    };
+            .catch(function () { if (!quiet) el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
+    }
+
+    /* Takes no argument ON PURPOSE. It is handed straight to luBayPost as a
+       callback, which calls it with the server's reply — so a `quiet` parameter
+       here would be truthy on every one of those call sites and silently turn
+       the loud path into the quiet one. */
+    window.luBayFetch = function () { luBayLoad(false); };
+    function luBayReload() { luBayLoad(true); }
 
     function luBayPost(body, done) {
         body.csrf_token = flashCsrf;
         fetch('/plugins/hbaviewer/bay_map.php', {method: 'POST', body: new URLSearchParams(body)})
             .then(function (r) { return r.json(); })
             .then(function (j) {
-                if (!j.ok) { alert(j.error || 'Bay map not saved.'); return; }
+                /* A refused write has to be un-done on screen as well as
+                   reported. The grid is now painted optimistically, so without
+                   this resync the map would keep showing a move the server
+                   rejected — the one state the person has no way to notice. */
+                if (!j.ok) { alert(j.error || 'Bay map not saved.'); luBayReload(); return; }
                 if (done) done(j);
             })
-            .catch(function () { alert('Bay map request failed.'); });
+            .catch(function () { alert('Bay map request failed.'); luBayReload(); });
     }
 
     /* Chrome once, contents on every change. Re-rendering the whole view from
@@ -986,8 +1007,7 @@ if ($enableFlash) {
             if (e.target.closest('button')) return;   // the Locate button, not the bay
             var hit = e.target.closest('.lu-bay-cell[data-bay-key]');
             if (!hit) return;
-            luBay.sel = null;
-            luBayPost({action: 'unassign', key: hit.dataset.bayKey}, luBayFetch);
+            luBayCommit(hit.dataset.bayKey, null, null);
         };
         /* Drag and drop, delegated to the grid for the same reason dblclick is:
            luBayPaint() replaces every cell, so a handler bound to a cell is
@@ -1021,9 +1041,7 @@ if ($enableFlash) {
             var key = luBay.drag, cell = e.target.closest('.lu-bay-cell');
             luBayDragEnd();
             if (!key || !cell || luBay.data.locked) return;
-            luBay.sel = null;
-            luBayPost({action: 'assign', key: key,
-                       row: +cell.dataset.row, col: +cell.dataset.col}, luBayFetch);
+            luBayCommit(key, +cell.dataset.row, +cell.dataset.col);
         };
         // Fires however the drag ends, including Escape and a drop on nothing —
         // without it the highlight sticks to a cell nobody is pointing at.
@@ -1191,10 +1209,58 @@ if ($enableFlash) {
             // Dragging a tray chip back onto the tray is a no-op, not a POST
             // that unassigns something already unassigned.
             if (!luBay.data.placed.some(function (p) { return p.key === key; })) return;
-            luBay.sel = null;
-            luBayPost({action: 'unassign', key: key}, luBayFetch);
+            luBayCommit(key, null, null);
         };
         tray.ondragend = luBayDragEnd;
+    }
+
+    /* Move a drive in the LOCAL model, so the grid redraws on the spot instead
+       of after a round trip. Mirrors what bay_map.php's assign does, including
+       displacing whatever already occupied the target bay — if the two ever
+       disagree, the quiet reload afterwards overwrites this and the server stays
+       the authority.
+       col === null means "back to the tray". The drive is appended there rather
+       than sorted into Unraid's Main-page order, because that order is computed
+       server-side (bay_tray_order) and duplicating the comparator here would be
+       a second copy of the rule to keep in step. The reload settles it a moment
+       later, which is the right trade for not having two sorts to maintain. */
+    function luBayApply(key, row, col) {
+        var d = luBay.data, moving = null;
+        function pull(list) {
+            return list.filter(function (e) {
+                if (moving || e.key !== key) return true;
+                moving = e; return false;
+            });
+        }
+        d.placed = pull(d.placed);
+        d.unassigned = pull(d.unassigned);
+        if (!moving) return false;
+        if (col === null) {
+            delete moving.row; delete moving.col;
+            d.unassigned.push(moving);
+        } else {
+            d.placed = d.placed.filter(function (p) {
+                if (p.row !== row || p.col !== col) return true;
+                delete p.row; delete p.col;
+                d.unassigned.push(p);           // one drive per bay, same as the server
+                return false;
+            });
+            moving.row = row; moving.col = col;
+            d.placed.push(moving);
+        }
+        return true;
+    }
+
+    /* The single way a drive moves, whichever gesture asked for it — drag,
+       click-then-click, or a double-click to empty. Paint first, POST second,
+       reconcile last. Keeping all three gestures on this one path is why the
+       optimistic update cannot drift between them. */
+    function luBayCommit(key, row, col) {
+        luBay.sel = null;
+        if (!luBayApply(key, row, col)) return;   // nothing matched; nothing to save
+        luBayPaint();
+        luBayPost(col === null ? {action: 'unassign', key: key}
+                               : {action: 'assign', key: key, row: row, col: col}, luBayReload);
     }
 
     // Drop highlights are cleared from one place, because every way a drag can
@@ -1340,7 +1406,7 @@ if ($enableFlash) {
             if (e && e.detail > 1) return;
             if (drv) { luBay.sel = (luBay.sel === drv.key) ? null : drv.key; luBayPaint(); return; }
             if (!luBay.sel) return;
-            luBayPost({action: 'assign', key: luBay.sel, row: r, col: c}, luBayFetch);
+            luBayCommit(luBay.sel, r, c);   // reads sel before luBayCommit clears it
         };
     }
 
