@@ -267,15 +267,19 @@ if ($enableFlash) {
    made and for the same reason: nothing in a health card is as wide as the
    frame, so on a two-HBA box the right half was empty and the second card sat
    below the fold.
-   The 500px floor is set by the instrument tile, which is the widest fixed
-   thing here: a 138px gauge + 22px gap + the band meter's 260px flex-basis is
-   420px of content, plus the tile's 32px padding and the card's 40px. Under
-   that the meter wraps below the gauge — still readable, just taller, which is
-   exactly what the single-column collapse on a narrow window wants. So this
-   needs no media query either.
+   The floor is 440px, NOT the ~492px the instrument tile needs to keep its
+   gauge and band meter on one row. That was the first attempt and it produced
+   a single column on the maintainer's 951px frame: two 492px tracks plus the
+   gap want 1000px, so the whole point was lost on the exact box it was built
+   for. Two columns with the meter wrapped under the gauge is a better trade
+   than one column of full-height cards — the card grows by the meter's height,
+   the page shrinks by a whole card.
+   It also un-wraps by itself: at a container of 1000px or more the tracks pass
+   492px again and the tile returns to one row. Below 896px it collapses to a
+   single column. Both without a media query.
    align-items:start so a controller that errored, which renders a two-line
    card, does not stretch into a tall empty box beside a full one. */
-#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 16px; align-items: start; }
+#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; align-items: start; }
 #health-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 .lu-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
 .lu-health-title { font-size: 12.5px; color: var(--text); font-weight: 600; }

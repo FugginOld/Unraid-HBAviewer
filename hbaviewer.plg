@@ -78,8 +78,10 @@ bundle located the expander problem below where it was reported.
   box half the page was empty and the second card sat below the fold. A
   narrow window still gets a single column.
 - HBA Health lays its controller cards out the same way, for the same reason.
-  A narrow window still gets a single column, and below that width the gauge
-  and the temperature meter stack instead of sitting side by side.
+  A narrow window still gets a single column. On a frame too tight to fit two
+  cards at full width, the gauge and the temperature meter stack inside each
+  card rather than the cards dropping back to one column — the card gets a
+  little taller and the page loses a whole card's height.
 
 ###2026.08.04.1###
 Everything reported on issue #11, plus two things found while fixing it.
