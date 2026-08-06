@@ -18,13 +18,14 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. **029** and **049** are the only two
+This year's plans and where they stand. Only **029**, **049** and **053** are
 still in `plans/`; the rest have been archived and keep their rows here, which
 is the whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **053** | **written 2026-08-05, not started** — a locate that cannot start answers `{"ok":true}` | nothing; no hardware needed, and the client already alerts on `ok:false` so the fix is server-side only |
 | **049** | **merged to `dev`** (`b45be77`), suite green; collector half confirmed on the reporter's box | the ring half of Step 5 — @TheIlluminate92 only (issue #12); see below |
 
 **Collector half confirmed on the reporter's box (2026-08-05).**
@@ -1111,7 +1112,9 @@ is now plan 052, the other two are still unowned:
   disambiguate with the SAS address when a controller reports duplicate
   indices. **Wants its own plan — do not widen 049, which is parked on a
   hardware confirmation that widening would compromise.**
-- **A locate that cannot start fails silently.** `locate_drive.sh` exits 3 when
+- **A locate that cannot start fails silently.** **Now
+  [plan 053](053-locate-start-failure-is-silent.md) (written 2026-08-05); the
+  finding is kept below as its provenance.** `locate_drive.sh` exits 3 when
   `/dev/bsg/<addr>` is missing; `locate.php` spawns it with output discarded,
   sleeps 250 ms and returns `{"ok":true}` regardless. The client sees `ok`, the
   address is absent from `active`, and the button quietly stays "Locate" — the
