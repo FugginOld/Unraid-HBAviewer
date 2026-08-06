@@ -108,7 +108,20 @@ many drives it is about to unplace.
 **Shrinking the grid** asks first, and says how many drives no longer fit. Those
 go back to the unassigned list; they are never silently dropped.
 
-**Undo** appears after a Clear or a grid resize and puts the map back as it was.
+**Copy map** puts the layout on your clipboard as JSON, and **Restore map**
+rebuilds it from that text. Keep a copy somewhere other than the boot flash —
+the map is built by hand and nothing on the machine can regenerate it, so a
+failed flash stick loses it outright. Note that Unraid's own flash backup does
+not necessarily capture this file, so do not assume it is covered.
+
+The text is `bay_map.json`'s own format, so it works in both directions: what
+Copy produces can be written straight into that file, and the file's contents
+paste straight back into Restore. Entries that no longer make sense — a drive
+key the controller no longer reports, a bay outside the current grid, or two
+drives in one bay — are skipped, and Restore tells you how many.
+
+**Undo** appears after a Clear, a grid resize, or a Restore, and puts the map
+back as it was.
 It is one level deep and is consumed when you use it — it exists to catch the
 misclick you notice straight away, not as a history. Anything older comes from
 your flash backup.

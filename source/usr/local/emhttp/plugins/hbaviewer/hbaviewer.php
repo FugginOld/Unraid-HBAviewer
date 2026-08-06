@@ -920,6 +920,15 @@ if ($enableFlash) {
           +   '<button class="lu-refresh-btn" id="bay-clear" onclick="luBayClear()"' + dis
           +     ' title="Send every placed drive back to the unassigned list. Only the map is'
           +     ' cleared — no drive is touched.">Clear map</button>'
+          /* Copy carries no `dis`: reading the map out is safe with the layout
+             locked, and a locked map is exactly the finished one worth saving.
+             Restore writes, so it is disabled like everything else that does. */
+          +   '<button class="lu-refresh-btn" id="bay-copy" onclick="luBayCopy(this)"'
+          +     ' title="Copy the map to the clipboard, so it can be kept somewhere'
+          +     ' other than the boot flash.">Copy map</button>'
+          +   '<button class="lu-refresh-btn" id="bay-restore" onclick="luBayRestore()"' + dis
+          +     ' title="Rebuild the map from text that Copy map produced, or from a'
+          +     ' bay_map.json out of a backup.">Restore map</button>'
           /* Only rendered when there is something to undo, so it is never a
              button that does nothing — and its presence is the signal that the
              last action was one of the destructive ones. */
@@ -979,6 +988,70 @@ if ($enableFlash) {
     // No confirm on the way back: undo is the recovery path, and putting a
     // dialog in front of it would guard the safe direction.
     window.luBayUndo = function () { luBayPost({action: 'restore'}, luBayFetch); };
+
+    /* execCommand('copy'), NOT navigator.clipboard. The modern API is gated on a
+       secure context, and an Unraid webGui is normally reached over plain HTTP
+       on a LAN address — where navigator.clipboard is simply undefined. This
+       path is deprecated and works everywhere, which is the trade that matters
+       for a button whose whole job is rescuing data. Returns false if the
+       browser refuses, and the caller falls back to showing the text. */
+    function luBayCopyText(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        // Off-screen but focusable; display:none would make select() a no-op.
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+        document.body.removeChild(ta);
+        return ok;
+    }
+
+    /* Copy is the backup half. The map is hand-built by walking to the rack and
+       nothing on the box can regenerate it, so it needs to be able to leave the
+       box — a flash that dies, or a flash backup that quietly stopped running,
+       otherwise takes it with no warning.
+       Emitted in bay_map.json's own shape on purpose: what this produces can be
+       pasted straight into that file, and the file's contents can be pasted
+       straight back in here. One format, both directions. */
+    window.luBayCopy = function (btn) {
+        var m = {};
+        (luBay.data.placed || []).forEach(function (p) { m[p.key] = {row: p.row, col: p.col}; });
+        var n = Object.keys(m).length;
+        if (!n) { alert('Nothing to copy — no drive is placed yet.'); return; }
+        var text = JSON.stringify(m, null, 4);
+        if (luBayCopyText(text)) {
+            var old = btn.textContent;
+            btn.textContent = 'Copied ' + n + ' bay' + (n === 1 ? '' : 's');
+            setTimeout(function () { btn.textContent = old; }, 1600);
+        } else {
+            // Never leave with nothing: if the copy is refused, show the text so
+            // it can still be selected by hand.
+            prompt('Copy this and keep it somewhere off the flash:', text);
+        }
+    };
+
+    window.luBayRestore = function () {
+        var raw = prompt('Paste a saved map — either what "Copy map" produced, '
+                       + 'or the contents of bay_map.json from a backup:');
+        if (raw === null || !raw.trim()) return;
+        // Parsed here only to reject obvious rubbish before a round trip; the
+        // server re-validates every key and position regardless.
+        try { JSON.parse(raw); } catch (e) { alert('That is not valid JSON.'); return; }
+        luBayPost({action: 'import', map: raw.trim()}, function (j) {
+            /* Say what was dropped. A restore that silently keeps 18 of 24 bays
+               reads as a success and sends someone to the wrong slot. */
+            if (j.skipped) {
+                alert('Restored ' + j.placed + ' placement' + (j.placed === 1 ? '' : 's') + '.\n\n'
+                    + j.skipped + ' entr' + (j.skipped === 1 ? 'y was' : 'ies were') + ' skipped — '
+                    + 'an unrecognised drive key, a bay outside the current grid size, '
+                    + 'or two drives in the same bay.');
+            }
+            luBayFetch();
+        });
+    };
 
     window.luBayLock = function () {
         luBayPost({action: 'lock', locked: luBay.data.locked ? '0' : '1'}, function (j) {

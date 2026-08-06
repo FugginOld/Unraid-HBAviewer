@@ -115,6 +115,36 @@ function bay_map_prune_to_dims(int $rows, int $cols, ?string $path = null): arra
     return $dropped;
 }
 
+/* Reduce a PASTED map to what may safely be written, and say how much was
+   dropped. This is a trust boundary: the text came from a person's clipboard,
+   so every key is checked against the shape bay_map_key() produces (without
+   which a crafted key writes arbitrary JSON object keys onto the boot flash)
+   and every position against the grid actually configured.
+
+   Duplicate positions are dropped rather than kept, because the map renders one
+   drive per bay and the loser would be stored but invisible -- present in the
+   file, absent from the screen, and impossible to find. The server already
+   enforces one-drive-per-bay on assign; a paste must not be the way around it.
+
+   Silent truncation would be worse than useless here, so the count of what was
+   dropped is returned and the UI reports it. */
+function bay_map_sanitize(array $in, int $rows, int $cols): array {
+    $map = $seen = [];
+    $skipped = 0;
+    foreach ($in as $key => $pos) {
+        if (!is_string($key) || !bay_map_key_valid($key)
+            || !is_array($pos) || !isset($pos['row'], $pos['col'])
+            || !is_numeric($pos['row']) || !is_numeric($pos['col'])) { $skipped++; continue; }
+        $row = (int) $pos['row'];
+        $col = (int) $pos['col'];
+        if ($row < 0 || $col < 0 || $row >= $rows || $col >= $cols) { $skipped++; continue; }
+        if (isset($seen["$row:$col"])) { $skipped++; continue; }
+        $seen["$row:$col"] = true;
+        $map[$key] = ['row' => $row, 'col' => $col];
+    }
+    return ['map' => $map, 'skipped' => $skipped];
+}
+
 /* The identity key for one drive row, or null when this drive carries neither
    identifier (a controller whose payload predates either field, or a drive
    storcli reported with an empty Connected Port Number). Null means "cannot be
@@ -205,6 +235,24 @@ if ($action === 'clear') {
     bay_map_backup();
     bay_map_write([]);
     echo json_encode(['ok' => true]);
+    exit;
+}
+
+/* Restore from a pasted map. Backed up first like Clear is, so a paste of the
+   wrong text is itself undoable — otherwise restoring a backup would be a new
+   way to lose the map you already had. */
+if ($action === 'import') {
+    $in = json_decode((string) ($_POST['map'] ?? ''), true);
+    if (!is_array($in)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'That is not a saved map.']);
+        exit;
+    }
+    $d = bay_map_dims();
+    $r = bay_map_sanitize($in, $d['rows'], $d['cols']);
+    bay_map_backup();
+    bay_map_write($r['map']);
+    echo json_encode(['ok' => true, 'placed' => count($r['map']), 'skipped' => $r['skipped']]);
     exit;
 }
 

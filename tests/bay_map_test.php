@@ -80,6 +80,39 @@ bay_map_restore($path);
 check('a second clear does not destroy the undo', bay_map_read($path) === $full);
 @unlink("$path.bak");
 
+/* Restore-from-paste. The text comes off somebody's clipboard, so this is a
+   trust boundary and every rejection below is load-bearing. */
+$san = bay_map_sanitize(['c0:p1' => ['row' => 0, 'col' => 0],
+                         'c1:h3' => ['row' => 2, 'col' => 1]], 6, 4);
+check('a good paste is kept whole',
+      $san['map'] === ['c0:p1' => ['row' => 0, 'col' => 0], 'c1:h3' => ['row' => 2, 'col' => 1]]
+      && $san['skipped'] === 0);
+/* Without the key check a crafted paste writes arbitrary object keys onto the
+   boot flash — this is the reason the function exists. */
+$evil = bay_map_sanitize(['../../etc/passwd' => ['row' => 0, 'col' => 0],
+                          'c0:p1' => ['row' => 0, 'col' => 1]], 6, 4);
+check('a bogus key is refused, the good one survives',
+      $evil['map'] === ['c0:p1' => ['row' => 0, 'col' => 1]] && $evil['skipped'] === 1);
+// A bay outside the CURRENT grid would be stored and never rendered.
+$out = bay_map_sanitize(['c0:p1' => ['row' => 99, 'col' => 0],
+                         'c0:p2' => ['row' => 0, 'col' => 99],
+                         'c0:p3' => ['row' => -1, 'col' => 0]], 6, 4);
+check('positions outside the grid are dropped', $out['map'] === [] && $out['skipped'] === 3);
+/* Two drives in one bay: the map renders one per bay, so the loser would be in
+   the file and invisible on screen — stored, unfindable, and pointing whoever
+   reads it at the wrong slot. */
+$dup = bay_map_sanitize(['c0:p1' => ['row' => 1, 'col' => 1],
+                         'c0:p2' => ['row' => 1, 'col' => 1]], 6, 4);
+check('two drives cannot share a bay', count($dup['map']) === 1 && $dup['skipped'] === 1);
+check('malformed entries are counted, not fataled',
+      bay_map_sanitize(['c0:p1' => 'nope', 'c0:p2' => ['row' => 1], 'c0:p3' => ['row' => 'x', 'col' => 'y']],
+                       6, 4) === ['map' => [], 'skipped' => 3]);
+check('an empty paste is an empty map', bay_map_sanitize([], 6, 4) === ['map' => [], 'skipped' => 0]);
+/* Copy -> paste has to survive the trip unchanged, or the backup is not one. */
+$rt = ['c0:p0' => ['row' => 0, 'col' => 0], 'c1:x1Ah2' => ['row' => 3, 'col' => 2]];
+$rtOut = bay_map_sanitize(json_decode(json_encode($rt), true), 6, 4);
+check('a copied map round-trips through JSON intact', $rtOut['map'] === $rt && $rtOut['skipped'] === 0);
+
 /* ── 2. Round-trip ───────────────────────────────────────────────────────── */
 $reset();
 bay_map_set('c0:p14', 2, 1, $path);
