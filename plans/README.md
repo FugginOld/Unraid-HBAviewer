@@ -65,6 +65,47 @@ to run an aggregate grep over a multi-controller payload — a false positive
 sent to a reporter costs more than one caught at home.
 | **050** | **DONE — hardware-verified 2026-08-05** (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05. Archive after release |
 | **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
+| **052** | **DONE — merged to `dev`** (`b413d2e`, from `a367a90`), suite green after the merge | a support bundle from an expander box before the changelog may claim it fixes anything (see below); ships in 2026.08.05 |
+
+**052 executed and review-approved 2026-08-05.** Five commits, eight files, all
+in scope; 049's five collectors and the storcli `p<port>` branch verified
+untouched. Reviewed by re-running every done criterion rather than reading the
+executor's report:
+
+- **Both mutation checks re-run independently, not taken on trust.** Reverting
+  `bay_map.php` alone fails exactly the two new assertions; reverting
+  `get_attached_drives.sh` alone leaves both expander drives emitting
+  `"expander":""` and fails Fixture C. The tests fail against the unfixed code,
+  which is the only thing that makes them evidence.
+- **`phy_drive()` verified by hand** (it has no test — see below): an
+  expander-attached drive returns `null`, a direct-attached one still matches,
+  and a **pre-052 payload with no `expander` key at all still matches**. That
+  last one matters more than it looks: it is the guard against a cached or
+  bundled payload from an older build silently losing every PHY↔drive label.
+- The direct-attach key is `c0:h8`, byte for byte, asserted rather than
+  asserted-about-in-a-comment. No migration, as designed.
+
+**The plan's own awk was wrong and the executor caught it.** Step 3 named the
+variable `exp` — which is awk's builtin exponential function, so the snippet as
+written is a syntax error. Renamed `expdr`, same logic, verified against the
+golden. **A plan snippet is a lead, not a fact**: this is the second time a
+plan-authored excerpt has needed a correction at execution time, and both times
+the executor was right to fix it and say so rather than work around it.
+
+**Two things the review turned up that are not 052's:**
+
+- **`phy_drive()`'s new expander guard has no test.** `tests/ajax_render_test.php`
+  covers `phy_drive_label()` but the file is not in 052's scope, so the executor
+  correctly did not touch it. The behaviour is verified manually and correct;
+  it is simply unpinned, and the next person to touch that loop can undo it
+  silently. One assertion, next time that file is open.
+- **`UPDATE=1 bash tests/run.sh` rewrites four unrelated goldens** —
+  `drives_osmap.txt`, `events_empty.json`, `phy_unsupported.json`,
+  `route_no_backend.json`. They are committed *with* a trailing newline;
+  `check()`'s UPDATE path writes without one (`printf '%s'`), and normal runs
+  never notice because `$(cat …)` strips it. Pre-existing, invisible except
+  when regenerating a golden, and it means every future `UPDATE=1` produces
+  four files of noise somebody has to remember to revert. P3 tidy.
 
 **051 hardware-confirmed on the 9207-8i, both directions (2026-08-05).**
 @jac2424 swapped in the two `dev` scripts and the topology check went from "0
@@ -1019,10 +1060,13 @@ Settings save reset every config key plans 047/048 added — silently unlocking
 a locked bay map and snapping the grid back to 6×4 — and `bay_map_read()`
 guarded only the top level, so one hand-edited entry was a `TypeError` that
 took down the Array Map tab. One was rejected (see the next section). One was
-the missing changelog, closed by `a19de8c`. These three are real and unowned:
+the missing changelog, closed by `a19de8c`. All three below are real; the first
+is now plan 052, the other two are still unowned:
 
 - **A duplicate PHY index collides bay-map keys — the 049 blind spot surfacing
-  inside 047's feature.** `bay_map_key()` returns `c<ctl>:h<phy>`. On hardware
+  inside 047's feature.** **Now [plan 052](052-expander-bay-map-key-collision.md)
+  (written 2026-08-05); the finding is kept below as its provenance.**
+  `bay_map_key()` returns `c<ctl>:h<phy>`. On hardware
   with two or more expanders behind one HBA, `get_attached_drives.sh` reads
   `phy_identifier` off each `end_device`, and expander A phy 8 and expander B
   phy 8 both yield `8` — one key, two drives. Both resolve the same `$map[$key]`
