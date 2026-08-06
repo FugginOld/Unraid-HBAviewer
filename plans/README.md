@@ -68,7 +68,29 @@ to run an aggregate grep over a multi-controller payload — a false positive
 sent to a reporter costs more than one caught at home.
 | **050** | **DONE, archived 2026-08-05** — hardware-verified (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05 |
 | **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
-| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green after the merge | a support bundle from an expander box before the changelog may claim it fixes anything (see below); ships in 2026.08.05 |
+| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green; **direct-attach half hardware-verified** | the expander half only — a bundle from @TheIlluminate92 (#12). Ships in 2026.08.05 with the hedged changelog wording |
+
+**052's no-migration promise is hardware-verified (2026-08-05).** @jac2424 ran
+the two patched scripts on the 9207-8i and posted the payload
+([#14 comment 5199437269](https://github.com/FugginOld/Unraid-HBAviewer/issues/14#issuecomment-5199437269)).
+Checked mechanically rather than by eye — every `,"expander":""` stripped from
+the new payload, then compared to the one he posted an hour earlier:
+**byte-identical**, 8 fields added and nothing else moved. The bay keys it
+produces are `c0:h3 c0:h0 c0:h1 c0:h2 c0:h5 c0:h4 c0:h6 c0:h7` — all distinct,
+none carrying an `x` segment, exactly the pre-052 set. He also confirmed the UI
+renders normally.
+
+**That is the half that can be proven, and it is the half that ships.** The
+promise 052 rests on is "a box without an expander sees no change at all", and
+that is now measured on the only lsiutil-backend hardware in existence for this
+project rather than argued from a fixture. The expander half — that the
+disambiguation *works* when it engages — remains unverified and the changelog
+wording stays hedged until a bundle arrives.
+
+**Worth copying: the ask was designed to be falsifiable.** He was told what the
+output must be before he ran it ("identical, with only `expander` added — if
+anything else moves, that is the result I need to hear about"), so a pass is
+evidence rather than a shrug. Same shape as 051's A/B revert.
 
 **052 executed and review-approved 2026-08-05.** Five commits, eight files, all
 in scope; 049's five collectors and the storcli `p<port>` branch verified
