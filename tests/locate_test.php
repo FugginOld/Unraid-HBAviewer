@@ -49,22 +49,45 @@ $proc = "$dir/proc";
 @mkdir($dir, 0755, true);
 @mkdir($proc, 0755, true);
 
+/* A live locate process: /proc/<pid>/cmdline naming our script, the way the
+   kernel presents it — NUL-separated argv. */
+function fake_proc(string $proc, int $pid, string $cmd = 'locate_drive.sh'): void {
+    @mkdir("$proc/$pid", 0755, true);
+    file_put_contents("$proc/$pid/cmdline", "bash\0/usr/local/…/$cmd\0" . "0:0:1:0\0");
+}
+
 check('pid path derives from the address',
       basename(locate_pid_path('0:0:1:0', $dir)) === 'hbav_locate_0_0_1_0.pid');
 check('no marker means not running', locate_running('0:0:1:0', $dir, $proc) === false);
 check('no marker means no pid',      locate_pid('0:0:1:0', $dir) === null);
 
-// A live locate: marker present AND the process exists.
+// A live locate: marker present AND the process exists AND it is our script.
 file_put_contents(locate_pid_path('0:0:1:0', $dir), "4242\n");
-@mkdir("$proc/4242", 0755, true);
+fake_proc($proc, 4242);
 check('a live marker reads as running', locate_running('0:0:1:0', $dir, $proc) === true);
 check('the pid is read back', locate_pid('0:0:1:0', $dir) === 4242);
 
 /* A STALE marker — the process is gone (killed -9, or the box rebooted with
    this file left behind). It must read as NOT running: otherwise the button
    stays "Blinking" forever and that drive can never be located again. */
-@rmdir("$proc/4242");
+@unlink("$proc/4242/cmdline"); @rmdir("$proc/4242");
 check('a stale marker reads as NOT running', locate_running('0:0:1:0', $dir, $proc) === false);
+
+/* A marker whose PID is alive but is running something else entirely — PID
+   reuse handed that number to an unrelated process. Must read as NOT running,
+   the whole point of this plan. */
+file_put_contents(locate_pid_path('0:0:5:0', $dir), "5150\n");
+fake_proc($proc, 5150, 'something_else.sh');
+check('a reused pid running someone else\'s process reads as NOT running',
+      locate_running('0:0:5:0', $dir, $proc) === false);
+
+/* A marker whose PID is alive but has NO cmdline at all — the pre-054 fixture
+   shape, and also what an unreadable /proc/<pid>/cmdline looks like. Must read
+   as NOT running rather than fatal. */
+@mkdir("$proc/6160", 0755, true);
+file_put_contents(locate_pid_path('0:0:6:0', $dir), "6160\n");
+check('a pid with no cmdline reads as NOT running',
+      locate_running('0:0:6:0', $dir, $proc) === false);
 // Garbage in the file is the same case, not a fatal.
 file_put_contents(locate_pid_path('0:0:2:0', $dir), "not-a-pid\n");
 check('a garbage marker reads as not running', locate_running('0:0:2:0', $dir, $proc) === false);
@@ -72,17 +95,21 @@ file_put_contents(locate_pid_path('0:0:3:0', $dir), "0\n");
 check('pid 0 is not a pid', locate_pid('0:0:3:0', $dir) === null);
 
 /* ── 3. The active list ───────────────────────────────────────────────────── */
-@mkdir("$proc/777", 0755, true);
-@mkdir("$proc/778", 0755, true);
+fake_proc($proc, 777);
+fake_proc($proc, 778);
 file_put_contents(locate_pid_path('1:0:0:0', $dir), "777\n");
 file_put_contents(locate_pid_path('1:0:7:0', $dir), "778\n");
 $active = locate_active($dir, $proc);
 check('active lists exactly the live locates', $active === ['1:0:0:0', '1:0:7:0']);
 check('active excludes the stale ones',
-      !in_array('0:0:1:0', $active, true) && !in_array('0:0:2:0', $active, true));
+      !in_array('0:0:1:0', $active, true) && !in_array('0:0:2:0', $active, true)
+      && !in_array('0:0:5:0', $active, true) && !in_array('0:0:6:0', $active, true));
 // Sweeping stale markers keeps /tmp from filling with dead files over months.
+// A reused pid (wrong script) and a pid with no cmdline are swept exactly like
+// any other stale marker — locate_running() cannot tell them apart from one.
 check('active sweeps the stale markers it finds',
-      !is_file(locate_pid_path('0:0:1:0', $dir)) && !is_file(locate_pid_path('0:0:2:0', $dir)));
+      !is_file(locate_pid_path('0:0:1:0', $dir)) && !is_file(locate_pid_path('0:0:2:0', $dir))
+      && !is_file(locate_pid_path('0:0:5:0', $dir)) && !is_file(locate_pid_path('0:0:6:0', $dir)));
 check('active leaves the live markers alone', is_file(locate_pid_path('1:0:0:0', $dir)));
 // A file whose name is not an address is ignored, never parsed into one.
 file_put_contents("$dir/hbav_locate_not_an_addr.pid", "777\n");
@@ -97,7 +124,9 @@ check('LOCATE_MAX_SECS clamps low',  lsi_clamp('LOCATE_MAX_SECS', 1) === 30);
 check('LOCATE_MAX_SECS clamps high', lsi_clamp('LOCATE_MAX_SECS', 99999) === 1800);
 
 array_map('unlink', glob("$dir/*.pid") ?: []);
-foreach (glob("$proc/*") ?: [] as $d) @rmdir($d);
+// rmdir fails on a non-empty directory — unlink each cmdline first, or the
+// temp tree leaks on every run.
+foreach (glob("$proc/*") ?: [] as $d) { @unlink("$d/cmdline"); @rmdir($d); }
 @rmdir($proc);
 @rmdir($dir);
 
