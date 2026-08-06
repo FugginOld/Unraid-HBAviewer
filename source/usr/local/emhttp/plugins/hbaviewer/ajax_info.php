@@ -519,6 +519,11 @@ function phy_drive(array $drives, array $phy): ?array {
     // lsiutil: drives carry `phy` directly — a straight index match.
     if (isset($drives[0]['phy'])) {
         foreach ($drives as $d) {
+            // A drive behind an expander numbers its PHY in the expander's
+            // namespace; these rows are the controller's own PHYs (plan 049).
+            // Matching the two names the wrong bay, which this function's whole
+            // contract says is worse than naming none.
+            if (($d['expander'] ?? '') !== '') continue;
             if (isset($d['phy']) && (string) $d['phy'] === (string) ($phy['phy'] ?? '')) return $d;
         }
         return null;
