@@ -420,7 +420,18 @@ if ($enableFlash) {
 @media (prefers-reduced-motion: reduce) { .lu-bay-fill.rebuild { animation: none; } }
 /* One left edge for every value, so the eye scans a column instead of hunting
    centred text. Nothing in the cell is centre-aligned. */
-.lu-bay-ref { display: grid; grid-template-columns: 42px 1fr; row-gap: 4px; align-items: baseline; }
+/* Four tracks, so UNRAID and PORT can sit side by side and save a row on every
+   card. The second label track is `auto` rather than another 42px: PORT is a
+   narrower word than UNRAID, and spending the difference on the value keeps
+   "Port 10" off the ellipsis at the 236px minimum cell width.
+   `wide` opts a pair out and gives it the whole row. Forcing the label back to
+   column 1 is what starts the new row — without it the grid would flow MODEL
+   into the third track alongside PORT. It also keeps the layout correct for a
+   drive with no Unraid role, where PORT is alone on the first row. */
+.lu-bay-ref { display: grid; grid-template-columns: 42px 1fr auto 1fr;
+    column-gap: 8px; row-gap: 4px; align-items: baseline; }
+.lu-bay-lbl.wide { grid-column: 1; }
+.lu-bay-val.wide { grid-column: 2 / -1; }
 .lu-bay-lbl { font: 500 8.5px/1.4 system-ui, sans-serif; color: var(--faint); opacity: .65; letter-spacing: .09em; }
 .lu-bay-val { font: 400 10.5px/1.4 var(--mono); color: var(--faint);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1197,10 +1208,14 @@ if ($enableFlash) {
                     ref.className = 'lu-bay-ref';
                     // First, because it is the identifier the person already
                     // knows: what this disk is called everywhere else in Unraid.
+                    /* UNRAID and PORT share a row — both values are short, and
+                       pairing them takes a row off every card in the grid. MODEL
+                       and SERIAL each keep a full row: they are the long ones,
+                       and halving their width only buys an ellipsis. */
                     if (drv.role) luBayRef(ref, 'UNRAID', drv.role);
                     luBayRef(ref, 'PORT',   drv.port);
-                    luBayRef(ref, 'MODEL',  drv.model);
-                    luBayRef(ref, 'SERIAL', drv.serial, true);
+                    luBayRef(ref, 'MODEL',  drv.model,  false, true);
+                    luBayRef(ref, 'SERIAL', drv.serial, true,  true);
                     body.appendChild(ref);
 
                     // Locate lives inside the cell but is not part of
@@ -1423,12 +1438,16 @@ if ($enableFlash) {
 
     // One PORT/MODEL/SERIAL row. An absent value still emits both cells, or the
     // rows below it climb into the wrong label's place.
-    function luBayRef(parent, label, text, dim) {
+    /* wide = this pair takes a row to itself, value spanning to the right edge.
+       Used for MODEL and SERIAL, whose values are long enough that sharing a row
+       would ellipsise them — and a truncated serial is no use at all against the
+       label printed on the drive, which is the one moment it is ever read. */
+    function luBayRef(parent, label, text, dim, wide) {
         var l = document.createElement('span');
-        l.className = 'lu-bay-lbl';
+        l.className = 'lu-bay-lbl' + (wide ? ' wide' : '');
         l.textContent = label;
         var v = document.createElement('span');
-        v.className = 'lu-bay-val' + (dim ? ' dim' : '');
+        v.className = 'lu-bay-val' + (dim ? ' dim' : '') + (wide ? ' wide' : '');
         v.textContent = (text === null || text === undefined || text === '') ? '—' : text;
         v.title = v.textContent;   // the value is ellipsised; the tooltip is the full string
         parent.appendChild(l);
