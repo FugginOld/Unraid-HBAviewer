@@ -18,7 +18,9 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-Active plans (still in `plans/`):
+This year's plans and where they stand. **029** and **049** are the only two
+still in `plans/`; the rest have been archived and keep their rows here, which
+is the whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
@@ -63,9 +65,9 @@ per-controller. The corrected check parses the JSON and counts duplicates
 within each controller separately. Worth remembering before asking any reporter
 to run an aggregate grep over a multi-controller payload — a false positive
 sent to a reporter costs more than one caught at home.
-| **050** | **DONE — hardware-verified 2026-08-05** (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05. Archive after release |
+| **050** | **DONE, archived 2026-08-05** — hardware-verified (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05 |
 | **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
-| **052** | **DONE — merged to `dev`** (`b413d2e`, from `a367a90`), suite green after the merge | a support bundle from an expander box before the changelog may claim it fixes anything (see below); ships in 2026.08.05 |
+| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green after the merge | a support bundle from an expander box before the changelog may claim it fixes anything (see below); ships in 2026.08.05 |
 
 **052 executed and review-approved 2026-08-05.** Five commits, eight files, all
 in scope; 049's five collectors and the storcli `p<port>` branch verified
@@ -348,7 +350,16 @@ history:
   while every test passed. `ARCHITECTURE.md` now carries the rule and
   `tests/ajax_render_test.php` asserts it in both forms.
 
-Archived to `archive/` on merge: **048** (done 2026-08-05, activity-light locate),
+**The trigger is the merge, not the release.** Two rows briefly said "archive
+after release" instead, which is a second trigger nobody tracks and it left 050
+and 052 sitting in `plans/` after they were done. Corrected 2026-08-05: a plan
+is archived when its code lands on `dev`, whatever else it is still waiting on.
+A plan that stays in `plans/` is one with work left in it — 049 (unconfirmed
+half) and 029 (unmerged) are the only two that qualify today.
+
+Archived to `archive/` on merge: **052** and **050** (both 2026-08-05, expander
+bay-map key and the errors/hr window),
+**048** (done 2026-08-05, activity-light locate),
 **047** (done 2026-08-04, with its design bundle),
 **041** (merged 2026-08-04, hardware-passed),
 **042** (merged `514ae74`), **044** (merged `bd77c0a`), **045** (merged `f53e161`), **046** and **043**. **028** is archived too, though its code was deliberately
@@ -1082,7 +1093,7 @@ the missing changelog, closed by `a19de8c`. All three below are real; the first
 is now plan 052, the other two are still unowned:
 
 - **A duplicate PHY index collides bay-map keys — the 049 blind spot surfacing
-  inside 047's feature.** **Now [plan 052](052-expander-bay-map-key-collision.md)
+  inside 047's feature.** **Now [plan 052](archive/052-expander-bay-map-key-collision.md)
   (written 2026-08-05); the finding is kept below as its provenance.**
   `bay_map_key()` returns `c<ctl>:h<phy>`. On hardware
   with two or more expanders behind one HBA, `get_attached_drives.sh` reads
