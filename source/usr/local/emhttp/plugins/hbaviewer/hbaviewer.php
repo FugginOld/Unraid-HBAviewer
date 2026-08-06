@@ -450,6 +450,11 @@ if ($enableFlash) {
 /* Locked: still fully readable, just inert. Dimming the map would punish the
    state you are meant to leave it in. */
 .lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
+/* The tab description and the how-to-place hint read as one sentence continuing
+   across the line, so they share a flex child. It wraps rather than pushing
+   Refresh off the right on a narrow window. */
+.lu-bay-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.lu-bay-hint { font-size: 12px; color: var(--muted); }
 /* Drag and drop. `grab` on anything that can be picked up, and a solid outline
    on whatever is under the pointer — a drop with no target feedback is a guess
    about where the drive is going to land. */
@@ -622,7 +627,12 @@ if ($enableFlash) {
 <?php if ($showDrives): ?>
 <div id="tab-baymap" class="lu-tab-pane">
   <div class="lu-tab-toolbar">
-    <span style="font-size:12px;color:var(--text);">Where each drive physically sits — you place them once, the map remembers</span>
+    <!-- Both spans wrap in one flex child so the toolbar still has exactly two,
+         and space-between keeps Refresh pinned right as the hint text changes. -->
+    <div class="lu-bay-head">
+      <span style="font-size:12px;color:var(--text);">Where each drive physically sits — you place them once, the map remembers</span>
+      <span id="bay-hint" class="lu-bay-hint"></span>
+    </div>
     <button class="lu-refresh-btn" onclick="luBayFetch()">Refresh</button>
   </div>
   <div id="baymap-content"><div class="lu-loading">Loading…</div></div>
@@ -948,8 +958,9 @@ if ($enableFlash) {
                     + ' title="Put the map back as it was before the last Clear or grid resize.">'
                     + '&#8630; Undo</button>'
                   : '')
-          +   (d.locked ? '' : '<span>Drag a drive into a bay, or click one then a bay. '
-                             + 'Drag it back to the tray — or double-click it — to empty the bay.</span>')
+          /* The hint used to sit here. It moved to the tab header: a sentence
+             in the middle of a row of controls shifted every button along it
+             whenever the text changed, and the toolbar is for controls. */
           + '</div>'
           + '<div class="lu-bay-legend">'
           +   luBayLegend('#3fb950', 'Healthy')     + luBayLegend('#d29922', 'High temp')
@@ -968,6 +979,15 @@ if ($enableFlash) {
           + '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Unassigned drives</p>'
           + '<div class="lu-bay-tray" id="bay-tray"></div>'
           + '</div>';
+        /* Set, not rendered: the hint lives in the TAB header, which is outside
+           #baymap-content and so is not luBayRender's to rewrite. Emptied while
+           locked, because none of those gestures do anything then. */
+        var hint = document.getElementById('bay-hint');
+        if (hint) {
+            hint.textContent = d.locked ? ''
+                : 'Drag a drive into a bay, or click one then a bay. '
+                + 'Drag it back to the tray — or double-click it — to empty the bay.';
+        }
         if (!d.locked) {
             // change, not input: `input` fires on every keystroke, so clearing
             // the field to retype it read as "1 row" and the debounced save
