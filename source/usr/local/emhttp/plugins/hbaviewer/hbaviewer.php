@@ -351,7 +351,12 @@ if ($enableFlash) {
 .lu-bay-lg i { width: 9px; height: 9px; border-radius: 2px; }
 .lu-bay-lg i.dashed { background: transparent; border: 1px dashed var(--border-soft); }
 .lu-bay-scroll { overflow-x: auto; }
-.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), 236px); gap: 10px; margin: 0 0 18px; }
+/* minmax, not a flat 236px: the cards grow to fill whatever width the frame
+   has — which changes with the tab strip, since "Firmware/BIOS Update" is a
+   wide label and hiding it narrows the page — while 236px stays a hard floor
+   so a 12-column map still overflows into .lu-bay-scroll instead of squeezing
+   every card to unreadable. 1fr alone would do the second thing. */
+.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), minmax(236px, 1fr)); gap: 10px; margin: 0 0 18px; }
 
 /* The rail is an inset shadow rather than a child element, so it follows the
    radius and the cell needs no extra DOM. --rail is set per state below. */
