@@ -31,6 +31,17 @@ function locate_pid_path(string $addr, ?string $dir = null): string {
     return ($dir ?? LOCATE_PID_DIR) . '/' . LOCATE_PREFIX . str_replace(':', '_', $addr) . '.pid';
 }
 
+const LOCATE_BSG_DIR = '/dev/bsg';
+
+/* Can this address be located at all? locate_drive.sh reads /dev/bsg/<addr>
+   with smartctl and exits 3 when that node is absent -- which is the whole of
+   its pre-loop failure surface, since locate.php has already validated the
+   address shape. Checking here rather than parsing the script's exit code
+   costs one stat and buys an error message that names the actual reason. */
+function locate_reachable(string $addr, ?string $bsgDir = null): bool {
+    return file_exists(($bsgDir ?? LOCATE_BSG_DIR) . '/' . $addr);
+}
+
 function locate_pid(string $addr, ?string $dir = null): ?int {
     $f = locate_pid_path($addr, $dir);
     if (!is_file($f)) return null;
