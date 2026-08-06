@@ -57,11 +57,11 @@ hba_query() {   # raw lsiutil -a 42,0 text, real column shape (fixtures/drives_h
 OUT=$( (SYS_SAS_DEVICE="$SAS" SYS_SCSI_HOST="$ROOT/a/no_such_scsi_host" drv_lsiutil) 2>"$ROOT/a.err" )
 
 eq "regression: sysfs join uses the real phy (3), not the target id (0), sas_address upper-cased with 0x stripped" \
-   '{"bus":0,"target":0,"sas_address":"AA11BB22CC330044","phy":3,"os_name":"/dev/sda"}' \
+   '{"bus":0,"target":0,"sas_address":"AA11BB22CC330044","phy":3,"expander":"","os_name":"/dev/sda"}' \
    "$(printf '%s' "$OUT" | grep -o '{"bus":0,"target":0[^}]*}')"
 
 eq "end_device with no block/ is skipped from the SAS map: sas empty, phy falls back to target" \
-   '{"bus":0,"target":1,"sas_address":"","phy":1,"os_name":"/dev/sdb"}' \
+   '{"bus":0,"target":1,"sas_address":"","phy":1,"expander":"","os_name":"/dev/sdb"}' \
    "$(printf '%s' "$OUT" | grep -o '{"bus":0,"target":1[^}]*}')"
 
 # ── Fixture B: Stage 3, lsiutil -a 42,0 returned nothing -- sysfs-only fallback ──
@@ -74,10 +74,56 @@ hba_query() { :; }   # empty -a 42,0 reply -> Stage 3 fallback kicks in
 OUT2=$( (SYS_SAS_DEVICE="$ROOT/b/no_such_sas_device" SYS_SCSI_HOST="$SCSI" drv_lsiutil) 2>"$ROOT/b.err" )
 
 eq "stage 3 fallback finds the real target id (3) through port-*/end_device-*/, not the trailing-slash-mangled one" \
-   '{"bus":0,"target":3,"sas_address":"","phy":3,"os_name":"/dev/sdc"}' \
+   '{"bus":0,"target":3,"sas_address":"","phy":3,"expander":"","os_name":"/dev/sdc"}' \
    "$(printf '%s' "$OUT2" | grep -o '{"bus":0,"target":3[^}]*}')"
 
 eq "stage 3 fallback emits nothing on stderr" "" "$(cat "$ROOT/b.err")"
+
+# ── Fixture C: two expanders plus a direct-attached drive, all phy_identifier 8 ──
+# The collision plan 052 exists for: an expander numbers its own PHYs from 0,
+# same as the HBA, so "phy 8" alone cannot tell these three drives apart.
+SAS3="$ROOT/c/sas_device"
+mkdir -p "$SAS3/expander-0:1" "$SAS3/expander-0:2"
+printf '0x500304801aaaaa1f' > "$SAS3/expander-0:1/sas_address"
+printf '0x500304801bbbbb2f' > "$SAS3/expander-0:2/sas_address"
+
+# Direct-attached: end_device-H:N (two parts) -- own HBA phy, no expander.
+mkdir -p "$SAS3/end_device-0:0/device/target0:0:0/0:0:0:0/block/sdd"
+printf '0xcc11dd22ee330055' > "$SAS3/end_device-0:0/sas_address"
+printf '8'                  > "$SAS3/end_device-0:0/phy_identifier"
+
+# Behind expander-0:1: end_device-H:N:M (three parts).
+mkdir -p "$SAS3/end_device-0:1:0/device/target0:0:1/0:0:1:0/block/sde"
+printf '0xdd11ee22ff330066' > "$SAS3/end_device-0:1:0/sas_address"
+printf '8'                  > "$SAS3/end_device-0:1:0/phy_identifier"
+
+# Behind expander-0:2: end_device-H:N:M (three parts), same phy_identifier 8.
+mkdir -p "$SAS3/end_device-0:2:0/device/target0:0:2/0:0:2:0/block/sdf"
+printf '0xee11ff2200330077' > "$SAS3/end_device-0:2:0/sas_address"
+printf '8'                  > "$SAS3/end_device-0:2:0/phy_identifier"
+
+hba_query() {
+    printf ' B___T___L  Type       Vendor   Product          Rev      OS Device\n'
+    printf ' 0   0   0  Disk       ATA      FAKE DISK        0000     /dev/sdd\n'
+    printf ' 0   1   0  Disk       ATA      FAKE DISK        0000     /dev/sde\n'
+    printf ' 0   2   0  Disk       ATA      FAKE DISK        0000     /dev/sdf\n'
+}
+
+OUT3=$( (SYS_SAS_DEVICE="$SAS3" SYS_SCSI_HOST="$ROOT/c/no_such_scsi_host" drv_lsiutil) 2>"$ROOT/c.err" )
+
+eq "direct-attached drive: phy 8, no expander" \
+   '{"bus":0,"target":0,"sas_address":"CC11DD22EE330055","phy":8,"expander":"","os_name":"/dev/sdd"}' \
+   "$(printf '%s' "$OUT3" | grep -o '{"bus":0,"target":0[^}]*}')"
+
+eq "expander-0:1 drive: phy 8, keyed to expander 500304801AAAAA1F" \
+   '{"bus":0,"target":1,"sas_address":"DD11EE22FF330066","phy":8,"expander":"500304801AAAAA1F","os_name":"/dev/sde"}' \
+   "$(printf '%s' "$OUT3" | grep -o '{"bus":0,"target":1[^}]*}')"
+
+eq "expander-0:2 drive: phy 8, keyed to expander 500304801BBBBB2F -- distinct from expander 0:1 despite the same phy_identifier" \
+   '{"bus":0,"target":2,"sas_address":"EE11FF2200330077","phy":8,"expander":"500304801BBBBB2F","os_name":"/dev/sdf"}' \
+   "$(printf '%s' "$OUT3" | grep -o '{"bus":0,"target":2[^}]*}')"
+
+eq "fixture C emits nothing on stderr" "" "$(cat "$ROOT/c.err")"
 
 [ $fail -eq 0 ] && echo "drives_sysfs: all pass"
 exit $fail
