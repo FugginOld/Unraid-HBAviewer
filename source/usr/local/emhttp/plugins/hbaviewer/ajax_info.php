@@ -430,8 +430,13 @@ function luPhyBaselineBar(int $ctl, ?int $ts, bool $stale): string {
    recent ring can show the link is clean right now (issue: two tabs disagreed
    with no explanation, plan 050). "since baseline" plus the title tooltip say
    what the number answers; $recent, when the Health tab's own ring is usable
-   for this PHY, says what has happened lately, side by side rather than in
-   place of the average — never hide the historical number, only add to it.
+   for this PHY, says what has happened lately, on its own line beneath the
+   average rather than in place of it — never hide the historical number, only
+   add to it. Stacked, not joined by a separator: the two together ran to about
+   fifty monospace characters in every one of four counter columns, which is
+   what pushed this table wider than its card (the horizontal scroller added in
+   a65abc1 was treating the symptom). Two short lines cost a row of height and
+   give the columns back.
    $recent is health_rates()'s per-PHY row (keyed 'rst', not 'reset' — the two
    subsystems name that counter differently, see phy_top_offenders() and
    health.php's header) or null when the ring cannot support one yet:
@@ -441,14 +446,18 @@ function luPhyCell($v, bool $err, ?array $d, string $k, ?array $recent = null, ?
     $s    = htmlspecialchars((string) $v);
     $cell = $err ? '<span class="lu-err-val">' . $s . '</span>' : $s;
     if ($d === null || !empty($d['reset'])) return $cell;
-    $r    = $d['rate'][$k];
-    $body = '&Delta;' . (int) $d['delta'][$k] . ' &middot; ' . health_rate_str($r) . ' since baseline';
+    $r   = $d['rate'][$k];
+    $out = $cell . '<div class="lu-phy-delta" title="Average rate since the baseline was set — a past burst of errors still shows here, decaying toward zero rather than reflecting the link right now.">'
+         . '&Delta;' . (int) $d['delta'][$k] . ' &middot; ' . health_rate_str($r) . ' since baseline</div>';
     if ($recent !== null && $ringSpanSecs !== null) {
         $rk = $k === 'reset' ? 'rst' : $k;
-        $body .= ' &middot; ' . health_rate_str($recent[$rk]) . ' in the last ' . lsi_age_str($ringSpanSecs);
+        // Its own line and its own tooltip: the two numbers answer different
+        // questions, which is the whole point of plan 050, and a shared title
+        // describing only the average would mislabel this one.
+        $out .= '<div class="lu-phy-delta" title="Rate across the Health tab\'s recent sample ring — what this link has been doing lately, independent of the long-run average above.">'
+              . health_rate_str($recent[$rk]) . ' in the last ' . lsi_age_str($ringSpanSecs) . '</div>';
     }
-    return $cell . '<div class="lu-phy-delta" title="Average rate since the baseline was set — a past burst of errors still shows here, decaying toward zero rather than reflecting the link right now.">'
-         . $body . '</div>';
+    return $out;
 }
 
 /* SERIAL -> /dev/NAME for every SCSI block device, from ONE lsblk call.
