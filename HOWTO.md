@@ -84,17 +84,34 @@ once, and the plugin remembers.
 
 1. Set **Rows** and **Columns** to match the chassis. The grid resizes as you
    type.
-2. Click a drive in the **Unassigned drives** list, then click the bay it lives
-   in. Repeat until the map matches what you see in the rack.
+2. **Drag** a drive from the **Unassigned drives** list into the bay it lives
+   in — or click the drive and then click the bay, whichever you prefer. Repeat
+   until the map matches what you see in the rack.
 3. Press **Lock**. The layout can no longer be changed until you unlock it.
 
-**Moving and removing.** Click a placed drive to pick it up, then click another
-bay to move it. **Double-click** a bay to empty it — a single click never
-removes anything. Dropping a drive on an occupied bay displaces the drive that
-was there back to the unassigned list rather than stacking them.
+The unassigned list is ordered the way Unraid's **Main** page lists disks —
+Parity, Disk 1, Disk 2, and so on, then pools, then any drive Unraid has no slot
+for.
+
+**Moving and removing.** Drag a placed drive to another bay to move it, or drag
+it back to the unassigned list to empty its bay. Click-then-click does the same
+thing, and **double-clicking** a bay empties it; a single click never removes
+anything. Dropping a drive on an occupied bay displaces the drive that was there
+back to the unassigned list rather than stacking them.
+
+Dragging needs a mouse. On a touch screen use click-then-click, which does
+everything dragging does.
+
+**Clear map** empties the whole grid at once, after asking and telling you how
+many drives it is about to unplace.
 
 **Shrinking the grid** asks first, and says how many drives no longer fit. Those
 go back to the unassigned list; they are never silently dropped.
+
+**Undo** appears after a Clear or a grid resize and puts the map back as it was.
+It is one level deep and is consumed when you use it — it exists to catch the
+misclick you notice straight away, not as a history. Anything older comes from
+your flash backup.
 
 **What the colours mean.** A bay stays neutral until it needs attention:
 

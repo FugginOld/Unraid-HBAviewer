@@ -53,6 +53,33 @@ check('clearing empties the map', bay_map_read($path) === []);
 check('a cleared map is still valid on disk',
       is_file($path) && bay_map_read($path) === [] && json_decode((string) file_get_contents($path), true) === []);
 
+/* Undo. The confirm dialog was the only guard Clear had and it was not enough —
+   a misclick got through it and took a real map with it. These pin the parts
+   that make the recovery actually work when someone needs it. */
+$reset();
+@unlink("$path.bak");
+$full = ['c0:p1' => ['row' => 0, 'col' => 0], 'c0:p2' => ['row' => 1, 'col' => 1]];
+bay_map_write($full, $path);
+check('no undo offered before anything destructive', !bay_map_has_backup($path));
+bay_map_backup($path);
+bay_map_write([], $path);          // what the clear action does
+check('undo is offered after a clear', bay_map_has_backup($path));
+check('the map really was cleared', bay_map_read($path) === []);
+check('undo restores every placement', bay_map_restore($path) && bay_map_read($path) === $full);
+/* One-shot: a second undo must not silently re-apply an old map over edits the
+   person has made since. */
+check('undo is consumed by using it', !bay_map_has_backup($path));
+check('a second undo reports nothing to do', bay_map_restore($path) === false);
+check('the restored map survived the second attempt', bay_map_read($path) === $full);
+/* Backing up an ALREADY-cleared map would overwrite the good backup with the
+   state about to be regretted — clear twice and the undo is worthless. */
+bay_map_backup($path);
+bay_map_write([], $path);
+bay_map_backup($path);             // second clear, nothing worth saving
+bay_map_restore($path);
+check('a second clear does not destroy the undo', bay_map_read($path) === $full);
+@unlink("$path.bak");
+
 /* ── 2. Round-trip ───────────────────────────────────────────────────────── */
 $reset();
 bay_map_set('c0:p14', 2, 1, $path);

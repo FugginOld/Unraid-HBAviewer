@@ -439,6 +439,13 @@ if ($enableFlash) {
 /* Locked: still fully readable, just inert. Dimming the map would punish the
    state you are meant to leave it in. */
 .lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
+/* Drag and drop. `grab` on anything that can be picked up, and a solid outline
+   on whatever is under the pointer — a drop with no target feedback is a guess
+   about where the drive is going to land. */
+.lu-bay-cell[draggable="true"], .lu-bay-chip[draggable="true"] { cursor: grab; }
+.lu-bay-cell[draggable="true"]:active, .lu-bay-chip[draggable="true"]:active { cursor: grabbing; }
+.lu-bay-cell.drop { outline: 2px solid #58a6ff; outline-offset: -2px; }
+.lu-bay-tray.drop { outline: 2px dashed #58a6ff; outline-offset: 2px; border-radius: 6px; }
 /* Locate (plan 048). The blinking bay pulses so the screen and the rack agree
    about which drive is being pointed at. Motion is the whole signal here, so
    under prefers-reduced-motion it becomes a steady outline rather than nothing
@@ -836,7 +843,11 @@ if ($enableFlash) {
        The grid is built from the payload with createElement + textContent, not
        innerHTML: model and serial strings come off the drive itself, and a
        drive's own firmware is not a trusted source of markup. */
-    var luBay = { data: null, sel: null, dimTimer: 0 };
+    /* drag = the key being dragged, over = the cell currently under the pointer.
+       Both live here rather than in dataTransfer because dataTransfer is
+       write-only during dragover — the browser will not let a page read what is
+       being dragged until the drop, and the hover highlight needs it sooner. */
+    var luBay = { data: null, sel: null, dimTimer: 0, drag: null, over: null };
 
     window.luBayFetch = function () {
         var el = document.getElementById('baymap-content');
@@ -888,7 +899,16 @@ if ($enableFlash) {
           +   '<button class="lu-refresh-btn" id="bay-clear" onclick="luBayClear()"' + dis
           +     ' title="Send every placed drive back to the unassigned list. Only the map is'
           +     ' cleared — no drive is touched.">Clear map</button>'
-          +   (d.locked ? '' : '<span>Click a drive, then a bay. Double-click a bay to empty it.</span>')
+          /* Only rendered when there is something to undo, so it is never a
+             button that does nothing — and its presence is the signal that the
+             last action was one of the destructive ones. */
+          +   (d.has_backup && !d.locked
+                  ? '<button class="lu-refresh-btn" id="bay-undo" onclick="luBayUndo()"'
+                    + ' title="Put the map back as it was before the last Clear or grid resize.">'
+                    + '&#8630; Undo</button>'
+                  : '')
+          +   (d.locked ? '' : '<span>Drag a drive into a bay, or click one then a bay. '
+                             + 'Drag it back to the tray — or double-click it — to empty the bay.</span>')
           + '</div>'
           + '<div class="lu-bay-legend">'
           +   luBayLegend('#3fb950', 'Healthy')     + luBayLegend('#d29922', 'High temp')
@@ -935,6 +955,10 @@ if ($enableFlash) {
         luBayPost({action: 'clear'}, luBayFetch);
     };
 
+    // No confirm on the way back: undo is the recovery path, and putting a
+    // dialog in front of it would guard the safe direction.
+    window.luBayUndo = function () { luBayPost({action: 'restore'}, luBayFetch); };
+
     window.luBayLock = function () {
         luBayPost({action: 'lock', locked: luBay.data.locked ? '0' : '1'}, function (j) {
             luBay.data.locked = !!j.locked;
@@ -965,6 +989,45 @@ if ($enableFlash) {
             luBay.sel = null;
             luBayPost({action: 'unassign', key: hit.dataset.bayKey}, luBayFetch);
         };
+        /* Drag and drop, delegated to the grid for the same reason dblclick is:
+           luBayPaint() replaces every cell, so a handler bound to a cell is
+           bound to a node that is about to be thrown away. Click-then-click is
+           deliberately kept alongside this — HTML5 drag does nothing at all on
+           a touch screen, and that is the fallback rather than a second
+           codepath, since both ends post the same assign action. */
+        grid.ondragstart = function (e) {
+            // The Locate button lives inside a draggable cell; dragging from it
+            // must not pick the drive up. Same hazard the dblclick guard has.
+            if (luBay.data.locked || e.target.closest('button')) { e.preventDefault(); return; }
+            var cell = e.target.closest('.lu-bay-cell[data-bay-key]');
+            if (!cell) { e.preventDefault(); return; }
+            luBay.drag = cell.dataset.bayKey;
+            e.dataTransfer.effectAllowed = 'move';
+            // Firefox will not start a drag at all unless some data is set.
+            e.dataTransfer.setData('text/plain', luBay.drag);
+        };
+        grid.ondragover = function (e) {
+            if (!luBay.drag || luBay.data.locked) return;
+            var cell = e.target.closest('.lu-bay-cell');
+            if (!cell) return;
+            // preventDefault is what marks this a valid drop target. Without it
+            // the browser refuses the drop and animates the drag back.
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (luBay.over !== cell) { luBayDragClear(); luBay.over = cell; cell.classList.add('drop'); }
+        };
+        grid.ondrop = function (e) {
+            e.preventDefault();
+            var key = luBay.drag, cell = e.target.closest('.lu-bay-cell');
+            luBayDragEnd();
+            if (!key || !cell || luBay.data.locked) return;
+            luBay.sel = null;
+            luBayPost({action: 'assign', key: key,
+                       row: +cell.dataset.row, col: +cell.dataset.col}, luBayFetch);
+        };
+        // Fires however the drag ends, including Escape and a drop on nothing —
+        // without it the highlight sticks to a cell nobody is pointing at.
+        grid.ondragend = luBayDragEnd;
         grid.innerHTML = '';
         grid.style.setProperty('--bay-cols', d.cols);
         var at = {};
@@ -1071,6 +1134,12 @@ if ($enableFlash) {
                     // The key rides on the element; the grid's delegated
                     // dblclick reads it. A handler here could never fire.
                     if (drv) cell.dataset.bayKey = drv.key;
+                    // Every bay is a drop TARGET, so both coordinates have to be
+                    // readable from the element — the delegated handler has no
+                    // closure over r and c the way cell.onclick does.
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    if (drv) cell.draggable = true;
                 }
                 grid.appendChild(cell);
             }
@@ -1090,10 +1159,53 @@ if ($enableFlash) {
                 : [u.role, u.model, u.serial, u.size].filter(Boolean).join(' · ');
             if (u.key !== null && !d.locked) {
                 chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
+                chip.draggable = true;
+                chip.dataset.trayKey = u.key;
             }
             tray.appendChild(chip);
         });
+
+        /* The tray is the drop target for taking a drive back OUT of a bay —
+           the drag equivalent of double-clicking it. Assigned after the chips
+           because tray.innerHTML above replaces its contents, not the element,
+           so these survive as properties on the same node. */
+        tray.ondragstart = function (e) {
+            var chip = e.target.closest('.lu-bay-chip[data-tray-key]');
+            if (luBay.data.locked || !chip) { e.preventDefault(); return; }
+            luBay.drag = chip.dataset.trayKey;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', luBay.drag);
+        };
+        tray.ondragover = function (e) {
+            if (!luBay.drag || luBay.data.locked) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            tray.classList.add('drop');
+        };
+        tray.ondragleave = function () { tray.classList.remove('drop'); };
+        tray.ondrop = function (e) {
+            e.preventDefault();
+            var key = luBay.drag;
+            luBayDragEnd();
+            if (!key || luBay.data.locked) return;
+            // Dragging a tray chip back onto the tray is a no-op, not a POST
+            // that unassigns something already unassigned.
+            if (!luBay.data.placed.some(function (p) { return p.key === key; })) return;
+            luBay.sel = null;
+            luBayPost({action: 'unassign', key: key}, luBayFetch);
+        };
+        tray.ondragend = luBayDragEnd;
     }
+
+    // Drop highlights are cleared from one place, because every way a drag can
+    // end has to clear them — drop, dragend, Escape, and moving to another cell.
+    function luBayDragClear() {
+        if (luBay.over) { luBay.over.classList.remove('drop'); luBay.over = null; }
+        var t = document.getElementById('bay-tray');
+        if (t) t.classList.remove('drop');
+    }
+
+    function luBayDragEnd() { luBay.drag = null; luBayDragClear(); }
 
     /* ── Locate: blink one drive's activity light (plan 048) ──────────────────
        The confirm fires once per page load, not once per press: the two things

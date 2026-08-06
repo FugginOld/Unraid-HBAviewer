@@ -1086,7 +1086,10 @@ if ($type === 'baymap') {
         smart_cache_age(),
         unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles(),
         lsi_scsi_addr_by_dev(), locate_active()
-    ));
+    // Whether an Undo is available. Merged here rather than threaded through
+    // bay_map_assemble(), which is about drives and has no business knowing
+    // about the store's backup file.
+    ) + ['has_backup' => bay_map_has_backup()]);
     exit;
 }
 

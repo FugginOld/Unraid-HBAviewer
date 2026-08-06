@@ -64,6 +64,39 @@ function bay_map_set(string $key, ?int $row, ?int $col, ?string $path = null): v
     bay_map_write($map, $path);
 }
 
+/* One generation of undo for the two actions that can destroy the whole map at
+   once: Clear, and a grid shrink that prunes everything outside the new size.
+
+   A confirm dialog is NOT a backup. It was the only guard Clear had and it was
+   not enough -- the misclick that gets through the dialog is precisely the one
+   that needed the safety net, and this cost a real map on the maintainer's box
+   the day it shipped. Nothing else on the machine has a copy: the map is built
+   by walking to the rack and reading labels, and /boot is FAT with no snapshots
+   to fall back on.
+
+   One generation, not a history. The undo exists to catch the misclick you
+   noticed immediately; anything older is a job for the flash backup. */
+function bay_map_backup(?string $path = null): void {
+    $path ??= BAY_MAP_PATH;
+    // Nothing to protect if there is no map yet, and an empty backup would
+    // overwrite a good one with the state that is about to be regretted.
+    if (is_file($path) && bay_map_read($path) !== []) @copy($path, $path . '.bak');
+}
+
+function bay_map_has_backup(?string $path = null): bool {
+    return is_file(($path ?? BAY_MAP_PATH) . '.bak');
+}
+
+/* Restores and CONSUMES the backup: undo is a one-shot, so a second press
+   cannot silently re-apply a map the person has since edited on purpose. */
+function bay_map_restore(?string $path = null): bool {
+    $path ??= BAY_MAP_PATH;
+    if (!is_file($path . '.bak')) return false;
+    if (!@copy($path . '.bak', $path)) return false;
+    @unlink($path . '.bak');
+    return true;
+}
+
 /* Called whenever the grid shrinks. Drives whose stored position no longer
    fits are returned to the caller AND removed from the store, so they land
    back in the unassigned list instead of sitting at coordinates the grid no
@@ -169,7 +202,18 @@ if (bay_map_locked()) {
    is also why the "are you sure" lives in the client and can only live there.
    The lock above is the server-side guard, and it is the real one. */
 if ($action === 'clear') {
+    bay_map_backup();
     bay_map_write([]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+if ($action === 'restore') {
+    if (!bay_map_restore()) {
+        http_response_code(409);
+        echo json_encode(['ok' => false, 'error' => 'Nothing to undo.']);
+        exit;
+    }
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -180,6 +224,10 @@ if ($action === 'dims') {
     // stranded outside it.
     $rows = lsi_clamp('BAY_ROWS', $_POST['rows'] ?? 0);
     $cols = lsi_clamp('BAY_COLS', $_POST['cols'] ?? 0);
+    // Backed up for the same reason Clear is: shrinking the grid can strand
+    // every drive outside the new size, and that is the other way to lose a
+    // whole map in one action.
+    bay_map_backup();
     bay_map_dims_set($rows, $cols);
     echo json_encode(['ok' => true, 'rows' => $rows, 'cols' => $cols,
                       'dropped' => bay_map_prune_to_dims($rows, $cols)]);
