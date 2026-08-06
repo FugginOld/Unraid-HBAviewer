@@ -53,10 +53,26 @@ drv_lsiutil() {
             sas=$(sed 's/0x//' "${ed}sas_address" 2>/dev/null | tr '[:lower:]' '[:upper:]' | tr -d ' \n')
             phy=$(tr -d ' \n' < "${ed}phy_identifier" 2>/dev/null)
             [ -n "$sas" ] || continue
+            # end_device-H:N   -> attached to the HBA itself; phy_identifier is
+            #                     an HBA PHY index and is unique per controller.
+            # end_device-H:N:M -> attached to expander N; phy_identifier is the
+            #                     EXPANDER's PHY number and collides with both
+            #                     the HBA's own numbering and every other
+            #                     expander's. Same naming rule plan 049 measured
+            #                     for phy-H:N vs phy-H:N:M.
+            # The expander's SAS address, not its index N, is what identifies it:
+            # N is discovery order and can move across a reboot, and the one
+            # store keyed on this is the one that cannot be rebuilt from hardware.
+            name=$(basename "$ed"); name=${name#end_device-}
+            exp=""
+            case "$name" in
+                *:*:*) exp=$(sed 's/0x//' "$SYS_SAS_DEVICE/expander-${name%:*}/sas_address" 2>/dev/null \
+                             | tr '[:lower:]' '[:upper:]' | tr -d ' \n') ;;
+            esac
             blk_dir=$(find "$(readlink -f "${ed}device")" -maxdepth 12 -type d -name 'block' 2>/dev/null | head -1)
             blk=$(ls "$blk_dir" 2>/dev/null | head -1)
             [ -n "$blk" ] || continue
-            printf "/dev/%s %s %s\n" "$blk" "$sas" "${phy:-0}"
+            printf "/dev/%s %s %s %s\n" "$blk" "$sas" "${phy:-0}" "${exp:-.}"
         done
     fi > "$TMPSAS"
 
