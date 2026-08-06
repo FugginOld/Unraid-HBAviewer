@@ -10,7 +10,7 @@ NR==FNR {
     next
 }
 {
-    sasmap[$1]=$2; phymap[$1]=$3
+    sasmap[$1]=$2; phymap[$1]=$3; expmap[$1]=($4 == "." ? "" : $4)
 }
 END {
     for (i=1; i<=n; i++) {
@@ -19,10 +19,11 @@ END {
         sas=(dev in sasmap) ? sasmap[dev] : ""
         # SATA drives have no sas_end_device entry; target == PHY for direct-attached
         phy=(dev in phymap) ? phymap[dev]+0 : tgt
+        expdr=(dev in expmap) ? expmap[dev] : ""
         if (!first) printf ","
         first=0
-        printf "{\"bus\":%d,\"target\":%d,\"sas_address\":\"%s\",\"phy\":%d,\"os_name\":\"%s\"}",
-            bus, tgt, sas, phy, dev
+        printf "{\"bus\":%d,\"target\":%d,\"sas_address\":\"%s\",\"phy\":%d,\"expander\":\"%s\",\"os_name\":\"%s\"}",
+            bus, tgt, sas, phy, expdr, dev
     }
     printf "]}"
 }
