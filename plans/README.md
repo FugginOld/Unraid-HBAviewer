@@ -18,14 +18,44 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. Only **029**, **049** and **053** are
-still in `plans/`; the rest have been archived and keep their rows here, which
-is the whole point of the index.
+This year's plans and where they stand. Only **029** and **049** are still in
+`plans/`; the rest have been archived and keep their rows here, which is the
+whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **053** | **written 2026-08-05, not started** — a locate that cannot start answers `{"ok":true}` | nothing; no hardware needed, and the client already alerts on `ok:false` so the fix is server-side only |
+| **053** | **DONE, archived 2026-08-05** — merged to `dev` (`667ca96`, from `9a14eba`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw |
+
+**053 executed and review-approved 2026-08-05.** Three commits, two files
+(`locate.php`, `tests/locate_test.php`), diff matching the plan verbatim.
+`locate_drive.sh`, `hbaviewer.php` and every line of JavaScript verified
+untouched. Reviewed by re-running the criteria, not by reading the report:
+
+- **Two mutations, one of them not the plan's.** Reverting `locate_reachable()`
+  to `return true` fails exactly the two checks the plan predicted. Separately,
+  changing `file_exists` to `is_file` — the plausible "tidy" that would refuse
+  every locate on real hardware, since a bsg node is a character device — fails
+  exactly the one check written to guard it, and nothing else. That check was
+  the one most at risk of being unfalsifiable; it is not.
+- All four new assertions can fail. That was worth confirming individually:
+  this repo has shipped three checks that could not.
+
+**What could NOT be verified, and why it is not a gap worth closing.**
+`locate.php` returns early under CLI, so the two done criteria about the HTTP
+responses (`ok:false` on an unreachable address, `ok:true` on a good one) are
+confirmed by reading the dispatch, not by executing it. That is the same
+boundary every other check in `tests/locate_test.php` respects, and the same
+one the plan set deliberately: exercising it needs an HTTP harness this repo
+does not have, which would be a larger change than the fix. Stated here rather
+than left implicit, because "suite green" does not cover those two lines.
+
+**One correction to the plan's own maintenance note.** It says a future client
+must keep repainting from `active` on a failure. The *current* client does not
+— `luLocatePost()` alerts and returns without calling `luLocateApply()`, so the
+`active` array now included in both failure replies is unused today. Harmless
+and forward-looking, but the note as written implies the UI repaints on
+failure, and it does not.
 | **049** | **merged to `dev`** (`b45be77`), suite green; collector half confirmed on the reporter's box | the ring half of Step 5 — @TheIlluminate92 only (issue #12); see below |
 
 **Collector half confirmed on the reporter's box (2026-08-05).**
@@ -380,8 +410,8 @@ is archived when its code lands on `dev`, whatever else it is still waiting on.
 A plan that stays in `plans/` is one with work left in it — 049 (unconfirmed
 half) and 029 (unmerged) are the only two that qualify today.
 
-Archived to `archive/` on merge: **052** and **050** (both 2026-08-05, expander
-bay-map key and the errors/hr window),
+Archived to `archive/` on merge: **053**, **052** and **050** (all 2026-08-05 —
+the silent locate failure, the expander bay-map key, the errors/hr window),
 **048** (done 2026-08-05, activity-light locate),
 **047** (done 2026-08-04, with its design bundle),
 **041** (merged 2026-08-04, hardware-passed),
@@ -1135,7 +1165,7 @@ is now plan 052, the other two are still unowned:
   indices. **Wants its own plan — do not widen 049, which is parked on a
   hardware confirmation that widening would compromise.**
 - **A locate that cannot start fails silently.** **Now
-  [plan 053](053-locate-start-failure-is-silent.md) (written 2026-08-05); the
+  [plan 053](archive/053-locate-start-failure-is-silent.md) (written 2026-08-05); the
   finding is kept below as its provenance.** `locate_drive.sh` exits 3 when
   `/dev/bsg/<addr>` is missing; `locate.php` spawns it with output discarded,
   sleeps 250 ms and returns `{"ok":true}` regardless. The client sees `ok`, the
