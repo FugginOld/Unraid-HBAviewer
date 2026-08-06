@@ -491,6 +491,38 @@ $bmRole = bay_map_assemble($bmDrives, null, [], 6, 4, ['PLACED01'=>'/dev/sdp'], 
 $roleBySerial = array_column($bmRole['unassigned'], null, 'serial');
 check('baymap carries the Unraid slot name', $roleBySerial['PLACED01']['role'] === 'Parity');
 check('baymap leaves a non-array drive roleless', $roleBySerial['NOSMART1']['role'] === '');
+/* Tray order is Unraid's Main-page order, not the controller/wire order the
+   assemble loop walks in. The fixture is fed deliberately scrambled, so a pass
+   cannot come from the input having been sorted already. */
+$bmSortDrives = ['controllers' => [['drives' => [
+    ['port'=>'1','serial'=>'D10'],   ['port'=>'2','serial'=>'CACHE'],
+    ['port'=>'3','serial'=>'P1'],    ['port'=>'4','serial'=>'D2'],
+    ['port'=>'5','serial'=>'NONE1'], ['port'=>'6','serial'=>'P2'],
+    ['port'=>'7','serial'=>'NONE2'], ['port'=>'8','serial'=>'D1'],
+]]]];
+$bmSortDevs  = ['D10'=>'/dev/sdb','CACHE'=>'/dev/sdc','P1'=>'/dev/sdp','D2'=>'/dev/sdg',
+                'NONE1'=>'/dev/sdaa','P2'=>'/dev/sdq','NONE2'=>'/dev/sdz','D1'=>'/dev/sdk'];
+$bmSortRoles = ['/dev/sdb'=>'Disk 10','/dev/sdc'=>'Cache','/dev/sdp'=>'Parity',
+                '/dev/sdg'=>'Disk 2','/dev/sdq'=>'Parity 2','/dev/sdk'=>'Disk 1'];
+$bmSorted = bay_map_assemble($bmSortDrives, null, [], 6, 4, $bmSortDevs, false, 45, null, [], $bmSortRoles);
+$bmSortedDevs = array_column($bmSorted['unassigned'], 'dev');
+check('baymap trays in Unraid Main-page order',
+      $bmSortedDevs === ['/dev/sdp','/dev/sdq','/dev/sdk','/dev/sdg','/dev/sdb','/dev/sdc',
+                         '/dev/sdz','/dev/sdaa']);
+/* The two orderings a naive sort gets wrong, pinned separately so a failure
+   says which rule broke: "Disk 10" precedes "Disk 2" as a string, and
+   "/dev/sdaa" precedes "/dev/sdz" under strcmp. Both put a person in front of
+   the wrong drive. */
+check('baymap trays Disk 2 ahead of Disk 10',
+      array_search('/dev/sdg', $bmSortedDevs, true) < array_search('/dev/sdb', $bmSortedDevs, true));
+check('baymap trays roleless drives in natural /dev order',
+      array_slice($bmSortedDevs, -2) === ['/dev/sdz','/dev/sdaa']);
+// Nothing resolved a /dev name for these, so the sort compares '' to '' — it
+// must still return both rather than trip on the null.
+check('baymap trays nameless drives without dropping them',
+      count(bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'1','serial'=>'X'],
+                                                          ['port'=>'2','serial'=>'Y']]]]],
+                             null, [], 6, 4)['unassigned']) === 2);
 check('baymap warn temperature is injectable',
       bay_map_assemble($bmDrives, null, [], 6, 4, [], false, 52)['warn_temp'] === 52);
 /* Rebuild is the ONE thing read from storcli's `state` field. That field is a

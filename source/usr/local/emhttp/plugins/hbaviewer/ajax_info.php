@@ -1037,11 +1037,44 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
             }
         }
     }
+    /* The tray comes out of the loop in controller/wire order, which is the one
+       order nobody reading it is thinking in. Sorted into Unraid's Main-page
+       order instead, so the chip you are hunting for sits where you already
+       expect it. Only the tray is sorted; placed drives sit at coordinates the
+       person chose.
+       The /dev tiebreak compares LENGTH before text, because sd names are
+       bijective base-26 and not decimal: the kernel goes sdz -> sdaa, so any
+       plain string compare puts sdaa ahead of sdz. strnatcmp is no help either
+       — it only groups digit runs, and there are no digits here. A drive with
+       no /dev name at all is '' from the cast and so leads its tier, which is
+       where an undetected device is worth looking at first. */
+    usort($tray, fn(array $a, array $b) => bay_tray_order($a) <=> bay_tray_order($b)
+                                        ?: [strlen((string) $a['dev']), (string) $a['dev']]
+                                       <=> [strlen((string) $b['dev']), (string) $b['dev']]);
     return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked, 'warn_temp' => $warnTemp,
             // Rendered in the legend row: the map's colours and temperatures are
             // only as current as the collection behind them.
             'smart_age' => $smartAge === null ? null : lsi_age_str($smartAge),
             'placed' => $placed, 'unassigned' => $tray];
+}
+
+/* Sort rank for one tray entry, as [tier, number, label] — compared
+   element-wise by <=>, so the tiers separate first and the number only breaks
+   ties inside one.
+   Tiers are Main's own reading order: parity, then the data disks, then pools,
+   then everything Unraid has no slot for. The number is pulled out as an
+   integer rather than compared inside the label, because "Disk 10" sorts
+   before "Disk 2" as a string and that is exactly the list where an off-by-one
+   read gets the wrong drive pulled. Bare "Parity" ranks as 1 so it leads
+   "Parity 2" — unraid_disk_roles() emits the first one without a number.
+   Roleless drives sort last: they have nothing to match against Main, so they
+   are not what anyone is scanning this list for. */
+function bay_tray_order(array $e): array {
+    $role = (string) ($e['role'] ?? '');
+    if ($role === '')                                   return [3, 0, ''];
+    if (preg_match('/^Parity(?: (\d+))?$/', $role, $m)) return [0, isset($m[1]) ? (int) $m[1] : 1, ''];
+    if (preg_match('/^Disk (\d+)$/', $role, $m))        return [1, (int) $m[1], ''];
+    return [2, 0, $role];   // cache and any named pool, alphabetical among themselves
 }
 
 if ($type === 'baymap') {
