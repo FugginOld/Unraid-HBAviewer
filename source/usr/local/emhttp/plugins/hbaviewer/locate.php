@@ -109,7 +109,12 @@ if (!locate_addr_valid($addr)) {
 }
 
 if ($action === 'stop') {
-    $pid = locate_pid($addr);
+    /* Gate on locate_running(), not merely on "a PID was in the file". This is
+       the line that sends a signal as root, so it gets the strongest check we
+       have rather than the weakest. locate_active() below then sweeps the
+       marker, since a PID that is not our loop makes the marker stale by
+       definition. */
+    $pid = locate_running($addr) ? locate_pid($addr) : null;
     // kill by PID only — never by name, never by pattern.
     if ($pid !== null) {
         shell_exec('kill ' . $pid . ' 2>/dev/null');
