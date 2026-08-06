@@ -101,5 +101,21 @@ foreach (glob("$proc/*") ?: [] as $d) @rmdir($d);
 @rmdir($proc);
 @rmdir($dir);
 
+/* ── 5. Reachability: the gate that stops a silent no-op (plan 053) ─────── */
+$bsg = sys_get_temp_dir() . '/hbav_bsg_test_' . getmypid();
+@mkdir($bsg, 0777, true);
+touch($bsg . '/0:0:1:0');
+@mkdir($bsg . '/2:0:0:0');   // stands in for a character device: exists, not a regular file
+check('an address with a bsg node is reachable',   locate_reachable('0:0:1:0', $bsg));
+check('an address without one is not',             !locate_reachable('9:9:9:9', $bsg));
+/* A real bsg node is a character device, so is_file() is false for it. If this
+   check ever fails, locate_reachable has been "tidied" to is_file() and every
+   locate on real hardware will be refused -- the exact inverse of this plan. */
+check('a node that is not a regular file still counts as reachable',
+      !is_file($bsg . '/2:0:0:0') && locate_reachable('2:0:0:0', $bsg));
+check('a missing bsg directory reads as unreachable',
+      !locate_reachable('0:0:1:0', $bsg . '/nope'));
+@unlink($bsg . '/0:0:1:0'); @rmdir($bsg . '/2:0:0:0'); @rmdir($bsg);
+
 echo $fails === 0 ? "locate: all pass\n" : "locate: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
