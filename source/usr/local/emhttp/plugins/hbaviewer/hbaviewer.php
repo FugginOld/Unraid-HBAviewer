@@ -1134,6 +1134,23 @@ if ($enableFlash) {
        table's buttons and the map's bays are two views of the same server-side
        state, so neither is ever guessed at from what was just clicked. */
     function luLocateApply(active) {
+        /* Write the state into luBay.data BEFORE the DOM, because the map is
+           repainted from that data and not from what is on screen. Touching
+           only the DOM was the bug: luBayPaint() clears the grid and rebuilds
+           every cell out of luBay.data, so picking a drive up -- any click on
+           the map at all -- restored whatever the Locate buttons looked like at
+           the last fetch.
+           That is not merely cosmetic, because luLocate() reads start-vs-stop
+           off the button's own class. A button stale-showing "Locate" over a
+           drive that IS blinking sends `start`, which is a deliberate no-op, so
+           the drive keeps going and only the SECOND press stops it. Same shape
+           as the double-click bug: state applied to cells that luBayPaint()
+           then throws away. */
+        if (luBay.data) {
+            (luBay.data.placed || []).concat(luBay.data.unassigned || []).forEach(function (drv) {
+                if (drv.addr) drv.locating = active.indexOf(drv.addr) !== -1;
+            });
+        }
         document.querySelectorAll('[data-locate]').forEach(function (el) {
             var on = active.indexOf(el.getAttribute('data-locate')) !== -1;
             el.classList.toggle('locating', on);
