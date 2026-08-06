@@ -925,6 +925,23 @@ if ($enableFlash) {
         var grid = document.getElementById('bay-grid');
         if (!grid) return;
         grid.parentNode.classList.toggle('lu-bay-locked', !!d.locked);
+        /* Emptying a bay is delegated to the GRID, which survives a repaint.
+           A per-cell ondblclick cannot work here and shipped broken in
+           2026.08.05: single-clicking a filled bay picks the drive up, that
+           calls luBayPaint(), and this function replaces every cell with a
+           fresh element. The browser then sees the two clicks of a double-click
+           land on two DIFFERENT nodes and dispatches dblclick at their nearest
+           common ancestor — this grid — so nothing on the cell ever runs.
+           Assigned as a property, not addEventListener, so repainting cannot
+           stack duplicate handlers. */
+        grid.ondblclick = function (e) {
+            if (luBay.data.locked) return;
+            if (e.target.closest('button')) return;   // the Locate button, not the bay
+            var hit = e.target.closest('.lu-bay-cell[data-bay-key]');
+            if (!hit) return;
+            luBay.sel = null;
+            luBayPost({action: 'unassign', key: hit.dataset.bayKey}, luBayFetch);
+        };
         grid.innerHTML = '';
         grid.style.setProperty('--bay-cols', d.cols);
         var at = {};
@@ -1027,8 +1044,10 @@ if ($enableFlash) {
                 }
 
                 if (!d.locked) {
-                    cell.onclick    = luBayCellClick(r, c, drv);
-                    cell.ondblclick = luBayCellClear(drv);
+                    cell.onclick = luBayCellClick(r, c, drv);
+                    // The key rides on the element; the grid's delegated
+                    // dblclick reads it. A handler here could never fire.
+                    if (drv) cell.dataset.bayKey = drv.key;
                 }
                 grid.appendChild(cell);
             }
@@ -1157,23 +1176,19 @@ if ($enableFlash) {
 
     /* Single click never destroys anything. On a filled bay it picks the drive
        up so you can put it somewhere else; on an empty one it drops whatever is
-       held. Emptying a bay is a double-click (luBayCellClear) — deliberate,
-       because a stray click on a map somebody walked to the rack to build
-       should not undo any of it. */
+       held. Emptying a bay is a double-click, handled by the grid's delegated
+       ondblclick in luBayPaint — deliberate, because a stray click on a map
+       somebody walked to the rack to build should not undo any of it. */
     function luBayCellClick(r, c, drv) {
-        return function () {
+        return function (e) {
+            /* Ignore the second click of a double-click. Without this the
+               selection toggles on and straight back off before the dblclick
+               that empties the bay arrives — harmless in the end state, but it
+               repaints the grid twice and flickers on the way. */
+            if (e && e.detail > 1) return;
             if (drv) { luBay.sel = (luBay.sel === drv.key) ? null : drv.key; luBayPaint(); return; }
             if (!luBay.sel) return;
             luBayPost({action: 'assign', key: luBay.sel, row: r, col: c}, luBayFetch);
-        };
-    }
-
-    // Clears THIS bay and nothing else — the drive goes back to the tray.
-    function luBayCellClear(drv) {
-        return function () {
-            if (!drv) return;
-            luBay.sel = null;
-            luBayPost({action: 'unassign', key: drv.key}, luBayFetch);
         };
     }
 
