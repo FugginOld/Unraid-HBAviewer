@@ -49,13 +49,27 @@ function locate_pid(string $addr, ?string $dir = null): ?int {
     return $pid > 0 ? $pid : null;
 }
 
-/* Running means the marker exists AND that process is still alive. A stale
-   marker — killed with -9, or left behind by a crash — must read as NOT
-   running, or the button never comes back and the drive can never be located
-   again without a reboot. */
+/* Running means the marker exists, that PID is alive, AND it is one of our own
+   locate loops. The last clause is not paranoia about /tmp — on a single-root
+   appliance anyone who can plant a marker is already root, and this repo has
+   correctly rejected that framing before. It is about PID REUSE, which needs
+   no attacker: locate_drive.sh clears its marker from a trap on EXIT, and
+   SIGKILL bypasses traps. A loop killed with -9 leaves its marker holding a
+   PID Linux will hand to something else, and without this check the plugin
+   reports a drive as blinking when it is not and then kills a stranger's
+   process as root when Stop is pressed.
+
+   Matching the SCRIPT name, not the address: the address is also on that
+   command line, but pinning it would mean any future change to how the loop is
+   invoked silently breaks every Stop button. Wrong-drive is not a failure this
+   can produce -- the marker file is already per-address. */
 function locate_running(string $addr, ?string $dir = null, ?string $procDir = null): bool {
     $pid = locate_pid($addr, $dir);
-    return $pid !== null && is_dir(($procDir ?? '/proc') . '/' . $pid);
+    if ($pid === null) return false;
+    $cmdline = @file_get_contents(($procDir ?? '/proc') . '/' . $pid . '/cmdline');
+    // cmdline is NUL-separated argv; a substring test is enough and does not
+    // care whether the loop was invoked as `bash <path>` or by any other route.
+    return $cmdline !== false && str_contains($cmdline, basename(LOCATE_SCRIPT));
 }
 
 /* Every address currently locating. The UI calls this on load so a locate
