@@ -88,7 +88,15 @@ function bay_map_prune_to_dims(int $rows, int $cols, ?string $path = null): arra
    placed" and the caller must leave it out of both lists rather than invent a
    key that would collide with a real one. */
 function bay_map_key(int $ctl, array $drive): ?string {
-    if (isset($drive['phy']) && $drive['phy'] !== '')   return "c$ctl:h" . (int) $drive['phy'];
+    if (isset($drive['phy']) && $drive['phy'] !== '') {
+        // An expander-attached drive's PHY number is the expander's, so it is
+        // unique only within that expander. Direct-attached drives keep the
+        // 047 key shape byte-for-byte -- that is deliberate, and it is why this
+        // needs no migration: on every box without an expander (which is every
+        // box that can have a working map today) not one stored key changes.
+        $exp = (string) ($drive['expander'] ?? '');
+        return "c$ctl:" . ($exp !== '' ? "x$exp" : '') . 'h' . (int) $drive['phy'];
+    }
     if (isset($drive['port']) && $drive['port'] !== '') return "c$ctl:p" . (int) $drive['port'];
     return null;
 }
@@ -97,7 +105,7 @@ function bay_map_key(int $ctl, array $drive): ?string {
    below is a trust boundary: without this, a crafted key writes arbitrary JSON
    object keys into a file on the boot flash. */
 function bay_map_key_valid(string $key): bool {
-    return (bool) preg_match('/^c\d{1,3}:[ph]\d{1,4}$/', $key);
+    return (bool) preg_match('/^c\d{1,3}:(x[0-9A-F]{1,16})?[ph]\d{1,4}$/', $key);
 }
 
 /* Grid dimensions. Read is a plain config read; the write goes through

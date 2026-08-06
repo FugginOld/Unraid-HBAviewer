@@ -86,6 +86,19 @@ check('an empty port is unplaceable', bay_map_key(0, ['port' => '']) === null);
 // A drive carrying both (no backend emits this today) must pick one and stay
 // on it — flipping between them across releases would orphan every assignment.
 check('phy wins when a drive somehow has both', bay_map_key(0, ['phy' => 1, 'port' => '9']) === 'c0:h1');
+/* Plan 052: an expander numbers its own PHYs from 0, same as the HBA, so
+   "phy 8" alone cannot tell two expander-attached drives apart -- let alone
+   an expander-attached drive from a direct-attached one on the same numbers.
+   Three drives, same controller, same phy, three different expanders (one of
+   them "no expander" i.e. direct-attached) must produce three distinct keys. */
+check('direct-attached key is unchanged -- the no-migration promise',
+      bay_map_key(0, ['phy' => 8]) === 'c0:h8');
+$k1 = bay_map_key(0, ['phy' => 8, 'expander' => '']);
+$k2 = bay_map_key(0, ['phy' => 8, 'expander' => '500304801AAAAA1F']);
+$k3 = bay_map_key(0, ['phy' => 8, 'expander' => '500304801BBBBB2F']);
+check('same phy, three different expanders -> three distinct keys',
+      $k1 !== $k2 && $k2 !== $k3 && $k1 !== $k3);
+check('direct-attached (empty expander) still keys as c0:h8', $k1 === 'c0:h8');
 
 /* ── 5. Key validation — this is a trust boundary ────────────────────────── */
 check('valid storcli key accepted', bay_map_key_valid('c0:p14'));
@@ -93,6 +106,10 @@ check('valid lsiutil key accepted', bay_map_key_valid('c12:h3'));
 foreach (['', 'c0:x1', 'c0:p', 'p14', 'c0:p14 ', '../../etc/passwd', 'c0:p14"}', 'c99999:p1'] as $bad) {
     check("rejects '" . $bad . "'", !bay_map_key_valid($bad));
 }
+// Plan 052: the expander-disambiguated shape, and its one canonical spelling.
+check('valid expander-disambiguated key accepted', bay_map_key_valid('c0:x500304801AAAAA1Fh8'));
+check("rejects lower-case hex -- bay_map_read() matches keys byte-for-byte",
+      !bay_map_key_valid('c0:x500304801aaaaa1fh8'));
 
 /* ── 6. Dimensions: writing them must not wipe the rest of the config ─────
    lsi_config_write() writes EVERY schema key and defaults anything absent, so

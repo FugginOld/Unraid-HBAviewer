@@ -397,6 +397,11 @@ dump_attrs 03-sysfs/sas_phy.txt       /sys/class/sas_phy/phy-*
 # different class and does not carry it.
 dump_attrs 03-sysfs/sas_device.txt /sys/class/sas_device/end_device-*
 dump_attrs 03-sysfs/sas_end_device.txt /sys/class/sas_end_device/end_device-*
+# The expander's own address — what plan 052 keys an expander-attached drive's
+# bay assignment on. Its end_device siblings are dumped above; the expander
+# itself was never captured, so no bundle could confirm the address is even
+# readable without asking.
+dump_attrs 03-sysfs/sas_expander.txt /sys/class/sas_device/expander-*
 # PCIe link state for the controllers only — resolved from each SAS host's own
 # device path, so this never walks the whole PCI tree.
 {
@@ -450,7 +455,7 @@ SMART included: $([ "$SMART" = 1 ] && echo yes || echo no)
 
 01-environment  kernel, Unraid + plugin version, tool presence, driver, proc_name
 02-raw          raw storcli / lsiutil / lsblk output, one file per command
-03-sysfs        scsi_host, sas_phy, sas_end_device and controller PCIe state
+03-sysfs        scsi_host, sas_phy, sas_device, sas_expander, sas_end_device and controller PCIe state
 04-parsed       what each composer made of the above, plus hbaviewer.cfg
 05-smart        smartctl -n standby -a per drive (only if requested)
 
