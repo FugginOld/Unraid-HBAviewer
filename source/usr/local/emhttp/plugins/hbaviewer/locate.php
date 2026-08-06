@@ -31,6 +31,17 @@ function locate_pid_path(string $addr, ?string $dir = null): string {
     return ($dir ?? LOCATE_PID_DIR) . '/' . LOCATE_PREFIX . str_replace(':', '_', $addr) . '.pid';
 }
 
+const LOCATE_BSG_DIR = '/dev/bsg';
+
+/* Can this address be located at all? locate_drive.sh reads /dev/bsg/<addr>
+   with smartctl and exits 3 when that node is absent -- which is the whole of
+   its pre-loop failure surface, since locate.php has already validated the
+   address shape. Checking here rather than parsing the script's exit code
+   costs one stat and buys an error message that names the actual reason. */
+function locate_reachable(string $addr, ?string $bsgDir = null): bool {
+    return file_exists(($bsgDir ?? LOCATE_BSG_DIR) . '/' . $addr);
+}
+
 function locate_pid(string $addr, ?string $dir = null): ?int {
     $f = locate_pid_path($addr, $dir);
     if (!is_file($f)) return null;
@@ -104,12 +115,35 @@ if ($action === 'start') {
     // Idempotent: a second press while it is already blinking is a no-op, not a
     // second process reading the same drive twice as often.
     if (!locate_running($addr)) {
+        /* Refuse before spawning when the device cannot be read. The script
+           would exit 3 here, and its stderr goes to /dev/null -- so without
+           this the caller is told the locate started, the button falls back to
+           "Locate", and the person goes looking for a blink that was never
+           started. An error naming the drive is the whole point. */
+        if (!locate_reachable($addr)) {
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'active' => locate_active(),
+                              'error' => 'No /dev/bsg node for ' . $addr
+                                       . ' — this drive cannot be located.']);
+            exit;
+        }
         $max = lsi_clamp('LOCATE_MAX_SECS', lsi_config_read()['LOCATE_MAX_SECS']);
         shell_exec('nohup bash ' . escapeshellarg(LOCATE_SCRIPT) . ' '
                  . escapeshellarg($addr) . ' ' . (int) $max . ' >/dev/null 2>&1 &');
-        // The script writes its own marker; give it a moment so the response
-        // can report the state the caller is about to render.
-        usleep(250000);
+        /* Wait for the marker the same bounded way stop waits for it to go.
+           The script writes it on the line after the bsg check, so this
+           normally returns in a few milliseconds -- the flat 250ms sleep this
+           replaces was paid by every successful locate. */
+        for ($i = 0; $i < 20 && !locate_running($addr); $i++) usleep(50000);   // ≤1s
+        /* Belt and braces: anything else that stops the loop reaching its
+           marker -- the script missing, bash unavailable, the spawn refused --
+           must not be reported as a start either. */
+        if (!locate_running($addr)) {
+            http_response_code(409);
+            echo json_encode(['ok' => false, 'active' => locate_active(),
+                              'error' => 'Locate did not start for ' . $addr . '.']);
+            exit;
+        }
     }
     echo json_encode(['ok' => true, 'active' => locate_active()]);
     exit;
