@@ -8,8 +8,8 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 480fc86..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/locate.php source/usr/local/emhttp/plugins/hbaviewer/scripts/locate_drive.sh source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php tests/locate_test.php`
-> Expected output: **nothing**. Every excerpt below is quoted from `480fc86`
+> `git diff --stat 066a8b1..HEAD -- source/usr/local/emhttp/plugins/hbaviewer/locate.php source/usr/local/emhttp/plugins/hbaviewer/scripts/locate_drive.sh source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php tests/locate_test.php`
+> Expected output: **nothing**. Every excerpt below is quoted from `066a8b1`
 > (`dev` tip, 2026-08-05). Any difference is a STOP condition.
 >
 > **Worktree note**: a fresh worktree may be cut from `main`, not `dev` — a trap
@@ -156,13 +156,13 @@ new helper must be the same shape.
 
 ## Git workflow
 
-Branch from `dev` (`480fc86`), not `main`. Inside a worktree `git switch dev`
+Branch from `dev` (`066a8b1`), not `main`. Inside a worktree `git switch dev`
 fails, because `dev` is checked out in the main tree; create the branch at the
 commit instead, which works either way:
 
 ```bash
-git log --oneline -1                            # expect 480fc86 or a descendant
-git switch -c advisor/053-locate-start-failure 480fc86
+git log --oneline -1                            # expect 066a8b1 or a descendant
+git switch -c advisor/053-locate-start-failure 066a8b1
 ```
 
 One commit per step, message ending in `(plan 053)`.
@@ -300,7 +300,7 @@ a local `php` nor Docker is available, say so rather than skipping quietly.
 
 ## STOP conditions
 
-- The drift check reports any change, or you are not on `480fc86` or a
+- The drift check reports any change, or you are not on `066a8b1` or a
   descendant.
 - **Any edit reaches `scripts/locate_drive.sh`.** Its behaviour is correct and
   `tests/locate_sh_test.sh` pins it.
