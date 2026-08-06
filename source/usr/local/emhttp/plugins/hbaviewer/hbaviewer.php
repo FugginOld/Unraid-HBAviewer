@@ -223,6 +223,17 @@ if ($enableFlash) {
 .lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; }
 .lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
 .lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
+/* One column per controller instead of a stack. Nothing in a flash card is
+   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
+   the frame was dead space with the second card pushed below the fold.
+   auto-fit, not a literal 2: the controller count is whatever the box has — one
+   card still fills the frame, three wrap to a second row. 420px is the floor at
+   which Step 2 stops wrapping badly; under that (narrow window, phone) it
+   collapses to a single column by itself, so this needs no media query.
+   align-items:start because a controller that errored renders a two-line card,
+   and stretching it to match a full one just makes a tall empty box. */
+#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+#flash-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 /* Each controller box is a .lu-card now, so its border, radius, padding, margin
    and background all come from there — .lu-fc keeps only the rules .lu-card has
    no opinion about, and stays as the hook flashCard() selects on. */

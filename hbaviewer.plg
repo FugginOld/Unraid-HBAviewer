@@ -73,6 +73,10 @@ bundle located the expander problem below where it was reported.
   that ended days ago keeps showing in one and not the other. Both now state
   the window they cover, and the PHY tab shows a recent rate beside the
   long-run one. Neither number changed.
+- Firmware/BIOS Update puts the controller cards side by side instead of
+  stacking them. Nothing in a card is as wide as the frame, so on a two-HBA
+  box half the page was empty and the second card sat below the fold. A
+  narrow window still gets a single column.
 
 ###2026.08.04.1###
 Everything reported on issue #11, plus two things found while fixing it.
