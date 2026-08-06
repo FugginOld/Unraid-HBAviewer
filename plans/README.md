@@ -18,14 +18,46 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. Only **029**, **049** and **054** are
-still in `plans/`; the rest have been archived and keep their rows here, which
-is the whole point of the index.
+This year's plans and where they stand. Only **029** and **049** are still in
+`plans/`, and both are parked on someone else — every plan with work left in it
+has been executed. The rest are archived and keep their rows here, which is the
+whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
-| **054** | **written 2026-08-05, not started** — Stop signals a PID from `/tmp` without checking it is ours | nothing; no hardware needed. **Reframed from the review's security finding to PID reuse** — see below, it changes what is worth fixing |
+| **054** | **DONE, archived 2026-08-05** — merged to `dev` (`1242963`, from `bf5e423`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw. **Reframed from the review's security finding to PID reuse** — see below |
+
+**054 executed and review-approved 2026-08-05.** Three commits, two files,
+diff matching the plan verbatim. `LOCATE_PID_DIR` is still `'/tmp'`,
+`locate_drive.sh` untouched, no new PID directory, no JavaScript. The four
+fixtures the plan predicted would break were repaired with real `cmdline` data
+rather than by loosening the guard — which was the STOP condition most likely
+to be tripped, and was not.
+
+**Three mutations at review, two of them beyond the plan:**
+
+- Reverting to the old `is_dir`-only check fails 6 checks. The rejection cases
+  are pinned.
+- **Making the guard always return `false` fails 4 checks, including "a live
+  marker reads as running".** This was the one worth adding: a guard that is
+  too *strict* silently breaks every Stop button on real hardware, and a suite
+  that only tests the rejections would pass while shipping that. The positive
+  path is genuinely pinned, not merely asserted.
+- **Un-gating the kill — reverting Step 2 alone — leaves the suite ALL PASS.**
+  That change has no test. See below; it is a structural limit, not a lapse.
+
+**The line that sends the signal cannot be tested here, and that is now a
+pattern.** Every endpoint file guards its dispatch with
+`if (PHP_SAPI === 'cli') return;`, so the top-level statement region after that
+line is unreachable from the suite by construction — `locate.php` (~75 lines),
+`flash.php` (~110), `bay_map.php` (~70), `export.php` (~46), `bundle.php`
+(~32), `phy_baseline.php` (~19). Function *bodies* below the guard are fine,
+because PHP hoists declarations and the tests call them directly; it is the
+per-request statements that no test reaches. Plan 053's two HTTP replies and
+054's kill gate both landed in that region, verified by reading only. **Two
+plans in one day is enough to call it a gap rather than a coincidence** — see
+the direction note below.
 | **053** | **DONE, archived 2026-08-05** — merged to `dev` (`667ca96`, from `9a14eba`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw |
 
 **054 reframes the review's finding, and says so rather than quietly widening
@@ -436,8 +468,9 @@ is archived when its code lands on `dev`, whatever else it is still waiting on.
 A plan that stays in `plans/` is one with work left in it — 049 (unconfirmed
 half) and 029 (unmerged) are the only two that qualify today.
 
-Archived to `archive/` on merge: **053**, **052** and **050** (all 2026-08-05 —
-the silent locate failure, the expander bay-map key, the errors/hr window),
+Archived to `archive/` on merge: **054**, **053**, **052** and **050** (all
+2026-08-05 — the unidentified-PID kill, the silent locate failure, the expander
+bay-map key, the errors/hr window),
 **048** (done 2026-08-05, activity-light locate),
 **047** (done 2026-08-04, with its design bundle),
 **041** (merged 2026-08-04, hardware-passed),
@@ -1160,7 +1193,7 @@ a count of what was hidden so a backend switch does not look like data loss.
 P3 — cosmetic warnings, no data loss today, and it needs a backend switch to
 trigger at all.
 
-## Open defects from the 2026-08-05 branch review — not yet planned
+## Defects from the 2026-08-05 branch review — ALL CLOSED 2026-08-05
 
 A pre-merge review of the whole `dev` branch (`d7d7fa7..dd9e96c`, plans
 047-051) against `main`. Two findings were fixed on the spot in `8bbc4d3`: a
@@ -1168,8 +1201,16 @@ Settings save reset every config key plans 047/048 added — silently unlocking
 a locked bay map and snapping the grid back to 6×4 — and `bay_map_read()`
 guarded only the top level, so one hand-edited entry was a `TypeError` that
 took down the Array Map tab. One was rejected (see the next section). One was
-the missing changelog, closed by `a19de8c`. All three below are real; the first
-is now plan 052, the other two are still unowned:
+the missing changelog, closed by `a19de8c`.
+
+**All three below became plans and all three are merged to `dev`** — 052
+(expander bay-map key), 053 (silent locate start failure), 054 (Stop signalling
+an unidentified PID). The findings are kept verbatim as the provenance of those
+plans, each annotated with where it went. Nothing here is outstanding. Two of
+the three were reshaped on the way — 053 turned out smaller than filed (the
+client already handled the error) and 054's security framing was set aside for
+the PID-reuse bug underneath it — which is the argument for keeping the original
+wording next to the plan rather than replacing it:
 
 - **A duplicate PHY index collides bay-map keys — the 049 blind spot surfacing
   inside 047's feature.** **Now [plan 052](archive/052-expander-bay-map-key-collision.md)
@@ -1203,7 +1244,7 @@ is now plan 052, the other two are still unowned:
   not this one. Fix: return `ok:false` with a reason when the address does not
   appear in `active` after the start attempt.
 - **`kill` trusts a PID read from world-writable `/tmp`.** **Now
-  [plan 054](054-locate-kill-trusts-a-tmp-pid.md) (written 2026-08-05) — but
+  [plan 054](archive/054-locate-kill-trusts-a-tmp-pid.md) (written 2026-08-05) — but
   reframed, see the note under 054's row above: the security half of this
   finding is weak on a single-root appliance and duplicates a rejection already
   recorded below. What the plan fixes is PID reuse, which needs no attacker.** `LOCATE_PID_DIR` is
@@ -1310,6 +1351,20 @@ decisions rather than defects:
    to one degrading now. Periodic snapshots plus a delta would make the PHY tab
    diagnostic instead of descriptive — the highest-signal failure predictor
    already being collected.
+4. **Make the request dispatches testable.** Every endpoint file ends with
+   `if (PHP_SAPI === 'cli') return;` followed by its per-request statements, so
+   that region is unreachable from the suite by construction: `flash.php` ~110
+   lines, `locate.php` ~75, `bay_map.php` ~70, `export.php` ~46, `bundle.php`
+   ~32, `phy_baseline.php` ~19. Everything above the guard is already pure and
+   well covered — this is the deliberate seam working, and then stopping one
+   line short. **Two plans in a single day (053's `ok:false` replies, 054's
+   kill gate) landed changes there verified by reading only**, and 054's was
+   the line that signals a process as root. The shape of a fix: give each
+   dispatch a `handle_<action>(array $post, …): array` that returns
+   `[$status, $payload]`, leaving the tail as `http_response_code()` +
+   `echo json_encode()`. Same pure-over-injected-paths posture the rest of
+   these files already have, and it turns "verified by reading" into a test.
+   Sized per file, `locate.php` first since it is smallest and freshest.
 
 ## Scope not audited
 
