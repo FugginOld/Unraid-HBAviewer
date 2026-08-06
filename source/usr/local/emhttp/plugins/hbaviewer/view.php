@@ -156,6 +156,17 @@ function lsi_gauge_svg(string $id, float $frac, array $stops): string {
          . '</svg>';
 }
 
+/* How old something is, in the coarsest unit that still says it: "just now",
+   "6 min", "3 h", "2 d". Deliberately one unit and no "ago" — callers put it in
+   their own sentence. This exists so a cached reading always states its own age
+   rather than being presented as if it were live. */
+function lsi_age_str(int $secs): string {
+    if ($secs < 60)    return 'just now';
+    if ($secs < 3600)  return intdiv($secs, 60) . ' min';
+    if ($secs < 86400) return intdiv($secs, 3600) . ' h';
+    return intdiv($secs, 86400) . ' d';
+}
+
 /* Timestamp in the user's configured format. date() already renders in the
    system timezone — only the 12/24-hour choice needs resolving here, so a
    missing preference degrades to the previous 24-hour output rather than

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>
+body{margin:0;background:#0d1013;font-family:system-ui,-apple-system,sans-serif}
+a{color:#58a6ff}a:hover{color:#79c0ff}
+@keyframes rebuild{0%{background-position:0 0}100%{background-position:14px 0}}
+.dv-turn{padding:44px 48px 36px;border-bottom:1px solid rgba(255,255,255,.07)}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 26px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#e6edf3;color:#0d1013;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#e6edf3}
+.dv-opts{display:flex;flex-direction:column;gap:40px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(255,255,255,.1);color:#e6edf3;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:9px;font:400 11.5px/1.4 system-ui,sans-serif;color:#8b949e;max-width:1010px}
+.dv-card{background:#14181d;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:20px;overflow:visible}
+.dv-opt:target .dv-oid{background:#58a6ff;color:#0d1013}
+.dv-next{margin:26px 0 0;font:12px/1.6 system-ui,sans-serif;color:#6e7681}
+</style></helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Three passes on the bay map — hierarchy, health colour, and find-a-drive</span></div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Typography only. Same grid, same fields, one left alignment axis. The device path is the anchor, the slot chip sits beside it, and serial drops into label-value rows so it stops shouting.</div>
+<div class="dv-card">
+  <div style="display:grid;grid-template-columns:repeat(4,236px);gap:10px">
+    <sc-for list="{{ drivesA }}" as="d" hint-placeholder-count="24">
+      <div style="display:flex;background:#1b1f24;border:1px solid rgba(255,255,255,.07);border-radius:6px;overflow:hidden">
+        <div style="{{ d.rail }}"></div>
+        <div style="flex:1;padding:10px 12px 11px;min-width:0">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:9px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#8b949e;background:rgba(255,255,255,.07);padding:3px 5px;border-radius:3px;letter-spacing:.04em">{{ d.slot }}</span>
+            <span style="font:600 14px/1 ui-monospace,Menlo,monospace;color:#e6edf3;letter-spacing:-.01em">{{ d.dev }}</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:11px">
+            <span style="font:600 17px/1 system-ui,sans-serif;color:#e6edf3;letter-spacing:-.02em">{{ d.cap }}</span>
+            <span style="font:400 10px/1 system-ui,sans-serif;color:#6e7681;letter-spacing:.06em">TB</span>
+            <span style="margin-left:auto;font:600 12px/1 ui-monospace,Menlo,monospace;color:#8b949e"><span style="{{ d.tempColor }}">{{ d.temp }}</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:42px 1fr;row-gap:4px;align-items:baseline">
+            <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">PORT</span>
+            <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e">{{ d.port }}</span>
+            <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">MODEL</span>
+            <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.model }}</span>
+            <sc-if value="{{ showSerials }}" hint-placeholder-val="{{ true }}">
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">SERIAL</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#6e7681;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.serial }}</span>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Colour becomes the signal. Bays stay neutral until something is wrong, every state gets its own treatment, empty slots are drawn as real bays, and temperature reads as a bar so a hot row is visible without reading 24 numbers.</div>
+<div class="dv-card">
+  <div style="display:flex;align-items:center;gap:18px;padding:0 2px 16px;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,.07)">
+    <sc-for list="{{ legend }}" as="l" hint-placeholder-count="6">
+      <div style="display:flex;align-items:center;gap:7px">
+        <span style="{{ l.sw }}"></span>
+        <span style="font:500 10.5px/1 system-ui,sans-serif;color:#8b949e;letter-spacing:.02em">{{ l.name }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,236px);gap:10px">
+    <sc-for list="{{ drivesB }}" as="d" hint-placeholder-count="24">
+      <div style="{{ d.shell }}">
+        <sc-if value="{{ d.isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="min-height:140px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#484f58;letter-spacing:.04em">{{ d.slot }}</span>
+            <span style="font:500 10px/1 system-ui,sans-serif;color:#3d444d;letter-spacing:.12em">EMPTY BAY</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ d.isDrive }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:10px 12px 11px">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+              <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#8b949e;background:rgba(255,255,255,.07);padding:3px 5px;border-radius:3px;letter-spacing:.04em">{{ d.slot }}</span>
+              <span style="font:600 14px/1 ui-monospace,Menlo,monospace;color:#e6edf3;letter-spacing:-.01em">{{ d.dev }}</span>
+              <span style="margin-left:auto"><span style="{{ d.chip }}">{{ d.status }}</span></span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px">
+              <span style="font:600 16px/1 system-ui,sans-serif;color:#e6edf3;letter-spacing:-.02em">{{ d.cap }}</span>
+              <span style="font:400 9.5px/1 system-ui,sans-serif;color:#6e7681;letter-spacing:.06em">TB</span>
+              <span style="margin-left:auto;font:600 11.5px/1 ui-monospace,Menlo,monospace;color:#8b949e"><span style="{{ d.tempColor }}">{{ d.temp }}</span></span>
+            </div>
+            <div style="height:3px;border-radius:2px;background:rgba(255,255,255,.07);margin-bottom:11px;overflow:hidden">
+              <div style="{{ d.tempBar }}"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:42px 1fr;row-gap:4px;align-items:baseline">
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">PORT</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e">{{ d.port }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">MODEL</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.model }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">SERIAL</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#6e7681;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ d.serial }}</span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><span style="display:block">Built around the real task: find the slot for a named device. Type a path, serial, model or port and matching bays light up while the rest fall back. Bays stay compact — hover one for the full record and Identify. Try <span style="font:600 10.5px ui-monospace,monospace;color:#e6edf3">sdq</span> or <span style="font:600 10.5px ui-monospace,monospace;color:#e6edf3">MG07</span>.</span></div>
+<div class="dv-card">
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+    <input value="{{ query }}" onInput="{{ onQuery }}" placeholder="Find device, serial, model or port…" style="flex:none;width:320px;box-sizing:border-box;background:#0d1013;border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:9px 12px;font:400 12px/1.2 ui-monospace,Menlo,monospace;color:#e6edf3;outline:none" style-focus="border-color:#58a6ff" />
+    <span style="font:400 11px/1.4 system-ui,sans-serif;color:#6e7681">{{ matchLabel }}</span>
+    <span style="margin-left:auto;font:400 11px/1.4 system-ui,sans-serif;color:#6e7681">{{ selectedLabel }}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(4,236px);gap:10px">
+    <sc-for list="{{ drivesC }}" as="d" hint-placeholder-count="24">
+      <div style="{{ d.dim }}" onMouseEnter="{{ d.onEnter }}" onMouseLeave="{{ onLeave }}" onClick="{{ d.onClick }}">
+        <div style="{{ d.shell }}">
+          <div style="{{ d.rail }}"></div>
+          <div style="flex:1;padding:10px 12px 12px;min-width:0">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:10px">
+              <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;color:#8b949e;background:rgba(255,255,255,.07);padding:3px 5px;border-radius:3px;letter-spacing:.04em">{{ d.slot }}</span>
+              <span style="font:600 14px/1 ui-monospace,Menlo,monospace;color:#e6edf3;letter-spacing:-.01em">{{ d.dev }}</span>
+              <span style="margin-left:auto;font:600 11.5px/1 ui-monospace,Menlo,monospace;color:#8b949e"><span style="{{ d.tempColor }}">{{ d.temp }}</span></span>
+            </div>
+            <div style="display:flex;align-items:baseline;gap:7px">
+              <span style="font:600 15px/1 system-ui,sans-serif;color:#e6edf3;letter-spacing:-.02em">{{ d.cap }}</span>
+              <span style="font:400 9.5px/1 system-ui,sans-serif;color:#6e7681;letter-spacing:.06em">TB</span>
+              <span style="margin-left:auto;font:400 10px/1 ui-monospace,Menlo,monospace;color:#6e7681">{{ d.port }}</span>
+            </div>
+          </div>
+        </div>
+        <sc-if value="{{ d.open }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 6px);left:0;width:262px;z-index:40;background:#0d1013;border:1px solid rgba(255,255,255,.16);border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.6);padding:13px 14px 12px">
+            <div style="display:flex;align-items:center;gap:7px;margin-bottom:11px">
+              <span style="font:600 13px/1 ui-monospace,Menlo,monospace;color:#e6edf3">{{ d.dev }}</span>
+              <span style="{{ d.chip }}">{{ d.status }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:56px 1fr;row-gap:5px;align-items:baseline;margin-bottom:12px">
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">SLOT</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#e6edf3">{{ d.slotLong }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">PORT</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e">{{ d.port }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">TEMP</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e">{{ d.temp }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">MODEL</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e">{{ d.model }}</span>
+              <span style="font:500 8.5px/1.4 system-ui,sans-serif;color:#586069;letter-spacing:.09em">SERIAL</span>
+              <span style="font:400 10.5px/1.4 ui-monospace,Menlo,monospace;color:#8b949e;word-break:break-all">{{ d.serial }}</span>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button style="flex:1;background:rgba(88,166,255,.12);border:1px solid rgba(88,166,255,.35);color:#79c0ff;border-radius:5px;padding:6px 8px;font:600 10px/1 system-ui,sans-serif;letter-spacing:.05em;cursor:pointer" style-hover="background:rgba(88,166,255,.22)">IDENTIFY</button>
+              <button style="flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);color:#8b949e;border-radius:5px;padding:6px 8px;font:600 10px/1 system-ui,sans-serif;letter-spacing:.05em;cursor:pointer" style-hover="background:rgba(255,255,255,.1)">DETAILS</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Try next: "merge the search from <a class="dv-oid" href="#1c">1c</a> into <a class="dv-oid" href="#1b">1b</a>" · "show <a class="dv-oid" href="#1b">1b</a> at 48 bays" · "give me a chassis-shaped view instead of a grid"</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;warnTemp&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:45,&quot;tsType&quot;:&quot;number&quot;,&quot;min&quot;:38,&quot;max&quot;:55,&quot;unit&quot;:&quot;\u00b0C&quot;,&quot;section&quot;:&quot;Thresholds&quot;},&quot;showSerials&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Fields&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#3fb950&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#3fb950&quot;,&quot;#58a6ff&quot;,&quot;#a371f7&quot;,&quot;#8b949e&quot;],&quot;section&quot;:&quot;Theme&quot;}}">
+const RAW = [
+["1-1","/dev/sda",37,0,"10.914","H0H72121CLAR12T0","8DGG8YNH"],
+["1-2","/dev/sdi",44,11,"12.733","OOS14000G","0000BDZP0000C0031QPT"],
+["1-3","/dev/sdd",38,2,"9.095","HUH721010AL4200","7PG7HXRR"],
+["1-4","/dev/sde",36,3,"12.733","MG07SCA14TE","29B0A044FJ7G"],
+["2-1","/dev/sdn",40,6,"10.914","H0H72121CLAR12T0","8DGYD1HH"],
+["2-2","/dev/sdh",44,10,"12.733","OOS14000G","000118BX0000C004GTH5"],
+["2-3","/dev/sdc",51,1,"9.095","HUH721010AL4200","7JJPE1RG"],
+["2-4","/dev/sdf",40,4,"12.733","MG07SCA14TE","3930A007FJ7G"],
+["3-1","/dev/sdb",40,8,"12.733","ST14000NM002G","ZLW1XA7K0000C10774TG"],
+["3-2","/dev/sdo",42,7,"12.733","OOS14000G","00048SNH0000C047HNAD"],
+["3-3","/dev/sdj",43,12,"9.095","HUH721010AL4200","7JGD32TC"],
+["3-4","/dev/sdk",41,14,"12.733","MG07SCA14TE","49B0A01KFJ7G"],
+["4-1","/dev/sdg",42,9,"12.733","WUH721414AL4204","Z2KY6WKT"],
+["4-2","/dev/sdm",39,5,"12.733","OOS14000G","0001EE7N0000C007B28R"],
+["4-3","/dev/sdq",44,13,"9.095","HUH721010AL42C0","2TH3LDND"],
+["4-4","/dev/sdl",44,15,"12.733","ST14000NM002G","ZLW1XPCH0000C1054PYR"],
+["5-1","/dev/sdr",49,0,"12.733","WUH721414AL4204","Z2KWX4AT"],
+["5-2","/dev/sds",45,1,"10.914","H0H72121CLAR12T0","8DGYLTHH"],
+["5-3","/dev/sdu",44,2,"9.095","HUH721010AL42C0","2TH4A97D"],
+["5-4","/dev/sdw",44,7,"9.095","HUH721010AL5200","7PK6JMAC"],
+["6-1","/dev/sdp",42,5,"12.733","WUH721414AL4204","Z2KXA07T"],
+["6-2","/dev/sdt",44,6,"10.914","H0H72121CLAR12T0","8DGG3ESH"],
+["6-3","/dev/sdv",43,3,"9.095","HUH721010AL42C0","2TH1VSXD"],
+["6-4","/dev/sdx",43,4,"9.095","HUH721010AL5200","7PK5BL3C"]
+];
+
+const STATES = {"2-3":"warning","5-1":"warning","3-3":"rebuilding","4-2":"failed","6-4":"empty","2-4":"unassigned"};
+const C = { ok:"#3fb950", warn:"#d29922", fail:"#f85149", rebuild:"#58a6ff", idle:"#6e7681", empty:"#30363d" };
+const STATUS = {
+  healthy:{label:"HEALTHY", color:C.ok},
+  warning:{label:"HIGH TEMP", color:C.warn},
+  failed:{label:"FAILED", color:C.fail},
+  rebuilding:{label:"RESILVER", color:C.rebuild},
+  unassigned:{label:"UNASSIGNED", color:C.idle}
+};
+const CHIP_BASE = { font:"600 8.5px/1 system-ui,sans-serif", padding:"3px 5px", borderRadius:"3px", letterSpacing:".08em", display:"inline-block" };
+
+class Component extends DCLogic {
+  state = { query:"", hovered:null, selected:"4-3" };
+
+  base(row){
+    const [slot,dev,temp,port,cap,model,serial] = row;
+    return {
+      key:slot, slot, dev, port:"Port " + port, portNum:port, cap, model, serial,
+      temp: temp + "\u00b0C", tempNum: temp,
+      slotLong: "Row " + slot.split("-")[0] + " \u00b7 Column " + slot.split("-")[1]
+    };
+  }
+
+  heat(t){
+    const warn = this.props.warnTemp ?? 45;
+    if (t >= warn + 4) return C.fail;
+    if (t >= warn) return C.warn;
+    if (t >= warn - 3) return "#c9a227";
+    return "#8b949e";
+  }
+
+  renderVals(){
+    const q = this.state.query.trim().toLowerCase();
+    const accent = this.props.accent ?? C.ok;
+    const rail = c => ({ width:"3px", flex:"none", background:c });
+
+    const drivesA = RAW.map(r => {
+      const d = this.base(r);
+      const hot = d.tempNum >= (this.props.warnTemp ?? 45);
+      d.rail = rail(hot ? C.warn : accent);
+      d.tempColor = { color: this.heat(d.tempNum) };
+      return d;
+    });
+
+    const drivesB = RAW.map(r => {
+      const d = this.base(r);
+      const st = STATES[d.slot] || "healthy";
+      d.isEmpty = st === "empty";
+      d.isDrive = !d.isEmpty;
+      const meta = STATUS[st] || STATUS.healthy;
+      const barColor = st === "healthy" ? accent : meta.color;
+      d.status = meta.label;
+      const tint = st === "failed" ? "#241618"
+        : st === "warning" ? "#241f13"
+        : st === "rebuilding" ? "#141d2b" : "#1b1f24";
+      d.shell = d.isEmpty
+        ? { borderRadius:"6px", overflow:"hidden", background:"transparent", border:"1px dashed " + C.empty }
+        : { borderRadius:"6px", overflow:"hidden", background:tint,
+            border:"1px solid " + (st === "healthy" ? "rgba(255,255,255,.07)" : meta.color + "66"),
+            boxShadow:"inset 3px 0 0 " + barColor };
+      d.chip = Object.assign({}, CHIP_BASE, { background: barColor + "22", color: barColor });
+      d.tempColor = { color: this.heat(d.tempNum) };
+      const pct = Math.max(6, Math.min(100, ((d.tempNum - 30) / 25) * 100));
+      d.tempBar = { height:"100%", borderRadius:"2px", width: pct + "%", background: this.heat(d.tempNum) };
+      if (st === "rebuilding") {
+        d.tempBar = { height:"100%", borderRadius:"2px", width: pct + "%",
+          backgroundImage:"repeating-linear-gradient(115deg," + C.rebuild + " 0 5px,rgba(88,166,255,.35) 5px 10px)",
+          backgroundSize:"14px 100%", animation:"rebuild .7s linear infinite" };
+      }
+      return d;
+    });
+
+    const drivesC = RAW.map(r => {
+      const d = this.base(r);
+      const st = STATES[d.slot] === "empty" ? "healthy" : (STATES[d.slot] || "healthy");
+      const meta = STATUS[st] || STATUS.healthy;
+      const color = st === "healthy" ? accent : meta.color;
+      d.status = meta.label;
+      d.chip = Object.assign({}, CHIP_BASE, { background: color + "22", color });
+      const hay = (d.dev + " " + d.model + " " + d.serial + " " + d.slot + " port" + d.portNum + " " + d.port).toLowerCase();
+      const hit = q.length > 0 && hay.indexOf(q) !== -1;
+      d.match = hit;
+      d.dim = { position:"relative", opacity: q && !hit ? .22 : 1, transition:"opacity .16s ease" };
+      const sel = this.state.selected === d.slot;
+      d.shell = {
+        display:"flex", borderRadius:"6px", overflow:"hidden", cursor:"pointer",
+        background: hit ? "#1d2530" : "#1b1f24",
+        border: "1px solid " + (hit ? "#58a6ff" : sel ? "rgba(255,255,255,.3)" : "rgba(255,255,255,.07)"),
+        boxShadow: hit ? "0 0 0 2px rgba(88,166,255,.22)" : "none",
+        transition: "background .16s ease, border-color .16s ease"
+      };
+      d.rail = rail(color);
+      d.tempColor = { color: this.heat(d.tempNum) };
+      d.open = this.state.hovered === d.slot;
+      d.onEnter = () => this.setState({ hovered: d.slot });
+      d.onClick = () => this.setState({ selected: d.slot });
+      return d;
+    });
+
+    const matches = drivesC.filter(d => d.match).length;
+    const sw = extra => Object.assign({ width:"9px", height:"9px", borderRadius:"2px", flex:"none", display:"inline-block" }, extra);
+
+    return {
+      drivesA, drivesB, drivesC,
+      showSerials: this.props.showSerials ?? true,
+      query: this.state.query,
+      onQuery: e => this.setState({ query: e.target.value }),
+      onLeave: () => this.setState({ hovered: null }),
+      matchLabel: q ? matches + " of 24 bays match" : "24 bays \u00b7 1 empty",
+      selectedLabel: this.state.selected ? "Selected \u2014 slot " + this.state.selected : "No bay selected",
+      legend: [
+        { name:"Healthy", sw: sw({ background: accent }) },
+        { name:"High temp", sw: sw({ background: C.warn }) },
+        { name:"Failed", sw: sw({ background: C.fail }) },
+        { name:"Resilvering", sw: sw({ background: C.rebuild }) },
+        { name:"Unassigned", sw: sw({ background: C.idle }) },
+        { name:"Empty bay", sw: sw({ background:"transparent", border:"1px dashed #484f58" }) }
+      ]
+    };
+  }
+}
+
+</script>
+</body>
+</html>

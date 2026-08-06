@@ -21,6 +21,22 @@ const LSI_SCHEMA = [
     'SHOW_PERF'       => [1,  0, 1],   // Performance (real-time graphs) tab
     'ENABLE_FLASH'    => [0,  0, 1],   // advanced: unlocks the Firmware/BIOS tab
     'ENABLE_NOTIFY'   => [0,  0, 1],   // opt-in: cron notifies on health status changes
+    // Drive bay map grid (plan 047). Deliberately NOT on the Settings page:
+    // these are edited in the map view itself, where you can see the grid
+    // change. bay_map.php owns the setter; this is only where they persist.
+    'BAY_ROWS'        => [6,  1, 12],
+    'BAY_COLS'        => [4,  1, 12],
+    // Locks the finished map against edits. Persisted, because the accident it
+    // prevents is a stray click on a map somebody spent time building.
+    'BAY_LOCK'        => [0,  0, 1],
+    // How long a drive-locate blink runs before stopping itself, in seconds.
+    // Bounded by default rather than by the user remembering: the technique
+    // keeps the drive awake for as long as it runs (plan 048).
+    'LOCATE_MAX_SECS'  => [300, 30, 1800],
+    // Drive temperature the bay map calls hot, in °C. NOT ALERT_THRESHOLD:
+    // that one is the HBA controller chip's band floor, and a chip at 76°C is
+    // ordinary while a spinning disk at 76°C is an emergency.
+    'BAY_WARN_TEMP'   => [45, 20, 80],
 ];
 
 function lsi_clamp(string $key, $val): int {
@@ -57,4 +73,14 @@ function lsi_config_write(array $raw, ?string $path = null): void {
     }
     @mkdir(dirname($path), 0755, true);
     file_put_contents($path, implode("\n", $lines) . "\n");
+}
+
+/* Change some keys and keep the rest. Every partial write must come through
+   here: lsi_config_write() writes EVERY schema key and defaults anything the
+   array omits, so a caller that names only the keys it cares about silently
+   resets the others. That is not hypothetical — the Settings page named its
+   nine form keys and so wiped the bay map's grid size and lock on every save.
+   A merge open-coded at each call site is a merge the next call site forgets. */
+function lsi_config_update(array $changes, ?string $path = null): void {
+    lsi_config_write($changes + lsi_config_read($path), $path);
 }

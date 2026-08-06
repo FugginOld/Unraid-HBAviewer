@@ -63,6 +63,43 @@ $ringOk = health_ingest([], sample(1000, 500, 0));
 $ringOk = health_ingest($ringOk, sample(1100, 600, 5));
 check('monotonic ingest does not reset', count($ringOk) === 2);
 
+// ── 4b. Duplicate idx (issue #12): an expander PHY collapses onto the same
+//    idx as the controller's own PHY -- NOT as a zero reading, but carrying
+//    its OWN, DIFFERENT counter from a device the controller doesn't own
+//    (measured on the reporter's capture: phy-0:0:10 and phy-0:0:11 both
+//    read invalid_dword_count=4 while the real phy-0:10 reads its own
+//    number). $prevByIdx keeps whichever entry enumerates last, so the real
+//    PHY's own reading gets compared against the expander's -- and when the
+//    expander's number is the higher one, that reads as a decrease and
+//    wipes the ring on every single sample. Both samples below are
+//    identical (a quiet real PHY, idx 0 inv=0, behind a chattier expander
+//    PHY that also collapses to idx 0, inv=4) -- nothing actually changed,
+//    but without the guard the unpairable idx 0 still looks like a reset. ──
+$dupPhys = function (): array {
+    return [
+        ['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit'], // controller's own PHY -- quiet
+        ['idx' => 0, 'inv' => 4, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => ''],           // expander PHY collapsed onto the same idx -- its own counter, unrelated to the real PHY's
+    ];
+};
+$ringDup = health_ingest([], sample(1000, 500, 0, 0, 0, 0, ['phys' => $dupPhys()]));
+$ringDup = health_ingest($ringDup, sample(1100, 600, 0, 0, 0, 0, ['phys' => $dupPhys()]));
+check('duplicate idx does not wipe the ring', count($ringDup) === 2);
+
+// a genuine decrease on a UNIQUE index still resets even when some other,
+// unrelated index in the same samples happens to be duplicated
+$mixedPhys = function (int $uniqueInv): array {
+    return array_merge(
+        [['idx' => 1, 'inv' => $uniqueInv, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']],
+        [
+            ['idx' => 0, 'inv' => 5, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit'],
+            ['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => ''],
+        ]
+    );
+};
+$ringMixed = health_ingest([], sample(1000, 500, 0, 0, 0, 0, ['phys' => $mixedPhys(100)]));
+$ringMixed = health_ingest($ringMixed, sample(1100, 600, 0, 0, 0, 0, ['phys' => $mixedPhys(10) /* idx 1 dropped: real reset */]));
+check('unique-index decrease still resets despite an unrelated duplicate', count($ringMixed) === 1);
+
 // ── 5. Ring cap: 300 ingested samples leave exactly HEALTH_RING_CAP ────────
 $ringCap = [];
 for ($i = 0; $i < 300; $i++) $ringCap = health_ingest($ringCap, sample(1000 + $i, 500 + $i, $i));
@@ -226,6 +263,46 @@ check('link_integrity floor rate state is warning', $indFloor['link_integrity'][
 check('link_integrity floor rate value is <0.1/hr', $indFloor['link_integrity']['value'] === '<0.1/hr');
 check('link_integrity floor rate reason has <0.1/hr', str_contains($indFloor['link_integrity']['reason'], '<0.1/hr'));
 check('link_integrity floor rate reason has no (0.0/hr)', !str_contains($indFloor['link_integrity']['reason'], '(0.0/hr)'));
+
+// ── health_ring_span_secs: the one span calculation Step 1 and Step 4 share ──
+check('health_ring_span_secs fn exists', function_exists('health_ring_span_secs'));
+check('health_ring_span_secs null on a single sample', health_ring_span_secs([sample(1000, 100, 0)]) === null);
+check('health_ring_span_secs null under a 60s span',
+    health_ring_span_secs([sample(1000, 100, 0), sample(1030, 130, 5)]) === null);
+check('health_ring_span_secs returns the real span',
+    health_ring_span_secs([sample(1000, 100, 0), sample(1000 + 3600, 100 + 3600, 5)]) === 3600);
+
+// ── Step 1 (plan 050): the Health row states the window it measured over,
+// not a bare rate — "0/hr" and "1.9/hr" mean nothing without it. Both the
+// clean default and the dirty (worst-PHY) reason must carry it. ────────────
+$ringHourLong = [sample(9000, 900, 0), sample(9000 + 3600, 900 + 3600, 0)];   // 1h apart, >= the Step 4 floor
+$ratesClean1h = [['idx' => 0, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0]];
+$indClean1h   = health_indicators($ringHourLong, $ratesClean1h, 9000 + 3600);
+check('clean reason states the measured window', str_contains($indClean1h['link_integrity']['reason'], '1 h'));
+check('clean reason still reads as an all-clear', str_contains($indClean1h['link_integrity']['reason'], 'No new cabling errors'));
+
+$ratesDirty1h = [['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.4, 'rst' => 0.0]];
+$indDirty1h   = health_indicators($ringHourLong, $ratesDirty1h, 9000 + 3600);
+check('dirty reason states the measured window', str_contains($indDirty1h['link_integrity']['reason'], '1 h'));
+check('dirty reason still names the offending PHY', str_contains($indDirty1h['link_integrity']['reason'], 'PHY 5'));
+
+// ── Step 4 (plan 050): a "0/hr" all-clear from a window too short to have
+// caught a slow fault is not evidence — it must read `unknown`, not `ok`.
+// Growth is exempt from the floor at ANY window length (the load-bearing
+// rule of this step): a real rate must never be delayed or downgraded. ────
+$ringShort4m = [sample(9000, 900, 0), sample(9000 + 240, 900 + 240, 0)];   // 4 min apart, < HEALTH_MIN_CLEAR_SECS
+
+$indShortClean = health_indicators($ringShort4m, $ratesClean1h, 9000 + 240);
+check('short window + clean -> unknown, not ok', $indShortClean['link_integrity']['state'] === 'unknown');
+check('short window + clean reason names the window', str_contains($indShortClean['link_integrity']['reason'], '4 min'));
+check('short window + clean reason explains why', str_contains($indShortClean['link_integrity']['reason'], 'too short to rule out a slow fault'));
+
+$indLongClean = health_indicators($ringHourLong, $ratesClean1h, 9000 + 3600);
+check('long window + clean -> ok', $indLongClean['link_integrity']['state'] === 'ok');
+
+$ratesDirtyShort = [['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.4, 'rst' => 0.0]];
+$indShortDirty = health_indicators($ringShort4m, $ratesDirtyShort, 9000 + 240);
+check('short window + growth still warns immediately', $indShortDirty['link_integrity']['state'] === 'warning');
 
 // ── health_rank: single source of truth, unknown unranked ──────────────────
 check('rank ok < watch < warning < critical',

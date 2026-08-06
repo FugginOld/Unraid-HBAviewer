@@ -56,7 +56,11 @@ if ($storcli !== '') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // Map the form (checkbox-absent = off); config_write clamps to schema.
-    lsi_config_write([
+    // config_update, not config_write: this page has no field for BAY_ROWS,
+    // BAY_COLS, BAY_LOCK, BAY_WARN_TEMP or LOCATE_MAX_SECS, and a plain write
+    // would reset all five to defaults — unlocking a locked map and snapping
+    // the grid back to 6x4 — every time somebody toggled a tab here.
+    lsi_config_update([
         'HBA_PORT'        => $_POST['port']      ?? 1,
         'ALERT_THRESHOLD' => $_POST['threshold'] ?? 80,
         'SHOW_PCIE'       => isset($_POST['show_pcie'])   ? 1 : 0,

@@ -177,6 +177,7 @@ if ($enableFlash) {
 .lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
 
 /* ── Tables ──────────────────────────────────────────────────────────────── */
+.lu-tscroll { overflow-x: auto; }
 .lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-table th {
     text-align: left; padding: 8px 12px; color: var(--faint);
@@ -222,6 +223,17 @@ if ($enableFlash) {
 .lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; }
 .lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
 .lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
+/* One column per controller instead of a stack. Nothing in a flash card is
+   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
+   the frame was dead space with the second card pushed below the fold.
+   auto-fit, not a literal 2: the controller count is whatever the box has — one
+   card still fills the frame, three wrap to a second row. 420px is the floor at
+   which Step 2 stops wrapping badly; under that (narrow window, phone) it
+   collapses to a single column by itself, so this needs no media query.
+   align-items:start because a controller that errored renders a two-line card,
+   and stretching it to match a full one just makes a tall empty box. */
+#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+#flash-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 /* Each controller box is a .lu-card now, so its border, radius, padding, margin
    and background all come from there — .lu-fc keeps only the rules .lu-card has
    no opinion about, and stays as the hook flashCard() selects on. */
@@ -328,6 +340,128 @@ if ($enableFlash) {
    theme variable, so a colour swap here would be a no-op. */
 .lu-ind-hint { flex: 0 0 100%; text-align: right; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
 
+/* ── Drive bay map (plan 047, redesigned to the 1b handoff) ───────────────
+   Colour is the signal, not decoration: a bay stays neutral until something
+   needs attention, so the two that do are the only two your eye lands on.
+   THEME NOTE. The handoff's status colours are used verbatim — they are signal
+   and must mean the same thing everywhere. Its surface and text hexes are NOT:
+   they are a dark-theme palette, and this plugin renders inside Unraid's white
+   and azure themes too, where a hardcoded #14181d panel would be an unreadable
+   hole. Surfaces, text and borders therefore keep the plugin's existing theme
+   variables, and the state tints are mixed over whatever surface the theme
+   gives us. The handoff explicitly asks for this ("prefer the existing token
+   over the raw hex — the intent matters more than the literal value").
+
+   Fixed 236px columns, per the handoff: the grid reads as a chassis, and the
+   panel scrolls sideways rather than squeezing cells. This deliberately
+   replaces the earlier expand-to-fill behaviour. */
+.lu-bay-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    padding: 0 2px 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft); }
+.lu-bay-lg { display: flex; align-items: center; gap: 7px;
+    font: 500 10.5px/1 system-ui, sans-serif; color: var(--faint); letter-spacing: .02em; }
+.lu-bay-lg i { width: 9px; height: 9px; border-radius: 2px; }
+.lu-bay-lg i.dashed { background: transparent; border: 1px dashed var(--border-soft); }
+.lu-bay-scroll { overflow-x: auto; }
+/* minmax, not a flat 236px: the cards grow to fill whatever width the frame
+   has — which changes with the tab strip, since "Firmware/BIOS Update" is a
+   wide label and hiding it narrows the page — while 236px stays a hard floor
+   so a 12-column map still overflows into .lu-bay-scroll instead of squeezing
+   every card to unreadable. 1fr alone would do the second thing. */
+.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), minmax(236px, 1fr)); gap: 10px; margin: 0 0 18px; }
+
+/* The rail is an inset shadow rather than a child element, so it follows the
+   radius and the cell needs no extra DOM. --rail is set per state below. */
+.lu-bay-cell {
+    border-radius: 6px; overflow: hidden; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--border-soft);
+    box-shadow: inset 3px 0 0 var(--rail, transparent);
+    transition: background .16s ease, border-color .16s ease;
+}
+.lu-bay-cell.st-ok      { --rail: #3fb950; }
+.lu-bay-cell.st-warn    { --rail: #d29922; border-color: #d2992266; background: color-mix(in srgb, #d29922 9%,  var(--surface-2)); }
+.lu-bay-cell.st-fail    { --rail: #f85149; border-color: #f8514966; background: color-mix(in srgb, #f85149 11%, var(--surface-2)); }
+.lu-bay-cell.st-rebuild { --rail: #58a6ff; border-color: #58a6ff66; background: color-mix(in srgb, #58a6ff 11%, var(--surface-2)); }
+.lu-bay-cell.st-nodata  { --rail: #6e7681; border-color: #6e768166; }
+/* Selection is deliberately NOT a status colour — it would be ambiguous with
+   health. Mixed from the theme's own ink so it shows on light themes too,
+   where the handoff's flat white-at-30% would vanish. */
+.lu-bay-cell.sel    { border-color: color-mix(in srgb, var(--text) 35%, transparent); }
+.lu-bay-cell.target { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.lu-bay-cell.empty  { background: transparent; border: 1px dashed var(--border-soft); box-shadow: none;
+    min-height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; }
+.lu-bay-eid   { font: 600 9.5px/1 var(--mono); color: var(--faint); opacity: .55; letter-spacing: .04em; }
+.lu-bay-eword { font: 500 10px/1 system-ui, sans-serif; color: var(--faint); opacity: .4; letter-spacing: .12em; }
+
+.lu-bay-body { padding: 10px 12px 11px; }
+.lu-bay-id   { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+.lu-bay-slot { font: 600 9.5px/1 var(--mono); color: var(--faint); letter-spacing: .04em;
+    background: color-mix(in srgb, var(--text) 7%, transparent); padding: 3px 5px; border-radius: 3px; }
+/* The anchor of the card: the largest mono element, because finding the bay for
+   a named device is what this screen is for. */
+.lu-bay-dev  { font: 600 14px/1 var(--mono); color: var(--text); letter-spacing: -.01em; }
+.lu-bay-stat { margin-left: auto; font: 600 8.5px/1 system-ui, sans-serif;
+    padding: 3px 5px; border-radius: 3px; letter-spacing: .08em; white-space: nowrap; }
+.lu-bay-cap  { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.lu-bay-capv { font: 600 16px/1 system-ui, sans-serif; color: var(--text); letter-spacing: -.02em; }
+.lu-bay-capu { font: 400 9.5px/1 system-ui, sans-serif; color: var(--faint); opacity: .8; letter-spacing: .06em; }
+/* Normal temperatures are grey, not green: a green number reads as a signal and
+   there is nothing to signal. Only the rail and the chip carry "healthy". */
+.lu-bay-temp { margin-left: auto; font: 600 11.5px/1 var(--mono); color: var(--faint); }
+.lu-bay-track { height: 3px; border-radius: 2px; overflow: hidden; margin-bottom: 11px;
+    background: color-mix(in srgb, var(--text) 7%, transparent); }
+.lu-bay-fill  { height: 100%; border-radius: 2px; }
+.lu-bay-fill.rebuild {
+    background-image: repeating-linear-gradient(115deg, #58a6ff 0 5px, rgba(88,166,255,.35) 5px 10px);
+    background-size: 14px 100%; animation: lu-rebuild .7s linear infinite;
+}
+@keyframes lu-rebuild { from { background-position: 0 0 } to { background-position: 14px 0 } }
+/* The stripe stays, the movement goes — the pattern is what distinguishes a
+   rebuild from a flat bar, so it must survive the preference. */
+@media (prefers-reduced-motion: reduce) { .lu-bay-fill.rebuild { animation: none; } }
+/* One left edge for every value, so the eye scans a column instead of hunting
+   centred text. Nothing in the cell is centre-aligned. */
+.lu-bay-ref { display: grid; grid-template-columns: 42px 1fr; row-gap: 4px; align-items: baseline; }
+.lu-bay-lbl { font: 500 8.5px/1.4 system-ui, sans-serif; color: var(--faint); opacity: .65; letter-spacing: .09em; }
+.lu-bay-val { font: 400 10.5px/1.4 var(--mono); color: var(--faint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lu-bay-val.dim { opacity: .8; }
+
+.lu-bay-tray { display: flex; flex-wrap: wrap; gap: 6px; }
+.lu-bay-chip {
+    border: 1px solid var(--border-soft); border-radius: 6px; padding: 5px 9px;
+    font-size: 11px; font-family: var(--mono); cursor: pointer; background: var(--surface-2);
+}
+.lu-bay-chip.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lu-bay-chip.dead { cursor: not-allowed; opacity: .45; }
+.lu-bay-dims { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 0 0 14px; color: var(--faint); }
+.lu-bay-dims input { width: 58px; padding: 4px 6px; background: var(--surface); color: var(--text);
+    border: 1px solid var(--border-soft); border-radius: 6px; font-family: var(--mono); }
+/* Locked: still fully readable, just inert. Dimming the map would punish the
+   state you are meant to leave it in. */
+.lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
+/* Locate (plan 048). The blinking bay pulses so the screen and the rack agree
+   about which drive is being pointed at. Motion is the whole signal here, so
+   under prefers-reduced-motion it becomes a steady outline rather than nothing
+   — the same trade the rebuild stripe makes. */
+.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
+/* The button blinks while the drive does, so the screen and the rack are
+   telling you the same thing. Motion is the signal, so reduced-motion keeps a
+   steady highlight rather than dropping to nothing. */
+.lu-refresh-btn.locating { border-color: #58a6ff; color: #58a6ff; animation: lu-locate-blink 1s steps(1, end) infinite; }
+@keyframes lu-locate-blink {
+    0%, 49%   { background: color-mix(in srgb, #58a6ff 22%, transparent); }
+    50%, 100% { background: transparent; }
+}
+.lu-bay-cell.locating { animation: lu-locate-pulse 1s ease-in-out infinite; }
+@keyframes lu-locate-pulse {
+    0%, 100% { box-shadow: inset 3px 0 0 var(--rail, transparent); }
+    50%      { box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lu-bay-cell.locating { animation: none; box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
+    .lu-refresh-btn.locating { animation: none; background: color-mix(in srgb, #58a6ff 22%, transparent); }
+}
+
 /* ── Performance tab ─────────────────────────────────────────────────────── */
 /* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
    .lu-perf-ctl survives only as the hook for the heading below. */
@@ -420,6 +554,9 @@ if ($enableFlash) {
   <button class="lu-tab-btn" data-tab="health" onclick="luTab('health')">HBA Health</button>
   <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
+  <?php /* Same payload as Drives, arranged as the chassis — so it follows the
+           same toggle rather than adding a second setting for one data source. */ ?>
+  <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="baymap" onclick="luTab('baymap')">Array Map</button><?php endif; ?>
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
@@ -460,6 +597,17 @@ if ($enableFlash) {
     <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
   </div>
   <div id="drives-content"><div class="lu-loading">Loading…</div></div>
+</div>
+<?php endif; ?>
+
+<!-- ── Array Map tab (plan 047): the same drives, arranged as the chassis ─── -->
+<?php if ($showDrives): ?>
+<div id="tab-baymap" class="lu-tab-pane">
+  <div class="lu-tab-toolbar">
+    <span style="font-size:12px;color:var(--text);">Where each drive physically sits — you place them once, the map remembers</span>
+    <button class="lu-refresh-btn" onclick="luBayFetch()">Refresh</button>
+  </div>
+  <div id="baymap-content"><div class="lu-loading">Loading…</div></div>
 </div>
 <?php endif; ?>
 
@@ -546,6 +694,9 @@ if ($enableFlash) {
             if (!loaded['flash']) luFlashInit();
         } else if (name === 'perf') {
             luMetricsStart();
+        } else if (name === 'baymap') {
+            // JSON, not an HTML fragment, so it never goes through luReloadTab.
+            if (!luBay.data) luBayFetch();
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
@@ -561,6 +712,9 @@ if ($enableFlash) {
             .then(function (html) {
                 el.innerHTML = html;
                 loaded[name] = true;
+                // The fragment carries the state at render time; this catches a
+                // locate that started or expired since (plan 048).
+                if (name === 'drives' && window.luLocateSync) luLocateSync();
             })
             .catch(function () {
                 el.innerHTML = '<div class="lu-error">Request failed.</div>';
@@ -675,6 +829,388 @@ if ($enableFlash) {
     // global; fall back to the token we read from var.ini at render time.
     var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    /* ── Drives tab: the bay map (plan 047) ───────────────────────────────────
+       Lives here, below flashCsrf, because every write goes through the same
+       Unraid CSRF token the flash and baseline POSTs use.
+       The grid is built from the payload with createElement + textContent, not
+       innerHTML: model and serial strings come off the drive itself, and a
+       drive's own firmware is not a trusted source of markup. */
+    var luBay = { data: null, sel: null, dimTimer: 0 };
+
+    window.luBayFetch = function () {
+        var el = document.getElementById('baymap-content');
+        el.innerHTML = '<div class="lu-loading">Loading…</div>';
+        fetch('/plugins/hbaviewer/ajax_info.php?type=baymap')
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.error) { el.innerHTML = '<div class="lu-error"></div>'; el.firstChild.textContent = d.error; return; }
+                luBay.data = d; luBay.sel = null; luBayRender();
+                if (window.luLocateSync) luLocateSync();
+            })
+            .catch(function () { el.innerHTML = '<div class="lu-error">Request failed.</div>'; });
+    };
+
+    function luBayPost(body, done) {
+        body.csrf_token = flashCsrf;
+        fetch('/plugins/hbaviewer/bay_map.php', {method: 'POST', body: new URLSearchParams(body)})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { alert(j.error || 'Bay map not saved.'); return; }
+                if (done) done(j);
+            })
+            .catch(function () { alert('Bay map request failed.'); });
+    }
+
+    /* Chrome once, contents on every change. Re-rendering the whole view from
+       the dimension inputs' own oninput would replace the input the person is
+       typing into and drop focus mid-number, so only the grid and tray repaint. */
+    function luBayRender() {
+        var d = luBay.data, el = document.getElementById('baymap-content');
+        var dis = d.locked ? ' disabled' : '';
+        el.innerHTML =
+            '<div class="lu-card first">'
+          /* Toolbar: Rows / Columns / lock, and no full-width sentence about
+             the lock state — the disabled inputs and the glyph already say it,
+             and that band of prose was the largest piece of dead space on the
+             screen. The unlock button is the only thing pressable while
+             locked, so it carries the explanation in its tooltip. */
+          + '<div class="lu-bay-dims">'
+          +   '<label>Rows <input type="number" id="bay-rows" min="1" max="12" value="' + (d.rows | 0) + '"' + dis + '></label>'
+          +   '<label>Columns <input type="number" id="bay-cols" min="1" max="12" value="' + (d.cols | 0) + '"' + dis + '></label>'
+          +   '<button class="lu-refresh-btn" id="bay-lock" onclick="luBayLock()" title="'
+          +     (d.locked ? 'The layout is locked. Unlock it to move drives or resize the grid.'
+                          : 'Lock the layout so it cannot be changed by accident.') + '">'
+          +     (d.locked ? '&#128274; Unlock' : '&#128275; Lock') + '</button>'
+          +   (d.locked ? '' : '<span>Click a drive, then a bay. Double-click a bay to empty it.</span>')
+          + '</div>'
+          + '<div class="lu-bay-legend">'
+          +   luBayLegend('#3fb950', 'Healthy')     + luBayLegend('#d29922', 'High temp')
+          +   luBayLegend('#f85149', 'Failed')      + luBayLegend('#58a6ff', 'Parity rebuild')
+          +   luBayLegend('#6e7681', 'No SMART data')
+          +   '<span class="lu-bay-lg"><i class="dashed"></i>Empty bay</span>'
+          /* The colours and temperatures above are only as current as the
+             collection behind them, and that collection is now kept until
+             someone refreshes it. Say its age here rather than letting a
+             three-day-old temperature pass for a live one. */
+          +   '<span class="lu-bay-lg" style="margin-left:auto">' + (d.smart_age
+                  ? 'SMART data collected ' + d.smart_age + ' ago — refresh it on the SMART tab'
+                  : 'No SMART data yet — open the SMART tab to collect it') + '</span>'
+          + '</div>'
+          + '<div class="lu-bay-scroll"><div class="lu-bay-grid" id="bay-grid"></div></div>'
+          + '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Unassigned drives</p>'
+          + '<div class="lu-bay-tray" id="bay-tray"></div>'
+          + '</div>';
+        if (!d.locked) {
+            // change, not input: `input` fires on every keystroke, so clearing
+            // the field to retype it read as "1 row" and the debounced save
+            // then displaced every drive below row 0 — the accidental wipe.
+            // `change` waits for the field to be committed (blur/Enter/spinner).
+            document.getElementById('bay-rows').onchange = luBayDims;
+            document.getElementById('bay-cols').onchange = luBayDims;
+        }
+        luBayPaint();
+    }
+
+    window.luBayLock = function () {
+        luBayPost({action: 'lock', locked: luBay.data.locked ? '0' : '1'}, function (j) {
+            luBay.data.locked = !!j.locked;
+            luBay.sel = null;
+            luBayRender();
+        });
+    };
+
+    function luBayPaint() {
+        var d = luBay.data;
+        var grid = document.getElementById('bay-grid');
+        if (!grid) return;
+        grid.parentNode.classList.toggle('lu-bay-locked', !!d.locked);
+        grid.innerHTML = '';
+        grid.style.setProperty('--bay-cols', d.cols);
+        var at = {};
+        d.placed.forEach(function (p) { at[p.row + ':' + p.col] = p; });
+
+        for (var r = 0; r < d.rows; r++) {
+            for (var c = 0; c < d.cols; c++) {
+                var drv  = at[r + ':' + c];
+                var slot = (r + 1) + '-' + (c + 1);
+                var cell = document.createElement('div');
+
+                if (!drv) {
+                    // An empty bay is drawn as a bay, not as a gap — a chassis
+                    // with a hole in it is information.
+                    cell.className = 'lu-bay-cell empty' + (luBay.sel ? ' target' : '');
+                    var eid = document.createElement('span');
+                    eid.className = 'lu-bay-eid'; eid.textContent = slot;
+                    var ew = document.createElement('span');
+                    ew.className = 'lu-bay-eword'; ew.textContent = 'EMPTY BAY';
+                    cell.appendChild(eid); cell.appendChild(ew);
+                } else {
+                    var st = luBayState(drv, d.warn_temp);
+                    cell.className = 'lu-bay-cell st-' + st.cls + (luBay.sel === drv.key ? ' sel' : '');
+
+                    var body = document.createElement('div');
+                    body.className = 'lu-bay-body';
+
+                    // 1. Identity: slot chip, device path (the anchor), status chip.
+                    var id = document.createElement('div');
+                    id.className = 'lu-bay-id';
+                    var sc = document.createElement('span');
+                    sc.className = 'lu-bay-slot'; sc.textContent = slot;
+                    var dv = document.createElement('span');
+                    dv.className = 'lu-bay-dev'; dv.textContent = drv.dev || drv.slot || drv.key;
+                    var stc = document.createElement('span');
+                    stc.className = 'lu-bay-stat'; stc.textContent = st.label;
+                    stc.style.color = st.col;
+                    stc.style.background = st.col + '22';
+                    id.appendChild(sc); id.appendChild(dv); id.appendChild(stc);
+                    body.appendChild(id);
+
+                    // 2. Capacity + temperature.
+                    var cap = document.createElement('div');
+                    cap.className = 'lu-bay-cap';
+                    var cv = document.createElement('span');
+                    cv.className = 'lu-bay-capv'; cv.textContent = drv.cap || '—';
+                    var cu = document.createElement('span');
+                    cu.className = 'lu-bay-capu'; cu.textContent = drv.cap_unit || '';
+                    var tp = document.createElement('span');
+                    tp.className = 'lu-bay-temp';
+                    // No reading is said, never left to read as a temperature.
+                    tp.textContent = drv.temp === null ? 'no data' : drv.temp + '°C';
+                    var heat = luBayHeat(drv.temp, d.warn_temp);
+                    if (heat) tp.style.color = heat;
+                    cap.appendChild(cv); cap.appendChild(cu); cap.appendChild(tp);
+                    body.appendChild(cap);
+
+                    // 3. Temperature bar — a hot row is visible without reading
+                    //    24 numbers. An unread drive gets an empty track, not a
+                    //    zero-width bar that would read as "cold".
+                    var track = document.createElement('div');
+                    track.className = 'lu-bay-track';
+                    if (drv.temp !== null || st.cls === 'rebuild') {
+                        var fill = document.createElement('div');
+                        fill.className = 'lu-bay-fill' + (st.cls === 'rebuild' ? ' rebuild' : '');
+                        var pct = drv.temp === null ? 100
+                                : Math.max(6, Math.min(100, ((drv.temp - 30) / 25) * 100));
+                        fill.style.width = pct + '%';
+                        if (st.cls !== 'rebuild') fill.style.background = heat || '#8b949e';
+                        track.appendChild(fill);
+                    }
+                    body.appendChild(track);
+
+                    // 4. Reference rows, one left edge for every value.
+                    var ref = document.createElement('div');
+                    ref.className = 'lu-bay-ref';
+                    // First, because it is the identifier the person already
+                    // knows: what this disk is called everywhere else in Unraid.
+                    if (drv.role) luBayRef(ref, 'UNRAID', drv.role);
+                    luBayRef(ref, 'PORT',   drv.port);
+                    luBayRef(ref, 'MODEL',  drv.model);
+                    luBayRef(ref, 'SERIAL', drv.serial, true);
+                    body.appendChild(ref);
+
+                    // Locate lives inside the cell but is not part of
+                    // click-to-move — its handler stops propagation.
+                    if (drv.addr) {
+                        var lb = document.createElement('button');
+                        lb.className = 'lu-refresh-btn lu-bay-loc' + (drv.locating ? ' locating' : '');
+                        lb.setAttribute('data-locate', drv.addr);
+                        lb.textContent = drv.locating ? 'STOP' : 'Locate';
+                        lb.onclick = (function (a, dv) {
+                            return function (ev) { luLocate(ev, this, a, dv); };
+                        })(drv.addr, drv.dev);
+                        body.appendChild(lb);
+                        if (drv.locating) cell.classList.add('locating');
+                    }
+
+                    cell.appendChild(body);
+                }
+
+                if (!d.locked) {
+                    cell.onclick    = luBayCellClick(r, c, drv);
+                    cell.ondblclick = luBayCellClear(drv);
+                }
+                grid.appendChild(cell);
+            }
+        }
+
+        var tray = document.getElementById('bay-tray');
+        tray.innerHTML = d.unassigned.length
+            ? '' : '<span class="lu-muted" style="font-size:12px">Every detected drive is placed.</span>';
+        d.unassigned.forEach(function (u) {
+            var chip = document.createElement('span');
+            // No key = the drive reported neither a port nor a PHY, so there is
+            // nothing stable to remember it by. Shown, but not placeable.
+            chip.className = 'lu-bay-chip' + (u.key === null ? ' dead' : (luBay.sel === u.key ? ' sel' : ''));
+            chip.textContent = (u.dev || u.slot || u.serial || '?') + (u.role ? '  ' + u.role : '');
+            chip.title = u.key === null
+                ? 'This drive reports no port or PHY, so it cannot be assigned to a bay.'
+                : [u.role, u.model, u.serial, u.size].filter(Boolean).join(' · ');
+            if (u.key !== null && !d.locked) {
+                chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
+            }
+            tray.appendChild(chip);
+        });
+    }
+
+    /* ── Locate: blink one drive's activity light (plan 048) ──────────────────
+       The confirm fires once per page load, not once per press: the two things
+       it says are properties of the technique, so a person needs them the first
+       time and would resent them the tenth. */
+    var luLocateWarned = false;
+
+    window.luLocate = function (ev, btn, addr, dev) {
+        // Bay cells are click-to-move and double-click-to-clear; this button
+        // lives inside one and must not trigger either.
+        if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+        var on = /locating/.test(btn.className);
+        if (!on && !luLocateWarned) {
+            if (!confirm('Locate blinks ' + (dev || 'this drive') + '’s ACTIVITY light by reading it '
+                       + 'twice a second.\n\n'
+                       + '• It is the activity light, not a dedicated locate LED. On a busy array other '
+                       + 'drives blink too — look for the steady rhythm.\n'
+                       + '• It wakes the drive and keeps it awake until you stop it, or it stops itself.\n\n'
+                       + 'Start blinking?')) return;
+            luLocateWarned = true;
+        }
+        luLocatePost(on ? 'stop' : 'start', addr);
+    };
+
+    function luLocatePost(action, addr) {
+        var body = {action: action, csrf_token: flashCsrf};
+        if (addr) body.addr = addr;
+        fetch('/plugins/hbaviewer/locate.php', {method: 'POST', body: new URLSearchParams(body)})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { alert(j.error || 'Locate failed.'); return; }
+                luLocateApply(j.active || []);
+            })
+            .catch(function () { alert('Locate request failed.'); });
+    }
+
+    /* Paint every Locate control from one list of blinking addresses — the
+       table's buttons and the map's bays are two views of the same server-side
+       state, so neither is ever guessed at from what was just clicked. */
+    function luLocateApply(active) {
+        document.querySelectorAll('[data-locate]').forEach(function (el) {
+            var on = active.indexOf(el.getAttribute('data-locate')) !== -1;
+            el.classList.toggle('locating', on);
+            // The button is its own stop control — one place to press, and it
+            // says what pressing it does rather than what is happening.
+            if (el.tagName === 'BUTTON') el.textContent = on ? 'STOP' : 'Locate';
+            var cell = el.closest('.lu-bay-cell');
+            if (cell) cell.classList.toggle('locating', on);
+        });
+    }
+
+    // On load, ask the server what is already blinking — a locate started in
+    // another tab, or before this reload, must still show as running.
+    window.luLocateSync = function () { luLocatePost('status', null); };
+
+    function luBayLegend(color, label) {
+        return '<span class="lu-bay-lg"><i style="background:' + color + '"></i>' + label + '</span>';
+    }
+
+    // One PORT/MODEL/SERIAL row. An absent value still emits both cells, or the
+    // rows below it climb into the wrong label's place.
+    function luBayRef(parent, label, text, dim) {
+        var l = document.createElement('span');
+        l.className = 'lu-bay-lbl';
+        l.textContent = label;
+        var v = document.createElement('span');
+        v.className = 'lu-bay-val' + (dim ? ' dim' : '');
+        v.textContent = (text === null || text === undefined || text === '') ? '—' : text;
+        v.title = v.textContent;   // the value is ellipsised; the tooltip is the full string
+        parent.appendChild(l);
+        parent.appendChild(v);
+    }
+
+    /* Which state a bay renders as, and what the chip says. Health comes from
+       the backend; a hot drive is promoted here because nothing server-side
+       judges drive temperature. Order is worst-first — a failed drive that is
+       also hot is failed. */
+    function luBayState(drv, warn) {
+        if (drv.state === 'fail')    return {cls: 'fail',    col: '#f85149', label: 'FAILED'};
+        // The server says WHICH rebuild — Unraid's parity reconstruct, or a
+        // controller-level one. It is never blank while the state is 'rebuild'.
+        if (drv.state === 'rebuild') return {cls: 'rebuild', col: '#58a6ff',
+                                             label: drv.rebuild_label || 'REBUILDING'};
+        if (drv.temp !== null && drv.temp >= warn)
+                                     return {cls: 'warn',    col: '#d29922', label: 'HIGH TEMP'};
+        // Amber for a reallocated/pending sector count too — but never labelled
+        // HIGH TEMP, which would be a plain lie on a 37°C drive.
+        if (drv.state === 'warn')    return {cls: 'warn',    col: '#d29922', label: 'SECTORS'};
+        if (drv.state === 'nodata')  return {cls: 'nodata',  col: '#6e7681', label: 'NO SMART'};
+        return {cls: 'ok', col: '#3fb950', label: 'HEALTHY'};
+    }
+
+    // Heat scale off warnTemp. Normal returns '' — the number then inherits the
+    // secondary ink, because a green temperature would signal something when
+    // there is nothing to signal.
+    function luBayHeat(t, warn) {
+        if (t === null || t === undefined) return '';
+        if (t >= warn + 4) return '#f85149';
+        if (t >= warn)     return '#d29922';
+        if (t >= warn - 3) return '#c9a227';
+        return '';
+    }
+
+    /* Single click never destroys anything. On a filled bay it picks the drive
+       up so you can put it somewhere else; on an empty one it drops whatever is
+       held. Emptying a bay is a double-click (luBayCellClear) — deliberate,
+       because a stray click on a map somebody walked to the rack to build
+       should not undo any of it. */
+    function luBayCellClick(r, c, drv) {
+        return function () {
+            if (drv) { luBay.sel = (luBay.sel === drv.key) ? null : drv.key; luBayPaint(); return; }
+            if (!luBay.sel) return;
+            luBayPost({action: 'assign', key: luBay.sel, row: r, col: c}, luBayFetch);
+        };
+    }
+
+    // Clears THIS bay and nothing else — the drive goes back to the tray.
+    function luBayCellClear(drv) {
+        return function () {
+            if (!drv) return;
+            luBay.sel = null;
+            luBayPost({action: 'unassign', key: drv.key}, luBayFetch);
+        };
+    }
+
+    /* Resize: reflow the grid on screen, then persist. Drives that no longer
+       fit move to the tray HERE too, not just in the server's prune, so the
+       preview shows what the change will actually do.
+       A shrink that displaces drives asks first. Everything else about this
+       view is reversible with another click; this is the one action that can
+       undo a lot of someone's work at once. */
+    function luBayDims() {
+        var rf = document.getElementById('bay-rows'), cf = document.getElementById('bay-cols');
+        var rows = parseInt(rf.value, 10), cols = parseInt(cf.value, 10);
+        // A blank or half-typed field is not a resize request. Without this,
+        // clearing the box to retype it read as 1 and wiped the layout below
+        // the first row.
+        if (!(rows >= 1 && rows <= 12) || !(cols >= 1 && cols <= 12)) return;
+
+        var d = luBay.data, keep = [], drop = [];
+        d.placed.forEach(function (p) {
+            if (p.row < rows && p.col < cols) keep.push(p); else drop.push(p);
+        });
+        if (drop.length && !confirm(
+                drop.length + (drop.length === 1 ? ' drive does' : ' drives do')
+                + ' not fit in a ' + rows + ' x ' + cols + ' grid.\n\n'
+                + 'They go back to the unassigned list and you will have to place them again. '
+                + 'Everything that still fits keeps its bay.')) {
+            rf.value = d.rows; cf.value = d.cols;   // put the fields back
+            return;
+        }
+        drop.forEach(function (p) { d.unassigned.push(p); });
+        d.placed = keep; d.rows = rows; d.cols = cols;
+        luBayPaint();
+        clearTimeout(luBay.dimTimer);
+        luBay.dimTimer = setTimeout(function () {
+            luBayPost({action: 'dims', rows: rows, cols: cols}, luBayFetch);
+        }, 400);
+    }
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     // Errored controllers render a card with data-ctl but no data-chip, so the
     // lookup can succeed while the attribute is absent. Coalesce to '' — chip is

@@ -37,6 +37,20 @@ check('write clamps thr lo',   $r['ALERT_THRESHOLD'] === 1);
 check('round-trip show off',   $r['SHOW_PHY'] === 0);
 check('missing key -> default',$r['SHOW_DRIVES'] === 1);
 
+/* A partial write must keep the keys it did not name. This is the whole
+   reason lsi_config_update() exists: the Settings page names its nine form
+   fields, and a plain write of those nine reset every bay-map key to default
+   — silently unlocking a map somebody built by walking to the rack. */
+lsi_config_write(['HBA_PORT' => 6, 'BAY_ROWS' => 2, 'BAY_COLS' => 12, 'BAY_LOCK' => 1], $tmp);
+lsi_config_update(['HBA_PORT' => 3], $tmp);
+$u = lsi_config_read($tmp);
+check('update applies its own key',      $u['HBA_PORT'] === 3);
+check('update preserves BAY_ROWS',       $u['BAY_ROWS'] === 2);
+check('update preserves BAY_COLS',       $u['BAY_COLS'] === 12);
+check('update preserves BAY_LOCK',       $u['BAY_LOCK'] === 1);
+lsi_config_update(['HBA_PORT' => 99], $tmp);
+check('update still clamps',             lsi_config_read($tmp)['HBA_PORT'] === 8);
+
 @unlink($tmp);
 echo $fails === 0 ? "config: all pass\n" : "config: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

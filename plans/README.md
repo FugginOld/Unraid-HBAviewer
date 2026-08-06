@@ -18,14 +18,516 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-Active plans (still in `plans/`) — all four are blocked on something only a
-person can supply, or not yet started:
+This year's plans and where they stand. **029 is the only plan left in
+`plans/`**, parked on a reboot the maintainer has to do. Everything else is
+executed, merged and archived, and keeps its row here — which is the whole
+point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **054** | **DONE, archived 2026-08-05** — merged to `dev` (`1242963`, from `bf5e423`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw. **Reframed from the review's security finding to PID reuse** — see below |
 
-Archived to `archive/` on merge: **041** (merged 2026-08-04, hardware-passed),
+**054 executed and review-approved 2026-08-05.** Three commits, two files,
+diff matching the plan verbatim. `LOCATE_PID_DIR` is still `'/tmp'`,
+`locate_drive.sh` untouched, no new PID directory, no JavaScript. The four
+fixtures the plan predicted would break were repaired with real `cmdline` data
+rather than by loosening the guard — which was the STOP condition most likely
+to be tripped, and was not.
+
+**Three mutations at review, two of them beyond the plan:**
+
+- Reverting to the old `is_dir`-only check fails 6 checks. The rejection cases
+  are pinned.
+- **Making the guard always return `false` fails 4 checks, including "a live
+  marker reads as running".** This was the one worth adding: a guard that is
+  too *strict* silently breaks every Stop button on real hardware, and a suite
+  that only tests the rejections would pass while shipping that. The positive
+  path is genuinely pinned, not merely asserted.
+- **Un-gating the kill — reverting Step 2 alone — leaves the suite ALL PASS.**
+  That change has no test. See below; it is a structural limit, not a lapse.
+
+**The line that sends the signal cannot be tested here, and that is now a
+pattern.** Every endpoint file guards its dispatch with
+`if (PHP_SAPI === 'cli') return;`, so the top-level statement region after that
+line is unreachable from the suite by construction — `locate.php` (~75 lines),
+`flash.php` (~110), `bay_map.php` (~70), `export.php` (~46), `bundle.php`
+(~32), `phy_baseline.php` (~19). Function *bodies* below the guard are fine,
+because PHP hoists declarations and the tests call them directly; it is the
+per-request statements that no test reaches. Plan 053's two HTTP replies and
+054's kill gate both landed in that region, verified by reading only. **Two
+plans in one day is enough to call it a gap rather than a coincidence** — see
+the direction note below.
+| **053** | **DONE, archived 2026-08-05** — merged to `dev` (`667ca96`, from `9a14eba`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw |
+
+**054 reframes the review's finding, and says so rather than quietly widening
+it (2026-08-05).** The review filed it as a security defect: `LOCATE_PID_DIR` is
+`/tmp`, so anyone who can write there makes Stop kill an arbitrary root process.
+**On this appliance that argument is weak, and it duplicates one already
+rejected below** — "not worth code on a single-root appliance where anyone who
+can create those files is already root". To plant the marker you must already
+be root.
+
+**What survives needs no attacker: PID reuse.** `locate_drive.sh` clears its
+marker from `trap … EXIT`, and SIGKILL bypasses traps. A loop killed with `-9`
+leaves a marker holding a PID Linux later hands to something else — so a drive
+reports as blinking when it is not, and pressing Stop signals a stranger's
+process as root. `kill -9` plus uptime is the whole reproduction.
+
+One fix closes both: `locate_running()` checks `/proc/<pid>/cmdline` names our
+script, and the `stop` handler gates its kill on that rather than on "a number
+was in the file". The review's other suggestion — a plugin-owned `0700`
+directory — was rejected in the plan: it does nothing about PID reuse, nothing
+about a root attacker, and needs a coordinated change across two files plus a
+migration for markers already in `/tmp`.
+
+**This also amends plan 048 on purpose.** 048 defined running as "PID file
+exists **and** `/proc/<pid>` exists", which guards staleness but not ownership.
+That was a decision, not a slip, and 054 changes it deliberately.
+
+**053 executed and review-approved 2026-08-05.** Three commits, two files
+(`locate.php`, `tests/locate_test.php`), diff matching the plan verbatim.
+`locate_drive.sh`, `hbaviewer.php` and every line of JavaScript verified
+untouched. Reviewed by re-running the criteria, not by reading the report:
+
+- **Two mutations, one of them not the plan's.** Reverting `locate_reachable()`
+  to `return true` fails exactly the two checks the plan predicted. Separately,
+  changing `file_exists` to `is_file` — the plausible "tidy" that would refuse
+  every locate on real hardware, since a bsg node is a character device — fails
+  exactly the one check written to guard it, and nothing else. That check was
+  the one most at risk of being unfalsifiable; it is not.
+- All four new assertions can fail. That was worth confirming individually:
+  this repo has shipped three checks that could not.
+
+**What could NOT be verified, and why it is not a gap worth closing.**
+`locate.php` returns early under CLI, so the two done criteria about the HTTP
+responses (`ok:false` on an unreachable address, `ok:true` on a good one) are
+confirmed by reading the dispatch, not by executing it. That is the same
+boundary every other check in `tests/locate_test.php` respects, and the same
+one the plan set deliberately: exercising it needs an HTTP harness this repo
+does not have, which would be a larger change than the fix. Stated here rather
+than left implicit, because "suite green" does not cover those two lines.
+
+**One correction to the plan's own maintenance note.** It says a future client
+must keep repainting from `active` on a failure. The *current* client does not
+— `luLocatePost()` alerts and returns without calling `luLocateApply()`, so the
+`active` array now included in both failure replies is unused today. Harmless
+and forward-looking, but the note as written implies the UI repaints on
+failure, and it does not.
+| **049** | **DONE, archived 2026-08-05** — merged to `dev` (`b45be77`), suite green; **both halves now confirmed on the reporter's box** | nothing; ships in 2026.08.05 |
+
+**049's ring half confirmed, and the plan is closed (2026-08-05).**
+@TheIlluminate92 cleared the rings and re-read
+([#12 comment 5199572625](https://github.com/FugginOld/Unraid-HBAviewer/issues/12#issuecomment-5199572625)):
+`hbav_health_c0.json` and `c1.json` went 1 sample → 2 across two renders, and
+**Link Integrity now shows a rate instead of "Not enough samples yet"** — the
+P1 symptom the issue was opened for. Both controllers, both halves, done.
+
+That closes the last of Step 5. Worth noting what it took: the collector half
+and the ring half looked like one claim and were two, and the box that could
+prove either was never the maintainer's.
+
+**Collector half confirmed on the reporter's box (2026-08-05).**
+@TheIlluminate92 ran the two counts on Waz-Server: **29 own PHYs in sysfs, 29
+`"idx"` entries emitted**. Pre-fix that glob matched all 105, so the 76
+expander PHYs are gone from the payload and nothing legitimate went with them.
+That closes two done criteria — *no emitted PHY index is duplicated* and
+*expander PHYs appear in none of the three collectors' output*. Both sides of
+that check are aggregate across hosts, so they are comparable; this is not the
+per-controller trap recorded below, which was about counting **duplicates**
+across a payload whose `phys` arrays each legitimately start at idx 0.
+
+**The ring half — CLOSED later the same day**, see 049's row above. It was
+tracked separately from the collector half on purpose: a correct payload and an
+accumulating ring are different claims, and only the second one is the P1
+symptom users reported. **Note Step 5's own heading in the plan said "by the
+maintainer" — that was stale**, written before the measurement below showed
+Golem cannot exercise it. Corrected in the plan text 2026-08-05.
+
+**049 cannot be confirmed on the maintainer's hardware — measured, not assumed
+(2026-08-05).** Golem reports **32 own PHYs and zero expander PHYs**
+(`phy-H:N:M` count is 0), split c0=21 / c1=11 with no duplicate index within
+either controller. The expander-skip the fix adds therefore never executes
+there: on that box, "correctly skipping expander PHYs" and "having none to
+skip" produce identical output. What the run *does* establish is **no
+regression** — 32 own PHYs in sysfs, 32 emitted by the collector, so the guard
+drops nothing it shouldn't, and c0's ring advanced 2 → 4 samples across
+renders. Only @TheIlluminate92's box (76 expander / 29 own) exercises the
+actual defect.
+
+**A verification command was wrong and the hardware caught it.** The first
+duplicate check grepped `"idx"` across the whole `get_hba_health.sh` payload
+and flagged 11 duplicates — but `hba_each` wraps *per-controller* objects, each
+`phys` array starting at idx 0, so cross-controller collisions are by design:
+the rings are per controller (`hbav_health_c<N>.json`) and 049's guard is
+per-controller. The corrected check parses the JSON and counts duplicates
+within each controller separately. Worth remembering before asking any reporter
+to run an aggregate grep over a multi-controller payload — a false positive
+sent to a reporter costs more than one caught at home.
+| **050** | **DONE, archived 2026-08-05** — hardware-verified (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05 |
+| **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
+| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green; **BOTH halves hardware-verified** | nothing. The changelog may now drop its hedge — see below |
+
+**052's expander half verified from the reporter's bundle (2026-08-05), and the
+defect was bigger than the plan estimated.** @TheIlluminate92 attached a full
+bundle to #12. Parsing `03-sysfs/` from it:
+
+- **The inferred sysfs naming is real.** `end_device-<H>:<N>:<M>` exists — 19 of
+  them on host 0 — alongside 7 two-part `end_device-<H>:<N>` on host 1. That was
+  the one thing plan 052 listed as *inferred, not measured*, and the fix was
+  written so that being wrong about it cost nothing. It was right.
+- **Two expanders**, `expander-0:0` and `expander-0:1`, with distinct addresses
+  `0x5000000000000135` and `0x5000000000000140`.
+- **Seven `phy_identifier` collisions on host 0** — phys 26, 27, 30, 31, 32, 33
+  and 36 each appear once behind each expander. Replaying `bay_map_key()` over
+  the bundle's real values: **12 distinct keys before 052 for 19 drives — seven
+  drives silently absent from both the grid and the tray — and 19 distinct keys
+  after.** Every expander resolved to exactly one address; nothing fell back.
+
+The plan's "Why this matters" argued from one hypothetical colliding pair. The
+real box loses **seven of nineteen drives**. Worth remembering as a calibration
+point: the estimate was conservative by a factor of seven, and the reason was
+that no one had counted.
+
+**Honest limit on this evidence.** The expander addresses were derived from
+their own `phy-H:N:*` entries in the bundle, not read from
+`/sys/class/sas_device/expander-H:N/sas_address`, because the bundle predates
+052's `sas_expander` dump. Those are the same value in every layout we have
+measured, but it is one inference deep. **The `dump_attrs sas_expander.txt` line
+052 added closes exactly this gap for the next bundle** — which is a fair
+argument for adding evidence capture in the same plan that needs it.
+
+**052's open question about the storcli backend — ANSWERED, and there is no
+bug (2026-08-05).** The worry was that `Connected Port Number` is the HBA port,
+so every drive behind one expander might report the same value and make
+`c<ctl>:p<port>` ambiguous for far more boxes than the lsiutil case. Measured on
+the same expander hardware: six drives on `/c0/e0`, ports **13, 12, 9, 10, 11,
+8** — all distinct. The value tracks the drive, not the uplink. **No storcli
+change is needed and none should be invented**; 052 was right to fence it out
+and wait rather than fix both backends from one backend's evidence.
+
+**Unexplained, worth one look sometime**: storcli reported **6 drives** on `/c0`
+while sysfs shows **19 end devices on host 0** and 7 on host 1. That may simply
+be storcli's `/c0` not being sysfs `host0`, but nobody has checked, and a
+backend that sees a fraction of the drives would matter. Not a defect until
+someone counts — recorded here so the observation is not lost.
+
+**052's no-migration promise is hardware-verified (2026-08-05).** @jac2424 ran
+the two patched scripts on the 9207-8i and posted the payload
+([#14 comment 5199437269](https://github.com/FugginOld/Unraid-HBAviewer/issues/14#issuecomment-5199437269)).
+Checked mechanically rather than by eye — every `,"expander":""` stripped from
+the new payload, then compared to the one he posted an hour earlier:
+**byte-identical**, 8 fields added and nothing else moved. The bay keys it
+produces are `c0:h3 c0:h0 c0:h1 c0:h2 c0:h5 c0:h4 c0:h6 c0:h7` — all distinct,
+none carrying an `x` segment, exactly the pre-052 set. He also confirmed the UI
+renders normally.
+
+**That is the half that can be proven, and it is the half that ships.** The
+promise 052 rests on is "a box without an expander sees no change at all", and
+that is now measured on the only lsiutil-backend hardware in existence for this
+project rather than argued from a fixture. The expander half — that the
+disambiguation *works* when it engages — remains unverified and the changelog
+wording stays hedged until a bundle arrives.
+
+**Worth copying: the ask was designed to be falsifiable.** He was told what the
+output must be before he ran it ("identical, with only `expander` added — if
+anything else moves, that is the result I need to hear about"), so a pass is
+evidence rather than a shrug. Same shape as 051's A/B revert.
+
+**052 executed and review-approved 2026-08-05.** Five commits, eight files, all
+in scope; 049's five collectors and the storcli `p<port>` branch verified
+untouched. Reviewed by re-running every done criterion rather than reading the
+executor's report:
+
+- **Both mutation checks re-run independently, not taken on trust.** Reverting
+  `bay_map.php` alone fails exactly the two new assertions; reverting
+  `get_attached_drives.sh` alone leaves both expander drives emitting
+  `"expander":""` and fails Fixture C. The tests fail against the unfixed code,
+  which is the only thing that makes them evidence.
+- **`phy_drive()` verified by hand** (it has no test — see below): an
+  expander-attached drive returns `null`, a direct-attached one still matches,
+  and a **pre-052 payload with no `expander` key at all still matches**. That
+  last one matters more than it looks: it is the guard against a cached or
+  bundled payload from an older build silently losing every PHY↔drive label.
+- The direct-attach key is `c0:h8`, byte for byte, asserted rather than
+  asserted-about-in-a-comment. No migration, as designed.
+
+**The plan's own awk was wrong and the executor caught it.** Step 3 named the
+variable `exp` — which is awk's builtin exponential function, so the snippet as
+written is a syntax error. Renamed `expdr`, same logic, verified against the
+golden. **A plan snippet is a lead, not a fact**: this is the second time a
+plan-authored excerpt has needed a correction at execution time, and both times
+the executor was right to fix it and say so rather than work around it.
+
+**Two things the review turned up that are not 052's:**
+
+- **`phy_drive()`'s new expander guard has no test.** `tests/ajax_render_test.php`
+  covers `phy_drive_label()` but the file is not in 052's scope, so the executor
+  correctly did not touch it. The behaviour is verified manually and correct;
+  it is simply unpinned, and the next person to touch that loop can undo it
+  silently. One assertion, next time that file is open.
+- **`UPDATE=1 bash tests/run.sh` rewrites four unrelated goldens** —
+  `drives_osmap.txt`, `events_empty.json`, `phy_unsupported.json`,
+  `route_no_backend.json`. They are committed *with* a trailing newline;
+  `check()`'s UPDATE path writes without one (`printf '%s'`), and normal runs
+  never notice because `$(cat …)` strips it. Pre-existing, invisible except
+  when regenerating a golden, and it means every future `UPDATE=1` produces
+  four files of noise somebody has to remember to revert. P3 tidy.
+
+**051 hardware-confirmed on the 9207-8i, both directions (2026-08-05).**
+@jac2424 swapped in the two `dev` scripts and the topology check went from "0
+of 8 drives" to all 8 present with health as expected — **then reverted to his
+backup and reproduced the fault**. That second half is what makes it evidence
+rather than coincidence: a one-way "it works now" leaves the reinstall or a
+reboot as an untested explanation, and A/B on the same box in one sitting does
+not. It is the same standard review applied to the fixture (revert one fix,
+watch exactly one assertion redden), now met on real hardware.
+
+It also vindicates the plan's correction to the issue's headline. The issue
+said "Drives tab empty"; the vetting said no — drives render with *wrong PHY
+numbers*, and it is the topology check that reports zero. The reporter's own
+wording was "HBA Health was showing 0 of previously 8 seen drives attached",
+which is the topology check. Both halves consistent.
+
+**Confirmed by screenshot, not by the numbers** — *then confirmed by the
+numbers, later the same day.* The first pass was UI panels only, leaving three
+specifics open: non-empty `sas_address` on all 8, `phy` differing from `target`
+on six of eight, and `_drive_count 0` → 8. Those cover the silent-wrong-answer
+half — the part that does not look broken in a screenshot, and the part the
+plan argued was worse than the visible one.
+
+**All three now answered** ([issue #14 comment 5198972830](https://github.com/FugginOld/Unraid-HBAviewer/issues/14#issuecomment-5198972830),
+raw payload, scripts pulled from `3520295`):
+
+| target | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| phy | 3 | 0 | 1 | 2 | 5 | 4 | 6 | 7 |
+
+Six of eight differ, **matching the plan's predicted table exactly**, all 8
+carry a non-empty `sas_address` (`4433221100000000`–`…07000000`), and
+`_drive_count 0` returned `8`. The prediction was written from the reporter's
+earlier bundle and then reproduced from a clean re-apply — which is the
+strongest form this evidence takes. **Issue #14 is closable.**
+
+**This box is the only lsiutil-backend hardware in play.** Golem is
+9400-16i + 9400-8i, i.e. storcli; `drv_lsiutil` runs on nothing the maintainer
+owns. Every plan that touches the lsiutil drives composer — 051, and now 052 —
+can only be regression-checked here. Worth remembering before assuming a green
+suite covers that path.
+
+**051 executed, review-approved and merged 2026-08-05.** The worktree-resets-to-
+`main` trap recorded under 050 was pre-empted this time: the dispatch's first
+instruction was `git reset --hard` onto the plan's baseline, and the executor
+confirmed the SHA before reading anything. That is the second run of that
+workaround and it should be treated as standard for every future `execute`.
+
+**Review mutation-tested one case the executor did not**: reverting *only*
+Stage 3's depth fix, leaving the trailing-slash fix in place. Exactly one
+assertion reddened — the Stage 3 target-id case — while the two Stage 2
+assertions stayed green, which is the evidence that the new test isolates the
+two defects rather than passing on aggregate. Also verified the
+`local V="${V:-default}"` seam really does inherit an outer value (it does;
+argument expansion precedes the builtin), since a silent failure there would
+have left Stage 2 reading nothing while every test still passed.
+
+**Three deviations, all documented by the executor, all correct — and all
+caused by defects in the plan I wrote:**
+
+1. **The plan contradicted itself.** Step 2 instructs the new comment to
+   explain that `sas_end_device` is the wrong class and why, while the done
+   criteria demand `grep "sas_end_device"` return no matches. The executor kept
+   the explanatory comment and flagged the conflict instead of silently
+   choosing. Right call: no code path reads that class (verified — the only
+   remaining hits are the comment and `bundle_support.sh`, which *should* dump
+   both classes, since that dump is how the layout was established in the first
+   place). The criterion should have read `grep '/sys/class/sas_end_device'`.
+2. **Step 5 could not run before Step 6.** Mutation 3 requires the test file
+   Step 6 creates. The executor swapped the order; the plan should have
+   numbered them the other way.
+3. **Added `host5` to the fixture**, not enumerated in the plan, to isolate the
+   overcount trap on a single-drive host so a failure there cannot be masked by
+   host3's seven other correctly-counted disks. A genuine improvement on what
+   was specified — and it paid off immediately: under the `find -path` mutation
+   host3 reported 13 and host5 reported 6, and only the second of those numbers
+   is diagnostic.
+
+**Not verifiable here.** Every line is on the lsiutil path; the maintainer's box
+is SAS3/storcli. The fixture is the whole safety net, which is why the mutation
+testing was a done criterion. Awaiting @jac2424 on issue #14.
+
+**051 (SAS transport sysfs depth), written 2026-08-05 — issue #14.** Four sysfs
+reads on the lsiutil path were written against a directory layout that
+SAS-transport cards do not have: the kernel inserts `port-H:P/end_device-H:P/`
+between a host and its targets, and splits device attributes across
+`sas_device` (which has `sas_address`) and `sas_end_device` (which does not,
+despite both containing identically-named `end_device-H:B` entries). Topology
+reads "Unknown" forever, and every drive's PHY number silently falls back to its
+SCSI target ID.
+
+**Three things the vetting changed.** (1) The issue's headline claim — Drives
+tab empty — is wrong; `drives_join.sh` iterates the *OS* map and degrades to
+`sas_address:""` with `phy = tgt`, so drives render with **wrong PHY numbers**,
+six of eight on the reporter's own box. A silent wrong answer, not a visible
+absence, which is worse. (2) Its "target IDs collapse to 0" claim does not
+reproduce: `printf "%d" "3/"` yields **3**, not 0. Real bug, cosmetic impact —
+stderr noise, not corruption. (3) It missed that Stage 3's fallback carries the
+*same* depth assumption, so the rescue path for a failed lsiutil query is
+entirely dead on these cards.
+
+**The finding worth keeping is none of those.** `tests/health_sh_test.sh` built
+its fixture in the assumed layout and commented that it "mirrors real mpt2sas
+sysfs". It never did. That green test is why issue #11's fix shipped believing
+it worked, and why this survived every release since. The plan fixes the fixture
+**first**, red, before touching a line of source — and makes mutation-testing a
+done criterion rather than a nicety. Same class as plan 047's hoisting bug: a
+suite that was structurally incapable of seeing the defect.
+
+**Attribution note**: the analysis in issue #14 was generated by Claude Code and
+pasted by the reporter, who ran the hardware commands. The hardware evidence is
+solid; the reasoning around it was wrong in two of four places. The plan says so
+where it quotes it, so the next reader calibrates rather than copies.
+
+**050 verified on Golem 2026-08-05, and it broke the frame doing it.** Adding
+`· N/hr in the last 10 min` to every error cell roughly doubled the width of
+four columns; `.lu-table` is `width:100%` with no scroller above it, so the
+overflow left the card and the last columns could not be reached at all. Fixed
+in `a65abc1` by wrapping `luTable()` — every table, not that one tab, since
+Drives and SMART are narrower only by accident. **The lesson is that adding
+text to a table cell is a layout change, and the suite cannot see it**: every
+render test asserts on substrings, so a table that renders perfectly and
+displays off-screen is green. Shortening the text was rejected — 050's own STOP
+condition says the fix is more context, not less.
+
+**The verification also reproduced the exact confusion 050 exists to fix, one
+level up.** Reading the tab, the maintainer's assistant concluded PHY 5 was
+accruing new errors: the top-offenders line showed `2.5/hr` where the plan had
+recorded `1.9/hr`, and an average-since-baseline can only rise if the counter
+grew. It had not — `invalid_dword_count` still read 115, unchanged since 08-02.
+The `2.5` is the **combined** rate across all four counters
+(`inv 1.4 · disp 0.7 · sync 0.3 · reset 0.0`); the plan's `1.9` was `inv`
+alone, at 60.5 h elapsed. Aggregate compared against per-counter. Checked
+properly, `inv` had *fallen* to 1.445/hr over 79.6 h, exactly as a fixed
+numerator over growing elapsed time must. **So the column header
+`Errors/hr — average since baseline` still does not say what the number is a
+rate *of*, and that is the same defect class the plan was written to close —
+made this time by a reader holding the plan.** Cheap follow-up if it recurs:
+say `combined` in that cell, or name the counters in the header. Not planned.
+
+**050 (two meanings of errors/hr) — executed, review-approved and merged
+2026-08-05** as `1fb2590`. Its hardware check is the only one of the three that
+does **not** need a reporter: 050 changes what the two tabs *say*, not what
+they compute, so Golem verifies it. What must hold is the shape, not the
+plan's numbers — the `~1.9/hr` and `~12.8 h` in the done criteria were a
+reading taken at writing time, and the ring only advances while the Health tab
+renders, so those figures will not reproduce. Two process notes worth keeping. The first dispatch
+**STOPPED on its own drift check**: `isolation: worktree` branches from the
+repo's default branch (`main`), not from the branch the plan was written
+against (`dev`), so the executor found itself missing plan 049's guard
+entirely and refused to rebase itself — correctly, since that would have been
+the improvisation the plan forbids. That same wrong base is what caused 049's
+`tests/run.sh` merge conflict. **Any future `execute` must reset the worktree
+to the plan's baseline commit before starting.** Second: review mutation-tested
+three ways, including one the executor did not run — widening the all-clear
+floor to also swallow *growth* reddens five link_integrity tests, which is the
+plan's load-bearing STOP condition holding.
+
+**050 (two meanings of errors/hr), written 2026-08-05.** PHY Health showed PHY
+5 at 3.3/hr while HBA Health said "no new cabling errors" on the same
+controller at the same moment. The first explanation — the health ring's window
+is too short to see a slow fault — was plausible and **wrong**: the ring turned
+out to span **12.83 h with zero growth on every counter**. So the Health tab is
+right and the link is currently clean; the PHY tab's rate is Δ-since-baseline
+divided by time-since-baseline, a long-run average that keeps reporting a burst
+which ended days ago. Neither number is wrong and neither says which question
+it answered. The plan adds the period to both and shows a recent rate beside
+the historical one, rather than changing either. Recorded because the wrong
+first diagnosis is the reusable part: the divisor is as much of a rate as the
+count, and one command measuring the actual window settled it.
+
+**049 (duplicate PHY indexes), written 2026-08-05 — issue #12.** Link Integrity
+never leaves "not enough samples" on a box with an **expander**. The reporter
+diagnosed the damage precisely (`health_ingest()` overwrites same-index PHYs, a
+real counter is then compared against a phantom, reads as a decrease, and the
+ring is wiped every sample) and posted a working FIFO-pairing fix. His bundle
+showed the cause is one layer further down and is ours, not the controller's:
+`/sys/class/sas_phy/phy-<host>:*` matches both `phy-H:N` (the HBA's own PHYs)
+and `phy-H:N:M` (PHYs on an expander behind it), and `${idx##*:}` collapses them
+onto the same index — measured at 29 own PHYs against 76 expander PHYs, with
+every index appearing four times in the parsed output. Three collectors share
+that glob; `get_phy_health.sh` does not, because it joins on the SAS address,
+which is the evidence for fixing it at the source rather than pairing HBA PHYs
+with expander PHYs. The plan keeps the reporter's insight as a consumer guard
+so a duplicate can never again silently destroy hours of history.
+
+**048 (activity-light locate) — DONE, archived 2026-08-05.** Step 1's mapping
+was confirmed on the maintainer's box before any code was written: every `sdX`
+resolves to an `H:C:T:L` that exists under `/dev/bsg/`. Two findings from that
+capture are recorded in the plan — `0:0:0:0` is a bsg node with no block device
+(the `VirtualSES` that killed plan 024, so the button is offered from the drive
+list rather than a bsg listing), and parity sits on the second controller, so
+host index is not a controller-ordering assumption this feature makes.
+
+The shell test earned its place immediately: it caught a **real bug in the
+first implementation**, where `trap 'rm -f "$PIDFILE"' EXIT INT TERM` removed
+the marker on Stop but did not *stop the loop* — the drive would have kept
+being read with nothing left to stop it by, since the marker was gone. The trap
+now exits.
+
+**Hardware-verified 2026-08-05.** The blink works, and the load-bearing done
+criterion holds: a full SMART Refresh run *while a locate is blinking* comes
+back complete. That is the criterion the whole `timeout`-instead-of-`pkill`
+decision was made for, and it is now measured rather than argued.
+
+One bug surfaced in that session and is worth keeping: pressing STOP stopped
+the drive but left the bay flashing. `stop` killed the loop and then listed
+what was still running in the same breath, catching the process between the
+signal and its exit — and since the client paints from that reply and has
+nothing to re-poll with, the graphic outlived the blink. Fixed in both halves:
+the dispatch waits (bounded) for the process to go, and the loop uses
+`sleep & wait` so a bash trap is not deferred until the sleep expires. The
+shell test now pins the stop at ~300ms and was confirmed red against the bare
+sleep first.
+
+**047 (drive bay map) — DONE, archived 2026-08-04.** Executed on `dev`,
+verified on the maintainer's 24-bay box, and shipped. Worth keeping from its
+history:
+
+- **Re-stamped `8286fe7` → `d7d7fa7` before execution.** Issues #10 and #11 had
+  moved 800+ lines through the same files, so the drift check fired — but every
+  contract the plan quoted still held, and the excerpts were updated in place.
+  Re-stamping a plan whose evidence survives is cheaper than rewriting it, and
+  leaves the next executor a drift check that means something.
+- **Two errors in the plan were corrected rather than followed.** Its
+  `bay_map_dims_set()` snippet would have reset every other config key to its
+  default on each write, and Step 1's open question was already answered by
+  shipped code (`phy_drive()`). Both corrections are recorded inline in the
+  archived plan.
+- **The design was then replaced wholesale** by the maintainer's `1b` handoff
+  (health-as-colour), archived beside the plan in
+  [`archive/047-design-handoff-drive-bay-map/`](archive/047-design-handoff-drive-bay-map/).
+  Four things shipped that the plan never specified: the lock, double-click to
+  clear one bay, Unraid slot names on every table, and a SMART cache with no
+  TTL. The plan is still accurate about the store, the identity key and the
+  SMART join — read it for the mechanism, the handoff for the appearance.
+- **A bug the tests were structurally blind to shipped and was fixed**: a
+  top-level `const` used by an endpoint above its declaration is undefined at
+  that point (functions hoist, consts do not), which blanked the SMART tab
+  while every test passed. `ARCHITECTURE.md` now carries the rule and
+  `tests/ajax_render_test.php` asserts it in both forms.
+
+**The trigger is the merge, not the release.** Two rows briefly said "archive
+after release" instead, which is a second trigger nobody tracks and it left 050
+and 052 sitting in `plans/` after they were done. Corrected 2026-08-05: a plan
+is archived when its code lands on `dev`, whatever else it is still waiting on.
+A plan that stays in `plans/` is one with work left in it — 049 (unconfirmed
+half) and 029 (unmerged) are the only two that qualify today.
+
+Archived to `archive/` on merge: **054**, **053**, **052**, **050** and **049**
+(all 2026-08-05 — the unidentified-PID kill, the silent locate failure, the
+expander bay-map key, the errors/hr window, the duplicate PHY index),
+**048** (done 2026-08-05, activity-light locate),
+**047** (done 2026-08-04, with its design bundle),
+**041** (merged 2026-08-04, hardware-passed),
 **042** (merged `514ae74`), **044** (merged `bd77c0a`), **045** (merged `f53e161`), **046** and **043**. **028** is archived too, though its code was deliberately
 **not** merged — it was executed and definitively resolved as a *negative
 result* (the check it proposed cannot be built), so nothing further will
@@ -130,6 +632,8 @@ box" is not actionable a month from now.
 
 | Plan | What is unverified | How to exercise it |
 |---|---|---|
+| **050** | **ANSWERED — verified on Golem 2026-08-05.** All four criteria hold, and the arithmetic was checked against raw sysfs rather than eyeballed: PHY 0:5 `inv` delta 115 over 79.6 h = 1.445/hr against a displayed `1.4`, `sync` 23/79.6 = 0.29 against `0.3`. Link Integrity read grey **Unknown — Watched for 10 min — too short to rule out a slow fault**, which is criterion 4, the load-bearing one, holding on a fresh ring. Only the long-window→`ok` half is untested; it needs the tab rendering for hours and nothing else. **The frame regression this surfaced is fixed in `a65abc1`** — see below. | 050 touches `ajax_info.php` and `health.php`, but those two files on `dev` also carry 047/048 — patching them alone onto a released install breaks, they need `bay_map.php`, `locate.php`, the new `config.php` keys and `hbaviewer.php`'s JS. Install the **whole** plugin dir instead (`/usr/local/emhttp` is a RAM overlay, so a reboot reverts everything): `cd /tmp && curl -fsSL -o dev.tgz https://github.com/FugginOld/Unraid-HBAviewer/archive/refs/heads/dev.tar.gz && tar xzf dev.tgz && cp -a Unraid-HBAviewer-dev/source/usr/local/emhttp/plugins/hbaviewer/. /usr/local/emhttp/plugins/hbaviewer/` — **push `dev` first or you get pre-`8bbc4d3` code.** Then: (1) HBA Health → Link Integrity states the window it measured, in both the all-clear and the warning wording; (2) PHY Health → the rate reads as an average *since the baseline*, and says when that baseline was; (3) a PHY with history but no recent errors shows **both** numbers, not one; (4) `rm -f /tmp/hbav_health_c*.json`, reload once, and the row must say `unknown` — **not `ok`** — because a seconds-long window with no growth is not evidence of health. That fourth one is the load-bearing check: it is the plan's own STOP condition, and it is the only one that fails loudly if Step 4's threshold was mis-set |
+| **049** | The **ring half** — that Link Integrity actually leaves "Not enough samples yet". The collector half is confirmed (29 own PHYs in sysfs, 29 emitted, vs 105 pre-fix), but a correct payload and an accumulating ring are different claims. **Reporter's box only**; Golem has zero expander PHYs | On Waz-Server, @TheIlluminate92: `rm -f /tmp/hbav_health_c*.json` (his existing rings were wiped-and-rewritten every poll, so they hold nothing usable regardless of the fix), open HBA Health in the webGUI, wait 60 s, reload, then count samples per controller — loop over `c*` rather than hardcoding `c0` in case that box has more than one. Expect ≥2 samples and a rate in place of the placeholder |
 | **037** | Whether 0.6 opacity actually reads as "disabled but legible" on a real screen. The contrast numbers are computed against *assumed* palette hex values, not sampled from a running Unraid. Also unverified: that the browser's own disabled styling on top of the dim does not push the button past illegible. | With the array **running**, open Firmware/BIOS on each of the white, azure, black and gray themes: Step 3 dimmed, its checkbox / FLASH field / Flash button all refusing both click **and** Tab-then-Enter, and the amber "Locked while the array is running" line above it at full strength. Confirm Step 1's Verify and Step 2's uploads still work. Then stop the array, reload, and confirm the dimming is gone. **Do not complete a flash to test this** — plan 005's rule stands |
 | **024** | **ANSWERED — NO. Not a pending test; a negative result.** All 24 populated slots set to `locate=1`, all read back `1`, no chassis LED changed. Empty bays will not even hold the flag. This box cannot verify the feature and no further testing here will change that. **Reassigned: needs a reporter with a genuine expander backplane** (not an HBA-synthesised `VirtualSES`). | With the array running, on the maintainer's own box, targeting **bay 21** (holds no array member). Resolve the component by reading `slot` — directory names are not slot numbers, component `7` is slot 12: `E=/sys/class/enclosure/0:0:0:0; C=$(for c in "$E"/*/; do [ "$(cat "$c/slot" 2>/dev/null)" = "21" ] && { echo "$c"; break; }; done); echo 1 > "$C/locate"` and **look at the bay**, then `echo 0 > "$C/locate"`. Bay 21 is an **empty** bay (0–15 populated, 16+ not), so a dark result is ambiguous — some backplanes only light occupied slots. Repeat on a populated slot before concluding; toggling `locate` on an array member is safe, it changes a light and nothing else. Then patch the branch in and confirm the Drives tab's button does the same thing and reverts to "Locate" after Stop. If the write succeeds but no light appears, that is a real finding — record it; the honest response is to keep the button rather than invent a stronger capability signal that does not exist |
 | **038** | *(OPTIONAL — the decode is confirmed against real hardware, see the status row. What is left is only that the patched files render it in the browser, which no longer carries real risk: `parse/hba.sh` is a pure function of the captured text, and `hba-normal` pins the exact `0x02 → Gen3` mapping his card produces.)* Cosmetic confirmation that the Overview, the dashboard tile and the Health tab's `host_link` row all read Gen3. | @jac2424 patches `parse/hba.sh` from `advisor/038-pcie-speed-decode`, clears `/tmp/lsiutil_dash.json`, reloads. Note his box has **storcli installed yet still routes through lsiutil** — `find_storcli` finds the binary but it does not enumerate an IT-mode SAS2308, so `hba_each` falls through. That is the documented precedence working, but it means "storcli is installed" is not a safe proxy for "the storcli backend is in use" when reading any future report |
@@ -743,9 +1247,94 @@ a count of what was hidden so a backend switch does not look like data loss.
 P3 — cosmetic warnings, no data loss today, and it needs a backend switch to
 trigger at all.
 
+## Defects from the 2026-08-05 branch review — ALL CLOSED 2026-08-05
+
+A pre-merge review of the whole `dev` branch (`d7d7fa7..dd9e96c`, plans
+047-051) against `main`. Two findings were fixed on the spot in `8bbc4d3`: a
+Settings save reset every config key plans 047/048 added — silently unlocking
+a locked bay map and snapping the grid back to 6×4 — and `bay_map_read()`
+guarded only the top level, so one hand-edited entry was a `TypeError` that
+took down the Array Map tab. One was rejected (see the next section). One was
+the missing changelog, closed by `a19de8c`.
+
+**All three below became plans and all three are merged to `dev`** — 052
+(expander bay-map key), 053 (silent locate start failure), 054 (Stop signalling
+an unidentified PID). The findings are kept verbatim as the provenance of those
+plans, each annotated with where it went. Nothing here is outstanding. Two of
+the three were reshaped on the way — 053 turned out smaller than filed (the
+client already handled the error) and 054's security framing was set aside for
+the PID-reuse bug underneath it — which is the argument for keeping the original
+wording next to the plan rather than replacing it:
+
+- **A duplicate PHY index collides bay-map keys — the 049 blind spot surfacing
+  inside 047's feature.** **Now [plan 052](archive/052-expander-bay-map-key-collision.md)
+  (written 2026-08-05); the finding is kept below as its provenance.**
+  `bay_map_key()` returns `c<ctl>:h<phy>`. On hardware
+  with two or more expanders behind one HBA, `get_attached_drives.sh` reads
+  `phy_identifier` off each `end_device`, and expander A phy 8 and expander B
+  phy 8 both yield `8` — one key, two drives. Both resolve the same `$map[$key]`
+  and both land at the same cell; `luBayPaint()`'s `at[row + ':' + col] = p`
+  keeps the last, so **one drive vanishes from the grid *and* the tray**. That
+  is exactly the outcome `bay_map_key()`'s own null-key comment says must never
+  happen. Note this is **not** an instance of 049: 049's mechanism is
+  `${idx##*:}` collapsing `phy-H:N:M` in the `sas_phy` glob, and the bay map
+  reads a different path entirely. Two expanders each numbering from 0 is a new
+  defect class. 047 *did* reason about key collisions ("port 3 and PHY 3 are
+  different physical positions") but only across *backends*, and its reference
+  hardware is explicitly direct-attach with no expander. Cheapest fix:
+  disambiguate with the SAS address when a controller reports duplicate
+  indices. **Wants its own plan — do not widen 049, which is parked on a
+  hardware confirmation that widening would compromise.**
+- **A locate that cannot start fails silently.** **Now
+  [plan 053](archive/053-locate-start-failure-is-silent.md) (written 2026-08-05); the
+  finding is kept below as its provenance.** `locate_drive.sh` exits 3 when
+  `/dev/bsg/<addr>` is missing; `locate.php` spawns it with output discarded,
+  sleeps 250 ms and returns `{"ok":true}` regardless. The client sees `ok`, the
+  address is absent from `active`, and the button quietly stays "Locate" — the
+  user confirmed a dialog and got nothing. This is 048's own narrowing showing
+  up: Step 1 confirmed every `sdX` resolves to an existing bsg node *on the
+  maintainer's box*, which is what left the error path unexercised. 048 even
+  captured the inverse case (`0:0:0:0` is a bsg node with no block device) and
+  not this one. Fix: return `ok:false` with a reason when the address does not
+  appear in `active` after the start attempt.
+- **`kill` trusts a PID read from world-writable `/tmp`.** **Now
+  [plan 054](archive/054-locate-kill-trusts-a-tmp-pid.md) (written 2026-08-05) — but
+  reframed, see the note under 054's row above: the security half of this
+  finding is weak on a single-root appliance and duplicates a rejection already
+  recorded below. What the plan fixes is PID reuse, which needs no attacker.** `LOCATE_PID_DIR` is
+  `/tmp`; `locate.php` casts the file's contents to int and signals it as root.
+  The cast blocks injection but not the value — a recycled PID after a `kill
+  -9`, or anything able to write `/tmp`, turns Stop into killing an arbitrary
+  root process. Low practical exploitability on stock Unraid (single root
+  admin, `/tmp` is 1777 tmpfs), so this is exposure rather than a live hole.
+  **Not an implementation deviation — 048 specified the path and specified
+  `locate_running()` as "PID file exists **and** `/proc/<pid>` exists", which
+  guards staleness but not ownership.** Fixing it amends a plan decision. Cheap
+  guard: a plugin-owned `0700` directory, or confirm `/proc/<pid>/cmdline` is
+  `locate_drive.sh` before signalling.
+
 ## Findings considered and rejected
 
 Recorded so they are not re-audited on the next pass:
+
+- **`get_phy_health.sh` is missing the expander-PHY filter the other three
+  collectors got** (raised by the 2026-08-05 branch review) — **rejected, and
+  049 already answered it.** The reviewer saw the guard in `get_hba_health.sh`,
+  `get_hba_info.sh` and `get_metrics.sh`, saw it absent in the fourth reader,
+  and called it a copy-paste that missed a file. It is not: `get_phy_health.sh`
+  joins on the **SAS address**, and the bundle showed host 0's own PHYs all
+  report `0x5000000000000134` while its expander PHYs report `0x…135`. The
+  address separates them; the name does not. 049 makes this an explicit STOP
+  condition — *"any change to `get_phy_health.sh` or `parse/storcli_phy.sh`"* —
+  and a done criterion that its output stay byte-identical, precisely so a
+  later reader cannot "tidy" the asymmetry away. **This is the second time the
+  three-of-four shape has read as an oversight. Expect a third.**
+  What *does* survive from that review is narrower and is not a code change:
+  whether the address join also excludes expander entries from the **displayed
+  total** on the *lsiutil* backend. 049's evidence covers the storcli path
+  (`storcli_phy.sh` filters to the controller's base address). If it does not
+  hold on lsiutil, the PHY tab and the Health tab can disagree — a consumer
+  question, for the same hardware 049 is already waiting on.
 
 - **Settings POST is unauthenticated / needs a server-side CSRF check** (was plan
   009) — **the finding was wrong.** Unraid auto-prepends
@@ -816,6 +1405,20 @@ decisions rather than defects:
    to one degrading now. Periodic snapshots plus a delta would make the PHY tab
    diagnostic instead of descriptive — the highest-signal failure predictor
    already being collected.
+4. **Make the request dispatches testable.** Every endpoint file ends with
+   `if (PHP_SAPI === 'cli') return;` followed by its per-request statements, so
+   that region is unreachable from the suite by construction: `flash.php` ~110
+   lines, `locate.php` ~75, `bay_map.php` ~70, `export.php` ~46, `bundle.php`
+   ~32, `phy_baseline.php` ~19. Everything above the guard is already pure and
+   well covered — this is the deliberate seam working, and then stopping one
+   line short. **Two plans in a single day (053's `ok:false` replies, 054's
+   kill gate) landed changes there verified by reading only**, and 054's was
+   the line that signals a process as root. The shape of a fix: give each
+   dispatch a `handle_<action>(array $post, …): array` that returns
+   `[$status, $payload]`, leaving the tail as `http_response_code()` +
+   `echo json_encode()`. Same pure-over-injected-paths posture the rest of
+   these files already have, and it turns "verified by reading" into a test.
+   Sized per file, `locate.php` first since it is smallest and freshest.
 
 ## Scope not audited
 

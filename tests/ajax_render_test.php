@@ -236,6 +236,95 @@ check('phy_top_offenders empty input stays quiet', $warned === false);
 $off = phy_top_offenders([['phy' => 5, 'sas_addr' => '5000CCA25319FB45']], [0 => $rate(3)], []);
 check('phy_top_offenders unresolved drive still ranks', count($off) === 1 && $off[0]['drive'] === null);
 
+/* ── PHY tab (plan 050): the baseline rate is a long-run average, and the
+   Health tab's own ring, read READ-ONLY, can show a far more recent one
+   beside it. luPhyCell tested directly with fixture $recent/$ringSpanSecs —
+   no disk I/O needed, the whole point of keeping the data assembly
+   (phy_recent_rate) separate from the HTML (luPhyCell). ────────────────── */
+check('luPhyCell fn exists',       function_exists('luPhyCell'));
+check('phy_recent_rate fn exists', function_exists('phy_recent_rate'));
+
+$dBase = ['reset' => false, 'delta' => ['inv' => 115], 'rate' => ['inv' => 1.9]];
+
+// No ring at all (null/null): the average prints with its "since baseline"
+// label, and nothing about a recent window is claimed.
+$cell = luPhyCell(115, false, $dBase, 'inv', null, null);
+check('luPhyCell labels the rate as an average since baseline', str_contains($cell, '1.9/hr since baseline'));
+check('luPhyCell omits the recent column with no ring', !str_contains($cell, 'in the last'));
+
+// Ring usable, this PHY quiet lately: the historical average survives
+// alongside the recent figure — the fix is MORE context, never less.
+$recentQuiet = ['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
+$cell = luPhyCell(115, false, $dBase, 'inv', $recentQuiet, 46189);
+check('luPhyCell recent column appears when the ring is usable', str_contains($cell, '0/hr in the last'));
+check('luPhyCell keeps the historical average alongside the recent one',
+    str_contains($cell, '1.9/hr since baseline') && str_contains($cell, '0/hr in the last'));
+
+// Recent WORSE than historical (a fault that just started): both numbers
+// still print, correctly, in the order historical-then-recent.
+$dQuietHistory = ['reset' => false, 'delta' => ['inv' => 1], 'rate' => ['inv' => 0.1]];
+$recentHot     = ['idx' => 5, 'inv' => 40.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
+$cell = luPhyCell(1, false, $dQuietHistory, 'inv', $recentHot, 600);
+check('luPhyCell reads correctly when recent exceeds historical',
+    str_contains($cell, '0.1/hr since baseline') && str_contains($cell, '40/hr in the last'));
+
+// The 'reset' counter is named 'rst' in the Health ring's own rows (sysfs'
+// field name) but 'reset' in phy_baseline's (the PHY tab's own field name) —
+// luPhyCell must bridge that, not silently show nothing for that column.
+$dReset    = ['reset' => false, 'delta' => ['reset' => 2], 'rate' => ['reset' => 0.5]];
+$recentRst = ['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 3.0];
+$cell = luPhyCell(2, false, $dReset, 'reset', $recentRst, 600);
+check('luPhyCell maps the reset counter onto the ring\'s rst key', str_contains($cell, '3.0/hr in the last'));
+
+// No baseline at all: unchanged (no lu-phy-delta div at all) regardless of
+// whether a recent rate is available — a raw counter with no reference point
+// must not sprout a rate from the ring alone.
+check('luPhyCell omits the delta entirely with no baseline',
+    luPhyCell(9, false, null, 'inv', $recentHot, 600) === '9');
+
+// phy_recent_rate(): the pure ring lookup, keyed by PHY index, that feeds
+// the cells above in renderPhyTables().
+$hSample = function (int $t, int $uptime, int $idx, int $inv): array {
+    return ['t' => $t, 'uptime' => $uptime, 'phys' => [['idx' => $idx, 'inv' => $inv, 'disp' => 0, 'sync' => 0, 'rst' => 0]]];
+};
+$ringUsable = [$hSample(1000, 100, 5, 0), $hSample(1000 + 3600, 3700, 5, 36)];
+check('phy_recent_rate finds the matching PHY index', phy_recent_rate($ringUsable, 5)['inv'] === 36.0);
+check('phy_recent_rate null for a PHY the ring never saw', phy_recent_rate($ringUsable, 9) === null);
+check('phy_recent_rate null on an empty ring', phy_recent_rate([], 5) === null);
+$ringTooShort = [$hSample(1000, 100, 5, 0), $hSample(1030, 130, 5, 10)];
+check('phy_recent_rate null under a 60s ring span', phy_recent_rate($ringTooShort, 5) === null);
+
+// Wiring: renderPhyTables must key the ring read by the CONTROLLER the row
+// belongs to (health_store_path($i)), never by position — controller 1's
+// recent rate must never leak onto controller 0's row, or vice versa.
+$phyRing0 = health_store_path(0);
+$phyRing1 = health_store_path(1);
+$phyRingSaved0 = is_file($phyRing0) ? file_get_contents($phyRing0) : null;
+$phyRingSaved1 = is_file($phyRing1) ? file_get_contents($phyRing1) : null;
+health_store_write($phyRing0, [$hSample(1000, 100, 0, 0), $hSample(1000 + 3600, 3700, 0, 72)]);  // ctl 0: 72/hr recent
+health_store_write($phyRing1, [$hSample(1000, 100, 0, 0), $hSample(1000 + 3600, 3700, 0, 15)]);  // ctl 1: 15/hr recent
+
+$twoCtlPhy = ['backend' => 'storcli', 'controllers' => [
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0]]],
+    ['phys' => [['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0]]],
+]];
+$blBothPhy = ['0:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000],
+              '1:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
+$h = renderPhyTables($twoCtlPhy, $blBothPhy, 1000 + 3600, 5000 + 3600);
+check('phy recent rate keyed per controller, not position',
+    str_contains($h, '72/hr in the last') && str_contains($h, '15/hr in the last'));
+
+if ($phyRingSaved0 === null) @unlink($phyRing0); else file_put_contents($phyRing0, $phyRingSaved0);
+if ($phyRingSaved1 === null) @unlink($phyRing1); else file_put_contents($phyRing1, $phyRingSaved1);
+
+// Top offenders header now says what the rate answers (plan 050 Step 2) —
+// wording, not a golden file, so it belongs beside the offenders it labels.
+$offHdr = renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => [
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], $bl, 1000 + 3600, 5000 + 3600);
+check('top offenders header states the rate is an average since baseline',
+    str_contains($offHdr, 'Errors/hr — average since baseline'));
+
 /* ── Drives: backend picks columns; enclosure summary renders ────────────── */
 $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
     'enclosures' => [['eid'=>'8','product'=>'VirtualSES','vendor'=>'LSI','slots'=>'8','drives'=>'4','direct'=>1]],
@@ -308,6 +397,35 @@ check('drives device column leads the row',
 
 $h = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg']);
 check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>'));
+
+/* The Unraid column: the same slot name on all four surfaces, so a row here can
+   be matched against Main without tracking /dev/sdX by eye. */
+$hRole = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
+check('drives table has an Unraid column',  str_contains($hRole, '<th>Unraid</th>'));
+check('drives table names the slot',        str_contains($hRole, '<td>Disk 1</td>'));
+check('drives lsiutil has an Unraid column',
+      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<th>Unraid</th>'));
+check('drives lsiutil names the slot',
+      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<td>Parity</td>'));
+// A drive the array does not use gets an em dash, never a blank cell that reads
+// as "not looked up".
+check('an unassigned drive shows an em dash',
+      substr_count(renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], []), '<span class="lu-muted">—</span>') > 0);
+
+$hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
+                               null, ['/dev/sdp' => 'Parity']);
+check('SMART table has an Unraid column', str_contains($hSmartRole, '<th>Unraid</th>'));
+check('SMART table names the slot',       str_contains($hSmartRole, '<td>Parity</td>'));
+
+$hPhyRole = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
+check('PHY table has an Unraid column', str_contains($hPhyRole, '<th>Unraid</th>'));
+check('PHY table names the slot',       str_contains($hPhyRole, '<td>Disk 1</td>'));
+check('PHY lsiutil table has an Unraid column',
+      str_contains(renderPhyTables($phyLsi, [], null, null,
+          ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]], [], ['/dev/sdb' => 'Parity']),
+          '<td>Parity</td>'));
 check('drives storcli device leads the row',
       strpos($h, '<th>Device</th>') < strpos($h, '<th>Encl:Slot</th>'));
 // Serials come off lsblk in whatever case the drive reports; the map is keyed
@@ -321,6 +439,258 @@ check('drives storcli device serial match is case-insensitive',
 check('drives storcli unmatched device is em dash',
       str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '<span class="lu-muted">—</span>')
       && !str_contains(renderDrivesTables($drvStorcli, ['SOMEONEELSE' => '/dev/sdz']), '/dev/sdz'));
+
+/* ── Bay map join (plan 047) ──────────────────────────────────────────────────
+   Three payloads meet here: the drive list, the background SMART cache (keyed
+   by serial) and the stored positions (keyed by port/PHY). The load-bearing
+   case is the third check: a drive nobody has SMART for must be `nodata`, not
+   green — a bay coloured healthy for a drive that was never read is the whole
+   failure this feature would introduce if it got that wrong. */
+$bmDrives = ['backend' => 'storcli', 'controllers' => [['drives' => [
+    ['slot'=>'0/0','port'=>'14','model'=>'ST8000NM','serial'=>'PLACED01','size'=>'7.276 TB'],
+    ['slot'=>'0/1','port'=>'15','model'=>'ST8000NM','serial'=>'NOSMART1','size'=>'7.276 TB'],
+    ['slot'=>'0/2','port'=>'16','model'=>'ST8000NM','serial'=>'TRAYDRV1','size'=>'7.276 TB'],
+]]]];
+$bmSmart = ['drives' => [
+    ['dev'=>'/dev/sda','serial'=>'PLACED01','smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0']],
+    ['dev'=>'/dev/sdc','serial'=>'TRAYDRV1','smart'=>['health'=>'PASSED','temp'=>'41','defects'=>'0','pending'=>'2']],
+]];
+$bm = bay_map_assemble($bmDrives, $bmSmart, ['c0:p14'=>['row'=>1,'col'=>2], 'c0:p15'=>['row'=>0,'col'=>0]],
+                       6, 4, ['PLACED01'=>'/dev/sda']);
+check('baymap carries the grid dims',   $bm['rows'] === 6 && $bm['cols'] === 4);
+// The view needs the lock state in the same payload, or it renders an editable
+// map over a store that will refuse every edit.
+check('baymap reports unlocked by default', $bm['locked'] === false);
+check('baymap passes the lock through',
+      bay_map_assemble($bmDrives, null, [], 6, 4, [], true)['locked'] === true);
+check('baymap places mapped drives',    count($bm['placed']) === 2);
+check('baymap trays unmapped drives',   count($bm['unassigned']) === 1 && $bm['unassigned'][0]['serial'] === 'TRAYDRV1');
+$placed = array_column($bm['placed'], null, 'serial');
+check('baymap placed keeps its position', $placed['PLACED01']['row'] === 1 && $placed['PLACED01']['col'] === 2);
+check('baymap joins SMART by serial',     $placed['PLACED01']['state'] === 'ok' && $placed['PLACED01']['temp'] === 34);
+check('baymap resolves the /dev name',    $placed['PLACED01']['dev'] === '/dev/sda');
+check('baymap placed-but-unread is nodata, NOT ok',
+      $placed['NOSMART1']['state'] === 'nodata' && $placed['NOSMART1']['temp'] === null);
+check('baymap flags pending sectors as warn', $bm['unassigned'][0]['state'] === 'warn');
+check('baymap keys storcli drives on port',   $placed['PLACED01']['key'] === 'c0:p14');
+// The cell prints six fields; each has to survive the join.
+check('baymap carries model, serial and size',
+      $placed['PLACED01']['model'] === 'ST8000NM' && $placed['PLACED01']['serial'] === 'PLACED01'
+      && $placed['PLACED01']['size'] === '7.276 TB');
+/* The bay card sets the capacity number and its unit at different sizes, so
+   they are split server-side rather than parsed in the view. */
+check('baymap splits capacity from its unit',
+      $placed['PLACED01']['cap'] === '7.276' && $placed['PLACED01']['cap_unit'] === 'TB');
+check('baymap passes an unparseable size through whole',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'1','size'=>'unknown']]]]], null, [], 6, 4)
+          ['unassigned'][0]['cap'] === 'unknown');
+check('baymap carries the warn temperature', $bm['warn_temp'] === 45);
+// The Unraid slot name reaches the bay card and the tray chip.
+$bmRole = bay_map_assemble($bmDrives, null, [], 6, 4, ['PLACED01'=>'/dev/sdp'], false, 45, null, [],
+                           ['/dev/sdp' => 'Parity']);
+$roleBySerial = array_column($bmRole['unassigned'], null, 'serial');
+check('baymap carries the Unraid slot name', $roleBySerial['PLACED01']['role'] === 'Parity');
+check('baymap leaves a non-array drive roleless', $roleBySerial['NOSMART1']['role'] === '');
+check('baymap warn temperature is injectable',
+      bay_map_assemble($bmDrives, null, [], 6, 4, [], false, 52)['warn_temp'] === 52);
+/* Rebuild is the ONE thing read from storcli's `state` field. That field is a
+   RAID-topology role rather than a health verdict — which is exactly why it is
+   right here and wrong for everything else: "Rbld" is not a claim about the
+   drive's health, it IS the role, and nothing else reports a rebuild. */
+$bmRbld = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['port'=>'3','serial'=>'REBUILD1','state'=>'Rbld'],
+    ['port'=>'4','serial'=>'ONLINE01','state'=>'Onln'],
+]]]], ['drives'=>[['serial'=>'REBUILD1','smart'=>['health'=>'PASSED']],
+                  ['serial'=>'ONLINE01','smart'=>['health'=>'PASSED']]]], [], 6, 4);
+$byS = array_column($bmRbld['unassigned'], null, 'serial');
+check('baymap reports a rebuilding drive', $byS['REBUILD1']['state'] === 'rebuild');
+/* Onln/UGood/JBOD are roles, not verdicts: an Onln drive with failing SMART
+   must still read as failed, so only Rbld may override the SMART state. */
+check('baymap does not let Onln override SMART', $byS['ONLINE01']['state'] === 'ok');
+check('baymap keeps a failing Onln drive failed',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'4','serial'=>'S','state'=>'Onln']]]]],
+          ['drives'=>[['serial'=>'S','smart'=>['health'=>'FAILED']]]], [], 6, 4)
+          ['unassigned'][0]['state'] === 'fail');
+/* The wire label is display-ready and backend-specific on purpose: calling an
+   lsiutil PHY a "Port" would be a small lie in the exact place someone reads
+   before pulling a drive out of a running array. */
+check('baymap labels a storcli wire as Port', $placed['PLACED01']['port'] === 'Port 14');
+check('baymap labels an lsiutil wire as PHY',
+      bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[['phy'=>'2','serial'=>'S']]]]],
+                       null, [], 6, 4)['unassigned'][0]['port'] === 'PHY 2');
+check('baymap port is empty when the drive reports no wire',
+      $bmNoKey_port = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[['serial'=>'S']]]]],
+                       null, [], 6, 4)['unassigned'][0]['port'] === '');
+
+// No SMART cache at all (never collected) — every drive is nodata, nothing green.
+$bmNone = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>0,'col'=>0]], 6, 4);
+check('baymap with no SMART cache colours nothing',
+      count(array_filter(array_merge($bmNone['placed'], $bmNone['unassigned']),
+                         fn($e) => $e['state'] !== 'nodata')) === 0);
+
+// lsiutil backend: no port anywhere, so the key comes off the PHY.
+$bmLsi = bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[
+    ['bus'=>'0','target'=>'3','phy'=>'2','os_name'=>'/dev/sdb','serial'=>'LSIDRV01'],
+]]]], null, ['c0:h2'=>['row'=>2,'col'=>1]], 6, 4);
+check('baymap keys lsiutil drives on phy', ($bmLsi['placed'][0]['key'] ?? '') === 'c0:h2');
+check('baymap lsiutil dev comes from os_name', ($bmLsi['placed'][0]['dev'] ?? '') === '/dev/sdb');
+
+// A stored position outside the current grid (hand-edited file) must land in
+// the tray, not vanish and not render off-screen.
+$bmOut = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>9,'col'=>9]], 2, 2);
+check('baymap out-of-grid position falls back to the tray',
+      $bmOut['placed'] === [] && count($bmOut['unassigned']) === 3);
+
+// A drive with neither port nor PHY cannot be placed — but must still be
+// listed, or a missing drive reads as a detection bug.
+$bmNoKey = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['slot'=>'0/9','model'=>'ST8000NM','serial'=>'NOPORT01'],
+]]]], null, [], 6, 4);
+check('baymap unplaceable drive still appears, with a null key',
+      count($bmNoKey['unassigned']) === 1 && $bmNoKey['unassigned'][0]['key'] === null);
+
+/* ── Constants must be declared before the code that uses them ───────────────
+   A `function` is hoisted and callable from anywhere in the file; a top-level
+   `const` is an ordinary statement that only exists once execution reaches it.
+   Declaring SMART_CACHE_PATH beside the functions that use it left it undefined
+   for the endpoints ABOVE it, and the SMART tab fataled with "Undefined
+   constant" — while every test here passed, because requiring this file under
+   CLI returns at the dispatch guard and never reaches an endpoint.
+   Two checks: the specific constants are visible under CLI (so they are above
+   that guard), and no constant in the file is used before its declaration. */
+check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
+
+$aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
+foreach ($mc[1] as [$cname, $declAt]) {
+    check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
+}
+
+/* A const used as a DEFAULT PARAMETER VALUE is the worse version of the same
+   trap: the function is hoisted and callable from anywhere, but its default
+   resolves at CALL time, so an endpoint above the const's declaration fatals on
+   a function that looks perfectly well-defined. Any const in a signature must
+   therefore live above the dispatch guard — where the CLI test runner can see
+   it, which is what this check is standing in for. */
+preg_match_all('/^function\s+\w+\s*\(([^)]*)\)/m', $aj, $sigs);
+foreach ($sigs[1] as $params) {
+    preg_match_all('/=\s*([A-Z][A-Z0-9_]{2,})\b/', $params, $defs);
+    foreach (array_unique($defs[1]) as $cname) {
+        check("const $cname is declared above the dispatch guard (used as a default parameter)", defined($cname));
+    }
+}
+
+/* ── Unraid parity rebuild ────────────────────────────────────────────────────
+   Read from the same two files Unraid's webGui renders from. The load-bearing
+   check is the parity-CHECK one: a check reads the array and writes nothing, so
+   painting it as a rebuild would put an animated "PARITY REBUILD" on a disk
+   that is not being rebuilt. Only positive evidence of a reconstruct counts. */
+$iniDir = sys_get_temp_dir() . '/hbav_ini_' . getmypid();
+@mkdir($iniDir, 0755, true);
+$mkIni = function (string $name, string $body) use ($iniDir): string {
+    file_put_contents("$iniDir/$name", $body);
+    return "$iniDir/$name";
+};
+$disks = $mkIni('disks.ini', "[\"parity\"]\nname=\"parity\"\ndevice=\"sdp\"\n"
+                           . "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdb\"\n"
+                           . "[\"cache\"]\nname=\"cache\"\ndevice=\"nvme0n1\"\n");
+check('parity devices come off disks.ini', unraid_parity_devs($disks) === ['/dev/sdp']);
+$disks2 = $mkIni('disks2.ini', "[\"parity\"]\ndevice=\"sdp\"\n[\"parity2\"]\ndevice=\"sdq\"\n");
+check('dual parity is both disks', unraid_parity_devs($disks2) === ['/dev/sdp', '/dev/sdq']);
+check('a missing disks.ini is no parity', unraid_parity_devs("$iniDir/nope.ini") === []);
+
+/* The array slot names — the identifier every other Unraid screen uses, and
+   the one a person already knows before they come here. Spelled the way Main
+   spells them so the two screens can be read side by side. */
+$roles = unraid_disk_roles($disks);
+check('parity is named Parity',   ($roles['/dev/sdp'] ?? '') === 'Parity');
+check('disk1 is named Disk 1',    ($roles['/dev/sdb'] ?? '') === 'Disk 1');
+check('a pool keeps its own name', ($roles['/dev/nvme0n1'] ?? '') === 'Cache');
+check('the second parity is Parity 2',
+      (unraid_disk_roles($disks2)['/dev/sdq'] ?? '') === 'Parity 2');
+check('a drive outside the array has no role', !isset($roles['/dev/sdzz']));
+check('a missing disks.ini has no roles', unraid_disk_roles("$iniDir/nope.ini") === []);
+/* Double digits must not sort or read as "Disk 1" — the whole point is telling
+   two disks apart at a glance. */
+check('disk10 is Disk 10',
+      (unraid_disk_roles($mkIni('d10.ini', "[\"disk10\"]\nname=\"disk10\"\ndevice=\"sdk\"\n"))['/dev/sdk'] ?? '') === 'Disk 10');
+
+check('recon while resyncing is a rebuild',
+      unraid_rebuilding($mkIni('v1.ini', "mdResync=\"1234\"\nmdResyncAction=\"recon P\"\n")) === true);
+check('a parity CHECK is not a rebuild',
+      unraid_rebuilding($mkIni('v2.ini', "mdResync=\"1234\"\nmdResyncAction=\"check P\"\n")) === false);
+check('recon with no resync running is not a rebuild',
+      unraid_rebuilding($mkIni('v3.ini', "mdResync=\"0\"\nmdResyncAction=\"recon P\"\n")) === false);
+check('an idle array is not a rebuild',
+      unraid_rebuilding($mkIni('v4.ini', "mdState=\"STARTED\"\n")) === false);
+check('a missing var.ini is not a rebuild', unraid_rebuilding("$iniDir/nope.ini") === false);
+
+/* Verbatim from a live box (Golem, 2026-08-04), and the reason mdResync is
+   checked at all: mdResyncAction is STICKY. This array is idle and has been for
+   some time, yet still reports the "check P" it last ran. Matching on the
+   action alone would paint a permanent rebuild on the parity disk of every
+   array that has ever run an operation.
+   The same capture shows the second parity slot present but unassigned
+   (device=""), which must not become "/dev/". */
+$golemVar = $mkIni('golem_var.ini',
+    "mdResync=\"0\"\nmdResyncCorr=\"0\"\nmdResyncPos=\"0\"\nmdResyncDb=\"0\"\n"
+  . "mdResyncDt=\"0\"\nmdResyncAction=\"check P\"\nmdResyncSize=\"13672382412\"\nmdState=\"STARTED\"\n");
+$golemDisks = $mkIni('golem_disks.ini',
+    "[\"parity\"]\nidx=\"0\"\nname=\"parity\"\ndevice=\"sdp\"\n"
+  . "[\"parity2\"]\nidx=\"29\"\nname=\"parity2\"\ndevice=\"\"\n"
+  . "[\"disk1\"]\nidx=\"1\"\nname=\"disk1\"\ndevice=\"sdb\"\n");
+check('a live idle array with a stale action is not rebuilding', unraid_rebuilding($golemVar) === false);
+check('an unassigned parity2 is not a device', unraid_parity_devs($golemDisks) === ['/dev/sdp']);
+// Section headers in Unraid's ini files are quoted (["parity"]); the parser
+// must see through that or every disk section is skipped.
+check('quoted ini section names still match', unraid_parity_devs($golemDisks) !== []);
+
+// End to end: the parity disk gets the chip, its neighbour does not.
+$bmPar = bay_map_assemble(['controllers'=>[['drives'=>[
+    ['port'=>'1','serial'=>'PARITY01'], ['port'=>'2','serial'=>'DATA0001'],
+]]]], null, [], 6, 4, ['PARITY01'=>'/dev/sdp','DATA0001'=>'/dev/sdb'], false, 45, null, ['/dev/sdp']);
+$byDev = array_column($bmPar['unassigned'], null, 'dev');
+check('the rebuilding parity disk reads as rebuild',
+      $byDev['/dev/sdp']['state'] === 'rebuild' && $byDev['/dev/sdp']['rebuild_label'] === 'PARITY REBUILD');
+check('a data disk beside it is untouched',
+      $byDev['/dev/sdb']['state'] !== 'rebuild' && $byDev['/dev/sdb']['rebuild_label'] === null);
+// storcli's own Rbld still reports, and says which kind it is.
+check('a controller rebuild is labelled RESILVER',
+      bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'3','serial'=>'S','state'=>'Rbld']]]]],
+          null, [], 6, 4)['unassigned'][0]['rebuild_label'] === 'RESILVER');
+array_map('unlink', glob("$iniDir/*") ?: []);
+@rmdir($iniDir);
+
+/* ── The SMART cache is kept until someone refreshes it ───────────────────────
+   Re-reading every drive costs ~1s per drive, and the data changes over weeks,
+   so a TTL made both the SMART tab and the bay map feel broken. What replaces
+   it is that every surface states the collection's age. */
+$sc = sys_get_temp_dir() . '/hbav_smartcache_' . getmypid() . '.json';
+file_put_contents($sc, '{"drives":[{"dev":"/dev/sda","serial":"X","smart":{"health":"PASSED"}}]}');
+touch($sc, time() - 86400 * 3);
+check('a three-day-old cache is still served', smart_cache_read($sc) !== null);
+check('cache age is reported in seconds', abs((int) smart_cache_age($sc) - 86400 * 3) < 5);
+check('no cache reads as null, not empty', smart_cache_read("$sc.nope") === null);
+check('no cache has no age', smart_cache_age("$sc.nope") === null);
+file_put_contents($sc, 'not json');
+check('a corrupt cache reads as null', smart_cache_read($sc) === null);
+@unlink($sc);
+// The table says how old it is, so week-old temperatures cannot pass for live.
+$smartHtml = renderSmartTable(['drives'=>[['dev'=>'/dev/sda','serial'=>'X','smart'=>['health'=>'PASSED']]]], 7200);
+check('the SMART table states its age', str_contains($smartHtml, 'Collected 2 h ago'));
+check('the SMART table says how to update it', str_contains($smartHtml, 'until you press Refresh'));
+check('no age given, no age line',
+      !str_contains(renderSmartTable(['drives'=>[['dev'=>'/dev/sda','serial'=>'X','smart'=>[]]]]), 'Collected'));
+
+/* smart_state is the one health rule the SMART tab, the per-drive line and the
+   bay map all share (plan 047 STOP condition). */
+check('smart_state ok',      smart_state(['health'=>'PASSED']) === 'ok');
+check('smart_state ok on OK', smart_state(['health'=>'OK']) === 'ok');
+check('smart_state warn on pending', smart_state(['health'=>'OK','pending'=>'3']) === 'warn');
+check('smart_state warn on defects', smart_state(['health'=>'OK','defects'=>'1']) === 'warn');
+check('smart_state fail',    smart_state(['health'=>'FAILED']) === 'fail');
+check('smart_state nodata on empty', smart_state([]) === 'nodata');
+check('smart_state nodata is uncoloured', smart_state_color('nodata') === '');
 
 check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
 check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
@@ -421,6 +791,11 @@ check('smart no transport is not guessed', !str_contains($hNoTran, 'SATA'));
 $t = luTable(['A & B'], [['<code>x</code>']]);
 check('luTable escapes headers', str_contains($t, 'A &amp; B'));
 check('luTable cells are html',  str_contains($t, '<code>x</code>'));
+/* Plan 050's per-cell rates made the PHY table wider than its card, and the
+   overflow columns were unreachable rather than merely ugly. The scroller is
+   what makes a wide table readable, so it is pinned here. */
+check('luTable is wrapped in a horizontal scroller',
+      str_starts_with($t, '<div class="lu-tscroll"><table') && str_ends_with($t, '</table></div>'));
 
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of
@@ -527,8 +902,11 @@ $hs = function (int $t, int $uptime, $temp, string $band): array {
             'link' => ['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s'],
             'phys' => [['idx' => 0, 'inv' => 0, 'disp' => 0, 'sync' => 0, 'rst' => 0, 'rate' => '12.0_Gbit']]];
 };
-// Two samples 120s apart with flat counters: link_integrity needs >= 60s of ring
-// to be anything but `unknown`, and identical counters make it `ok`.
+// Two samples 2000s apart with flat counters: link_integrity needs >= 60s of
+// ring to be anything but `unknown` at all, and (plan 050) >= HEALTH_MIN_CLEAR_SECS
+// (30 min) of it clean before a bare "0/hr" counts as the all-clear rather than
+// "too short to have seen a slow fault yet" — 2000s clears that floor, and
+// identical counters make it `ok`.
 $hRender = function (array $ctl, array $seed) use ($hRing): string {
     health_store_write($hRing, [$seed]);
     return renderHealthTables(['controllers' => [$ctl]]);
@@ -538,7 +916,7 @@ $rowsOf  = fn(string $h) => substr_count($h, 'class="lu-indicator-row"');
 $greenOf = fn(string $h) => substr_count($h, '<span class="lu-ind-dot" style="--gd:' . $okDark . ';');
 
 $now = time();
-$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 120, 3480, '76', 'warning'));
+$h = $hRender($hs($now, 3600, '77', 'warning'), $hs($now - 2000, 1600, '76', 'warning'));
 
 check('health five rows render', $rowsOf($h) === 5);
 foreach (['Thermal', 'Link Integrity', 'Topology', 'Host Link', 'Read Health'] as $lbl) {
@@ -588,7 +966,7 @@ check('health warning row not green', $greenOf($h) === 4);
 /* No temperature sensor at all — the common SAS2008/9211 case. thermal is
    `unknown`, which must still render a row (with an em dash) and must NOT be
    counted as ok. */
-$h = $hRender($hs($now, 3600, null, ''), $hs($now - 120, 3480, null, ''));
+$h = $hRender($hs($now, 3600, null, ''), $hs($now - 2000, 1600, null, ''));
 check('health unknown thermal still rows', $rowsOf($h) === 5);
 check('health unknown thermal em dash', str_contains($h, '<span class="lu-indicator-value">—</span>'));
 check('health unknown thermal not green', $greenOf($h) === 4);
@@ -601,7 +979,7 @@ check('health unknown gauge total == rows rendered',  (int) ($m[2] ?? -1) === $r
    orientation where the numerator assertion, not the denominator, does the work. */
 $down = $hs($now, 3600, '45', 'normal');
 $down['link']['width'] = 4;                       // x4 in an x8 slot -> host_link warning
-$h = $hRender($down, $hs($now - 120, 3480, '45', 'normal'));
+$h = $hRender($down, $hs($now - 2000, 1600, '45', 'normal'));
 preg_match('~<span class="val">(\d+) / (\d+)</span>~', $h, $m);
 check('health downtrain gauge reads 4 / 5', ($m[1] ?? '') === '4' && ($m[2] ?? '') === '5');
 check('health downtrain numerator == green rows', (int) ($m[1] ?? -1) === $greenOf($h));

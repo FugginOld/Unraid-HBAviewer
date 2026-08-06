@@ -71,11 +71,12 @@ installs it; Unraid's Slackware base ships it.
 
 | File | Role |
 | --- | --- |
-| `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
+| `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
 | `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
 | `health.php` | The five indicators, the rolling sample ring, the rollup. |
 | `phy_baseline.php` | The `/boot` baseline store, delta and rate maths, reset detection. |
+| `bay_map.php` | The `/boot` drive-bay assignment store, the identity key, the grid size and the lock. Second mutating path after `flash.php` — see below. |
 | `event_archive.php` | Persists the firmware event ring to `/boot`; pure `event_merge()`. |
 | `export.php` | Read-only JSON / Prometheus snapshot. |
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
@@ -89,6 +90,17 @@ the top, `if (PHP_SAPI === 'cli') return;` in the middle, HTTP dispatch at the
 bottom. PHP hoists top-level function declarations, so the test runner can
 `require` the file and get the functions without ever reaching the dispatch.
 `ajax_info.php` includes several of these purely for their helpers.
+
+**A `const` used by an endpoint must be declared ABOVE the dispatch guard.**
+Function declarations are hoisted; top-level `const` statements are not — they
+exist only once execution reaches them. A const declared next to the functions
+that use it is therefore undefined for every endpoint above it, and the failure
+is a fatal on a function that looks perfectly well defined. This shipped once
+and blanked the SMART tab. It is worse for a const used as a **default
+parameter value**, which resolves at call time, so the call site's position is
+what matters rather than the function's. Both cases are asserted in
+`tests/ajax_render_test.php`; the guard is that anything visible to the CLI test
+runner is by definition above the dispatch.
 
 **CSRF is not checked in plugin code, deliberately.** Unraid auto-prepends
 `local_prepend.php`, which `hash_equals`-checks every POST and then unsets the
@@ -110,7 +122,32 @@ truncated result is never served; and the cache is invalidated by **code mtime**
 as well as age, so pushing new files takes effect immediately instead of after
 60 seconds.
 
-## The one mutating path
+## The mutating paths
+
+Three, and only one of them writes to hardware.
+
+`bay_map.php` writes the drive-bay layout to `/boot` on a POST. It is not a
+hardware path, but it holds the one thing here that **cannot be regenerated**:
+where each drive physically sits, which a person established by walking to the
+rack. So it fails safe in its own way — the lock is enforced in the dispatch
+rather than by greying out the UI (a stale tab can still POST), keys are
+validated against the shape `bay_map_key()` produces before they become object
+keys in a file on flash, and a position outside the current grid is rejected
+rather than clamped.
+
+`locate.php` + `scripts/locate_drive.sh` spawns a root process per drive and
+later signals it by PID. It persists nothing — the marker is a PID file in
+`/tmp` — but it mutates in two senses: it keeps a drive awake for as long as it
+runs, and it sends signals as root. Both are bounded server-side. The loop
+stops itself after `LOCATE_MAX_SECS` (schema-clamped), so a closed browser tab
+cannot leave a disk spinning. Stop signals only a PID whose
+`/proc/<pid>/cmdline` names `locate_drive.sh` — **that check is about PID
+reuse, not `/tmp` permissions**: a loop killed with `-9` skips its own cleanup
+trap and leaves a marker holding a number the kernel will later hand to
+something else. And a start that cannot happen — no `/dev/bsg` node for that
+address — answers `ok:false` with a reason instead of reporting success,
+because a locate that silently does nothing reads as "the light is too subtle
+to see".
 
 `flash.php` + `scripts/flash_hba.sh` is the only code that writes to hardware,
 and it is kept off the read-only path on purpose. Guards are pure functions,
@@ -134,6 +171,7 @@ client-side state load-bearing, the safety model has been inverted.
 | `/boot/config/plugins/hbaviewer/hbaviewer.cfg` | Settings | Survives reinstall |
 | `/boot/.../phy_baseline.json` | User-set PHY baselines | A deliberate reference point must outlive a reboot |
 | `/boot/.../events_c*.json` | Firmware event archive | History survives ring-buffer wrap |
+| `/boot/.../bay_map.json` | Drive bay assignments | The only state here that cannot be re-read from hardware — a person put it there |
 | `/tmp/hbav_*`, `/tmp/lsiutil_*` | Caches, health ring | RAM; no flash wear, dies with the boot |
 
 Everything under `/usr/local/emhttp/plugins/hbaviewer/` is **tmpfs** — a reboot
@@ -197,6 +235,18 @@ Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
   storcli's `WWN` reports the drive's other port, differing in the last hex
   digit by a vendor-specific amount. The join compares the first 15 digits and
   **fails closed** when that prefix is not unique.
+- **A PHY number is only unique within the device that numbered it.** On the
+  lsiutil path a drive's `phy` is `phy_identifier` from sysfs, and an expander
+  numbers its own PHYs from zero exactly as the HBA does. Two drives behind two
+  expanders report the same number. So the drives payload also carries
+  `expander` — the expander's SAS address, empty when direct-attached — and
+  `bay_map_key()` folds it in: `c0:h26` direct, `c0:x<addr>h26` behind an
+  expander. Sysfs distinguishes the two by the shape of the device name,
+  `end_device-H:N` versus `end_device-H:N:M`, the same rule that separates
+  `phy-H:N` from `phy-H:N:M`. Measured on reporter hardware: 19 drives behind
+  two expanders, seven colliding numbers. **Anything that joins on `phy` alone
+  is wrong for expander-attached drives** — `phy_drive()` skips them for
+  exactly this reason.
 - **Absence is not health.** Unknown, unmeasured and stale states must render as
   grey or be omitted — never as green, and never as a zero that reads like a
   measurement.
