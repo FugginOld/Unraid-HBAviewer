@@ -18,10 +18,10 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. Only **029** and **049** are still in
-`plans/`, and both are parked on someone else — every plan with work left in it
-has been executed. The rest are archived and keep their rows here, which is the
-whole point of the index.
+This year's plans and where they stand. **029 is the only plan left in
+`plans/`**, parked on a reboot the maintainer has to do. Everything else is
+executed, merged and archived, and keeps its row here — which is the whole
+point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
@@ -114,7 +114,18 @@ must keep repainting from `active` on a failure. The *current* client does not
 `active` array now included in both failure replies is unused today. Harmless
 and forward-looking, but the note as written implies the UI repaints on
 failure, and it does not.
-| **049** | **merged to `dev`** (`b45be77`), suite green; collector half confirmed on the reporter's box | the ring half of Step 5 — @TheIlluminate92 only (issue #12); see below |
+| **049** | **DONE, archived 2026-08-05** — merged to `dev` (`b45be77`), suite green; **both halves now confirmed on the reporter's box** | nothing; ships in 2026.08.05 |
+
+**049's ring half confirmed, and the plan is closed (2026-08-05).**
+@TheIlluminate92 cleared the rings and re-read
+([#12 comment 5199572625](https://github.com/FugginOld/Unraid-HBAviewer/issues/12#issuecomment-5199572625)):
+`hbav_health_c0.json` and `c1.json` went 1 sample → 2 across two renders, and
+**Link Integrity now shows a rate instead of "Not enough samples yet"** — the
+P1 symptom the issue was opened for. Both controllers, both halves, done.
+
+That closes the last of Step 5. Worth noting what it took: the collector half
+and the ring half looked like one claim and were two, and the box that could
+prove either was never the maintainer's.
 
 **Collector half confirmed on the reporter's box (2026-08-05).**
 @TheIlluminate92 ran the two counts on Waz-Server: **29 own PHYs in sysfs, 29
@@ -126,12 +137,11 @@ that check are aggregate across hosts, so they are comparable; this is not the
 per-controller trap recorded below, which was about counting **duplicates**
 across a payload whose `phys` arrays each legitimately start at idx 0.
 
-**Still open: the ring half.** The P1 symptom — Link Integrity never leaving
-"Not enough samples yet" — is a separate thing from the collector emitting
-correctly, and is unconfirmed. Step 5's remaining commands (`rm -f
-/tmp/hbav_health_c*.json`, render the tab, wait 60 s, count samples) still need
-running on Waz-Server. **Note Step 5's own heading in the plan says "by the
-maintainer" — that is stale**, written before the measurement below showed
+**The ring half — CLOSED later the same day**, see 049's row above. It was
+tracked separately from the collector half on purpose: a correct payload and an
+accumulating ring are different claims, and only the second one is the P1
+symptom users reported. **Note Step 5's own heading in the plan said "by the
+maintainer" — that was stale**, written before the measurement below showed
 Golem cannot exercise it. Corrected in the plan text 2026-08-05.
 
 **049 cannot be confirmed on the maintainer's hardware — measured, not assumed
@@ -156,7 +166,51 @@ to run an aggregate grep over a multi-controller payload — a false positive
 sent to a reporter costs more than one caught at home.
 | **050** | **DONE, archived 2026-08-05** — hardware-verified (`1fb2590`, from `7400339`), suite green | nothing; ships in 2026.08.05 |
 | **051** | **DONE, archived 2026-08-05** — hardware-confirmed both ways | nothing; ships in 2026.08.05 |
-| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green; **direct-attach half hardware-verified** | the expander half only — a bundle from @TheIlluminate92 (#12). Ships in 2026.08.05 with the hedged changelog wording |
+| **052** | **DONE, archived 2026-08-05** — merged to `dev` (`b413d2e`, from `a367a90`), suite green; **BOTH halves hardware-verified** | nothing. The changelog may now drop its hedge — see below |
+
+**052's expander half verified from the reporter's bundle (2026-08-05), and the
+defect was bigger than the plan estimated.** @TheIlluminate92 attached a full
+bundle to #12. Parsing `03-sysfs/` from it:
+
+- **The inferred sysfs naming is real.** `end_device-<H>:<N>:<M>` exists — 19 of
+  them on host 0 — alongside 7 two-part `end_device-<H>:<N>` on host 1. That was
+  the one thing plan 052 listed as *inferred, not measured*, and the fix was
+  written so that being wrong about it cost nothing. It was right.
+- **Two expanders**, `expander-0:0` and `expander-0:1`, with distinct addresses
+  `0x5000000000000135` and `0x5000000000000140`.
+- **Seven `phy_identifier` collisions on host 0** — phys 26, 27, 30, 31, 32, 33
+  and 36 each appear once behind each expander. Replaying `bay_map_key()` over
+  the bundle's real values: **12 distinct keys before 052 for 19 drives — seven
+  drives silently absent from both the grid and the tray — and 19 distinct keys
+  after.** Every expander resolved to exactly one address; nothing fell back.
+
+The plan's "Why this matters" argued from one hypothetical colliding pair. The
+real box loses **seven of nineteen drives**. Worth remembering as a calibration
+point: the estimate was conservative by a factor of seven, and the reason was
+that no one had counted.
+
+**Honest limit on this evidence.** The expander addresses were derived from
+their own `phy-H:N:*` entries in the bundle, not read from
+`/sys/class/sas_device/expander-H:N/sas_address`, because the bundle predates
+052's `sas_expander` dump. Those are the same value in every layout we have
+measured, but it is one inference deep. **The `dump_attrs sas_expander.txt` line
+052 added closes exactly this gap for the next bundle** — which is a fair
+argument for adding evidence capture in the same plan that needs it.
+
+**052's open question about the storcli backend — ANSWERED, and there is no
+bug (2026-08-05).** The worry was that `Connected Port Number` is the HBA port,
+so every drive behind one expander might report the same value and make
+`c<ctl>:p<port>` ambiguous for far more boxes than the lsiutil case. Measured on
+the same expander hardware: six drives on `/c0/e0`, ports **13, 12, 9, 10, 11,
+8** — all distinct. The value tracks the drive, not the uplink. **No storcli
+change is needed and none should be invented**; 052 was right to fence it out
+and wait rather than fix both backends from one backend's evidence.
+
+**Unexplained, worth one look sometime**: storcli reported **6 drives** on `/c0`
+while sysfs shows **19 end devices on host 0** and 7 on host 1. That may simply
+be storcli's `/c0` not being sysfs `host0`, but nobody has checked, and a
+backend that sees a fraction of the drives would matter. Not a defect until
+someone counts — recorded here so the observation is not lost.
 
 **052's no-migration promise is hardware-verified (2026-08-05).** @jac2424 ran
 the two patched scripts on the 9207-8i and posted the payload
@@ -468,9 +522,9 @@ is archived when its code lands on `dev`, whatever else it is still waiting on.
 A plan that stays in `plans/` is one with work left in it — 049 (unconfirmed
 half) and 029 (unmerged) are the only two that qualify today.
 
-Archived to `archive/` on merge: **054**, **053**, **052** and **050** (all
-2026-08-05 — the unidentified-PID kill, the silent locate failure, the expander
-bay-map key, the errors/hr window),
+Archived to `archive/` on merge: **054**, **053**, **052**, **050** and **049**
+(all 2026-08-05 — the unidentified-PID kill, the silent locate failure, the
+expander bay-map key, the errors/hr window, the duplicate PHY index),
 **048** (done 2026-08-05, activity-light locate),
 **047** (done 2026-08-04, with its design bundle),
 **041** (merged 2026-08-04, hardware-passed),

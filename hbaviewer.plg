@@ -60,11 +60,10 @@ bundle located the expander problem below where it was reported.
   An expander numbers its own PHYs from zero, exactly as the card does, so
   on a chassis with one two drives could claim the same bay — and whichever
   was read last took it, leaving the other missing from the grid and from
-  the unassigned tray both. Cards without an expander are unaffected and
-  every existing assignment keeps its bay. This one was found by reading
-  the code rather than by a report, and we have no expander here to try it
-  on: if you run one and the Array Map has been losing a drive, #12 is the
-  place to say so. (#12)
+  the unassigned tray both. On the reporting hardware — two expanders on
+  one card — that was seven of nineteen drives missing. Cards without an
+  expander are unaffected and every existing assignment keeps its bay,
+  confirmed unchanged on a direct-attached card. (#12)
 
 **Changed**
 - HBA Health and PHY Health could report different error rates for the same
