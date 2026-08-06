@@ -263,6 +263,20 @@ if ($enableFlash) {
 .lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 
 /* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
+/* One column per controller instead of a stack, the same move #flash-content
+   made and for the same reason: nothing in a health card is as wide as the
+   frame, so on a two-HBA box the right half was empty and the second card sat
+   below the fold.
+   The 500px floor is set by the instrument tile, which is the widest fixed
+   thing here: a 138px gauge + 22px gap + the band meter's 260px flex-basis is
+   420px of content, plus the tile's 32px padding and the card's 40px. Under
+   that the meter wraps below the gauge — still readable, just taller, which is
+   exactly what the single-column collapse on a narrow window wants. So this
+   needs no media query either.
+   align-items:start so a controller that errored, which renders a two-line
+   card, does not stretch into a tall empty box beside a full one. */
+#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 16px; align-items: start; }
+#health-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 .lu-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
 .lu-health-title { font-size: 12.5px; color: var(--text); font-weight: 600; }
 .lu-health-pill {
