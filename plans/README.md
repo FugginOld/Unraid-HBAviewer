@@ -18,14 +18,40 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. Only **029** and **049** are still in
-`plans/`; the rest have been archived and keep their rows here, which is the
-whole point of the index.
+This year's plans and where they stand. Only **029**, **049** and **054** are
+still in `plans/`; the rest have been archived and keep their rows here, which
+is the whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **054** | **written 2026-08-05, not started** — Stop signals a PID from `/tmp` without checking it is ours | nothing; no hardware needed. **Reframed from the review's security finding to PID reuse** — see below, it changes what is worth fixing |
 | **053** | **DONE, archived 2026-08-05** — merged to `dev` (`667ca96`, from `9a14eba`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw |
+
+**054 reframes the review's finding, and says so rather than quietly widening
+it (2026-08-05).** The review filed it as a security defect: `LOCATE_PID_DIR` is
+`/tmp`, so anyone who can write there makes Stop kill an arbitrary root process.
+**On this appliance that argument is weak, and it duplicates one already
+rejected below** — "not worth code on a single-root appliance where anyone who
+can create those files is already root". To plant the marker you must already
+be root.
+
+**What survives needs no attacker: PID reuse.** `locate_drive.sh` clears its
+marker from `trap … EXIT`, and SIGKILL bypasses traps. A loop killed with `-9`
+leaves a marker holding a PID Linux later hands to something else — so a drive
+reports as blinking when it is not, and pressing Stop signals a stranger's
+process as root. `kill -9` plus uptime is the whole reproduction.
+
+One fix closes both: `locate_running()` checks `/proc/<pid>/cmdline` names our
+script, and the `stop` handler gates its kill on that rather than on "a number
+was in the file". The review's other suggestion — a plugin-owned `0700`
+directory — was rejected in the plan: it does nothing about PID reuse, nothing
+about a root attacker, and needs a coordinated change across two files plus a
+migration for markers already in `/tmp`.
+
+**This also amends plan 048 on purpose.** 048 defined running as "PID file
+exists **and** `/proc/<pid>` exists", which guards staleness but not ownership.
+That was a decision, not a slip, and 054 changes it deliberately.
 
 **053 executed and review-approved 2026-08-05.** Three commits, two files
 (`locate.php`, `tests/locate_test.php`), diff matching the plan verbatim.
@@ -1176,7 +1202,11 @@ is now plan 052, the other two are still unowned:
   captured the inverse case (`0:0:0:0` is a bsg node with no block device) and
   not this one. Fix: return `ok:false` with a reason when the address does not
   appear in `active` after the start attempt.
-- **`kill` trusts a PID read from world-writable `/tmp`.** `LOCATE_PID_DIR` is
+- **`kill` trusts a PID read from world-writable `/tmp`.** **Now
+  [plan 054](054-locate-kill-trusts-a-tmp-pid.md) (written 2026-08-05) — but
+  reframed, see the note under 054's row above: the security half of this
+  finding is weak on a single-root appliance and duplicates a rejection already
+  recorded below. What the plan fixes is PID reuse, which needs no attacker.** `LOCATE_PID_DIR` is
   `/tmp`; `locate.php` casts the file's contents to int and signals it as root.
   The cast blocks injection but not the value — a recycled PID after a `kill
   -9`, or anything able to write `/tmp`, turns Stop into killing an arbitrary
