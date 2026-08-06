@@ -122,13 +122,31 @@ numbers*, and it is the topology check that reports zero. The reporter's own
 wording was "HBA Health was showing 0 of previously 8 seen drives attached",
 which is the topology check. Both halves consistent.
 
-**Confirmed by screenshot, not by the numbers.** He posted UI panels, not the
-text of the two commands, so the visible symptom is settled while three
-specifics are not: non-empty `sas_address` on all 8, `phy` differing from
-`target` on six of eight, and `_drive_count 0` → 8. Those cover the
-silent-wrong-answer half — the part that does not look broken in a screenshot,
-and the part the plan argued was worse than the visible one. Asked for in the
-issue thread; archiving anyway, since the A/B settles whether the fix works.
+**Confirmed by screenshot, not by the numbers** — *then confirmed by the
+numbers, later the same day.* The first pass was UI panels only, leaving three
+specifics open: non-empty `sas_address` on all 8, `phy` differing from `target`
+on six of eight, and `_drive_count 0` → 8. Those cover the silent-wrong-answer
+half — the part that does not look broken in a screenshot, and the part the
+plan argued was worse than the visible one.
+
+**All three now answered** ([issue #14 comment 5198972830](https://github.com/FugginOld/Unraid-HBAviewer/issues/14#issuecomment-5198972830),
+raw payload, scripts pulled from `3520295`):
+
+| target | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| phy | 3 | 0 | 1 | 2 | 5 | 4 | 6 | 7 |
+
+Six of eight differ, **matching the plan's predicted table exactly**, all 8
+carry a non-empty `sas_address` (`4433221100000000`–`…07000000`), and
+`_drive_count 0` returned `8`. The prediction was written from the reporter's
+earlier bundle and then reproduced from a clean re-apply — which is the
+strongest form this evidence takes. **Issue #14 is closable.**
+
+**This box is the only lsiutil-backend hardware in play.** Golem is
+9400-16i + 9400-8i, i.e. storcli; `drv_lsiutil` runs on nothing the maintainer
+owns. Every plan that touches the lsiutil drives composer — 051, and now 052 —
+can only be regression-checked here. Worth remembering before assuming a green
+suite covers that path.
 
 **051 executed, review-approved and merged 2026-08-05.** The worktree-resets-to-
 `main` trap recorded under 050 was pre-empted this time: the dispatch's first
