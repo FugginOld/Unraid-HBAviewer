@@ -148,8 +148,11 @@ Two things to know before you press it:
   the care taken everywhere else not to spin a sleeping disk up. Fine when you
   are about to pull the drive, which is when you use it.
 
-Drives with no SCSI address show a dash instead of a button. Nothing else is
-disturbed while it runs: the blink never interferes with a SMART collection.
+Drives with no SCSI address show a dash instead of a button. If a drive has an
+address but the kernel exposes no device node for it, pressing Locate says so
+rather than appearing to work — you get an error naming the drive, not a button
+that quietly settles back to **Locate**. Nothing else is disturbed while it
+runs: the blink never interferes with a SMART collection.
 
 ## Set a PHY error baseline
 

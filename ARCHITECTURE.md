@@ -124,7 +124,7 @@ as well as age, so pushing new files takes effect immediately instead of after
 
 ## The mutating paths
 
-Two, and only one of them touches hardware.
+Three, and only one of them writes to hardware.
 
 `bay_map.php` writes the drive-bay layout to `/boot` on a POST. It is not a
 hardware path, but it holds the one thing here that **cannot be regenerated**:
@@ -134,6 +134,20 @@ rather than by greying out the UI (a stale tab can still POST), keys are
 validated against the shape `bay_map_key()` produces before they become object
 keys in a file on flash, and a position outside the current grid is rejected
 rather than clamped.
+
+`locate.php` + `scripts/locate_drive.sh` spawns a root process per drive and
+later signals it by PID. It persists nothing — the marker is a PID file in
+`/tmp` — but it mutates in two senses: it keeps a drive awake for as long as it
+runs, and it sends signals as root. Both are bounded server-side. The loop
+stops itself after `LOCATE_MAX_SECS` (schema-clamped), so a closed browser tab
+cannot leave a disk spinning. Stop signals only a PID whose
+`/proc/<pid>/cmdline` names `locate_drive.sh` — **that check is about PID
+reuse, not `/tmp` permissions**: a loop killed with `-9` skips its own cleanup
+trap and leaves a marker holding a number the kernel will later hand to
+something else. And a start that cannot happen — no `/dev/bsg` node for that
+address — answers `ok:false` with a reason instead of reporting success,
+because a locate that silently does nothing reads as "the light is too subtle
+to see".
 
 `flash.php` + `scripts/flash_hba.sh` is the only code that writes to hardware,
 and it is kept off the read-only path on purpose. Guards are pure functions,
@@ -221,6 +235,18 @@ Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
   storcli's `WWN` reports the drive's other port, differing in the last hex
   digit by a vendor-specific amount. The join compares the first 15 digits and
   **fails closed** when that prefix is not unique.
+- **A PHY number is only unique within the device that numbered it.** On the
+  lsiutil path a drive's `phy` is `phy_identifier` from sysfs, and an expander
+  numbers its own PHYs from zero exactly as the HBA does. Two drives behind two
+  expanders report the same number. So the drives payload also carries
+  `expander` — the expander's SAS address, empty when direct-attached — and
+  `bay_map_key()` folds it in: `c0:h26` direct, `c0:x<addr>h26` behind an
+  expander. Sysfs distinguishes the two by the shape of the device name,
+  `end_device-H:N` versus `end_device-H:N:M`, the same rule that separates
+  `phy-H:N` from `phy-H:N:M`. Measured on reporter hardware: 19 drives behind
+  two expanders, seven colliding numbers. **Anything that joins on `phy` alone
+  is wrong for expander-attached drives** — `phy_drive()` skips them for
+  exactly this reason.
 - **Absence is not health.** Unknown, unmeasured and stale states must render as
   grey or be omitted — never as green, and never as a zero that reads like a
   measurement.
