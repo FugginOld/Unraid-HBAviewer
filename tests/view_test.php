@@ -141,5 +141,17 @@ foreach (glob("$dir/*.php") ?: [] as $src) {
 check('every internal HBAviewer link resolves to a content page', $bad === []);
 if ($bad) foreach ($bad as $b) echo "      $b\n";
 
+/* The firmware page must not appear in Unraid's menu unless flashing is on.
+   Gating the BUTTON in settings.php is not enough — a .page file with no Cond
+   is listed under Settings regardless, so the entry showed up for people who
+   had never enabled flashing and could not use it. The Cond is the only thing
+   that hides the menu entry itself; flash_view.php's own ENABLE_FLASH check
+   stays as the second line of defence for a direct URL. */
+check('the firmware page is menu-gated on ENABLE_FLASH',
+      isset($pages['HBAviewer_Flash'])
+      && preg_match('~^Cond="[^"]*ENABLE_FLASH~m', $pages['HBAviewer_Flash']));
+check('the firmware view still guards itself for a direct URL',
+      str_contains((string) file_get_contents("$dir/flash_view.php"), "ENABLE_FLASH"));
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
