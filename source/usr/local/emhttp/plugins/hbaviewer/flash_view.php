@@ -88,7 +88,12 @@ if ($enableFlash) {
   <div class="lu-bay-head">
     <span style="font-size:12px;color:var(--text);">Firmware and BIOS flashing for the LSI/Broadcom controllers in this server</span>
   </div>
-  <a class="lu-settings-link" href="/Tools/HBAviewer">&#8592; Back to HBAviewer</a>
+  <?php /* HBAviewer_Monitor, NOT HBAviewer: HBAviewer.page is Type="menu", a
+           menu container with no content of its own, so /Tools/HBAviewer is not
+           a page and the link silently went nowhere. The monitor is the xmenu
+           entry under it — the same URL dashboard.php and settings.php have
+           always used. */ ?>
+  <a class="lu-settings-link" href="/Tools/HBAviewer_Monitor">&#8592; Back to HBAviewer</a>
 </div>
 
 <?php if (!$enableFlash): ?>
@@ -97,7 +102,7 @@ if ($enableFlash) {
   <div class="lu-card first">
     <p class="lu-muted" style="margin:0">
       Firmware/BIOS flashing is turned off. Enable it under
-      <a class="lu-settings-link" style="padding:0" href="/Settings/HBAviewer">Settings &rarr; HBAviewer</a>
+      <a class="lu-settings-link" style="padding:0" href="/Settings/HBAviewer_Settings">Settings &rarr; HBAviewer</a>
       if you intend to flash a controller.
     </p>
   </div>

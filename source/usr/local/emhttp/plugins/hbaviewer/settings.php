@@ -348,7 +348,7 @@ foreach ($bands as $floor => $label) {
                page left open. $cfg is re-read after a save, so this appears the
                moment the box is ticked and saved. */ ?>
       <?php if ((int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Utilities/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Settings/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 

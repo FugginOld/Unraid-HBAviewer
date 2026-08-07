@@ -298,7 +298,7 @@ Attach the archive to a GitHub issue.
 
 **Settings → Advanced — Firmware Flashing → Enable → Save.** A red
 **⚠ Firmware/BIOS Update** button then appears at the bottom right of that same
-Settings page, and opens **Utilities → HBAviewer Firmware**.
+Settings page, and opens the firmware page under **Settings → User Utilities**.
 
 That button is the only way in, and the Monitor has no link to it. Flashing is
 the one thing in this plugin that writes to hardware, so reaching it means

@@ -110,5 +110,36 @@ $sc = lsi_hba_view(['temp' => 72, 'status' => 'ok', 'port_name' => '', 'board_na
 check('storcli port label', $sc['port_label'] === 'Controller /c1');
 check('storcli model',      $sc['model'] === 'HBA 9400-16i');
 
+/* ── Internal page links resolve ──────────────────────────────────────────────
+   Every /Tools/X and /Settings/X href in the plugin must name a real X.page,
+   and that page must not be Type="menu" — a menu entry is a container with no
+   content of its own, so linking to one lands nowhere at all.
+
+   Both mistakes shipped in one evening (plan 055): /Tools/HBAviewer, which is
+   the Type="menu" container rather than the monitor, and /Utilities/… for a
+   page whose Menu="Utilities" is actually served under /Settings/. Nothing
+   caught either, because a dead internal link looks exactly like a working one
+   until it is clicked. This is the cheap static check that would have. */
+$dir   = __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer';
+$pages = [];
+foreach (glob("$dir/*.page") ?: [] as $p) {
+    $pages[basename($p, '.page')] = (string) file_get_contents($p);
+}
+check('page files were found at all', count($pages) >= 4);
+
+$bad = [];
+foreach (glob("$dir/*.php") ?: [] as $src) {
+    if (!preg_match_all('~href="/(?:Tools|Settings|Utilities)/([A-Za-z0-9_]+)"~',
+                        (string) file_get_contents($src), $m)) continue;
+    foreach ($m[1] as $target) {
+        // Unraid's own pages (Notifications, etc.) are not ours to resolve.
+        if (!str_starts_with($target, 'HBAviewer')) continue;
+        if (!isset($pages[$target]))                       $bad[] = basename($src) . " -> $target (no such .page)";
+        elseif (preg_match('~^Type="menu"~m', $pages[$target])) $bad[] = basename($src) . " -> $target (Type=\"menu\", a container with no content)";
+    }
+}
+check('every internal HBAviewer link resolves to a content page', $bad === []);
+if ($bad) foreach ($bad as $b) echo "      $b\n";
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
