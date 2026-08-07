@@ -70,6 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
         'ENABLE_FLASH'    => isset($_POST['enable_flash'])  ? 1 : 0,
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
+        'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
+        'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -145,6 +147,14 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-danger strong { color: var(--crit-text); }
 .lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
 .lu-btn:hover { background: #d9901a; }
+/* The action row. Save and Open Monitor stay left where the eye lands after
+   filling a form; the firmware button is pushed to the far right by
+   margin-left:auto, away from the two buttons someone presses routinely. */
+.lu-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 0; }
+/* Red, and the only red button on the page. It leads to the one screen here
+   that writes to hardware, so it must not read as a peer of Save. */
+.lu-btn.danger { background: var(--crit); color: #fff; margin-right: 0; margin-left: auto; }
+.lu-btn.danger:hover { background: #c0392b; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
@@ -180,6 +190,30 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         </div>
         <div class="lu-s-control" style="padding-top:8px">
           <span style="font-family:var(--mono);font-size:12px"><?= htmlspecialchars($hw_detail) ?></span>
+        </div>
+      </div>
+
+      <?php /* Host Link normally works this out: the slot's own ceiling is read
+               from the upstream bridge, so a card in a narrower slot is judged
+               against the slot rather than against itself (issues #13/#14).
+               These are for boards whose bridge publishes nothing. Left at 0 on
+               almost every machine. */ ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Expected PCIe Width
+          <small>0 = detect from the slot. Set only if Host Link misjudges your link; a link below this still warns.</small>
+        </div>
+        <div class="lu-s-control">
+          <input type="number" name="pcie_width" value="<?= (int)$cfg['PCIE_EXPECT_WIDTH'] ?>" min="0" max="32">
+        </div>
+      </div>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Expected PCIe Generation
+          <small>0 = detect. 1&ndash;6, where 3 is 8.0 GT/s and 4 is 16.0 GT/s.</small>
+        </div>
+        <div class="lu-s-control">
+          <input type="number" name="pcie_gen" value="<?= (int)$cfg['PCIE_EXPECT_GEN'] ?>" min="0" max="6">
         </div>
       </div>
 
@@ -323,15 +357,26 @@ foreach ($bands as $floor => $label) {
       <label class="lu-toggle">
         <input type="checkbox" name="enable_flash" <?= lu_checked((int)$cfg['ENABLE_FLASH']) ?>>
         <span>Enable firmware/BIOS flashing (advanced)</span>
-        <small>adds a Firmware/BIOS Update tab to the Monitor</small>
+        <small>save, then use the Firmware/BIOS Update button below</small>
       </label>
     </div>
 
-    <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
-    <?php if ($saved): ?>
-    <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block"
-       onclick="return confirm('The HBA Monitor reads live information from your controller(s).\n\nThe first load can take up to 60 seconds while it queries the hardware. After you press OK, the Monitor opens and shows a \'Loading HBA information\' banner until it is ready.\n\nPress OK to continue.')">Open HBAviewer Monitor</a>
-    <?php endif; ?>
+    <div class="lu-actions">
+      <button class="lu-btn" type="submit" name="save_hbaviewer" value="1">Save Settings First</button>
+      <?php if ($saved): ?>
+      <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block"
+         onclick="return confirm('The HBA Monitor reads live information from your controller(s).\n\nThe first load can take up to 60 seconds while it queries the hardware. After you press OK, the Monitor opens and shows a \'Loading HBA information\' banner until it is ready.\n\nPress OK to continue.')">Open HBAviewer Monitor</a>
+      <?php endif; ?>
+      <?php /* The way in to firmware flashing, and the only one — it is
+               deliberately NOT a link on the Monitor. Reaching it means coming
+               through the page where you turned it on and read the danger
+               notice, rather than finding it beside the monitoring tabs on a
+               page left open. $cfg is re-read after a save, so this appears the
+               moment the box is ticked and saved. */ ?>
+      <?php if ((int)$cfg['ENABLE_FLASH'] === 1): ?>
+      <a class="lu-btn danger" href="/Settings/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <?php endif; ?>
+    </div>
 
   </form>
 </div>

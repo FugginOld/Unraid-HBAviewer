@@ -64,6 +64,39 @@ function bay_map_set(string $key, ?int $row, ?int $col, ?string $path = null): v
     bay_map_write($map, $path);
 }
 
+/* One generation of undo for the two actions that can destroy the whole map at
+   once: Clear, and a grid shrink that prunes everything outside the new size.
+
+   A confirm dialog is NOT a backup. It was the only guard Clear had and it was
+   not enough -- the misclick that gets through the dialog is precisely the one
+   that needed the safety net, and this cost a real map on the maintainer's box
+   the day it shipped. Nothing else on the machine has a copy: the map is built
+   by walking to the rack and reading labels, and /boot is FAT with no snapshots
+   to fall back on.
+
+   One generation, not a history. The undo exists to catch the misclick you
+   noticed immediately; anything older is a job for the flash backup. */
+function bay_map_backup(?string $path = null): void {
+    $path ??= BAY_MAP_PATH;
+    // Nothing to protect if there is no map yet, and an empty backup would
+    // overwrite a good one with the state that is about to be regretted.
+    if (is_file($path) && bay_map_read($path) !== []) @copy($path, $path . '.bak');
+}
+
+function bay_map_has_backup(?string $path = null): bool {
+    return is_file(($path ?? BAY_MAP_PATH) . '.bak');
+}
+
+/* Restores and CONSUMES the backup: undo is a one-shot, so a second press
+   cannot silently re-apply a map the person has since edited on purpose. */
+function bay_map_restore(?string $path = null): bool {
+    $path ??= BAY_MAP_PATH;
+    if (!is_file($path . '.bak')) return false;
+    if (!@copy($path . '.bak', $path)) return false;
+    @unlink($path . '.bak');
+    return true;
+}
+
 /* Called whenever the grid shrinks. Drives whose stored position no longer
    fits are returned to the caller AND removed from the store, so they land
    back in the unassigned list instead of sitting at coordinates the grid no
@@ -80,6 +113,36 @@ function bay_map_prune_to_dims(int $rows, int $cols, ?string $path = null): arra
     }
     if ($dropped) bay_map_write($map, $path);
     return $dropped;
+}
+
+/* Reduce a PASTED map to what may safely be written, and say how much was
+   dropped. This is a trust boundary: the text came from a person's clipboard,
+   so every key is checked against the shape bay_map_key() produces (without
+   which a crafted key writes arbitrary JSON object keys onto the boot flash)
+   and every position against the grid actually configured.
+
+   Duplicate positions are dropped rather than kept, because the map renders one
+   drive per bay and the loser would be stored but invisible -- present in the
+   file, absent from the screen, and impossible to find. The server already
+   enforces one-drive-per-bay on assign; a paste must not be the way around it.
+
+   Silent truncation would be worse than useless here, so the count of what was
+   dropped is returned and the UI reports it. */
+function bay_map_sanitize(array $in, int $rows, int $cols): array {
+    $map = $seen = [];
+    $skipped = 0;
+    foreach ($in as $key => $pos) {
+        if (!is_string($key) || !bay_map_key_valid($key)
+            || !is_array($pos) || !isset($pos['row'], $pos['col'])
+            || !is_numeric($pos['row']) || !is_numeric($pos['col'])) { $skipped++; continue; }
+        $row = (int) $pos['row'];
+        $col = (int) $pos['col'];
+        if ($row < 0 || $col < 0 || $row >= $rows || $col >= $cols) { $skipped++; continue; }
+        if (isset($seen["$row:$col"])) { $skipped++; continue; }
+        $seen["$row:$col"] = true;
+        $map[$key] = ['row' => $row, 'col' => $col];
+    }
+    return ['map' => $map, 'skipped' => $skipped];
 }
 
 /* The identity key for one drive row, or null when this drive carries neither
@@ -162,12 +225,57 @@ if (bay_map_locked()) {
     exit;
 }
 
+/* Empty the whole map in one write, rather than the client posting an unassign
+   per drive: a per-drive loop half-succeeds when the browser goes away
+   mid-sweep, and half a cleared map is the state nobody asked for.
+   No key to validate — there is no input here beyond the action itself, which
+   is also why the "are you sure" lives in the client and can only live there.
+   The lock above is the server-side guard, and it is the real one. */
+if ($action === 'clear') {
+    bay_map_backup();
+    bay_map_write([]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+/* Restore from a pasted map. Backed up first like Clear is, so a paste of the
+   wrong text is itself undoable — otherwise restoring a backup would be a new
+   way to lose the map you already had. */
+if ($action === 'import') {
+    $in = json_decode((string) ($_POST['map'] ?? ''), true);
+    if (!is_array($in)) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'That is not a saved map.']);
+        exit;
+    }
+    $d = bay_map_dims();
+    $r = bay_map_sanitize($in, $d['rows'], $d['cols']);
+    bay_map_backup();
+    bay_map_write($r['map']);
+    echo json_encode(['ok' => true, 'placed' => count($r['map']), 'skipped' => $r['skipped']]);
+    exit;
+}
+
+if ($action === 'restore') {
+    if (!bay_map_restore()) {
+        http_response_code(409);
+        echo json_encode(['ok' => false, 'error' => 'Nothing to undo.']);
+        exit;
+    }
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
 if ($action === 'dims') {
     // Clamp BEFORE pruning: pruning to an unclamped 9999x9999 would keep every
     // assignment and then the grid would render at the clamped size with drives
     // stranded outside it.
     $rows = lsi_clamp('BAY_ROWS', $_POST['rows'] ?? 0);
     $cols = lsi_clamp('BAY_COLS', $_POST['cols'] ?? 0);
+    // Backed up for the same reason Clear is: shrinking the grid can strand
+    // every drive outside the new size, and that is the other way to lose a
+    // whole map in one action.
+    bay_map_backup();
     bay_map_dims_set($rows, $cols);
     echo json_encode(['ok' => true, 'rows' => $rows, 'cols' => $cols,
                       'dropped' => bay_map_prune_to_dims($rows, $cols)]);

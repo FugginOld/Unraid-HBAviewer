@@ -84,17 +84,56 @@ once, and the plugin remembers.
 
 1. Set **Rows** and **Columns** to match the chassis. The grid resizes as you
    type.
-2. Click a drive in the **Unassigned drives** list, then click the bay it lives
-   in. Repeat until the map matches what you see in the rack.
+2. **Drag** a drive from the **Unassigned drives** list into the bay it lives
+   in — or click the drive and then click the bay, whichever you prefer. Repeat
+   until the map matches what you see in the rack.
 3. Press **Lock**. The layout can no longer be changed until you unlock it.
 
-**Moving and removing.** Click a placed drive to pick it up, then click another
-bay to move it. **Double-click** a bay to empty it — a single click never
-removes anything. Dropping a drive on an occupied bay displaces the drive that
-was there back to the unassigned list rather than stacking them.
+The unassigned list is ordered the way Unraid's **Main** page lists disks —
+Parity, Disk 1, Disk 2, and so on, then pools, then any drive Unraid has no slot
+for.
+
+**Moving and removing.** Drag a placed drive to another bay to move it, or drag
+it back to the unassigned list to empty its bay. Click-then-click does the same
+thing, and **double-clicking** a bay empties it; a single click never removes
+anything. Dropping a drive on an occupied bay displaces the drive that was there
+back to the unassigned list rather than stacking them.
+
+Dragging needs a mouse. On a touch screen use click-then-click, which does
+everything dragging does.
+
+**Clear map** empties the whole grid at once, after asking and telling you how
+many drives it is about to unplace.
 
 **Shrinking the grid** asks first, and says how many drives no longer fit. Those
 go back to the unassigned list; they are never silently dropped.
+
+**Copy map** puts the layout on your clipboard as JSON, and **Restore map**
+rebuilds it from that text. The map is built by hand and nothing on the machine
+can regenerate it, so it is worth keeping a copy somewhere other than the boot
+flash.
+
+Unraid Connect's flash backup **does** cover `bay_map.json` — it is not excluded
+— but only while that backup is actually running. On the maintainer's own
+server it had silently stopped committing four days before the map was built,
+so the map existed on exactly one FAT flash drive and nowhere else. If you rely
+on flash backup for this, check that it is alive rather than assuming:
+
+```bash
+cd /boot && git log -1 --date=iso --format='last flash backup: %ad'
+```
+
+The text is `bay_map.json`'s own format, so it works in both directions: what
+Copy produces can be written straight into that file, and the file's contents
+paste straight back into Restore. Entries that no longer make sense — a drive
+key the controller no longer reports, a bay outside the current grid, or two
+drives in one bay — are skipped, and Restore tells you how many.
+
+**Undo** appears after a Clear, a grid resize, or a Restore, and puts the map
+back as it was.
+It is one level deep and is consumed when you use it — it exists to catch the
+misclick you notice straight away, not as a history. Anything older comes from
+your flash backup.
 
 **What the colours mean.** A bay stays neutral until it needs attention:
 
@@ -184,11 +223,30 @@ never averaged:
 | `thermal` | Controller temperature against the fixed bands |
 | `link_integrity` | PHY error **rates**, with the worst PHY named in the reason |
 | `topology` | Devices present versus what was seen before |
-| `host_link` | The PCIe link width/speed versus what the slot is capable of |
+| `host_link` | The PCIe link width/speed versus what it could actually reach |
 | `controller` | Whether the controller read succeeded at all |
 
 An indicator that cannot be measured shows **grey / unknown**, not green. A
 collector that timed out or a card that was pulled must never look healthy.
+
+**What `host_link` compares against.** The link is judged against the lower of
+what the *card* can do and what the *slot* can do, read from the slot's own PCIe
+bridge. An x8 card in an x4 slot is running at that slot's maximum — normal on
+OEM boards, nothing you can fix, and not a warning. It says so:
+
+```text
+Running at x4 16.0 GT/s — this slot's maximum (card supports x8)
+```
+
+A card in a slot **wider** than itself is equally normal, and reads as the full
+width of both. Only a link below what it could reach warns — an x8 card in an x8
+slot negotiating x4 is a real fault and still says so.
+
+If your board's bridge reports nothing, `host_link` falls back to the card's own
+maximum, which can produce a permanent warning on a slot-limited card. Set
+**Expected PCIe Width** / **Generation** in Settings to declare what the link
+should be. Those are corrections, not mutes: a link below what you declare
+still warns.
 
 Rates need more than one sample, so `link_integrity` reads `unknown` on the
 first load after a reboot and resolves once a second sample arrives.
@@ -266,8 +324,14 @@ Attach the archive to a GitHub issue.
 > **Flashing can permanently brick a controller.** Off by default, and for
 > people who already know how to flash an LSI/Broadcom HBA from a console.
 
-**Settings → Advanced — Firmware Flashing → Enable → Save.** A
-**Firmware/BIOS Update** tab appears on the Monitor.
+**Settings → Advanced — Firmware Flashing → Enable → Save.** A red
+**⚠ Firmware/BIOS Update** button then appears at the bottom right of that same
+Settings page, and opens the firmware page under **Settings → User Utilities**.
+
+That button is the only way in, and the Monitor has no link to it. Flashing is
+the one thing in this plugin that writes to hardware, so reaching it means
+coming back through the page where you enabled it and read the warning — not
+finding it beside the monitoring tabs on a page you left open.
 
 Per controller:
 

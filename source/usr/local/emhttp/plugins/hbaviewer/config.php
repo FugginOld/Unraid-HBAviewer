@@ -37,6 +37,15 @@ const LSI_SCHEMA = [
     // that one is the HBA controller chip's band floor, and a chip at 76°C is
     // ordinary while a spinning disk at 76°C is an emergency.
     'BAY_WARN_TEMP'   => [45, 20, 80],
+    /* What Host Link should EXPECT of the PCIe link, when the slot cannot be
+       asked. 0 = detect it, which is what almost everyone wants: the slot's own
+       ceiling is read from the upstream bridge and a card in a narrower slot is
+       judged against the slot, not against itself (plan 056, issues #13/#14).
+       These exist for platforms whose bridge publishes nothing. Setting one is
+       a CORRECTION, not a mute: a link below what you declare still warns,
+       which is what #13 explicitly asked for. */
+    'PCIE_EXPECT_WIDTH' => [0, 0, 32],   // lanes; 0 = detect from the slot
+    'PCIE_EXPECT_GEN'   => [0, 0, 6],    // PCIe generation; 0 = detect
 ];
 
 function lsi_clamp(string $key, $val): int {

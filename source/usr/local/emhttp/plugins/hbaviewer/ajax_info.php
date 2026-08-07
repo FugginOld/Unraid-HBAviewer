@@ -197,7 +197,7 @@ if ($type === 'health') {
         echo '<div class="lu-error"><strong>Error:</strong> ' . $msg . '</div>';
         exit;
     }
-    echo renderHealthTables($data);
+    echo renderHealthTables($data, lsi_config_read());
     exit;
 }
 
@@ -391,7 +391,7 @@ function renderOverviewCards(array $data, array $cfg): string {
 function luCtlHead(int $i): string {
     // No top margin: this is now the first child of its controller's card, and
     // the card already supplies 18px of padding above it.
-    return '<h3 style="margin:0 0 10px;color:#f5a623;font-size:12px;'
+    return '<h3 style="margin:0 0 7px;color:#f5a623;font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
 function luLinkBadge(string $link): string {
@@ -677,7 +677,7 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             } elseif (empty($off)) {
                 $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0">No PHY has logged errors since the baseline.</p>';
             } else {
-                $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0 4px">Top offenders</p>';
+                $out .= '<p class="lu-muted" style="font-size:12px;margin:2px 0 3px">Top offenders</p>';
                 $rows = [];
                 foreach ($off as $rank => $o) {
                     $drvLabel = $o['drive'] !== null ? htmlspecialchars($o['drive']) : 'drive not identified';
@@ -796,7 +796,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             $counts = !$enclLess && ($e['slots'] ?? '') !== '' && ($e['drives'] ?? '') !== ''
                 ? htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives']) . ' drives &middot; '
                 : '';
-            $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Enclosure e' . htmlspecialchars($e['eid'])
+            $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 6px">Enclosure e' . htmlspecialchars($e['eid'])
                   . ': ' . htmlspecialchars($e['product']) . ' (' . htmlspecialchars($e['vendor']) . ') &middot; '
                   . $counts . $mode . ($enclLess ? ' &middot; drives are addressed without an enclosure' : '') . '</p>';
         }
@@ -1037,11 +1037,44 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
             }
         }
     }
+    /* The tray comes out of the loop in controller/wire order, which is the one
+       order nobody reading it is thinking in. Sorted into Unraid's Main-page
+       order instead, so the chip you are hunting for sits where you already
+       expect it. Only the tray is sorted; placed drives sit at coordinates the
+       person chose.
+       The /dev tiebreak compares LENGTH before text, because sd names are
+       bijective base-26 and not decimal: the kernel goes sdz -> sdaa, so any
+       plain string compare puts sdaa ahead of sdz. strnatcmp is no help either
+       — it only groups digit runs, and there are no digits here. A drive with
+       no /dev name at all is '' from the cast and so leads its tier, which is
+       where an undetected device is worth looking at first. */
+    usort($tray, fn(array $a, array $b) => bay_tray_order($a) <=> bay_tray_order($b)
+                                        ?: [strlen((string) $a['dev']), (string) $a['dev']]
+                                       <=> [strlen((string) $b['dev']), (string) $b['dev']]);
     return ['rows' => $rows, 'cols' => $cols, 'locked' => $locked, 'warn_temp' => $warnTemp,
             // Rendered in the legend row: the map's colours and temperatures are
             // only as current as the collection behind them.
             'smart_age' => $smartAge === null ? null : lsi_age_str($smartAge),
             'placed' => $placed, 'unassigned' => $tray];
+}
+
+/* Sort rank for one tray entry, as [tier, number, label] — compared
+   element-wise by <=>, so the tiers separate first and the number only breaks
+   ties inside one.
+   Tiers are Main's own reading order: parity, then the data disks, then pools,
+   then everything Unraid has no slot for. The number is pulled out as an
+   integer rather than compared inside the label, because "Disk 10" sorts
+   before "Disk 2" as a string and that is exactly the list where an off-by-one
+   read gets the wrong drive pulled. Bare "Parity" ranks as 1 so it leads
+   "Parity 2" — unraid_disk_roles() emits the first one without a number.
+   Roleless drives sort last: they have nothing to match against Main, so they
+   are not what anyone is scanning this list for. */
+function bay_tray_order(array $e): array {
+    $role = (string) ($e['role'] ?? '');
+    if ($role === '')                                   return [3, 0, ''];
+    if (preg_match('/^Parity(?: (\d+))?$/', $role, $m)) return [0, isset($m[1]) ? (int) $m[1] : 1, ''];
+    if (preg_match('/^Disk (\d+)$/', $role, $m))        return [1, (int) $m[1], ''];
+    return [2, 0, $role];   // cache and any named pool, alphabetical among themselves
 }
 
 if ($type === 'baymap') {
@@ -1053,7 +1086,10 @@ if ($type === 'baymap') {
         smart_cache_age(),
         unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles(),
         lsi_scsi_addr_by_dev(), locate_active()
-    ));
+    // Whether an Undo is available. Merged here rather than threaded through
+    // bay_map_assemble(), which is about drives and has no business knowing
+    // about the store's backup file.
+    ) + ['has_backup' => bay_map_has_backup()]);
     exit;
 }
 
@@ -1134,7 +1170,9 @@ function luHealthCtlMeta(int $i): array {
     return ['board' => $c['board_name'] ?? '', 'chip' => $c['model'] ?? ''];
 }
 
-function renderHealthTables(array $data): string {
+/* $cfg is injected so this stays testable without /boot; the caller passes the
+   live config. Only host_link reads it (the expected-PCIe-link settings). */
+function renderHealthTables(array $data, array $cfg = []): string {
     $ctls  = $data['controllers'] ?? [$data];
     $multi = count($ctls) > 1;
     $out   = '';
@@ -1152,7 +1190,7 @@ function renderHealthTables(array $data): string {
         health_store_write($file, $ring);
 
         $rates = health_rates($ring);
-        $ind   = health_indicators($ring, $rates, time());
+        $ind   = health_indicators($ring, $rates, time(), $cfg);
         [$state, $reason] = health_rollup($ind);
 
         $meta  = luHealthCtlMeta($i);

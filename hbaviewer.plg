@@ -13,6 +13,78 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.06###
+Everything below the Array Map is the same map you already built — placement
+got easier, and it can now leave the machine. Thanks to @Waz and @jac2424,
+whose sysfs output made the Host Link fix possible on hardware nobody here
+owns.
+
+**Fixed**
+- Host Link no longer warns forever about a card in a slot narrower than
+  itself. It compared the negotiated link against the CARD's maximum, so an
+  x8 card the motherboard runs at x4 — normal on OEM servers and not
+  fixable — reported a permanent fault, while a chipset-limited x4 was told
+  it was "running at its full x4 width" when the card could do x8. The
+  slot's own ceiling is now read from its PCIe bridge and the link judged
+  against whichever of the two is lower, so both read correctly with no
+  configuration. A link below what it could actually reach still warns.
+  (#13, #14)
+- Host Link claimed a SAS2 card was at "its full x4 width" when nothing had
+  told it what that card's maximum was. The lsiutil backend reports no
+  maximum at all, so there was nothing to be full of. It now says the link
+  and stops there, rather than dressing an unmeasured link as a checked one.
+  (#14)
+- Double-clicking a bay to empty it did nothing, from 2026.08.05. Picking a
+  drive up redraws the whole grid, so the two clicks landed on different
+  elements and the browser never delivered the double-click to the bay.
+- The Locate STOP button needed two presses. Any click on the Array Map
+  redrew the Locate buttons from the state at the last refresh, so a button
+  could show "Locate" over a drive that was still blinking — and pressing it
+  then started a locate that was already running instead of stopping it.
+- The bay map, Locate and Reset Baseline could all silently fail to save
+  when firmware flashing was turned off. They share Unraid's CSRF token,
+  which was only being read when flashing was enabled.
+
+**Added**
+- Drag a drive into its bay on the Array Map, or drag it back to the
+  unassigned list to empty it. Click-then-click still works and is still the
+  way to do it on a touch screen.
+- **Copy map** and **Restore map**. The layout is built by hand and nothing
+  on the machine can regenerate it, so it can now be copied out as text and
+  pasted back — into a note, another server, or the file itself.
+- **Clear map**, which empties the grid in one go after telling you how many
+  drives it is about to unplace, and **Undo**, which puts the map back after
+  a Clear or a grid resize. One level deep, and consumed when used.
+- Expected PCIe Width and Generation in Settings, for boards whose PCIe
+  bridge reports nothing and where Host Link therefore cannot work the slot
+  out for itself. Leave both at 0 unless Host Link is wrong about your link;
+  they are corrections, not mutes, and a link below what you set still warns.
+
+**Changed**
+- Firmware/BIOS Update is its own page now, under Settings → User Utilities,
+  instead of a tab on the Monitor. Once flashing is enabled, a red button at
+  the bottom of the Settings page opens it — and that is the only way in; the
+  Monitor no longer links to it at all. It is the one part of this plugin that
+  writes to hardware, so getting to it means passing the warning that explains
+  what it costs to get wrong. With flashing off, neither the button nor the
+  menu entry exists. Nothing about how flashing works has changed.
+- HBA Health lays its controller cards out the same way, for the same reason.
+  A narrow window still gets a single column. On a frame too tight to fit two
+  cards at full width, the gauge and the temperature meter stack inside each
+  card rather than the cards dropping back to one column — the card gets a
+  little taller and the page loses a whole card's height.
+- The unassigned drive list on the Array Map is ordered the way Unraid's Main
+  page lists disks — Parity, Disk 1, Disk 2, then pools, then anything the
+  array does not use — instead of the order the controller happened to
+  report them in.
+- Every tab is one width now. The panel used to size itself to whichever tab
+  was open, so it changed shape as you moved along the strip.
+- Tables and health rows lost the dead space between them, and the bay cards
+  are shorter: the Unraid slot and the port share a line, and the model and
+  serial keep their own so neither gets truncated.
+- Placing a drive no longer reloads the whole Array Map. The bay updates
+  immediately and the save happens behind it.
+
 ###2026.08.05###
 Two new tabs, plus the topology fix that 2026.08.04.1 did not actually
 deliver on SAS2 cards. Thanks to @jac2424, who confirmed the SAS2 fixes on

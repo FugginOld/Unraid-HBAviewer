@@ -491,6 +491,38 @@ $bmRole = bay_map_assemble($bmDrives, null, [], 6, 4, ['PLACED01'=>'/dev/sdp'], 
 $roleBySerial = array_column($bmRole['unassigned'], null, 'serial');
 check('baymap carries the Unraid slot name', $roleBySerial['PLACED01']['role'] === 'Parity');
 check('baymap leaves a non-array drive roleless', $roleBySerial['NOSMART1']['role'] === '');
+/* Tray order is Unraid's Main-page order, not the controller/wire order the
+   assemble loop walks in. The fixture is fed deliberately scrambled, so a pass
+   cannot come from the input having been sorted already. */
+$bmSortDrives = ['controllers' => [['drives' => [
+    ['port'=>'1','serial'=>'D10'],   ['port'=>'2','serial'=>'CACHE'],
+    ['port'=>'3','serial'=>'P1'],    ['port'=>'4','serial'=>'D2'],
+    ['port'=>'5','serial'=>'NONE1'], ['port'=>'6','serial'=>'P2'],
+    ['port'=>'7','serial'=>'NONE2'], ['port'=>'8','serial'=>'D1'],
+]]]];
+$bmSortDevs  = ['D10'=>'/dev/sdb','CACHE'=>'/dev/sdc','P1'=>'/dev/sdp','D2'=>'/dev/sdg',
+                'NONE1'=>'/dev/sdaa','P2'=>'/dev/sdq','NONE2'=>'/dev/sdz','D1'=>'/dev/sdk'];
+$bmSortRoles = ['/dev/sdb'=>'Disk 10','/dev/sdc'=>'Cache','/dev/sdp'=>'Parity',
+                '/dev/sdg'=>'Disk 2','/dev/sdq'=>'Parity 2','/dev/sdk'=>'Disk 1'];
+$bmSorted = bay_map_assemble($bmSortDrives, null, [], 6, 4, $bmSortDevs, false, 45, null, [], $bmSortRoles);
+$bmSortedDevs = array_column($bmSorted['unassigned'], 'dev');
+check('baymap trays in Unraid Main-page order',
+      $bmSortedDevs === ['/dev/sdp','/dev/sdq','/dev/sdk','/dev/sdg','/dev/sdb','/dev/sdc',
+                         '/dev/sdz','/dev/sdaa']);
+/* The two orderings a naive sort gets wrong, pinned separately so a failure
+   says which rule broke: "Disk 10" precedes "Disk 2" as a string, and
+   "/dev/sdaa" precedes "/dev/sdz" under strcmp. Both put a person in front of
+   the wrong drive. */
+check('baymap trays Disk 2 ahead of Disk 10',
+      array_search('/dev/sdg', $bmSortedDevs, true) < array_search('/dev/sdb', $bmSortedDevs, true));
+check('baymap trays roleless drives in natural /dev order',
+      array_slice($bmSortedDevs, -2) === ['/dev/sdz','/dev/sdaa']);
+// Nothing resolved a /dev name for these, so the sort compares '' to '' — it
+// must still return both rather than trip on the null.
+check('baymap trays nameless drives without dropping them',
+      count(bay_map_assemble(['controllers'=>[['drives'=>[['port'=>'1','serial'=>'X'],
+                                                          ['port'=>'2','serial'=>'Y']]]]],
+                             null, [], 6, 4)['unassigned']) === 2);
 check('baymap warn temperature is injectable',
       bay_map_assemble($bmDrives, null, [], 6, 4, [], false, 52)['warn_temp'] === 52);
 /* Rebuild is the ONE thing read from storcli's `state` field. That field is a
@@ -946,9 +978,17 @@ check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
 preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
-// The hint line is only readable as a sub-line if the shell styles it; unstyled
-// it inherits the row's 12.5px flex and lands next to the value.
-check('hint line is styled in the shell', str_contains($shell, '.lu-ind-hint {'));
+/* The hint line is only readable as a sub-line if it is styled; unstyled it
+   inherits the row's 12.5px flex and lands next to the value. The rules moved
+   out of the shell into chrome.css (plan 055), so this follows them — and now
+   also checks the shell LINKS that file, because a stylesheet that exists and
+   is never loaded fails exactly like one that was deleted. */
+$css = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/chrome.css');
+check('hint line is styled', str_contains($css, '.lu-ind-hint {'));
+check('the shell loads chrome.css', str_contains($shell, 'href="/plugins/hbaviewer/chrome.css"'));
+// Chrome is shared by two pages now, so it must stay pure CSS — a PHP tag in
+// there would be served as text and silently break every rule after it.
+check('chrome.css carries no PHP', !str_contains($css, '<?'));
 // The sprite must be parsed once in the page shell, never re-emitted by the
 // per-poll Health render, which would duplicate these ids on every refresh.
 check('sprite defined once, in the shell only',
