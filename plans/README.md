@@ -26,6 +26,8 @@ point of the index.
 | Plan | State | Waiting on |
 |------|-------|------------|
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
+| **055** | **not started** — written 2026-08-06 against `c3be441` | nothing. Refactor only: moves Firmware/BIOS off the tab strip onto its own page. Its real work is extracting the shared chrome; `flash.php` is not touched |
+| **056** | **not started** — written 2026-08-06 against `c3be441` | closes #13 and the Host Link half of #14. Needs a bridge probe on slot-limited hardware first (in the plan) — the maintainer's box cannot reproduce it |
 | **054** | **DONE, archived 2026-08-05** — merged to `dev` (`1242963`, from `bf5e423`), suite green after the merge | nothing. **No changelog entry**: Locate ships for the first time in 2026.08.05, so this fixes a bug no user ever saw. **Reframed from the review's security finding to PID reuse** — see below |
 
 **054 executed and review-approved 2026-08-05.** Three commits, two files,
