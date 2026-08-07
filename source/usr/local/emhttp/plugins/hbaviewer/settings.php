@@ -70,6 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
         'ENABLE_FLASH'    => isset($_POST['enable_flash'])  ? 1 : 0,
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
+        'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
+        'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -188,6 +190,30 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         </div>
         <div class="lu-s-control" style="padding-top:8px">
           <span style="font-family:var(--mono);font-size:12px"><?= htmlspecialchars($hw_detail) ?></span>
+        </div>
+      </div>
+
+      <?php /* Host Link normally works this out: the slot's own ceiling is read
+               from the upstream bridge, so a card in a narrower slot is judged
+               against the slot rather than against itself (issues #13/#14).
+               These are for boards whose bridge publishes nothing. Left at 0 on
+               almost every machine. */ ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Expected PCIe Width
+          <small>0 = detect from the slot. Set only if Host Link misjudges your link; a link below this still warns.</small>
+        </div>
+        <div class="lu-s-control">
+          <input type="number" name="pcie_width" value="<?= (int)$cfg['PCIE_EXPECT_WIDTH'] ?>" min="0" max="32">
+        </div>
+      </div>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Expected PCIe Generation
+          <small>0 = detect. 1&ndash;6, where 3 is 8.0 GT/s and 4 is 16.0 GT/s.</small>
+        </div>
+        <div class="lu-s-control">
+          <input type="number" name="pcie_gen" value="<?= (int)$cfg['PCIE_EXPECT_GEN'] ?>" min="0" max="6">
         </div>
       </div>
 

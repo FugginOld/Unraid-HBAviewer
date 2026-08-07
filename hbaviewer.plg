@@ -65,6 +65,17 @@ bundle located the expander problem below where it was reported.
   expander are unaffected and every existing assignment keeps its bay,
   confirmed unchanged on a direct-attached card. (#12)
 
+**Fixed**
+- Host Link no longer warns forever about a card in a slot narrower than
+  itself. It compared the negotiated link against the CARD's maximum, so an
+  x8 card the motherboard runs at x4 — normal on OEM servers and not
+  fixable — reported a permanent fault, while a chipset-limited x4 was told
+  it was "running at its full x4 width" when the card could do x8. The
+  slot's own ceiling is now read from its PCIe bridge and the link judged
+  against whichever of the two is lower, so both read correctly with no
+  configuration. A link below what it could actually reach still warns.
+  Thanks to @Waz and @jac2424 for the reports and the sysfs output. (#13, #14)
+
 **Changed**
 - HBA Health and PHY Health could report different error rates for the same
   controller at the same moment, with neither saying why. They answer

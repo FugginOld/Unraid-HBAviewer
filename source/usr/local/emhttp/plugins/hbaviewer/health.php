@@ -184,7 +184,63 @@ function health_rate_str(float $rate): string {
    what the indicator row prints. $ring's last element is the current sample;
    $rates is health_rates($ring), passed in rather than recomputed so callers
    (and tests) can feed a synthetic rate set without needing real history. */
-function health_indicators(array $ring, array $rates, int $now): array {
+/* What this link could actually reach, and why — [width, speed|null, source].
+   `source` is 'set', 'slot' or 'card', and only exists so host_link can word
+   itself honestly.
+
+   Precedence: an explicit setting, else the slot's own ceiling, else the card's
+   maximum. That last is the pre-plan-056 rule and stays as the fallback for
+   samples collected before slot_* existed and for platforms whose bridge
+   publishes nothing — the ring survives upgrades, so old entries must not
+   suddenly read as faults.
+
+   CLAMPED to the card. A slot wider than the card is at least as common as the
+   narrow slot #13 reported: the maintainer's own x8 cards sit in x16 slots, and
+   judging those against the slot alone would call two healthy cards downtrained.
+   The ceiling is the lower of the two, always.
+
+   Config is INJECTED, not read here. This function and health_indicators() are
+   pure over their inputs, which is what lets tests/health_test.php drive them
+   with no /boot and no config file. */
+function health_link_expected(array $link, array $cfg = []): array {
+    $cardW = (int) ($link['max_width'] ?? 0);
+    $cardS = health_rate_number((string) ($link['max_speed'] ?? ''));
+    $slotW = (int) ($link['slot_width'] ?? 0);
+    $slotS = health_rate_number((string) ($link['slot_speed'] ?? ''));
+    $setW  = (int) ($cfg['PCIE_EXPECT_WIDTH'] ?? 0);
+    $setG  = (int) ($cfg['PCIE_EXPECT_GEN'] ?? 0);
+
+    $why = 'card';
+    $w   = $cardW;
+    if ($slotW > 0 && ($cardW <= 0 || $slotW < $cardW)) { $w = $slotW; $why = 'slot'; }
+    if ($setW > 0) { $w = $setW; $why = 'set'; }
+
+    $sp = $cardS;
+    if ($slotS !== null && ($cardS === null || $slotS < $cardS)) { $sp = $slotS; if ($why === 'card') $why = 'slot'; }
+    if ($setG > 0) { $sp = health_pcie_gen_rate($setG); $why = 'set'; }
+
+    return [$w, $sp, $why];
+}
+
+/* PCIe generation to its GT/s lane rate. The table is the specification's, not
+   a formula: Gen1-2 double, Gen3 does not (8b/10b became 128b/130b), and Gen6
+   changes signalling again. Anything unrecognised expects nothing rather than
+   guessing a rate the card will then be judged against. */
+function health_pcie_gen_rate(int $gen): ?float {
+    return [1 => 2.5, 2 => 5.0, 3 => 8.0, 4 => 16.0, 5 => 32.0, 6 => 64.0][$gen] ?? null;
+}
+
+/* The expected speed as it should READ in a message. Prefers the card's own
+   spelling ("8.0 GT/s") over a bare number so the two halves of the sentence
+   match; falls back to the rate when the expectation came from a setting and
+   there is no string to borrow. */
+function health_link_speed_label(array $link, ?float $expS): string {
+    $maxStr = (string) ($link['max_speed'] ?? '');
+    if ($expS !== null && $maxStr !== '' && health_rate_number($maxStr) === $expS) return $maxStr;
+    return $expS === null ? '' : rtrim(rtrim(number_format($expS, 1), '0'), '.') . ' GT/s';
+}
+
+function health_indicators(array $ring, array $rates, int $now, array $cfg = []): array {
     $newest = $ring ? end($ring) : null;
 
     // ── thermal: temp_band, plan 018's bands (NOT the spec's four-state table) ──
@@ -266,23 +322,37 @@ function health_indicators(array $ring, array $rates, int $now): array {
         $topology = ['state' => 'ok', 'reason' => "All {$curDrives} attached drives present", 'value' => $curDrives . ' drive' . ($curDrives === 1 ? '' : 's')];
     }
 
-    // ── host_link: current PCIe width/speed vs this slot's capability ──────────
+    // ── host_link: the negotiated link against what it could REACH ────────────
     $link = $newest['link'] ?? [];
     $w  = (int) ($link['width'] ?? 0);  $mw = (int) ($link['max_width'] ?? 0);
     $s  = health_rate_number((string) ($link['speed'] ?? ''));
     $ms = health_rate_number((string) ($link['max_speed'] ?? ''));
-    $widthDown = $mw > 0 && $w > 0 && $w < $mw;
-    $speedDown = $ms !== null && $s !== null && $s < $ms;
+    [$expW, $expS, $why] = health_link_expected($link, $cfg);
+    // A link below what it could reach. Both comparisons are against the
+    // EXPECTED ceiling, never the card's own maximum — see health_link_expected.
+    $widthDown = $expW > 0 && $w > 0 && $w < $expW;
+    $speedDown = $expS !== null && $s !== null && $s < $expS;
     if ($widthDown || $speedDown) {
         $host_link = [
             'state'  => 'warning',
-            'reason' => sprintf('PCIe link downtrained: x%d %s of x%d %s capable', $w, $link['speed'] ?? '', $mw, $link['max_speed'] ?? ''),
-            'value'  => "x{$w} / x{$mw}",
+            'reason' => sprintf('PCIe link downtrained: x%d %s of x%d %s expected',
+                                $w, $link['speed'] ?? '', $expW, health_link_speed_label($link, $expS)),
+            'value'  => "x{$w} / x{$expW}",
         ];
+    } elseif ($w <= 0) {
+        $host_link = ['state' => 'ok', 'reason' => 'No PCIe downtraining reported', 'value' => '—'];
     } else {
-        $host_link = ['state' => 'ok', 'reason' => $w > 0
-            ? "PCIe slot running at its full x{$w} width" . (($link['speed'] ?? '') !== '' ? " and {$link['speed']}" : '')
-            : 'No PCIe downtraining reported', 'value' => $w > 0 ? "x{$w}" : '—'];
+        /* Running at the ceiling. WHAT the ceiling is decides the wording, and
+           "full" is only honest when nothing is holding the card back — issue
+           #14 was told its chipset-limited x4 was "running at its full x4
+           width" while the card could do x8. */
+        $at = 'Running at x' . $w . (($link['speed'] ?? '') !== '' ? ' ' . $link['speed'] : '');
+        $host_link = ['state' => 'ok', 'value' => 'x' . $w, 'reason' => match ($why) {
+            'set'  => $at . ' — matches the expected link you set',
+            'slot' => $at . ' — this slot\'s maximum'
+                          . ($mw > $expW ? ' (card supports x' . $mw . ')' : ''),
+            default => $at . ' — the full width of both card and slot',
+        }];
     }
 
     // ── controller: can we even trust the rest of this row? ────────────────────

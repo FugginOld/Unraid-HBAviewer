@@ -197,7 +197,7 @@ if ($type === 'health') {
         echo '<div class="lu-error"><strong>Error:</strong> ' . $msg . '</div>';
         exit;
     }
-    echo renderHealthTables($data);
+    echo renderHealthTables($data, lsi_config_read());
     exit;
 }
 
@@ -1170,7 +1170,9 @@ function luHealthCtlMeta(int $i): array {
     return ['board' => $c['board_name'] ?? '', 'chip' => $c['model'] ?? ''];
 }
 
-function renderHealthTables(array $data): string {
+/* $cfg is injected so this stays testable without /boot; the caller passes the
+   live config. Only host_link reads it (the expected-PCIe-link settings). */
+function renderHealthTables(array $data, array $cfg = []): string {
     $ctls  = $data['controllers'] ?? [$data];
     $multi = count($ctls) > 1;
     $out   = '';
@@ -1188,7 +1190,7 @@ function renderHealthTables(array $data): string {
         health_store_write($file, $ring);
 
         $rates = health_rates($ring);
-        $ind   = health_indicators($ring, $rates, time());
+        $ind   = health_indicators($ring, $rates, time(), $cfg);
         [$state, $reason] = health_rollup($ind);
 
         $meta  = luHealthCtlMeta($i);
