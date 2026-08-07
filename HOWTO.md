@@ -109,10 +109,19 @@ many drives it is about to unplace.
 go back to the unassigned list; they are never silently dropped.
 
 **Copy map** puts the layout on your clipboard as JSON, and **Restore map**
-rebuilds it from that text. Keep a copy somewhere other than the boot flash —
-the map is built by hand and nothing on the machine can regenerate it, so a
-failed flash stick loses it outright. Note that Unraid's own flash backup does
-not necessarily capture this file, so do not assume it is covered.
+rebuilds it from that text. The map is built by hand and nothing on the machine
+can regenerate it, so it is worth keeping a copy somewhere other than the boot
+flash.
+
+Unraid Connect's flash backup **does** cover `bay_map.json` — it is not excluded
+— but only while that backup is actually running. On the maintainer's own
+server it had silently stopped committing four days before the map was built,
+so the map existed on exactly one FAT flash drive and nowhere else. If you rely
+on flash backup for this, check that it is alive rather than assuming:
+
+```bash
+cd /boot && git log -1 --date=iso --format='last flash backup: %ad'
+```
 
 The text is `bay_map.json`'s own format, so it works in both directions: what
 Copy produces can be written straight into that file, and the file's contents
