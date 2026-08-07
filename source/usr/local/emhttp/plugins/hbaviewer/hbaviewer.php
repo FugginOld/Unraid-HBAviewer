@@ -107,13 +107,20 @@ if ($enableFlash) {
 .lu-divider { border: none; border-top: 1px solid var(--border-soft); margin: 16px 0; }
 
 /* ── Overview + temperature ring ─────────────────────────────────────────── */
-.lu-ov-grid { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-/* Cards size to their own widest row — in practice the PCIe row, since the four
-   fields are one unwrapped line — instead of a guessed fixed maximum. fit-content
-   resolves to min(max-content, available), so a card takes exactly the width its
-   content needs when there is room, and shrinks (letting .lu-pcie-row wrap) when
-   there is not. max-width:100% keeps it inside #lu-wrap on a narrow window. */
-.lu-ov-grid .lu-card { flex: 0 1 auto; width: fit-content; max-width: 100%; margin-bottom: 0; }
+/* The same auto-fit grid #flash-content and #health-content use, so all three
+   card tabs lay out by one rule rather than three.
+   Cards used to be width:fit-content in a centred flex row, sizing to their own
+   widest row (the PCIe one, four fields on an unwrapped line). That hugged the
+   content, which was right while the frame hugged it back — now the frame is a
+   fixed width, so hugging just left a gutter down both sides.
+   auto-fit, not auto-fill: it COLLAPSES the empty tracks, so two controllers
+   take half the frame each instead of sitting in two of three columns with the
+   third left empty. That distinction is the whole reason this fills.
+   The 420px floor is where .lu-pcie-row starts wrapping, and it doubles as the
+   responsive rule — a narrow window collapses to one column with no media
+   query, exactly as the other two tabs do. */
+.lu-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+.lu-ov-grid .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 .lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
 /* Gauge and its band label read as one unit — the band describes the number
    above it, which is not what a row buried in the field list conveyed. */
