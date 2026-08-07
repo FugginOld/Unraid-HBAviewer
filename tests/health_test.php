@@ -331,5 +331,46 @@ health_store_write($file, $ring);
 check('store round-trips', health_store_read($file) === $ring);
 @unlink($file); @rmdir($dir);
 
+/* ── host_link ────────────────────────────────────────────────────────────────
+   CHARACTERIZATION of the behaviour as it stands (plan 056, step 1). Written
+   BEFORE the slot-aware rework and green against the old code, because this
+   indicator had no assertions at all — so there was nothing to prove a change
+   only altered what it meant to.
+
+   What these pin is deliberately narrow: a link matching the card's own maximum
+   is ok, anything below it warns. That rule is what issues #13 and #14 are
+   about — it compares the card against ITSELF, so a card in a slot narrower
+   than the card reads as a fault. The rows below encode today's answers, not
+   the right ones; the ones that must survive the rework are the two genuine
+   downtrains. */
+$hl = fn(array $link): array =>
+    health_indicators([sample(1000, 100, 0, 0, 0, 0, ['link' => $link])], [], 1000)['host_link'];
+
+$full = $hl(['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: matched link is ok', $full['state'] === 'ok');
+check('host_link: matched link reports the width', $full['value'] === 'x8');
+
+// A GENUINE downtrain — the card can do x8, the link negotiated x4 in an x8
+// slot. This must keep warning after plan 056; it is the failure the indicator
+// exists to catch and the easy thing to lose while making #13 go green.
+$narrow = $hl(['width' => 4, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: narrower width warns', $narrow['state'] === 'warning');
+check('host_link: narrower width shows both widths', $narrow['value'] === 'x4 / x8');
+
+// The same, on speed rather than width. Also must survive.
+$slow = $hl(['width' => 8, 'max_width' => 8, 'speed' => '5.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: slower speed warns', $slow['state'] === 'warning');
+
+// No link data at all: says nothing rather than inventing a verdict.
+$none = $hl([]);
+check('host_link: absent link data is ok, not a warning', $none['state'] === 'ok');
+check('host_link: absent link data reports no width', $none['value'] === '—');
+
+/* The wording #14 objected to, pinned so the rework has to change it
+   deliberately rather than by accident. "full" is the wrong word when the card
+   can do more than the slot allows. */
+check('host_link: currently claims the width is "full"',
+      str_contains($full['reason'], 'full x8 width'));
+
 echo $fails === 0 ? "health: all pass\n" : "health: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
