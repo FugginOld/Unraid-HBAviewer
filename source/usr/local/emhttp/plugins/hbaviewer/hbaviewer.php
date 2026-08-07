@@ -23,514 +23,7 @@ if ($enableFlash) {
 }
 ?>
 
-<style>
-/* ── Design tokens: original HBAviewer palette in the new component format ── */
-/* One width for every tab. This was `fit-content` so the panel could hug the
-   active tab's contents and Overview would not sit in dead space — but hidden
-   tabs contribute nothing to max-content, so the frame resized on every tab
-   switch, and a panel that changes shape as you move along the strip reads as
-   the page reloading rather than as a tab changing.
-   Drives is the widest tab and so sets the reference; filling the available
-   width up to the cap is at least that wide without hard-coding a number that
-   would only be right on one box's controller data. The cost is the dead space
-   either side of Overview that fit-content was avoiding, which is the trade
-   asked for: a steady frame beats a snug one. */
-#lu-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the ~40 call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --accent-2:#88aaff; --track: var(--border-color, #2a2a2a);
-    --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
-    font-family: inherit; width: 100%; max-width: 1560px; margin: 20px auto;
-    color: var(--text);
-    background:
-        radial-gradient(900px 350px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%),
-        var(--bg);
-    border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px 26px;
-    /* Stated here rather than inherited from the webGui: with width:100% and
-       48px of padding, content-box would push the panel 50px past its parent
-       and put a horizontal scrollbar on the page. Nothing else in this plugin
-       sets box-sizing, so this must not depend on Unraid's reset. Scoped to the
-       wrapper — children keep whatever they had. */
-    box-sizing: border-box;
-}
-
-/* ── Tabs (underline) ────────────────────────────────────────────────────── */
-.lu-tabs { display: flex; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
-.lu-tab-btn {
-    appearance: none; background: none; border: none; cursor: pointer;
-    color: var(--faint); font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
-    padding: 11px 14px 12px; position: relative; white-space: nowrap; transition: color 0.15s; text-transform: none;
-}
-.lu-tab-btn:hover  { color: var(--muted); }
-.lu-tab-btn.active { color: var(--accent); }
-.lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
-.lu-settings-link {
-    margin-left: auto; padding: 11px 14px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
-    color: var(--text); text-decoration: none; transition: color 0.15s;
-}
-.lu-settings-link:hover { color: var(--accent); }
-.lu-tab-btn[data-tab="flash"] { color: var(--crit-text); }
-.lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
-.lu-tab-pane { display: none; }
-.lu-tab-pane.active { display: block; }
-
-/* ── Cards ───────────────────────────────────────────────────────────────── */
-.lu-card {
-    background: linear-gradient(180deg, var(--surface-2), var(--surface));
-    border: 1px solid var(--border-soft); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px;
-    box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 12px 32px -24px rgba(0,0,0,.9);
-}
-.lu-card.first { border-radius: 14px; }
-.lu-card h3 {
-    margin: 0 0 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
-    text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px;
-}
-.lu-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
-.lu-divider { border: none; border-top: 1px solid var(--border-soft); margin: 16px 0; }
-
-/* ── Overview + temperature ring ─────────────────────────────────────────── */
-/* The same auto-fit grid #flash-content and #health-content use, so all three
-   card tabs lay out by one rule rather than three.
-   Cards used to be width:fit-content in a centred flex row, sizing to their own
-   widest row (the PCIe one, four fields on an unwrapped line). That hugged the
-   content, which was right while the frame hugged it back — now the frame is a
-   fixed width, so hugging just left a gutter down both sides.
-   auto-fit, not auto-fill: it COLLAPSES the empty tracks, so two controllers
-   take half the frame each instead of sitting in two of three columns with the
-   third left empty. That distinction is the whole reason this fills.
-   The 420px floor is where .lu-pcie-row starts wrapping, and it doubles as the
-   responsive rule — a narrow window collapses to one column with no media
-   query, exactly as the other two tabs do. */
-.lu-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
-.lu-ov-grid .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
-.lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
-/* Gauge and its band label read as one unit — the band describes the number
-   above it, which is not what a row buried in the field list conveyed. */
-.lu-gauge { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 0 0 auto; }
-.lu-temp-band { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; font-family: var(--mono); color: var(--mark); }
-
-/* ── The instrument tile ──────────────────────────────────────────────────
-   A panel that supplies its own background to the marks sitting on it, so they
-   stop depending on what the Unraid theme puts behind them. The class is added
-   server-side from lsi_tile_is_light() — no Unraid theme sets
-   prefers-color-scheme, so CSS alone cannot tell light from dark here.
-   --td/--tl are the band's gradient stops, set inline per card; --mark is the
-   colour of the number and the band label, which is white on the filled panel
-   and the band's own light stop when there is no panel. That difference is
-   deliberate: floating on a dark card with no panel, white loses its
-   association with the arc. */
-.lu-tile {
-    padding: 12px 16px 13px; border-radius: 12px;
-    border: 1px solid #2e2e2e; background: transparent;
-    --gauge-track: #3a3a3a; --mark: var(--tl, #41d141);
-}
-.lu-tile.light {
-    background: #6e6e6e; border-color: #5c5c5c;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.22);
-    --gauge-track: #5a5a5a; --mark: #fff;
-}
-/* Half-circle gauge. The geometry lives in lsi_gauge_svg() (view.php) — this
-   only sizes and strokes it. ponytail: no vertical sheen on the arc; an SVG
-   stroke cannot carry the overlay the flat bars use, and the arc's own
-   dark->light sweep already gives it internal contrast. */
-.lu-arc { display: block; width: 138px; height: 78px; }
-.lu-arc-bg, .lu-arc-fg { fill: none; stroke-width: 14; stroke-linecap: round; }
-.lu-arc-bg { stroke: var(--gauge-track); }
-.lu-arc-fg { transition: stroke-dashoffset 0.4s; }
-.lu-arc-wrap { position: relative; }
-.lu-arc-readout {
-    position: absolute; inset: 0; display: flex; flex-direction: column;
-    justify-content: flex-end; align-items: center; padding-bottom: 2px; line-height: 1;
-}
-.lu-arc-readout .val  { font-family: var(--mono); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mark); }
-.lu-arc-readout .unit { font-size: 11px; letter-spacing: 0.05em; color: var(--mark); margin-top: 5px; }
-/* The Health gauge reads "N / total" — 5+ characters against the temperature
-   readout's 2 — and the arc's inner clear space is only ~100px wide (radius 80
-   less the 14 stroke, at 138/200 scale). 30px overruns it; 19px does not. */
-.lu-arc-readout.count .val { font-size: 19px; }
-.lu-meta { flex: 1; min-width: 0; }
-.lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
-.lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.lu-badge {
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
-    padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
-    color: var(--sc, var(--good)); background: color-mix(in srgb, var(--sc, var(--good)) 15%, transparent);
-    transition: color 0.4s, background 0.4s;
-}
-.lu-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-/* The health pill now lives in the meta list, where `.lu-meta p span` would
-   otherwise repaint it with the field-value treatment (mono, --text) and destroy
-   the status colour. The rule below outranks that one, so restate the pill's own
-   typography and colour here. */
-.lu-meta p span.lu-badge {
-    margin-top: 0; font-family: inherit; font-weight: 700; font-size: 11px;
-    color: var(--sc, var(--good));
-}
-
-/* ── PCIe row ────────────────────────────────────────────────────────────── */
-/* Spacing matches the dashboard tile's footer row (dashboard.php .lu-d-foot-row)
-   deliberately — the same four PCIe fields appear in both places and they should
-   not read differently. Centred, not edge-justified: at the 1560px page width
-   an edge-justified row flung the four items to the card's edges. */
-.lu-pcie-row { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; align-items: baseline; }
-.lu-pcie-item { font-size: 12px; color: var(--faint); white-space: nowrap; }
-.lu-pcie-item span { color: var(--text); font-weight: 500; font-family: var(--mono); }
-
-/* ── Tables ──────────────────────────────────────────────────────────────── */
-.lu-tscroll { overflow-x: auto; }
-.lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.lu-table th {
-    text-align: left; padding: 8px 12px; color: var(--faint);
-    font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-    border-bottom: 1px solid var(--border); white-space: nowrap;
-}
-.lu-table td { padding: 9px 12px; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
-.lu-table tr:last-child td { border-bottom: none; }
-.lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
-.lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
-
-/* ── Link + error badges ─────────────────────────────────────────────────── */
-.lu-link-up   { color: var(--good); font-weight: 700; font-size: 11px; letter-spacing: 0.03em; }
-.lu-link-down { color: var(--crit); font-weight: 700; font-size: 11px; }
-.lu-err-val   { color: var(--warn); font-weight: 600; }
-
-/* ── PHY error baseline (plan 022) ───────────────────────────────────────── */
-.lu-phy-bar   { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 8px; }
-.lu-phy-delta { color: var(--faint); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; opacity: 0.85; }
-.lu-phy-stale { color: var(--warn-text); font-size: 13px; }
-
-/* ── Misc ────────────────────────────────────────────────────────────────── */
-.lu-error {
-    background: color-mix(in srgb, var(--crit) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 40%, transparent);
-    border-radius: 8px; padding: 14px 18px; color: var(--crit-text); font-size: 13px; margin-bottom: 12px;
-}
-.lu-muted  { color: var(--faint); font-size: 13px; }
-.lu-loading { color: var(--faint); font-size: 13px; padding: 22px 0; text-align: center; }
-.lu-tab-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-/* On the per-controller tabs the toolbar sits at pane level (the cards are one
-   per HBA, and the toolbar describes the tab, not the first HBA), so it no
-   longer inherits .lu-card's 20px inset — restate just that, not a whole card. */
-.lu-tab-pane > .lu-tab-toolbar { padding: 0 20px; }
-.lu-refresh-btn {
-    background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
-    font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
-}
-.lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-/* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
-.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: var(--crit-text); font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
-.lu-flash-warn strong { color: var(--crit-text); }
-.lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; }
-.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
-.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
-/* One column per controller instead of a stack. Nothing in a flash card is
-   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
-   the frame was dead space with the second card pushed below the fold.
-   auto-fit, not a literal 2: the controller count is whatever the box has — one
-   card still fills the frame, three wrap to a second row. 420px is the floor at
-   which Step 2 stops wrapping badly; under that (narrow window, phone) it
-   collapses to a single column by itself, so this needs no media query.
-   align-items:start because a controller that errored renders a two-line card,
-   and stretching it to match a full one just makes a tall empty box. */
-#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
-#flash-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
-/* Each controller box is a .lu-card now, so its border, radius, padding, margin
-   and background all come from there — .lu-fc keeps only the rules .lu-card has
-   no opinion about, and stays as the hook flashCard() selects on. */
-.lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
-.lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
-.lu-fstep { margin: 14px 0; }
-.lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-/* Locked state (plan 037): while the array runs, Step 3 is dimmed and inert.
-   COSMETIC ONLY — flash.php's flash_array_stopped() and luFlashGo's
-   !flashArrayStopped alert are the actual gate. Deleting this CSS must still
-   leave flashing blocked; if it ever doesn't, the safety model has inverted.
-   0.45 measured 2.3-2.8:1 on the light themes (white/azure); 0.6 keeps every
-   theme >= 3.3:1. .lu-flock is a SIBLING of the locked step, not a child:
-   opacity applies to the whole subtree, so a child can never be less
-   transparent than its parent — the plan's `.is-locked .lu-flock{opacity:1}`
-   would have been a no-op and left the explanation as dim as what it explains. */
-.lu-fstep.is-locked { opacity: 0.6; pointer-events: none; }
-.lu-flock { color: var(--warn-text); font-size: 12px; margin: 14px 0 0; }
-.lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
-.lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
-.lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
-.lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
-.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
-.lu-fbtn:hover { background: #d9901a; }
-.lu-fbtn.danger { background: var(--crit); color: #fff; }
-.lu-fbtn.danger:hover { background: #c0392b; }
-.lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
-
-/* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
-/* One column per controller instead of a stack, the same move #flash-content
-   made and for the same reason: nothing in a health card is as wide as the
-   frame, so on a two-HBA box the right half was empty and the second card sat
-   below the fold.
-   The floor is 440px, NOT the ~492px the instrument tile needs to keep its
-   gauge and band meter on one row. That was the first attempt and it produced
-   a single column on the maintainer's 951px frame: two 492px tracks plus the
-   gap want 1000px, so the whole point was lost on the exact box it was built
-   for. Two columns with the meter wrapped under the gauge is a better trade
-   than one column of full-height cards — the card grows by the meter's height,
-   the page shrinks by a whole card.
-   It also un-wraps by itself: at a container of 1000px or more the tracks pass
-   492px again and the tile returns to one row. Below 896px it collapses to a
-   single column. Both without a media query.
-   align-items:start so a controller that errored, which renders a two-line
-   card, does not stretch into a tall empty box beside a full one. */
-#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; align-items: start; }
-#health-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
-.lu-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
-.lu-health-title { font-size: 12.5px; color: var(--text); font-weight: 600; }
-.lu-health-pill {
-    display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 20px;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
-}
-/* Band meter: thermal only — the one continuous metric with meaningful bands.
-   Segments sized to the plan-018 cut-points (65/75/85/95) over a 0-110C scale:
-   65/110, 10/110, 10/110, 10/110, 15/110 as flex-grow ratios. */
-.lu-band-meter { margin: 0 0 18px; }
-.lu-band-track { position: relative; display: flex; height: 10px; border-radius: 6px; overflow: hidden; background: var(--gauge-track, var(--track)); }
-.lu-band-seg { display: block; height: 100%; }
-/* Each band is a dark->light gradient so the segment carries its own internal
-   contrast (see lsi_temp_gradient in view.php). The `flex` weights below are
-   UNCHANGED by plan 030 and must stay in step with the label percentages
-   emitted by ajax_info.php — both encode the same band edges. */
-.lu-band-seg.s0 { flex: 65; background: linear-gradient(90deg, #0f7a1a, #41d141); }
-.lu-band-seg.s1 { flex: 10; background: linear-gradient(90deg, #b8890a, #f5d020); }
-.lu-band-seg.s2 { flex: 10; background: linear-gradient(90deg, #a85410, #f09428); }
-.lu-band-seg.s3 { flex: 10; background: linear-gradient(90deg, #9c1810, #e8443a); }
-.lu-band-seg.s4 { flex: 15; background: linear-gradient(90deg, #6b0f0c, #b82820); }
-/* The vertical sheen the Unraid bars carry, laid over all five segments at
-   once rather than repeated on each. */
-.lu-band-track::after {
-    content: ""; position: absolute; inset: 0; pointer-events: none;
-    background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 55%, rgba(0,0,0,.13));
-}
-.lu-band-marker {
-    position: absolute; top: -3px; width: 2px; height: 16px; background: #fff; z-index: 1;
-    box-shadow: 0 0 4px rgba(0,0,0,.6); transform: translateX(-1px);
-}
-/* Labels sit at their TRUE percentage of the 0-110 scale (set inline per-span
-   by the renderer), not spread evenly — six evenly-spaced labels over
-   unevenly-sized segments put "85" under the 65 boundary. These percentages
-   must stay in step with the `flex` weights on .lu-band-seg above; both
-   encode the same band edges (65/75/85/95), just in different files. */
-.lu-band-labels { position: relative; height: 12px; font-size: 10px; color: var(--faint); margin-top: 4px; font-family: var(--mono); }
-.lu-band-labels span { position: absolute; transform: translateX(-50%); }
-.lu-band-labels span:first-child { transform: none; }             /* 0 flush left */
-.lu-band-labels span:last-child  { transform: translateX(-100%); } /* 110 flush right */
-/* Gauge + band meter share one instrument tile: the gauge is the summary, the
-   meter is the one continuous metric behind it, and both need the panel's own
-   background rather than the theme's. */
-.lu-health-tile { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 0 0 16px; }
-.lu-health-tile .lu-band-meter { flex: 1 1 260px; margin: 0; }
-.lu-tile.light .lu-band-labels { color: #fff; }
-.lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
-/* Wraps so the hint line drops below label+value. column-gap stays 10px (the
-   dot/icon/label rhythm); row-gap is tight so the hint reads as part of the row
-   above it, not as a row of its own. */
-.lu-indicator-row { display: flex; align-items: center; flex-wrap: wrap; column-gap: 10px; row-gap: 1px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
-.lu-indicator-row:last-child { border-bottom: none; }
-/* A dot again as of plan 032 — but the GRADIENT FILL IS LOAD-BEARING, not
-   decoration, so it survived the shape change. Flat status colours were measured
-   against the #e8e8e8 white-theme card and three of the five fail the 3:1 floor
-   for a small graphical object (ok #0ca30c 2.74, watch #fab219 1.50, warning
-   #ec835a 2.15). A two-layer gradient carries its own internal contrast and stays
-   legible at 8px on any theme surface. Do not "simplify" this to a solid colour.
-   --gd/--gl set inline per row from lsi_health_gradient(). */
-.lu-ind-dot {
-    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
-    background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0) 55%, rgba(0,0,0,.13)),
-                linear-gradient(90deg, var(--gd), var(--gl));
-}
-/* Tabler glyph between the dot and the label. Inherits the label's ink so the
-   icon reads as part of the label, not as a second status signal — the dot is
-   the only thing that carries state. */
-.lu-ind-icon { width: 15px; height: 15px; flex: none; color: var(--faint); fill: none; stroke: currentColor; }
-.lu-indicator-label { color: var(--faint); flex: 1; }
-.lu-indicator-value { color: var(--text); font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
-/* What the value MEANS, on its own line under it — right-aligned, so it hangs
-   off the value it explains rather than off the label. The 2px right padding
-   matches .lu-indicator-row's, keeping it flush with the value above it.
-   Dimmed by opacity, not colour: --text/--muted/--faint are the same Unraid
-   theme variable, so a colour swap here would be a no-op. */
-.lu-ind-hint { flex: 0 0 100%; text-align: right; font-size: 11px; line-height: 1.35; color: var(--faint); opacity: .62; }
-
-/* ── Drive bay map (plan 047, redesigned to the 1b handoff) ───────────────
-   Colour is the signal, not decoration: a bay stays neutral until something
-   needs attention, so the two that do are the only two your eye lands on.
-   THEME NOTE. The handoff's status colours are used verbatim — they are signal
-   and must mean the same thing everywhere. Its surface and text hexes are NOT:
-   they are a dark-theme palette, and this plugin renders inside Unraid's white
-   and azure themes too, where a hardcoded #14181d panel would be an unreadable
-   hole. Surfaces, text and borders therefore keep the plugin's existing theme
-   variables, and the state tints are mixed over whatever surface the theme
-   gives us. The handoff explicitly asks for this ("prefer the existing token
-   over the raw hex — the intent matters more than the literal value").
-
-   Fixed 236px columns, per the handoff: the grid reads as a chassis, and the
-   panel scrolls sideways rather than squeezing cells. This deliberately
-   replaces the earlier expand-to-fill behaviour. */
-.lu-bay-legend { display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
-    padding: 0 2px 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft); }
-.lu-bay-lg { display: flex; align-items: center; gap: 7px;
-    font: 500 10.5px/1 system-ui, sans-serif; color: var(--faint); letter-spacing: .02em; }
-.lu-bay-lg i { width: 9px; height: 9px; border-radius: 2px; }
-.lu-bay-lg i.dashed { background: transparent; border: 1px dashed var(--border-soft); }
-.lu-bay-scroll { overflow-x: auto; }
-/* minmax, not a flat 236px: the cards grow to fill whatever width the frame
-   has — which changes with the tab strip, since "Firmware/BIOS Update" is a
-   wide label and hiding it narrows the page — while 236px stays a hard floor
-   so a 12-column map still overflows into .lu-bay-scroll instead of squeezing
-   every card to unreadable. 1fr alone would do the second thing. */
-.lu-bay-grid { display: grid; grid-template-columns: repeat(var(--bay-cols, 4), minmax(236px, 1fr)); gap: 10px; margin: 0 0 18px; }
-
-/* The rail is an inset shadow rather than a child element, so it follows the
-   radius and the cell needs no extra DOM. --rail is set per state below. */
-.lu-bay-cell {
-    border-radius: 6px; overflow: hidden; cursor: pointer;
-    background: var(--surface-2); border: 1px solid var(--border-soft);
-    box-shadow: inset 3px 0 0 var(--rail, transparent);
-    transition: background .16s ease, border-color .16s ease;
-}
-.lu-bay-cell.st-ok      { --rail: #3fb950; }
-.lu-bay-cell.st-warn    { --rail: #d29922; border-color: #d2992266; background: color-mix(in srgb, #d29922 9%,  var(--surface-2)); }
-.lu-bay-cell.st-fail    { --rail: #f85149; border-color: #f8514966; background: color-mix(in srgb, #f85149 11%, var(--surface-2)); }
-.lu-bay-cell.st-rebuild { --rail: #58a6ff; border-color: #58a6ff66; background: color-mix(in srgb, #58a6ff 11%, var(--surface-2)); }
-.lu-bay-cell.st-nodata  { --rail: #6e7681; border-color: #6e768166; }
-/* Selection is deliberately NOT a status colour — it would be ambiguous with
-   health. Mixed from the theme's own ink so it shows on light themes too,
-   where the handoff's flat white-at-30% would vanish. */
-.lu-bay-cell.sel    { border-color: color-mix(in srgb, var(--text) 35%, transparent); }
-.lu-bay-cell.target { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
-.lu-bay-cell.empty  { background: transparent; border: 1px dashed var(--border-soft); box-shadow: none;
-    min-height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px; }
-.lu-bay-eid   { font: 600 9.5px/1 var(--mono); color: var(--faint); opacity: .55; letter-spacing: .04em; }
-.lu-bay-eword { font: 500 10px/1 system-ui, sans-serif; color: var(--faint); opacity: .4; letter-spacing: .12em; }
-
-.lu-bay-body { padding: 10px 12px 11px; }
-.lu-bay-id   { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
-.lu-bay-slot { font: 600 9.5px/1 var(--mono); color: var(--faint); letter-spacing: .04em;
-    background: color-mix(in srgb, var(--text) 7%, transparent); padding: 3px 5px; border-radius: 3px; }
-/* The anchor of the card: the largest mono element, because finding the bay for
-   a named device is what this screen is for. */
-.lu-bay-dev  { font: 600 14px/1 var(--mono); color: var(--text); letter-spacing: -.01em; }
-.lu-bay-stat { margin-left: auto; font: 600 8.5px/1 system-ui, sans-serif;
-    padding: 3px 5px; border-radius: 3px; letter-spacing: .08em; white-space: nowrap; }
-.lu-bay-cap  { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
-.lu-bay-capv { font: 600 16px/1 system-ui, sans-serif; color: var(--text); letter-spacing: -.02em; }
-.lu-bay-capu { font: 400 9.5px/1 system-ui, sans-serif; color: var(--faint); opacity: .8; letter-spacing: .06em; }
-/* Normal temperatures are grey, not green: a green number reads as a signal and
-   there is nothing to signal. Only the rail and the chip carry "healthy". */
-.lu-bay-temp { margin-left: auto; font: 600 11.5px/1 var(--mono); color: var(--faint); }
-.lu-bay-track { height: 3px; border-radius: 2px; overflow: hidden; margin-bottom: 11px;
-    background: color-mix(in srgb, var(--text) 7%, transparent); }
-.lu-bay-fill  { height: 100%; border-radius: 2px; }
-.lu-bay-fill.rebuild {
-    background-image: repeating-linear-gradient(115deg, #58a6ff 0 5px, rgba(88,166,255,.35) 5px 10px);
-    background-size: 14px 100%; animation: lu-rebuild .7s linear infinite;
-}
-@keyframes lu-rebuild { from { background-position: 0 0 } to { background-position: 14px 0 } }
-/* The stripe stays, the movement goes — the pattern is what distinguishes a
-   rebuild from a flat bar, so it must survive the preference. */
-@media (prefers-reduced-motion: reduce) { .lu-bay-fill.rebuild { animation: none; } }
-/* One left edge for every value, so the eye scans a column instead of hunting
-   centred text. Nothing in the cell is centre-aligned. */
-/* Four tracks, so UNRAID and PORT can sit side by side and save a row on every
-   card. The second label track is `auto` rather than another 42px: PORT is a
-   narrower word than UNRAID, and spending the difference on the value keeps
-   "Port 10" off the ellipsis at the 236px minimum cell width.
-   `wide` opts a pair out and gives it the whole row. Forcing the label back to
-   column 1 is what starts the new row — without it the grid would flow MODEL
-   into the third track alongside PORT. It also keeps the layout correct for a
-   drive with no Unraid role, where PORT is alone on the first row. */
-.lu-bay-ref { display: grid; grid-template-columns: 42px 1fr auto 1fr;
-    column-gap: 8px; row-gap: 4px; align-items: baseline; }
-.lu-bay-lbl.wide { grid-column: 1; }
-.lu-bay-val.wide { grid-column: 2 / -1; }
-.lu-bay-lbl { font: 500 8.5px/1.4 system-ui, sans-serif; color: var(--faint); opacity: .65; letter-spacing: .09em; }
-.lu-bay-val { font: 400 10.5px/1.4 var(--mono); color: var(--faint);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lu-bay-val.dim { opacity: .8; }
-
-.lu-bay-tray { display: flex; flex-wrap: wrap; gap: 6px; }
-.lu-bay-chip {
-    border: 1px solid var(--border-soft); border-radius: 6px; padding: 5px 9px;
-    font-size: 11px; font-family: var(--mono); cursor: pointer; background: var(--surface-2);
-}
-.lu-bay-chip.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
-.lu-bay-chip.dead { cursor: not-allowed; opacity: .45; }
-.lu-bay-dims { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 0 0 14px; color: var(--faint); }
-.lu-bay-dims input { width: 58px; padding: 4px 6px; background: var(--surface); color: var(--text);
-    border: 1px solid var(--border-soft); border-radius: 6px; font-family: var(--mono); }
-/* Locked: still fully readable, just inert. Dimming the map would punish the
-   state you are meant to leave it in. */
-.lu-bay-locked .lu-bay-cell, .lu-bay-locked .lu-bay-chip { cursor: default; }
-/* The tab description and the how-to-place hint read as one sentence continuing
-   across the line, so they share a flex child. It wraps rather than pushing
-   Refresh off the right on a narrow window. */
-.lu-bay-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.lu-bay-hint { font-size: 12px; color: var(--muted); }
-/* Drag and drop. `grab` on anything that can be picked up, and a solid outline
-   on whatever is under the pointer — a drop with no target feedback is a guess
-   about where the drive is going to land. */
-.lu-bay-cell[draggable="true"], .lu-bay-chip[draggable="true"] { cursor: grab; }
-.lu-bay-cell[draggable="true"]:active, .lu-bay-chip[draggable="true"]:active { cursor: grabbing; }
-.lu-bay-cell.drop { outline: 2px solid #58a6ff; outline-offset: -2px; }
-.lu-bay-tray.drop { outline: 2px dashed #58a6ff; outline-offset: 2px; border-radius: 6px; }
-/* Locate (plan 048). The blinking bay pulses so the screen and the rack agree
-   about which drive is being pointed at. Motion is the whole signal here, so
-   under prefers-reduced-motion it becomes a steady outline rather than nothing
-   — the same trade the rebuild stripe makes. */
-.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
-/* The button blinks while the drive does, so the screen and the rack are
-   telling you the same thing. Motion is the signal, so reduced-motion keeps a
-   steady highlight rather than dropping to nothing. */
-.lu-refresh-btn.locating { border-color: #58a6ff; color: #58a6ff; animation: lu-locate-blink 1s steps(1, end) infinite; }
-@keyframes lu-locate-blink {
-    0%, 49%   { background: color-mix(in srgb, #58a6ff 22%, transparent); }
-    50%, 100% { background: transparent; }
-}
-.lu-bay-cell.locating { animation: lu-locate-pulse 1s ease-in-out infinite; }
-@keyframes lu-locate-pulse {
-    0%, 100% { box-shadow: inset 3px 0 0 var(--rail, transparent); }
-    50%      { box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .lu-bay-cell.locating { animation: none; box-shadow: inset 3px 0 0 var(--rail, transparent), 0 0 0 2px #58a6ff; }
-    .lu-refresh-btn.locating { animation: none; background: color-mix(in srgb, #58a6ff 22%, transparent); }
-}
-
-/* ── Performance tab ─────────────────────────────────────────────────────── */
-/* One .lu-card per controller — spacing comes from .lu-card's margin-bottom;
-   .lu-perf-ctl survives only as the hook for the heading below. */
-.lu-perf-ctl h4 { margin: 0 0 10px; color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-.lu-perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.lu-perf-cell { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 10px; padding: 9px 12px 6px; }
-.lu-perf-cell .cap { font-size: 10px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; }
-.lu-perf-cell .cap b { color: var(--text); font-weight: 600; font-size: 13px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.lu-perf-canvas { position: relative; height: 88px; }
-</style>
+<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css">
 
 <div id="lu-wrap">
 
@@ -619,7 +112,12 @@ if ($enableFlash) {
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
-  <?php if ($enableFlash): ?><button class="lu-tab-btn" data-tab="flash" onclick="luTab('flash')">Firmware/BIOS Update</button><?php endif; ?>
+  <?php /* A link, not a tab (plan 055). Flashing is the one destructive action
+           in an otherwise read-only plugin and does not belong one click away
+           from monitoring on a page people leave open. It keeps the --crit
+           colour it always had; that colour was already saying it did not
+           belong in this strip. */ ?>
+  <?php if ($enableFlash): ?><a class="lu-settings-link lu-flash-link" href="/Utilities/HBAviewer_Flash">&#9888; Firmware/BIOS Update</a><?php endif; ?>
   <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
 </div>
 
@@ -711,27 +209,6 @@ if ($enableFlash) {
 <?php endif; ?>
 
 <!-- ── Firmware/BIOS Update tab (opt-in; hidden unless ENABLE_FLASH) ──────── -->
-<?php if ($enableFlash): ?>
-<div id="tab-flash" class="lu-tab-pane">
-  <div class="lu-card first">
-    <div class="lu-flash-warn">
-      <strong>&#9888; Firmware / BIOS flashing.</strong> A wrong or mismatched image
-      will <strong>permanently brick</strong> your controller. Verify the image
-      matches your exact card and chip. The array must be stopped. Proceed entirely
-      at your own risk.
-    </div>
-    <div class="lu-flash-array <?= $arrayStopped ? 'ok' : 'bad' ?>">
-      <?php if ($arrayStopped): ?>
-        Array is <strong>STOPPED</strong> — safe to flash.
-      <?php else: ?>
-        Array is <strong>NOT stopped</strong> — stop it on the Main tab, then reload
-        this page. Flashing is blocked by the server until the array is stopped.
-      <?php endif; ?>
-    </div>
-  </div>
-  <div id="flash-content"><div class="lu-loading">Loading controllers…</div></div>
-</div>
-<?php endif; ?>
 
 </div><!-- #lu-wrap -->
 
@@ -754,8 +231,6 @@ if ($enableFlash) {
         });
         if (name === 'smart') {
             luSmartAll(false);
-        } else if (name === 'flash') {
-            if (!loaded['flash']) luFlashInit();
         } else if (name === 'perf') {
             luMetricsStart();
         } else if (name === 'baymap') {
@@ -797,7 +272,7 @@ if ($enableFlash) {
         btn.disabled = true; btn.textContent = 'Working…';
         fetch('/plugins/hbaviewer/phy_baseline.php', {
             method: 'POST',
-            body: new URLSearchParams({reset_baseline: ctl, csrf_token: flashCsrf})
+            body: new URLSearchParams({reset_baseline: ctl, csrf_token: luCsrf})
         })
             .then(function (r) { return r.text(); })
             .then(function (t) {
@@ -874,29 +349,22 @@ if ($enableFlash) {
             });
     }
 
-    /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────
-       Opt-in, single-flight (one flash at a time, enforced server-side). This UI
-       drives flash.php; every real guard (array stopped, confirm, lock) is
-       re-checked on the server, so the JS checks here are only fast feedback. */
-    var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
-    /* Step 3 writes hardware, so it is greyed out and disabled while the array
-       runs. Steps 1 (read-only listing) and 2 (uploads to the plugin's own tools
-       dir) stay live on purpose — staging the image before the array goes down
-       is what keeps the outage short. `disabled` as well as pointer-events
-       because a pointer-only lock is still keyboard-reachable, which is a worse
-       trap than an enabled button. Read once at render: stopping the array needs
-       a page reload, same as the banner already says. */
-    var lockCls  = flashArrayStopped ? '' : ' is-locked';
-    var lockAttr = flashArrayStopped ? '' : ' disabled';
-    var lockNote = flashArrayStopped ? '' : '<div class="lu-flock">Locked while the array is running — stop the array on the Main tab, then reload this page.</div>';
-    // Unraid rejects POSTs without its CSRF token. Prefer Unraid's own fresh JS
-    // global; fall back to the token we read from var.ini at render time.
-    var flashCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
-    function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+    /* Unraid rejects POSTs without its CSRF token. Prefer Unraid's own fresh JS
+       global; fall back to the token read from var.ini at render time.
+
+       This is NOT flash state, despite having been declared inside the flash
+       block and named for it until plan 055. The bay map, Locate and the PHY
+       baseline reset all post with it, and moving it out with the rest of the
+       flash JS broke every write on this page while the page still rendered
+       perfectly — which is exactly how this would reach a user unnoticed.
+       Renamed off `flashCsrf` so nothing here is named after code that no
+       longer lives here. */
+    var luCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
 
     /* ── Drives tab: the bay map (plan 047) ───────────────────────────────────
-       Lives here, below flashCsrf, because every write goes through the same
-       Unraid CSRF token the flash and baseline POSTs use.
+       Lives here, below luCsrf, because every write goes through the same
+       Unraid CSRF token the baseline POST uses.
        The grid is built from the payload with createElement + textContent, not
        innerHTML: model and serial strings come off the drive itself, and a
        drive's own firmware is not a trusted source of markup. */
@@ -937,7 +405,7 @@ if ($enableFlash) {
     function luBayReload() { luBayLoad(true); }
 
     function luBayPost(body, done) {
-        body.csrf_token = flashCsrf;
+        body.csrf_token = luCsrf;
         fetch('/plugins/hbaviewer/bay_map.php', {method: 'POST', body: new URLSearchParams(body)})
             .then(function (r) { return r.json(); })
             .then(function (j) {
@@ -1441,7 +909,7 @@ if ($enableFlash) {
     };
 
     function luLocatePost(action, addr) {
-        var body = {action: action, csrf_token: flashCsrf};
+        var body = {action: action, csrf_token: luCsrf};
         if (addr) body.addr = addr;
         fetch('/plugins/hbaviewer/locate.php', {method: 'POST', body: new URLSearchParams(body)})
             .then(function (r) { return r.json(); })
@@ -1592,114 +1060,6 @@ if ($enableFlash) {
             luBayPost({action: 'dims', rows: rows, cols: cols}, luBayFetch);
         }, 400);
     }
-    function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
-    // Errored controllers render a card with data-ctl but no data-chip, so the
-    // lookup can succeed while the attribute is absent. Coalesce to '' — chip is
-    // only ever sent as a POST field, and URLSearchParams would stringify a null
-    // into the literal "null", which flash.php's alnum filter happily accepts.
-    function flashChip(i){ var c=flashCard(i); return c ? (c.getAttribute('data-chip') || '') : ''; }
-
-    window.luFlashInit = function () {
-        var el = document.getElementById('flash-content');
-        if (!el) return;
-        fetch('/plugins/hbaviewer/ajax_info.php?type=overview')
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            var ctls = (d && d.controllers) || [];
-            if (!ctls.length) { el.innerHTML = '<div class="lu-error">No controllers detected (or backend error).</div>'; return; }
-            el.innerHTML = ctls.map(function(c,i){
-              if (c.error) return '<div class="lu-fc lu-card first" data-ctl="'+i+'"><h4>Controller /c'+i+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
-              var chip = c.model || '';
-              return '<div class="lu-fc lu-card first" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
-                + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
-                + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
-                + '<div class="lu-fstep"><label class="step">Step 1 — verify the flash tool sees THIS card (controller /c'+i+' only)</label>'
-                +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Verify /c'+i+'</button>'
-                +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
-                + '<div class="lu-fstep"><label class="step">Step 2 — upload the model-correct image (+ optional BIOS / tool)</label>'
-                +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
-                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"><br><br>'
-                +   'Flash tool if not installed (sas2flash/sas3flash): <input type="file" id="flash-tool-'+i+'"> '
-                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
-                +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
-                + lockNote
-                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 3 — confirm &amp; flash</label>'
-                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
-                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"'+lockAttr+'> '
-                +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')"'+lockAttr+'>Flash /c'+i+'</button></div>'
-                + '<pre id="flash-log-'+i+'" style="display:none"></pre>'
-                + '</div>';
-            }).join('');
-            loaded['flash'] = true;
-          })
-          .catch(function(){ el.innerHTML = '<div class="lu-error">Failed to load controllers.</div>'; });
-    };
-
-    window.luFlashList = function (i) {
-        var pre = document.getElementById('flash-list-'+i);
-        pre.style.display='block'; pre.textContent='Running…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(i), ctl:i, csrf_token:flashCsrf})})
-          .then(function(r){ return r.text(); })
-          .then(function(t){ pre.textContent = t || '(no output)'; })
-          .catch(function(){ pre.textContent='Request failed.'; });
-    };
-
-    window.luFlashUpload = function (i) {
-        var out = document.getElementById('flash-up-'+i); out.style.color='var(--muted)'; out.textContent='Uploading…';
-        var fw=document.getElementById('flash-fw-'+i).files[0];
-        var bios=document.getElementById('flash-bios-'+i).files[0];
-        var tool=document.getElementById('flash-tool-'+i).files[0];
-        if (!fw && !tool) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
-        var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
-        if (fw) fd.append('firmware', fw);
-        if (bios) fd.append('bios', bios);
-        if (tool) fd.append('tool', tool);
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            if (d.error) { out.style.color='var(--crit-text)'; out.textContent=d.error; return; }
-            var c=flashCard(i);
-            if (d.firmware) c.setAttribute('data-fw', d.firmware);
-            if (d.bios) c.setAttribute('data-bios', d.bios);
-            out.style.color='var(--good-text)';
-            out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
-          })
-          .catch(function(){ out.style.color='var(--crit-text)'; out.textContent='Upload failed.'; });
-    };
-
-    window.luFlashGo = function (i) {
-        var log = document.getElementById('flash-log-'+i);
-        var c = flashCard(i);
-        var fw = c.getAttribute('data-fw'); var bios = c.getAttribute('data-bios') || '';
-        var ack = document.getElementById('flash-ack-'+i).checked;
-        var confirmTxt = document.getElementById('flash-confirm-'+i).value;
-        if (!flashArrayStopped) { alert('The array is not stopped. Stop it on the Main tab and reload this page.'); return; }
-        if (!ack) { alert('Tick the acknowledgement box first.'); return; }
-        if (confirmTxt !== 'FLASH') { alert('Type FLASH (all caps) to confirm.'); return; }
-        if (!fw) { alert('Upload a firmware image first.'); return; }
-        if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
-        log.style.display='block'; log.textContent='Starting flash…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            if (d.error) { log.textContent='Refused: '+d.error; return; }
-            luFlashPoll(i);
-          })
-          .catch(function(){ log.textContent='Request failed.'; });
-    };
-
-    window.luFlashPoll = function (i) {
-        var log = document.getElementById('flash-log-'+i);
-        fetch('/plugins/hbaviewer/flash.php?action=status')
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            log.textContent = d.log || '(waiting for output…)';
-            if (d.running) { setTimeout(function(){ luFlashPoll(i); }, 2000); return; }
-            if (d.done === 'success') log.textContent += '\n\n✔ Flash completed. REBOOT the server to load the new firmware. (Linux flashers update the BIOS but cannot erase it.)';
-            else if (d.done === 'error') log.textContent += '\n\n✖ Flash tool exited with an error (code '+d.exit+'). Read the log above; do NOT reboot — reflash the correct image first.';
-          })
-          .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(i); }, 3000); });
-    };
 
     /* ── Performance tab: poll instant counters, compute rates, plot ─────────
        In-browser only: a ring buffer (~5 min) of rates derived from the delta
