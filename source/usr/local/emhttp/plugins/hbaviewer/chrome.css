@@ -72,7 +72,9 @@
 }
 .lu-card.first { border-radius: 14px; }
 .lu-card h3 {
-    margin: 0 0 14px; font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    /* 14px under an 11px uppercase label read as a gap rather than a heading
+       attached to what follows it. */
+    margin: 0 0 9px; font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
     text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px;
 }
 .lu-card h3::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); flex: 0 0 auto; }
@@ -174,7 +176,11 @@
     font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     border-bottom: 1px solid var(--border); white-space: nowrap;
 }
-.lu-table td { padding: 9px 12px; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
+/* line-height is STATED, not inherited. Cells here stack up to three lines (the
+   counter, the since-baseline rate, the recent rate), and inheriting the
+   webGui's body line-height spent about a third of each row on leading. 1.4 is
+   still comfortable for 13px text and takes ~6px off every stacked row. */
+.lu-table td { padding: 6px 12px; line-height: 1.4; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
 .lu-table tr:last-child td { border-bottom: none; }
 .lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
@@ -185,8 +191,12 @@
 .lu-err-val   { color: var(--warn); font-weight: 600; }
 
 /* ── PHY error baseline (plan 022) ───────────────────────────────────────── */
-.lu-phy-bar   { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 8px; }
-.lu-phy-delta { color: var(--faint); font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; margin-top: 2px; white-space: nowrap; opacity: 0.85; }
+.lu-phy-bar   { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 6px; }
+/* The two sub-lines are the densest thing on the page and were the loosest:
+   11px text on the inherited body leading left more gap than glyph. Tight
+   line-height and a 1px separation keep them reading as sub-lines of the
+   counter above rather than as three unrelated rows. */
+.lu-phy-delta { color: var(--faint); font-size: 11px; line-height: 1.25; font-family: var(--mono); font-variant-numeric: tabular-nums; margin-top: 1px; white-space: nowrap; opacity: 0.85; }
 .lu-phy-stale { color: var(--warn-text); font-size: 13px; }
 
 /* ── Misc ────────────────────────────────────────────────────────────────── */
@@ -272,11 +282,11 @@
 .lu-health-tile { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin: 0 0 16px; }
 .lu-health-tile .lu-band-meter { flex: 1 1 260px; margin: 0; }
 .lu-tile.light .lu-band-labels { color: #fff; }
-.lu-indicator-rows { display: flex; flex-direction: column; gap: 2px; }
+.lu-indicator-rows { display: flex; flex-direction: column; gap: 0; }
 /* Wraps so the hint line drops below label+value. column-gap stays 10px (the
    dot/icon/label rhythm); row-gap is tight so the hint reads as part of the row
    above it, not as a row of its own. */
-.lu-indicator-row { display: flex; align-items: center; flex-wrap: wrap; column-gap: 10px; row-gap: 1px; padding: 7px 2px; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
+.lu-indicator-row { display: flex; align-items: center; flex-wrap: wrap; column-gap: 10px; row-gap: 0; padding: 5px 2px; line-height: 1.35; border-bottom: 1px dashed var(--border-soft); font-size: 12.5px; }
 .lu-indicator-row:last-child { border-bottom: none; }
 /* A dot again as of plan 032 — but the GRADIENT FILL IS LOAD-BEARING, not
    decoration, so it survived the shape change. Flat status colours were measured

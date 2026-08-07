@@ -677,7 +677,7 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             } elseif (empty($off)) {
                 $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0">No PHY has logged errors since the baseline.</p>';
             } else {
-                $out .= '<p class="lu-muted" style="font-size:12px;margin:8px 0 4px">Top offenders</p>';
+                $out .= '<p class="lu-muted" style="font-size:12px;margin:2px 0 3px">Top offenders</p>';
                 $rows = [];
                 foreach ($off as $rank => $o) {
                     $drvLabel = $o['drive'] !== null ? htmlspecialchars($o['drive']) : 'drive not identified';
