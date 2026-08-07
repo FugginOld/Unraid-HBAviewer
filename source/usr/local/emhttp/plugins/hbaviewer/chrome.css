@@ -61,8 +61,11 @@
     color: var(--text); text-decoration: none; transition: color 0.15s;
 }
 .lu-settings-link:hover { color: var(--accent); }
-.lu-tab-btn[data-tab="flash"] { color: var(--crit-text); }
-.lu-tab-btn[data-tab="flash"]:hover, .lu-tab-btn[data-tab="flash"].active { color: var(--crit); }
+/* Firmware/BIOS is a link to its own page now (plan 055), not a tab button, but
+   it keeps the colour it always had — that colour was already saying it did not
+   belong in a strip of read-only views. */
+.lu-flash-link { color: var(--crit-text); }
+.lu-flash-link:hover { color: var(--crit); }
 .lu-tab-pane { display: none; }
 .lu-tab-pane.active { display: block; }
 
@@ -208,51 +211,6 @@
     font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
 }
 .lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-/* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
-.lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: var(--crit-text); font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }
-.lu-flash-warn strong { color: var(--crit-text); }
-.lu-flash-array { border-radius: 10px; font-size: 13px; padding: 10px 16px; }
-.lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
-.lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
-/* One column per controller instead of a stack. Nothing in a flash card is
-   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
-   the frame was dead space with the second card pushed below the fold.
-   auto-fit, not a literal 2: the controller count is whatever the box has — one
-   card still fills the frame, three wrap to a second row. 420px is the floor at
-   which Step 2 stops wrapping badly; under that (narrow window, phone) it
-   collapses to a single column by itself, so this needs no media query.
-   align-items:start because a controller that errored renders a two-line card,
-   and stretching it to match a full one just makes a tall empty box. */
-#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
-#flash-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
-/* Each controller box is a .lu-card now, so its border, radius, padding, margin
-   and background all come from there — .lu-fc keeps only the rules .lu-card has
-   no opinion about, and stays as the hook flashCard() selects on. */
-.lu-fc h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
-.lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
-.lu-fstep { margin: 14px 0; }
-.lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-/* Locked state (plan 037): while the array runs, Step 3 is dimmed and inert.
-   COSMETIC ONLY — flash.php's flash_array_stopped() and luFlashGo's
-   !flashArrayStopped alert are the actual gate. Deleting this CSS must still
-   leave flashing blocked; if it ever doesn't, the safety model has inverted.
-   0.45 measured 2.3-2.8:1 on the light themes (white/azure); 0.6 keeps every
-   theme >= 3.3:1. .lu-flock is a SIBLING of the locked step, not a child:
-   opacity applies to the whole subtree, so a child can never be less
-   transparent than its parent — the plan's `.is-locked .lu-flock{opacity:1}`
-   would have been a no-op and left the explanation as dim as what it explains. */
-.lu-fstep.is-locked { opacity: 0.6; pointer-events: none; }
-.lu-flock { color: var(--warn-text); font-size: 12px; margin: 14px 0 0; }
-.lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
-.lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
-.lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
-.lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
-.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
-.lu-fbtn:hover { background: #d9901a; }
-.lu-fbtn.danger { background: var(--crit); color: #fff; }
-.lu-fbtn.danger:hover { background: #c0392b; }
-.lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 
 /* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
 /* One column per controller instead of a stack, the same move #flash-content
