@@ -978,9 +978,17 @@ check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
 preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
-// The hint line is only readable as a sub-line if the shell styles it; unstyled
-// it inherits the row's 12.5px flex and lands next to the value.
-check('hint line is styled in the shell', str_contains($shell, '.lu-ind-hint {'));
+/* The hint line is only readable as a sub-line if it is styled; unstyled it
+   inherits the row's 12.5px flex and lands next to the value. The rules moved
+   out of the shell into chrome.css (plan 055), so this follows them — and now
+   also checks the shell LINKS that file, because a stylesheet that exists and
+   is never loaded fails exactly like one that was deleted. */
+$css = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/chrome.css');
+check('hint line is styled', str_contains($css, '.lu-ind-hint {'));
+check('the shell loads chrome.css', str_contains($shell, 'href="/plugins/hbaviewer/chrome.css"'));
+// Chrome is shared by two pages now, so it must stay pure CSS — a PHP tag in
+// there would be served as text and silently break every rule after it.
+check('chrome.css carries no PHP', !str_contains($css, '<?'));
 // The sprite must be parsed once in the page shell, never re-emitted by the
 // per-poll Health render, which would duplicate these ids on every refresh.
 check('sprite defined once, in the shell only',
