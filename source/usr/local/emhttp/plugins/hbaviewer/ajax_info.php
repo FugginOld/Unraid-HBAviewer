@@ -391,7 +391,7 @@ function renderOverviewCards(array $data, array $cfg): string {
 function luCtlHead(int $i): string {
     // No top margin: this is now the first child of its controller's card, and
     // the card already supplies 18px of padding above it.
-    return '<h3 style="margin:0 0 10px;color:#f5a623;font-size:12px;'
+    return '<h3 style="margin:0 0 7px;color:#f5a623;font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
 function luLinkBadge(string $link): string {
@@ -796,7 +796,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             $counts = !$enclLess && ($e['slots'] ?? '') !== '' && ($e['drives'] ?? '') !== ''
                 ? htmlspecialchars($e['slots']) . ' slots &middot; ' . htmlspecialchars($e['drives']) . ' drives &middot; '
                 : '';
-            $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 8px">Enclosure e' . htmlspecialchars($e['eid'])
+            $out .= '<p class="lu-muted" style="font-size:12px;margin:0 0 6px">Enclosure e' . htmlspecialchars($e['eid'])
                   . ': ' . htmlspecialchars($e['product']) . ' (' . htmlspecialchars($e['vendor']) . ') &middot; '
                   . $counts . $mode . ($enclLess ? ' &middot; drives are addressed without an enclosure' : '') . '</p>';
         }

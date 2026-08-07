@@ -181,6 +181,12 @@
    webGui's body line-height spent about a third of each row on leading. 1.4 is
    still comfortable for 13px text and takes ~6px off every stacked row. */
 .lu-table td { padding: 6px 12px; line-height: 1.4; color: var(--text); border-bottom: 1px solid var(--border-soft); font-variant-numeric: tabular-nums; }
+/* A button inside a row sets that row's height on its own. The Drives tab has a
+   Locate button in every row and the SMART tab has none, which is the whole
+   reason one looked taller than the other — the cells were already identical.
+   Compact only inside a table; the toolbar buttons keep their size, and this
+   stays ~22px tall so it is still a comfortable click target. */
+.lu-table .lu-refresh-btn { padding: 3px 10px; font-size: 10.5px; line-height: 1.4; }
 .lu-table tr:last-child td { border-bottom: none; }
 .lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
