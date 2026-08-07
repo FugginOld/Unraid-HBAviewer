@@ -331,5 +331,139 @@ health_store_write($file, $ring);
 check('store round-trips', health_store_read($file) === $ring);
 @unlink($file); @rmdir($dir);
 
+/* ── host_link ────────────────────────────────────────────────────────────────
+   CHARACTERIZATION of the behaviour as it stands (plan 056, step 1). Written
+   BEFORE the slot-aware rework and green against the old code, because this
+   indicator had no assertions at all — so there was nothing to prove a change
+   only altered what it meant to.
+
+   What these pin is deliberately narrow: a link matching the card's own maximum
+   is ok, anything below it warns. That rule is what issues #13 and #14 are
+   about — it compares the card against ITSELF, so a card in a slot narrower
+   than the card reads as a fault. The rows below encode today's answers, not
+   the right ones; the ones that must survive the rework are the two genuine
+   downtrains. */
+$hl = fn(array $link): array =>
+    health_indicators([sample(1000, 100, 0, 0, 0, 0, ['link' => $link])], [], 1000)['host_link'];
+
+$full = $hl(['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: matched link is ok', $full['state'] === 'ok');
+check('host_link: matched link reports the width', $full['value'] === 'x8');
+
+// A GENUINE downtrain — the card can do x8, the link negotiated x4 in an x8
+// slot. This must keep warning after plan 056; it is the failure the indicator
+// exists to catch and the easy thing to lose while making #13 go green.
+$narrow = $hl(['width' => 4, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: narrower width warns', $narrow['state'] === 'warning');
+check('host_link: narrower width shows both widths', $narrow['value'] === 'x4 / x8');
+
+// The same, on speed rather than width. Also must survive.
+$slow = $hl(['width' => 8, 'max_width' => 8, 'speed' => '5.0 GT/s', 'max_speed' => '8.0 GT/s']);
+check('host_link: slower speed warns', $slow['state'] === 'warning');
+
+// No link data at all: says nothing rather than inventing a verdict.
+$none = $hl([]);
+check('host_link: absent link data is ok, not a warning', $none['state'] === 'ok');
+check('host_link: absent link data reports no width', $none['value'] === '—');
+
+/* ── Slot-aware judging (plan 056) ────────────────────────────────────────────
+   The link is now judged against what it could REACH — the lower of the card's
+   maximum and the slot's — instead of against the card alone. */
+$hlc = fn(array $link, array $cfg = []): array =>
+    health_indicators([sample(1000, 100, 0, 0, 0, 0, ['link' => $link])], [], 1000, $cfg)['host_link'];
+
+$G3 = '8.0 GT/s';
+$card8 = ['width' => 8, 'max_width' => 8, 'speed' => $G3, 'max_speed' => $G3];
+
+// Card and slot agree: "full" is honest here and only here.
+$both = $hlc($card8 + ['slot_width' => 8, 'slot_speed' => $G3]);
+check('host_link: card == slot is ok', $both['state'] === 'ok');
+check('host_link: card == slot says full width of both',
+      str_contains($both['reason'], 'full width of both card and slot'));
+
+/* Issue #13: an x8 card the board runs at x4. Not a fault, and the old code
+   warned about it forever. */
+$slotLtd = $hlc(['width' => 4, 'max_width' => 8, 'speed' => $G3, 'max_speed' => $G3,
+                 'slot_width' => 4, 'slot_speed' => $G3]);
+check('host_link: slot-limited link is ok, not a warning', $slotLtd['state'] === 'ok');
+check('host_link: slot-limited names the slot as the limit',
+      str_contains($slotLtd['reason'], "this slot's maximum"));
+check('host_link: slot-limited still reports what the card could do',
+      str_contains($slotLtd['reason'], 'card supports x8'));
+
+/* THE INVERSE, and just as common: an x8 card in an x16 slot — both of the
+   maintainer's cards. Judging against the slot alone would call these
+   downtrained, which is why the ceiling is clamped to the card. This is the
+   regression this whole change most easily causes. */
+$wideSlot = $hlc($card8 + ['slot_width' => 16, 'slot_speed' => '16.0 GT/s']);
+check('host_link: card narrower than its slot is NOT downtrained', $wideSlot['state'] === 'ok');
+check('host_link: card narrower than its slot reads as full',
+      str_contains($wideSlot['reason'], 'full width of both card and slot'));
+
+/* A REAL downtrain with slot data present: x8 card, x8 slot, negotiated x4.
+   Nothing about plan 056 may silence this. */
+$realDown = $hlc(['width' => 4, 'max_width' => 8, 'speed' => $G3, 'max_speed' => $G3,
+                  'slot_width' => 8, 'slot_speed' => $G3]);
+check('host_link: a real downtrain still warns', $realDown['state'] === 'warning');
+check('host_link: a real downtrain says what was expected', $realDown['value'] === 'x4 / x8');
+
+// Old samples from before slot_* existed: the ring survives upgrades, so these
+// must behave exactly as they did rather than suddenly reading as faults.
+check('host_link: sample with no slot data falls back to the card',
+      $hlc($card8)['state'] === 'ok' && $hlc(['width' => 4, 'max_width' => 8,
+          'speed' => $G3, 'max_speed' => $G3])['state'] === 'warning');
+
+/* #13's requested escape hatch: pin the expected link, and a drop BELOW it must
+   still warn. This is the setting behaving as a correction, not a mute button. */
+$pinned = $hlc(['width' => 4, 'max_width' => 8, 'speed' => $G3, 'max_speed' => $G3],
+               ['PCIE_EXPECT_WIDTH' => 4]);
+check('host_link: expected width set makes the link ok', $pinned['state'] === 'ok');
+check('host_link: expected width says it was set',
+      str_contains($pinned['reason'], 'expected link you set'));
+$belowPin = $hlc(['width' => 2, 'max_width' => 8, 'speed' => $G3, 'max_speed' => $G3],
+                 ['PCIE_EXPECT_WIDTH' => 4]);
+check('host_link: below the expected width still warns', $belowPin['state'] === 'warning');
+
+// A pinned generation works the same way, through the Gen->GT/s table.
+$genPin = $hlc(['width' => 8, 'max_width' => 8, 'speed' => '5.0 GT/s', 'max_speed' => $G3],
+               ['PCIE_EXPECT_GEN' => 2]);
+check('host_link: expected Gen2 accepts 5.0 GT/s', $genPin['state'] === 'ok');
+check('host_link: expected Gen3 rejects 5.0 GT/s',
+      $hlc(['width' => 8, 'max_width' => 8, 'speed' => '5.0 GT/s', 'max_speed' => $G3],
+           ['PCIE_EXPECT_GEN' => 3])['state'] === 'warning');
+check('host_link: an unknown generation expects nothing rather than guessing',
+      health_pcie_gen_rate(9) === null && health_pcie_gen_rate(3) === 8.0);
+
+// #14's complaint, now inverted into an assertion: never "full" when the card
+// can do more than it is being allowed to.
+check('host_link: never calls a slot-limited link "full"',
+      !str_contains($slotLtd['reason'], 'full'));
+
+/* ── Three real cards, values copied from the probe output ────────────────────
+   Invented fixtures agree with whatever model you invented them under. These
+   are what actual hardware reported, so they check the model against the world.
+   Speeds are already ' PCIe'-stripped, as the collector stores them. */
+
+// Issue #13's own card: SAS3816, x8 capable, in a slot that is only x4.
+// This is the permanent warning the issue was opened about.
+$issue13 = $hlc(['width' => 4, 'max_width' => 8, 'speed' => '16.0 GT/s', 'max_speed' => '16.0 GT/s',
+                 'slot_width' => 4, 'slot_speed' => '16.0 GT/s']);
+check('host_link: issue #13 hardware reads ok with no configuration',
+      $issue13['state'] === 'ok');
+check('host_link: issue #13 hardware is told why, and what the card could do',
+      str_contains($issue13['reason'], "this slot's maximum")
+      && str_contains($issue13['reason'], 'card supports x8'));
+
+/* The reporter's OTHER card: Gen3 x8 in a slot advertising Gen5 (32 GT/s).
+   Judging against the slot's speed would call this downtrained — the clamp to
+   the card is what stops a false warning here. */
+$gen5slot = $hlc(['width' => 8, 'max_width' => 8, 'speed' => '8.0 GT/s', 'max_speed' => '8.0 GT/s',
+                  'slot_width' => 8, 'slot_speed' => '32.0 GT/s']);
+check('host_link: Gen3 card in a Gen5 slot is not downtrained', $gen5slot['state'] === 'ok');
+
+/* The maintainer's cards: x8 Gen3 in x16 Gen4 slots — wider AND faster slot. */
+$maint = $hlc($card8 + ['slot_width' => 16, 'slot_speed' => '16.0 GT/s']);
+check('host_link: x8 card in an x16 Gen4 slot is not downtrained', $maint['state'] === 'ok');
+
 echo $fails === 0 ? "health: all pass\n" : "health: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

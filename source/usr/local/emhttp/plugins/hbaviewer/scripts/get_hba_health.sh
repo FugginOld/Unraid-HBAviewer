@@ -89,7 +89,7 @@ NOW=$(date +%s)
 health_storcli() {   # $1 = controller index
     local out val_out pci dom bus dev fn dir
     local temp fw drives band readok=true
-    local width=0 maxwidth=0 speed="" maxspeed=""
+    local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
 
     out=$({ "$STORCLI" /c"$1" show; "$STORCLI" /c"$1" show temperature; } 2>/dev/null)
     val() { printf '%s\n' "$out" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
@@ -113,12 +113,21 @@ health_storcli() {   # $1 = controller index
         val_out=$(cat "$dir/max_link_width"     2>/dev/null); maxwidth="${val_out:-0}"
         speed=$(cat "$dir/current_link_speed" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//')
         maxspeed=$(cat "$dir/max_link_speed"  2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//')
+        # The SLOT's own ceiling, from the upstream bridge one level up in the
+        # sysfs device tree (plan 056). A card in a slot narrower than itself is
+        # the normal state of most OEM servers, not a fault -- but nothing on the
+        # card can say so, because max_link_* above is the CARD's own.
+        # Confirmed present on the maintainer's box: x8 cards reporting a slot
+        # max of 16. Absent (0/"") where a platform does not publish it, and
+        # health.php then falls back to the card maximum, which is the old rule.
+        val_out=$(cat "$dir/../max_link_width" 2>/dev/null); slotwidth="${val_out:-0}"
+        slotspeed=$(cat "$dir/../max_link_speed" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//')
     fi
 
-    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s"},"phys":%s}' \
+    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
         "$NOW" "$UPTIME" \
         "${temp:-null}" "$band" "$fw" "$drives" "$readok" \
-        "$width" "$maxwidth" "$speed" "$maxspeed" \
+        "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
         "$(_phys_json "$1")"
 }
 
@@ -175,7 +184,10 @@ health_lsiutil() {
 
     hnum=$(_first_sas_host)
 
-    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":0,"speed":"%s","max_speed":""},"phys":%s}' \
+    # Same link shape as the storcli path, all zeros: lsiutil reports no maximum
+    # and this path never resolves a PCI address, so there is no bridge to read.
+    # Emitting the keys anyway keeps one JSON shape for both backends.
+    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":0,"speed":"%s","max_speed":"","slot_width":0,"slot_speed":""},"phys":%s}' \
         "$NOW" "$UPTIME" \
         "${temp:-null}" "$band" "$fw" "$(_drive_count "${hnum:-0}")" "$readok" \
         "$width" "$speed" \

@@ -223,11 +223,30 @@ never averaged:
 | `thermal` | Controller temperature against the fixed bands |
 | `link_integrity` | PHY error **rates**, with the worst PHY named in the reason |
 | `topology` | Devices present versus what was seen before |
-| `host_link` | The PCIe link width/speed versus what the slot is capable of |
+| `host_link` | The PCIe link width/speed versus what it could actually reach |
 | `controller` | Whether the controller read succeeded at all |
 
 An indicator that cannot be measured shows **grey / unknown**, not green. A
 collector that timed out or a card that was pulled must never look healthy.
+
+**What `host_link` compares against.** The link is judged against the lower of
+what the *card* can do and what the *slot* can do, read from the slot's own PCIe
+bridge. An x8 card in an x4 slot is running at that slot's maximum — normal on
+OEM boards, nothing you can fix, and not a warning. It says so:
+
+```text
+Running at x4 16.0 GT/s — this slot's maximum (card supports x8)
+```
+
+A card in a slot **wider** than itself is equally normal, and reads as the full
+width of both. Only a link below what it could reach warns — an x8 card in an x8
+slot negotiating x4 is a real fault and still says so.
+
+If your board's bridge reports nothing, `host_link` falls back to the card's own
+maximum, which can produce a permanent warning on a slot-limited card. Set
+**Expected PCIe Width** / **Generation** in Settings to declare what the link
+should be. Those are corrections, not mutes: a link below what you declare
+still warns.
 
 Rates need more than one sample, so `link_integrity` reads `unknown` on the
 first load after a reboot and resolves once a second sample arrives.
