@@ -29,6 +29,11 @@ owns.
   against whichever of the two is lower, so both read correctly with no
   configuration. A link below what it could actually reach still warns.
   (#13, #14)
+- Host Link claimed a SAS2 card was at "its full x4 width" when nothing had
+  told it what that card's maximum was. The lsiutil backend reports no
+  maximum at all, so there was nothing to be full of. It now says the link
+  and stops there, rather than dressing an unmeasured link as a checked one.
+  (#14)
 - Double-clicking a bay to empty it did nothing, from 2026.08.05. Picking a
   drive up redraws the whole grid, so the two clicks landed on different
   elements and the browser never delivered the double-click to the bay.

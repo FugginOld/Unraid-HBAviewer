@@ -465,5 +465,27 @@ check('host_link: Gen3 card in a Gen5 slot is not downtrained', $gen5slot['state
 $maint = $hlc($card8 + ['slot_width' => 16, 'slot_speed' => '16.0 GT/s']);
 check('host_link: x8 card in an x16 Gen4 slot is not downtrained', $maint['state'] === 'ok');
 
+/* #14's SAS9207-8i, on the lsiutil backend, which reports NO maximum at all:
+   max_width 0 and max_speed "". The old message told it it was at "its full x4
+   width" on the strength of no information, which is what that report was
+   about. Nothing may claim fullness here — there is nothing to be full of. */
+$noMax = $hlc(['width' => 4, 'max_width' => 0, 'speed' => '8.0 GT/s', 'max_speed' => '',
+               'slot_width' => 0, 'slot_speed' => '']);
+check('host_link: no maximum reported is still ok', $noMax['state'] === 'ok');
+check('host_link: no maximum reported never claims "full"',
+      !str_contains($noMax['reason'], 'full'));
+check('host_link: no maximum reported says why it cannot be checked',
+      str_contains($noMax['reason'], 'no maximum'));
+check('host_link: no maximum reported still states the link',
+      str_contains($noMax['reason'], 'x4 8.0 GT/s'));
+
+/* Card maximum known but the bridge silent — a storcli card on a board that
+   publishes no slot data. True of the card, unknown of the slot, so the
+   sentence must not speak for the slot. */
+$cardOnly = $hlc($card8);
+check('host_link: card known, slot silent claims only the card',
+      str_contains($cardOnly['reason'], 'the full width this card reports')
+      && !str_contains($cardOnly['reason'], 'slot'));
+
 echo $fails === 0 ? "health: all pass\n" : "health: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

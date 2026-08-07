@@ -347,11 +347,23 @@ function health_indicators(array $ring, array $rates, int $now, array $cfg = [])
            #14 was told its chipset-limited x4 was "running at its full x4
            width" while the card could do x8. */
         $at = 'Running at x' . $w . (($link['speed'] ?? '') !== '' ? ' ' . $link['speed'] : '');
-        $host_link = ['state' => 'ok', 'value' => 'x' . $w, 'reason' => match ($why) {
-            'set'  => $at . ' — matches the expected link you set',
-            'slot' => $at . ' — this slot\'s maximum'
-                          . ($mw > $expW ? ' (card supports x' . $mw . ')' : ''),
-            default => $at . ' — the full width of both card and slot',
+        $slotKnown = (int) ($link['slot_width'] ?? 0) > 0;
+        $anyCeiling = $expW > 0 || $expS !== null;
+        $host_link = ['state' => 'ok', 'value' => 'x' . $w, 'reason' => match (true) {
+            $why === 'set'  => $at . ' — matches the expected link you set',
+            $why === 'slot' => $at . ' — this slot\'s maximum'
+                                   . ($mw > $expW ? ' (card supports x' . $mw . ')' : ''),
+            /* Nothing to compare against. The lsiutil backend reports no
+               maximum at all (max_width 0, max_speed ""), so the old message
+               told #14's SAS9207-8i it was at "its full x4 width" on the
+               strength of no information whatsoever. Say what is known and
+               stop there — an unmeasured link must not read as a verified one,
+               which is this repo's rule everywhere else. */
+            !$anyCeiling => $at . ' — this controller reports no maximum, so there is nothing to check it against',
+            // Card maximum known, slot silent: true of the card, unknown of the
+            // slot, so claiming both would be the same overreach one step down.
+            !$slotKnown  => $at . ' — the full width this card reports',
+            default      => $at . ' — the full width of both card and slot',
         }];
     }
 
