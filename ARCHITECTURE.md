@@ -82,7 +82,9 @@ installs it; Unraid's Slackware base ships it.
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
 | `notify.php`, `scripts/notify_check.php` | Health-transition notifications (cron). |
 | `flash.php` | **The only mutating path.** See below. |
-| `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page + all JS/CSS. |
+| `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page + its JS. |
+| `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
+| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup, its own CSS and JS. A page rather than a tab, and its menu entry is `Cond`-gated on `ENABLE_FLASH` so it does not exist when flashing is off. |
 
 **The house pattern for an endpoint that both mutates and shares helpers**
 (`phy_baseline.php`, `bundle.php`, `flash.php`, `export.php`): pure functions at
@@ -250,6 +252,17 @@ Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
 - **Absence is not health.** Unknown, unmeasured and stale states must render as
   grey or be omitted — never as green, and never as a zero that reads like a
   measurement.
+- **`max_link_width` is the CARD's maximum, not the slot's.** Judging the
+  negotiated PCIe link against it means comparing a card with itself, so an x8
+  card in an x4 slot — ordinary on OEM boards and unfixable — reads as a
+  permanent fault (#13), and the same bug calls a chipset-limited x4 "full
+  width" (#14). The slot's own ceiling comes from the upstream bridge, one
+  directory up in sysfs. **Judge against `min(card, slot)`, never the slot
+  alone**: cards in slots *wider* than themselves are at least as common — the
+  maintainer's are x8 in x16, and one reporter's Gen3 card sits in a slot
+  advertising Gen5 — and trusting the slot would call all of those downtrained.
+  Samples predating `slot_width`/`slot_speed` fall back to the card maximum,
+  because the ring survives upgrades and old entries must not become faults.
 - **The SAS2 path has almost no hardware coverage.** The maintainer's box is
   SAS3/storcli, so the lsiutil branches are fixture-tested only and are
   effectively verified by reporters on the issue tracker. Flag changes there in

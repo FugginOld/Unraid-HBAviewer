@@ -60,9 +60,11 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   row here can be matched against the Main page without tracking `sdX` by eye.
 - **Array Map** — a grid of the physical bays, arranged the way they sit in
   the chassis, so a problem drive is a place you can walk to rather than a slot
-  number. You place each drive once (click a drive, click a bay) and the layout
-  is saved to `/boot`; **lock it** when you are done so a stray click cannot
-  undo it. Colour is the signal: bays stay neutral until something needs
+  number. You place each drive once — drag it into its bay, or click the drive
+  then the bay — and the layout is saved to `/boot`; **lock it** when you are
+  done so a stray click cannot undo it. **Copy map** puts the layout on your
+  clipboard so it can live somewhere other than the flash drive, **Restore map**
+  rebuilds it from that text, and **Undo** covers a mistaken Clear or resize. Colour is the signal: bays stay neutral until something needs
   attention, a temperature bar makes a hot row visible without reading every
   number, empty bays are drawn as empty bays, and a disk being rebuilt into
   parity shows as such. Nothing on the machine knows your chassis layout — on a
@@ -107,7 +109,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   ~2 s from `/proc/diskstats` and `sysfs` (zero-dependency — no sampler daemon,
   no flash writes; history lives in the browser and resets on reload).
 - **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
-  flash tab that detects the card + running firmware, runs a read-only
+  flash page that detects the card + running firmware, runs a read-only
   per-controller sanity check, takes your model-correct image, and flashes one
   controller behind hard guardrails with a live log. See the safety section below.
 
@@ -126,8 +128,10 @@ tab is *assisted, not automatic*: it detects the card and runs the tools, but
 the flash tool.
 
 **Enabling it:** Settings → *Advanced — Firmware Flashing* → tick
-**Enable firmware/BIOS flashing** → Save. A **Firmware/BIOS Update** tab then
-appears on the Monitor.
+**Enable firmware/BIOS flashing** → Save. A red **Firmware/BIOS Update** button
+then appears at the bottom of that same Settings page, and is the only way in —
+the Monitor does not link to it. Reaching the one screen that writes to hardware
+means coming back past the warning that explains what it costs to get wrong.
 
 **How a flash works, per controller:**
 
@@ -207,12 +211,13 @@ After installation, find the monitor under **Tools → HBAviewer → HBA Monitor
 Tools
 └── HBAviewer
     └── HBA Monitor   (tabs: Overview · HBA Health · PHY Health · Drives
-                              · Array Map · SMART · Event Log · Performance
-                              · Firmware/BIOS Update*)
-                              *opt-in, off by default
+                              · Array Map · SMART · Event Log · Performance)
 
 User Utilities
-└── HBAviewer         (full settings page)
+└── HBAviewer          (full settings page)
+└── HBAviewer Firmware (Firmware/BIOS Update*)
+                        *opt-in, off by default; the page and its menu entry
+                         only exist once it is enabled
 
 Dashboard
 └── HBA Temperature tile (Unraid 7.2+)
@@ -235,7 +240,7 @@ right backend is in use before opening the Monitor.
 | Show Event Log | On | Event Log tab. |
 | Show Performance | On | Performance tab — real-time throughput / IOPS / %util / latency / PHY-error-rate / temperature graphs (in-browser, resets on reload). |
 | Enable notifications | **Off** | Sends an Unraid notification when a controller's health status changes (checked every 10 minutes). One notification per change, never a repeat while it persists. |
-| Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update tab. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
+| Enable firmware/BIOS flashing | **Off** | *Advanced.* Unlocks the Firmware/BIOS Update page and the button that reaches it. Read the [firmware section](#firmware--bios-updates-advanced-opt-in) before enabling — flashing can brick a card. |
 
 The **drive bay map** deliberately has no row on this page. Its grid size and
 its lock live with the map itself (the **Array Map** tab), because a layout is
