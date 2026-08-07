@@ -25,11 +25,16 @@ if ($enableFlash) {
 
 <style>
 /* ── Design tokens: original HBAviewer palette in the new component format ── */
-/* fit-content, not a fixed width: the panel hugs whatever the active tab
-   contains, so Overview shrinks to the HBA cards instead of leaving dead space
-   either side. Consequence: the panel's width now differs per tab, since hidden
-   tabs contribute nothing to max-content. max-width caps it on a wide screen and
-   margin:auto re-centres it once shrunk. */
+/* One width for every tab. This was `fit-content` so the panel could hug the
+   active tab's contents and Overview would not sit in dead space — but hidden
+   tabs contribute nothing to max-content, so the frame resized on every tab
+   switch, and a panel that changes shape as you move along the strip reads as
+   the page reloading rather than as a tab changing.
+   Drives is the widest tab and so sets the reference; filling the available
+   width up to the cap is at least that wide without hard-coding a number that
+   would only be right on one box's controller data. The cost is the dead space
+   either side of Overview that fit-content was avoiding, which is the trade
+   asked for: a steady frame beats a snug one. */
 #lu-wrap {
     /* Chrome tokens follow Unraid's theme variables (confirmed present on
        white/black/gray/azure — see plan 021); each keeps its original literal
@@ -53,12 +58,18 @@ if ($enableFlash) {
     --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
     --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
-    font-family: inherit; width: fit-content; max-width: 1560px; margin: 20px auto;
+    font-family: inherit; width: 100%; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
         radial-gradient(900px 350px at 85% -20%, var(--shade-bg-color, #242424) 0%, rgba(0,0,0,0) 55%),
         var(--bg);
     border: 1px solid var(--border-soft); border-radius: 16px; padding: 22px 24px 26px;
+    /* Stated here rather than inherited from the webGui: with width:100% and
+       48px of padding, content-box would push the panel 50px past its parent
+       and put a horizontal scrollbar on the page. Nothing else in this plugin
+       sets box-sizing, so this must not depend on Unraid's reset. Scoped to the
+       wrapper — children keep whatever they had. */
+    box-sizing: border-box;
 }
 
 /* ── Tabs (underline) ────────────────────────────────────────────────────── */
