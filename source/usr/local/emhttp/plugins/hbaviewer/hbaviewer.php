@@ -11,16 +11,17 @@ $showPhy     = $cfg['SHOW_PHY'];
 $showDrives  = $cfg['SHOW_DRIVES'];
 $showEvents  = $cfg['SHOW_EVENTS'];
 $showPerf    = $cfg['SHOW_PERF'];
-$enableFlash = $cfg['ENABLE_FLASH'];
-// Array must be stopped before flashing. Read the state once (cheap, no hardware);
-// the flash.php preflight is the authoritative gate — this banner is advisory.
-$arrayStopped = false;
-$csrfToken    = '';
-if ($enableFlash) {
-    $vi = @parse_ini_file('/var/local/emhttp/var.ini');
-    $arrayStopped = is_array($vi) && strtoupper((string) ($vi['mdState'] ?? '')) === 'STOPPED';
-    $csrfToken    = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';  // Unraid requires this on POST
-}
+/* Unraid requires its CSRF token on POST, and this page has three writers: the
+   bay map, Locate and the PHY baseline reset. Read UNCONDITIONALLY.
+
+   It used to sit behind `if ($enableFlash)`, which was defensible while the
+   flash tab lived here and was the loudest of the writers. It is not any more:
+   with flashing off the token came out empty and every write depended on
+   Unraid's own `csrf_token` JS global still being defined. That is a fallback,
+   not a guarantee. The array-state read left with the flash view (plan 055) —
+   flash_view.php does its own. */
+$vi        = @parse_ini_file('/var/local/emhttp/var.ini');
+$csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 ?>
 
 <link rel="stylesheet" href="/plugins/hbaviewer/chrome.css">
@@ -112,12 +113,11 @@ if ($enableFlash) {
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
-  <?php /* A link, not a tab (plan 055). Flashing is the one destructive action
-           in an otherwise read-only plugin and does not belong one click away
-           from monitoring on a page people leave open. It keeps the --crit
-           colour it always had; that colour was already saying it did not
-           belong in this strip. */ ?>
-  <?php if ($enableFlash): ?><a class="lu-settings-link lu-flash-link" href="/Utilities/HBAviewer_Flash">&#9888; Firmware/BIOS Update</a><?php endif; ?>
+  <?php /* No firmware entry here at all (plan 055). Flashing is reached only
+           from the Settings page, below the danger notice and the toggle that
+           enables it — so getting there means passing what it costs to get it
+           wrong, rather than finding it beside the monitoring tabs on a page
+           left open. */ ?>
   <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
 </div>
 

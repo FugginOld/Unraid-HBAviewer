@@ -78,10 +78,11 @@ bundle located the expander problem below where it was reported.
   box half the page was empty and the second card sat below the fold. A
   narrow window still gets a single column.
 - Firmware/BIOS Update is its own page now, under Utilities, instead of a tab
-  on the Monitor. When flashing is enabled a red link to it appears beside
-  Settings. It is the only part of this plugin that writes to hardware, and it
-  does not belong one click away from the monitoring tabs. Nothing about how
-  flashing works has changed.
+  on the Monitor. Once flashing is enabled, a red button at the bottom of the
+  Settings page opens it — and that is the only way in; the Monitor no longer
+  links to it at all. It is the one part of this plugin that writes to
+  hardware, so getting to it means passing the warning that explains what it
+  costs to get wrong. Nothing about how flashing works has changed.
 - HBA Health lays its controller cards out the same way, for the same reason.
   A narrow window still gets a single column. On a frame too tight to fit two
   cards at full width, the gauge and the temperature meter stack inside each

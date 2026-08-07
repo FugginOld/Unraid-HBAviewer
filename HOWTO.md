@@ -297,12 +297,13 @@ Attach the archive to a GitHub issue.
 > people who already know how to flash an LSI/Broadcom HBA from a console.
 
 **Settings → Advanced — Firmware Flashing → Enable → Save.** A red
-**⚠ Firmware/BIOS Update** link then appears at the top right of the Monitor,
-next to Settings, and opens its own page at **Utilities → HBAviewer Firmware**.
+**⚠ Firmware/BIOS Update** button then appears at the bottom right of that same
+Settings page, and opens **Utilities → HBAviewer Firmware**.
 
-It is a separate page rather than a tab on purpose. Flashing is the only thing
-in this plugin that writes to hardware, and it does not belong one click away
-from the monitoring tabs on a page you leave open.
+That button is the only way in, and the Monitor has no link to it. Flashing is
+the one thing in this plugin that writes to hardware, so reaching it means
+coming back through the page where you enabled it and read the warning — not
+finding it beside the monitoring tabs on a page you left open.
 
 Per controller:
 

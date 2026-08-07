@@ -61,11 +61,6 @@
     color: var(--text); text-decoration: none; transition: color 0.15s;
 }
 .lu-settings-link:hover { color: var(--accent); }
-/* Firmware/BIOS is a link to its own page now (plan 055), not a tab button, but
-   it keeps the colour it always had — that colour was already saying it did not
-   belong in a strip of read-only views. */
-.lu-flash-link { color: var(--crit-text); }
-.lu-flash-link:hover { color: var(--crit); }
 .lu-tab-pane { display: none; }
 .lu-tab-pane.active { display: block; }
 
