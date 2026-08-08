@@ -13,6 +13,26 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.08.1###
+A card that cannot measure its own temperature now says so instead of
+reporting zero. Thanks to @NotAnotherForumName, whose diagnostics bundle
+showed a SAS9211-8i being asked for a reading it has no way to take.
+
+**Fixed**
+- SAS9211-8i and other SAS2008 cards showed a temperature of 0 °C in a
+  "normal" band. Those cards have no onboard temperature sensor — but they
+  answer the query anyway and return zero, which was read as a real
+  measurement. That is worse than showing nothing, because a number in a
+  green band looks like a live reading. They now show "N/A — no sensor". The
+  card still counts as read, no temperature alert can fire from it, and
+  cards that do have a sensor are unaffected. (#17)
+
+**Changed**
+- The Monitor and firmware pages load their behaviour from separate files
+  now, rather than carrying it inline. Nothing changes on screen. The point
+  is that this is the largest body of code in the plugin and, until now, not
+  one of the tools that check this project for mistakes could open any of it.
+
 ###2026.08.08###
 If you have drives sharing a controller port, your Array Map placements were
 being overwritten by each other. Thanks to @PaliKinG3, who diagnosed the cause
