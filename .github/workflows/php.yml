@@ -21,6 +21,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+          tools: phpstan
 
       # The parsers use GNU awk, which Unraid (Slackware) ships as `awk`.
       # ubuntu-latest defaults to mawk, so make gawk the default here.
@@ -35,6 +36,30 @@ jobs:
 
       - name: Lint shell (bash -n on every .sh)
         run: find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
+
+      # bash -n is syntax only -- it passes unquoted word-splitting, an unset
+      # var in an rm path, a [ $x = y ] that breaks on empty. These scripts
+      # build paths under /boot, so that class of bug is the expensive one.
+      # Four checks are excluded because every hit in this repo is deliberate:
+      #   SC1090  config.sh sources a path built at runtime
+      #   SC2034  config.sh's PORT/ALERT are consumed by whatever sourced it
+      #   SC2207  get_metrics.sh wants the word-splitting it is doing
+      #   SC1007  "STORCLI= LSIUTIL=..." in run.sh is an env prefix, not a typo
+      - name: Lint shell (shellcheck)
+        run: find source tests -name '*.sh' -print0
+             | xargs -0 -r shellcheck -S warning -e SC1090,SC2034,SC2207,SC1007
+
+      # release.yml runs with contents:write and pushes to main, so a mistake
+      # there rewrites the branch Unraid clients poll for updates.
+      - name: Lint workflows (actionlint)
+        uses: docker://rhysd/actionlint:latest
+
+      # Level 3 is where this codebase sits clean today. Level 4 only adds
+      # "this condition is always true" on guards that are deliberately belt
+      # and braces (locate.php's post-loop recheck, health.php's null tests),
+      # so raising it would buy a baseline file and no bugs.
+      - name: Static analysis (phpstan)
+        run: phpstan analyse source tests --level=3 --no-progress
 
       - name: Run test suite
         run: bash tests/run.sh

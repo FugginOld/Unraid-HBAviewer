@@ -1,0 +1,11 @@
+---
+# Codacy scans the whole repo by default, which meant 61 of 70 open alerts were
+# on things that do not ship: archived design handoffs under plans/ (30 Jshint
+# on 047's support.js, 31 remark-lint on old plan markdown) and a vendored
+# minified Chart.js bundle nobody here is going to reformat.
+#
+# What is left after this is PHPMD and ShellCheck on source/ and tests/, which
+# is the code that actually runs on somebody's server.
+exclude_paths:
+  - 'plans/**'
+  - '**/chart.umd.min.js'

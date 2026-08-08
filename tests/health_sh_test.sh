@@ -27,6 +27,12 @@ FN=$(sed -n '/^_drive_count()/,/^}/p' "$SRC")
 HS=$(sed -n '/^health_storcli()/,/^}/p' "$SRC")
 [ -n "$HS" ] || { echo "FAIL  health_storcli not found in $SRC"; exit 1; }
 
+# The sysfs read itself, shared with the lsiutil path (see the #14 block below)
+# and so lifted out alongside whichever function is under test.
+PD=$(sed -n '/^_pci_dir_of_host()/,/^}/p' "$SRC")
+LF=$(sed -n '/^_link_from_sysfs()/,/^}/p' "$SRC"; sed -n '/^_link_speed()/,/^}/p' "$SRC")
+[ -n "$PD" ] && [ -n "$LF" ] || { echo "FAIL  link helpers not found in $SRC"; exit 1; }
+
 LROOT=$(mktemp -d)
 # The maintainer's own shape: an x8 Gen3 card in an x16 Gen4 slot. The slot is
 # WIDER than the card here, which is the case that must not be read as a
@@ -50,7 +56,7 @@ STUB
 chmod +x "$LROOT/storcli"
 
 LJSON=$(NOW=1000 UPTIME=500 STORCLI="$LROOT/storcli" SYS_PCI_ROOT="$LROOT" \
-        bash -c "$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
+        bash -c "$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
 
 # Parsed with sed, NOT php: this is the shell suite and it runs where php may
 # not be installed. That is not a lesser check for the bug being guarded --
@@ -75,7 +81,7 @@ printf '8\n' > "$BROOT/0000:65:00.0/current_link_width"
 printf '8\n' > "$BROOT/0000:65:00.0/max_link_width"
 cp "$LROOT/storcli" "$BROOT/storcli"
 BJSON=$(NOW=1000 UPTIME=500 STORCLI="$BROOT/storcli" SYS_PCI_ROOT="$BROOT" \
-        bash -c "$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
+        bash -c "$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
 eq "no bridge: slot width is 0, not missing" "0" "$(num "$BJSON" slot_width)"
 if printf '%s' "$BJSON" | grep -q '"slot_speed":""'; then
     echo "PASS  no bridge: slot speed is empty, not missing"
@@ -83,6 +89,47 @@ else
     echo "FAIL  no bridge: slot speed is empty, not missing -- $BJSON"; fail=1
 fi
 rm -rf "$LROOT" "$BROOT"
+
+# ── lsiutil's route to the same sysfs files (issue #14) ──────────────────────
+# lsiutil reports no maximum and there is no PCI-address line to parse, so that
+# backend used to emit max_width 0 / slot_width 0 and health.php told a
+# SAS9207-8i at x4 that its link was "full" — asserted on no information. The
+# kernel knew the whole time: the card's x8 LnkCap is max_link_width in sysfs,
+# reachable from the scsi_host. _pci_dir_of_host walks there, _link_from_sysfs
+# reads it. Both are lifted out and driven against a fixture, same as above.
+# jac2424's box: a SAS2308 whose x8 card sits in a chipset x4 slot. The fixture
+# is the REAL sysfs shape -- /sys/class/scsi_host/hostN is a symlink INTO the
+# device tree at <pci dev>/hostN/scsi_host/hostN, so pointing SYS_SCSI_HOST at
+# that scsi_host dir is what readlink -f resolves to on hardware, and it walks
+# up three levels to the card. No symlink is created: the suite must run on
+# filesystems that don't have them.
+SROOT=$(mktemp -d)
+CARD="$SROOT/0000:81:00.0"
+mkdir -p "$CARD/host0/scsi_host/host0"
+printf '4\n'             > "$CARD/current_link_width"
+printf '8\n'             > "$CARD/max_link_width"        # LnkCap x8 -- the card
+printf '8.0 GT/s PCIe\n' > "$CARD/current_link_speed"
+printf '8.0 GT/s PCIe\n' > "$CARD/max_link_speed"
+printf '4\n'             > "$SROOT/max_link_width"       # the slot's own ceiling
+printf '8.0 GT/s PCIe\n' > "$SROOT/max_link_speed"
+
+# width/speed pre-set to what lsiutil's IOC page gives, to prove sysfs agrees
+# rather than silently replacing them with a default.
+SJSON=$(SYS_SCSI_HOST="$CARD/host0/scsi_host" bash -c "$PD"$'\n'"$LF"$'\n''
+    width=4 maxwidth=0 speed="8.0 GT/s" maxspeed="" slotwidth=0 slotspeed=""
+    _link_from_sysfs "$(_pci_dir_of_host 0)"
+    echo "$width|$maxwidth|$speed|$maxspeed|$slotwidth|$slotspeed"' 2>/dev/null)
+eq "lsiutil path reaches the card from its scsi_host" "4|8|8.0 GT/s|8.0 GT/s|4|8.0 GT/s" "$SJSON"
+
+# No card behind the host (or a platform that publishes no link state): every
+# field must stay at its caller-set value, so health.php still says "no maximum"
+# instead of comparing against a zero it mistakes for a ceiling.
+NJSON=$(SYS_SCSI_HOST="$SROOT" bash -c "$PD"$'\n'"$LF"$'\n''
+    width=4 maxwidth=0 speed="8.0 GT/s" maxspeed="" slotwidth=0 slotspeed=""
+    _link_from_sysfs "$(_pci_dir_of_host 99)"
+    echo "$width|$maxwidth|$speed|$maxspeed|$slotwidth|$slotspeed"' 2>/dev/null)
+eq "absent card leaves the link untouched" "4|0|8.0 GT/s||0|" "$NJSON"
+rm -rf "$SROOT"
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT

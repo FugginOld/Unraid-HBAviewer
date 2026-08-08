@@ -3,7 +3,7 @@
 # HBA disk, so it's meant to be launched detached (nohup ... &) by the SMART tab
 # endpoint; the tab polls the cache + progress file while this runs.
 #
-#   /tmp/lsiutil_smart.json           final cache  {"drives":[{dev,serial,model,smart}]}
+#   /tmp/lsiutil_smart.json           final cache  {"drives":[{dev,serial,model,size,smart}]}
 #   /tmp/lsiutil_smart.json.progress  "12/24" while running (removed when done)
 #
 # -n standby: a sleeping drive is reported as such, never woken.
@@ -28,17 +28,24 @@ total=$(lsblk -S -P -o NAME,WWN 2>/dev/null | grep -c 'WWN="0x')
 printf '{"drives":[' > "$TMP"
 i=0
 first=1
-lsblk -S -P -o NAME,WWN,SERIAL,MODEL 2>/dev/null | grep 'WWN="0x' | while IFS= read -r line; do
+lsblk -S -P -o NAME,WWN,SERIAL,MODEL,SIZE 2>/dev/null | grep 'WWN="0x' | while IFS= read -r line; do
     name=$(kv "$line" NAME)
     serial=$(kv "$line" SERIAL)
     model=$(kv "$line" MODEL)
+    # Capacity, for the backends that do not report one themselves:
+    # lsiutil emits no size at all, so the bay map had nothing to print
+    # on a 9207-8i (issue #15). "7.3T" from lsblk, digits and a unit.
+    # lsblk says "7.3T"; storcli says "7.276 TB". The bay card splits the number
+    # from its unit and prints them at different sizes, so a bare "T" next to a
+    # neighbouring "TB" reads as a truncation. Normalise to storcli's spelling.
+    size=$(kv "$line" SIZE | sed -E 's/^([0-9.]+)([KMGTP])$/\1 \2B/')
     i=$(( i + 1 )); echo "$i/$total" > "$PROG"
     smart=$(bash "$DIR/read_smart.sh" "/dev/$name")
     [ -n "$smart" ] || smart='{}'
     [ "$first" -eq 1 ] || printf ',' >> "$TMP"
     first=0
-    printf '{"dev":"/dev/%s","serial":"%s","model":"%s","smart":%s}' \
-        "$name" "$serial" "$model" "$smart" >> "$TMP"
+    printf '{"dev":"/dev/%s","serial":"%s","model":"%s","size":"%s","smart":%s}' \
+        "$name" "$serial" "$model" "$size" "$smart" >> "$TMP"
 done
 printf ']}' >> "$TMP"
 
