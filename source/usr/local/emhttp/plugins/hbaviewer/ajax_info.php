@@ -957,23 +957,43 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                           array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
                           ?int $smartAge = null, array $rebuildDevs = [], array $roles = [],
                           array $addrByDev = [], array $locating = []): array {
-    // Serial is the join key the SMART collector already emits per drive; it is
-    // also the only identifier both payloads share (storcli's WWN differs by a
-    // nibble from /dev's — see lsi_dev_by_serial).
-    $bySerial = [];
+    /* Serial is the join key the SMART collector already emits per drive; it is
+       also the only identifier the STORCLI payload shares with it (storcli's WWN
+       differs by a nibble from /dev's — see lsi_dev_by_serial).
+
+       The lsiutil payload has no serial at all — parse/drives_join.sh emits
+       bus, target, sas_address, phy, expander and os_name, and nothing else. So
+       a serial-only join missed every drive on that backend and the bay cards
+       came up with no temperature, no health, no model and no capacity, which
+       is what issue #15 reported on a 9207-8i. /dev is the identifier those two
+       payloads DO share, so it is the fallback, and the collector's own entry
+       supplies the fields the backend never reported. */
+    $bySerial = $byDev = [];
     foreach ($smart['drives'] ?? [] as $sd) {
         $sn = strtoupper(trim((string) ($sd['serial'] ?? '')));
-        if ($sn !== '') $bySerial[$sn] = $sd['smart'] ?? [];
+        if ($sn !== '') $bySerial[$sn] = $sd;
+        $dv = (string) ($sd['dev'] ?? '');
+        if ($dv !== '') $byDev[$dv] = $sd;
     }
 
     $placed = [];
     $tray   = [];
     foreach ($drivesData['controllers'] ?? [$drivesData] as $i => $ctl) {
         foreach ($ctl['drives'] ?? [] as $d) {
-            $sn = strtoupper(trim((string) ($d['serial'] ?? '')));
-            $s  = $bySerial[$sn] ?? [];
+            $sn  = strtoupper(trim((string) ($d['serial'] ?? '')));
             $key = bay_map_key((int) $i, $d);
             $dev = drive_dev_name($d, $devBySerial);
+            // Serial first: it is the drive's own identity and survives a /dev
+            // name that moved across a reboot. /dev only when there is no serial
+            // to match on, which on lsiutil is every drive.
+            $sd  = $bySerial[$sn] ?? ($dev !== null ? ($byDev[$dev] ?? []) : []);
+            $s   = $sd['smart'] ?? [];
+            // Backend first, collector second: storcli's own model/serial/size
+            // are the controller's view of the drive and stay authoritative
+            // where it reports them.
+            $serial = $sn !== '' ? (string) $d['serial'] : (string) ($sd['serial'] ?? '');
+            $model  = ($d['model'] ?? '') !== '' ? (string) $d['model'] : (string) ($sd['model'] ?? '');
+            $size   = ($d['size']  ?? '') !== '' ? (string) $d['size']  : (string) ($sd['size']  ?? '');
             /* Two different rebuilds can reach the same cell. Unraid's parity
                reconstruct wins, because on an Unraid box it is the one the
                person is actually waiting on — and on an IT-mode HBA (which is
@@ -987,14 +1007,14 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 'key'    => $key,
                 'ctl'    => (int) $i,
                 'dev'    => $dev,
-                'serial' => $d['serial'] ?? '',
-                'model'  => $d['model'] ?? '',
-                'size'   => $d['size'] ?? '',
+                'serial' => $serial,
+                'model'  => $model,
+                'size'   => $size,
                 // The bay card prints the number and its unit at different
                 // sizes, so they are split once here rather than parsed in the
                 // view. "12.733 TB" -> "12.733" + "TB"; anything that does not
                 // look like a measurement passes through whole as the value.
-                'cap'    => preg_match('/^\s*([0-9.]+)\s*([A-Za-z]+)/', (string) ($d['size'] ?? ''), $cm) ? $cm[1] : ($d['size'] ?? ''),
+                'cap'    => preg_match('/^\s*([0-9.]+)\s*([A-Za-z]+)/', $size, $cm) ? $cm[1] : $size,
                 'cap_unit' => $cm[2] ?? '',
                 'slot'   => $d['slot'] ?? (isset($d['phy']) ? 'PHY ' . $d['phy'] : ''),
                 // What Unraid calls this disk — the name on its Main page, and
@@ -1080,6 +1100,11 @@ function bay_tray_order(array $e): array {
 if ($type === 'baymap') {
     header('Content-Type: application/json; charset=utf-8');
     $d = bay_map_dims();
+    // Carry a pre-#15 port-keyed map onto slot keys before reading it, so an
+    // upgrade does not empty somebody's grid on the first page load. A no-op
+    // on every map already in the current shape, and it needs the drive
+    // payload, which is why it lives at the endpoint rather than in the store.
+    bay_map_migrate_ports($data);
     echo json_encode(bay_map_assemble(
         $data, smart_cache_read(), bay_map_read(), $d['rows'], $d['cols'],
         lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP'],

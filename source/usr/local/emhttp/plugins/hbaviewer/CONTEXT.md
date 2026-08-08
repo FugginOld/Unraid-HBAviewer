@@ -33,11 +33,17 @@ position among the SAS scsi_hosts (host order), so the drivemap is instant sysfs
 Where each drive physically sits in the chassis. `bay_map_{read,write,set}` is
 the `/boot` store, `bay_map_prune_to_dims()` returns the drives a shrunken grid
 displaces (they go back to the tray, never silently dropped), `bay_map_key()`
-is the identity — `c0:p14` (storcli port) or `c0:h2` (lsiutil PHY), the **wire**
-rather than the drive, so replacing a dead disk in the same bay keeps the bay.
-The p/h letter is load-bearing: port 3 and PHY 3 are different positions.
+is the identity — `c0:s0/14` (storcli enclosure/slot) or `c0:h2` (lsiutil PHY),
+the **position** rather than the drive, so replacing a dead disk in the same bay
+keeps the bay. The s/h letter is load-bearing: slot 3 and PHY 3 are different
+positions. It was storcli's Connected Port Number until issue #15, which is the
+controller port and identical for every drive behind one path — one assignment
+placed a dozen drives. `bay_map_migrate_ports()` carries the old keys over.
 `bay_map_assemble()` is the read side — drives × stored positions × the SMART
-cache — kept separate from rendering so it is fixture-testable. Health colour
+cache — kept separate from rendering so it is fixture-testable. It joins the
+cache by serial, falling back to `/dev`: the lsiutil payload carries no serial,
+model or size at all, so a serial-only join left those bay cards blank (issue #15
+again), and the cache supplies what that backend never reported. Health colour
 comes from SMART, never from storcli's `state` field, which is a topology role;
 the one exception is `Rbld`, and Unraid's own parity reconstruct (var.ini
 `mdResync` + `mdResyncAction`, read via `unraid_rebuilding()`) outranks it.

@@ -455,7 +455,7 @@ $bmSmart = ['drives' => [
     ['dev'=>'/dev/sda','serial'=>'PLACED01','smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0']],
     ['dev'=>'/dev/sdc','serial'=>'TRAYDRV1','smart'=>['health'=>'PASSED','temp'=>'41','defects'=>'0','pending'=>'2']],
 ]];
-$bm = bay_map_assemble($bmDrives, $bmSmart, ['c0:p14'=>['row'=>1,'col'=>2], 'c0:p15'=>['row'=>0,'col'=>0]],
+$bm = bay_map_assemble($bmDrives, $bmSmart, ['c0:s0/0'=>['row'=>1,'col'=>2], 'c0:s0/1'=>['row'=>0,'col'=>0]],
                        6, 4, ['PLACED01'=>'/dev/sda']);
 check('baymap carries the grid dims',   $bm['rows'] === 6 && $bm['cols'] === 4);
 // The view needs the lock state in the same payload, or it renders an editable
@@ -472,7 +472,7 @@ check('baymap resolves the /dev name',    $placed['PLACED01']['dev'] === '/dev/s
 check('baymap placed-but-unread is nodata, NOT ok',
       $placed['NOSMART1']['state'] === 'nodata' && $placed['NOSMART1']['temp'] === null);
 check('baymap flags pending sectors as warn', $bm['unassigned'][0]['state'] === 'warn');
-check('baymap keys storcli drives on port',   $placed['PLACED01']['key'] === 'c0:p14');
+check('baymap keys storcli drives on slot',   $placed['PLACED01']['key'] === 'c0:s0/0');
 // The cell prints six fields; each has to survive the join.
 check('baymap carries model, serial and size',
       $placed['PLACED01']['model'] === 'ST8000NM' && $placed['PLACED01']['serial'] === 'PLACED01'
@@ -567,16 +567,45 @@ $bmLsi = bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[
 check('baymap keys lsiutil drives on phy', ($bmLsi['placed'][0]['key'] ?? '') === 'c0:h2');
 check('baymap lsiutil dev comes from os_name', ($bmLsi['placed'][0]['dev'] ?? '') === '/dev/sdb');
 
+/* Issue #15, jac2424's half. The lsiutil payload carries no serial, model or
+   size — parse/drives_join.sh emits bus/target/sas_address/phy/expander/os_name
+   and nothing else — so a serial-only SMART join missed every drive and the bay
+   cards rendered blank: no temperature, no health, no model, no capacity. /dev
+   is the identifier both payloads share, and the collector's entry carries the
+   rest. Same fixture as above, minus the serial the real backend never sends. */
+$bmLsiSmart = ['drives' => [['dev'=>'/dev/sdb','serial'=>'LSIDRV01','model'=>'HUH721212AL',
+                             'size'=>'10.9 TB','smart'=>['health'=>'PASSED','temp'=>'38',
+                             'defects'=>'0','pending'=>'0']]]];
+$bmLsi2 = bay_map_assemble(['backend'=>'lsiutil','controllers'=>[['drives'=>[
+    ['bus'=>'0','target'=>'3','phy'=>'2','os_name'=>'/dev/sdb'],
+]]]], $bmLsiSmart, ['c0:h2'=>['row'=>2,'col'=>1]], 6, 4);
+$lsiCard = $bmLsi2['placed'][0] ?? [];
+check('baymap falls back to the /dev join when the drive has no serial',
+      ($lsiCard['temp'] ?? null) === 38 && ($lsiCard['state'] ?? '') === 'ok');
+check('baymap fills model, serial and capacity from the SMART cache',
+      ($lsiCard['model'] ?? '') === 'HUH721212AL' && ($lsiCard['serial'] ?? '') === 'LSIDRV01'
+   && ($lsiCard['cap'] ?? '') === '10.9' && ($lsiCard['cap_unit'] ?? '') === 'TB');
+/* The controller's own view wins where it has one: storcli reports model and
+   size itself, and a cache entry that disagrees must not overwrite it. */
+$bmPref = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
+    ['slot'=>'0/0','model'=>'FROM-STORCLI','serial'=>'PLACED01','size'=>'7.276 TB'],
+]]]], ['drives'=>[['dev'=>'/dev/sda','serial'=>'PLACED01','model'=>'FROM-CACHE',
+                   'size'=>'7.3 TB','smart'=>['health'=>'PASSED','temp'=>'30']]]],
+    [], 6, 4, ['PLACED01'=>'/dev/sda']);
+check('baymap keeps the backend model and size over the cache',
+      $bmPref['unassigned'][0]['model'] === 'FROM-STORCLI'
+   && $bmPref['unassigned'][0]['size'] === '7.276 TB');
+
 // A stored position outside the current grid (hand-edited file) must land in
 // the tray, not vanish and not render off-screen.
 $bmOut = bay_map_assemble($bmDrives, null, ['c0:p14'=>['row'=>9,'col'=>9]], 2, 2);
 check('baymap out-of-grid position falls back to the tray',
       $bmOut['placed'] === [] && count($bmOut['unassigned']) === 3);
 
-// A drive with neither port nor PHY cannot be placed — but must still be
+// A drive with neither slot nor PHY cannot be placed — but must still be
 // listed, or a missing drive reads as a detection bug.
 $bmNoKey = bay_map_assemble(['backend'=>'storcli','controllers'=>[['drives'=>[
-    ['slot'=>'0/9','model'=>'ST8000NM','serial'=>'NOPORT01'],
+    ['port'=>'14','model'=>'ST8000NM','serial'=>'NOPORT01'],
 ]]]], null, [], 6, 4);
 check('baymap unplaceable drive still appears, with a null key',
       count($bmNoKey['unassigned']) === 1 && $bmNoKey['unassigned'][0]['key'] === null);

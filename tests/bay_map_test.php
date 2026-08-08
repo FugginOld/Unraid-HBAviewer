@@ -143,20 +143,34 @@ bay_map_set('c0:p1', 3, 1, $path);
 check('prune keeps the last in-grid position', bay_map_prune_to_dims(4, 2, $path) === []);
 check('prune writes nothing when nothing moved', bay_map_read($path) === ['c0:p1' => ['row' => 3, 'col' => 1]]);
 
-/* ── 4. Identity key: the p/h letter is load-bearing ─────────────────────── */
-check('storcli drive keys on its port', bay_map_key(0, ['port' => '14', 'serial' => 'X']) === 'c0:p14');
+/* ── 4. Identity key: the s/h letter is load-bearing ─────────────────────── */
+check('storcli drive keys on its slot', bay_map_key(0, ['slot' => '252/14', 'port' => '0', 'serial' => 'X']) === 'c0:s252/14');
+check('a drive with no enclosure keys on the bare slot', bay_map_key(0, ['slot' => '3']) === 'c0:s3');
 check('lsiutil drive keys on its phy',  bay_map_key(0, ['phy' => 2, 'os_name' => '/dev/sdb']) === 'c0:h2');
-check('controller index is part of the key', bay_map_key(3, ['port' => '14']) === 'c3:p14');
-/* Port 14 and PHY 14 are different physical positions. If the two shared a
+check('controller index is part of the key', bay_map_key(3, ['slot' => '252/14']) === 'c3:s252/14');
+/* Issue #15: Connected Port Number is the CONTROLLER's port, and a SAS9305-16i
+   reports 0 for every drive behind path0. Keying on it made one assignment
+   place a dozen drives. Slot is per-drive; the port must not come back. */
+check('the port is no longer an identity at all', bay_map_key(0, ['port' => '14']) === null);
+$p0 = bay_map_key(0, ['slot' => '252/3', 'port' => '0']);
+$p1 = bay_map_key(0, ['slot' => '252/4', 'port' => '0']);
+check('two drives sharing port 0 get different keys', $p0 !== $p1 && $p0 !== null);
+/* Slot 14 and PHY 14 are different physical positions. If the two shared a
    namespace, a box that switched backend would place a drive in the wrong bay
    — the one failure this store cannot recover from, because nothing on the
    machine knows the assignment was ever wrong. */
-check('port and phy never collide', bay_map_key(0, ['port' => '2']) !== bay_map_key(0, ['phy' => 2]));
+check('slot and phy never collide', bay_map_key(0, ['slot' => '2']) !== bay_map_key(0, ['phy' => 2]));
 check('a drive with neither is unplaceable', bay_map_key(0, ['serial' => 'X']) === null);
-check('an empty port is unplaceable', bay_map_key(0, ['port' => '']) === null);
+check('an empty slot is unplaceable', bay_map_key(0, ['slot' => '']) === null);
+/* The slot reaches a JSON object key on the boot flash, so it is checked
+   against the grammar rather than trusted -- a payload that ever carried
+   something else there must produce "unplaceable", not a new key shape. */
+foreach (['../../etc', '1/2/3', '3"', '99999'] as $bad) {
+    check("a slot of '$bad' is unplaceable", bay_map_key(0, ['slot' => $bad]) === null);
+}
 // A drive carrying both (no backend emits this today) must pick one and stay
 // on it — flipping between them across releases would orphan every assignment.
-check('phy wins when a drive somehow has both', bay_map_key(0, ['phy' => 1, 'port' => '9']) === 'c0:h1');
+check('phy wins when a drive somehow has both', bay_map_key(0, ['phy' => 1, 'slot' => '9']) === 'c0:h1');
 /* Plan 052: an expander numbers its own PHYs from 0, same as the HBA, so
    "phy 8" alone cannot tell two expander-attached drives apart -- let alone
    an expander-attached drive from a direct-attached one on the same numbers.
@@ -172,11 +186,61 @@ check('same phy, three different expanders -> three distinct keys',
 check('direct-attached (empty expander) still keys as c0:h8', $k1 === 'c0:h8');
 
 /* ── 5. Key validation — this is a trust boundary ────────────────────────── */
-check('valid storcli key accepted', bay_map_key_valid('c0:p14'));
+check('valid storcli key accepted', bay_map_key_valid('c0:s252/14'));
+check('valid bare-slot key accepted', bay_map_key_valid('c0:s3'));
 check('valid lsiutil key accepted', bay_map_key_valid('c12:h3'));
-foreach (['', 'c0:x1', 'c0:p', 'p14', 'c0:p14 ', '../../etc/passwd', 'c0:p14"}', 'c99999:p1'] as $bad) {
+// Still accepted so a pre-#15 map survives long enough to be migrated, even
+// though nothing emits it any more.
+check('a pre-#15 port key is still readable', bay_map_key_valid('c0:p14'));
+foreach (['', 'c0:x1', 'c0:p', 'p14', 'c0:p14 ', '../../etc/passwd', 'c0:p14"}', 'c99999:p1',
+          'c0:s', 'c0:s1/', 'c0:s/1', 'c0:s1/2/3', 'c0:s252/14 '] as $bad) {
     check("rejects '" . $bad . "'", !bay_map_key_valid($bad));
 }
+/* ── 4b. The #15 migration: port keys carried onto slot keys ─────────────── */
+$mp = tempnam(sys_get_temp_dir(), 'bmm');
+// One controller: ports 1 and 2 are unique (migratable), port 0 is shared by
+// two drives (the collision itself, not migratable).
+$payload = ['controllers' => [['drives' => [
+    ['port' => '1', 'slot' => '252/1'],
+    ['port' => '2', 'slot' => '252/2'],
+    ['port' => '0', 'slot' => '252/3'],
+    ['port' => '0', 'slot' => '252/4'],
+]]]];
+bay_map_write(['c0:p1' => ['row' => 0, 'col' => 0],
+               'c0:p2' => ['row' => 1, 'col' => 1],
+               'c0:p0' => ['row' => 2, 'col' => 2]], $mp);
+check('migration reports what it moved', bay_map_migrate_ports($payload, $mp) === 2);
+$m = bay_map_read($mp);
+check('an unambiguous port keeps its position under the slot key',
+      ($m['c0:s252/1'] ?? null) === ['row' => 0, 'col' => 0]
+   && ($m['c0:s252/2'] ?? null) === ['row' => 1, 'col' => 1]);
+check('the migrated port keys are gone', !isset($m['c0:p1'], $m['c0:p2']));
+/* The colliding entry was never about one drive, so there is nothing to carry
+   it onto. Left in place rather than deleted: it matches no drive (all four
+   now key on slot), so every one of them lands back in the tray, which is
+   this store's stated way of surfacing a key that stopped matching. */
+check('an ambiguous port entry is left alone, not guessed at',
+      ($m['c0:p0'] ?? null) === ['row' => 2, 'col' => 2]);
+check('running it again is a no-op', bay_map_migrate_ports($payload, $mp) === 0);
+
+// A drive that is not in the payload at all -- controller failed to enumerate,
+// or the disk is out for the afternoon. Its placement must survive.
+bay_map_write(['c0:p7' => ['row' => 3, 'col' => 3]], $mp);
+check('an absent drive keeps its placement', bay_map_migrate_ports($payload, $mp) === 0
+   && bay_map_read($mp) === ['c0:p7' => ['row' => 3, 'col' => 3]]);
+
+// Already placed under the new key: the person has re-assigned it since, and
+// the stale port entry must not overwrite that.
+bay_map_write(['c0:p1' => ['row' => 0, 'col' => 0], 'c0:s252/1' => ['row' => 5, 'col' => 5]], $mp);
+bay_map_migrate_ports($payload, $mp);
+check('a position set since the upgrade wins over the stale port key',
+      bay_map_read($mp)['c0:s252/1'] === ['row' => 5, 'col' => 5]);
+
+// An lsiutil map has no port keys and must not be touched or rewritten.
+bay_map_write(['c0:h3' => ['row' => 1, 'col' => 1]], $mp);
+check('an lsiutil map is left entirely alone', bay_map_migrate_ports($payload, $mp) === 0);
+@unlink($mp);
+
 // Plan 052: the expander-disambiguated shape, and its one canonical spelling.
 check('valid expander-disambiguated key accepted', bay_map_key_valid('c0:x500304801AAAAA1Fh8'));
 check("rejects lower-case hex -- bay_map_read() matches keys byte-for-byte",

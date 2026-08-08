@@ -13,16 +13,26 @@
  * must outlive a reboot, and it is written on a click, not on a poll, so there
  * is no flash-wear budget to defend.
  *
- * IDENTITY KEY. "c<ctl>:p<port>" on the storcli backend (Connected Port
- * Number) and "c<ctl>:h<phy>" on lsiutil (PHY index). Both are the physical
- * wire the drive is on, which is what a bay assignment actually means — the
- * serial changes when you replace a dead drive in the same bay, and /dev/sdX
- * is not stable across reboots. The p/h letter is load-bearing: port 3 and PHY
- * 3 are different positions, so a box that switched backend would otherwise
- * silently place a drive in the wrong bay. With the letter, old keys simply
- * stop matching and their drives reappear in the unassigned list, which is
- * visible and fixable. Any future change to this shape needs a migration, not
- * a silent format change (plan 047's maintenance note).
+ * IDENTITY KEY. "c<ctl>:s<eid>/<slot>" on the storcli backend (enclosure and
+ * slot) and "c<ctl>:h<phy>" on lsiutil (PHY index), with "x<expander>" in
+ * front of the PHY where one is in the path. All of them are the physical
+ * POSITION the drive occupies, which is what a bay assignment actually means —
+ * the serial and the SAS address both belong to the drive and change when you
+ * replace a dead one in the same bay, and /dev/sdX is not stable across
+ * reboots. The s/h letter is load-bearing: slot 3 and PHY 3 are different
+ * positions, so a box that switched backend would otherwise silently place a
+ * drive in the wrong bay. With the letter, old keys simply stop matching and
+ * their drives reappear in the unassigned list, which is visible and fixable.
+ * Any future change to this shape needs a migration, not a silent format
+ * change (plan 047's maintenance note) — see bay_map_migrate_ports() for the
+ * one this rule has already been paid for.
+ *
+ * NOT the port. Until issue #15 the storcli key was "c<ctl>:p<port>", from
+ * Connected Port Number, and that is the controller port rather than the
+ * drive's position: every drive behind one path reports the same one. On a
+ * SAS9305-16i reporting "0(path0)" for most of its drives, assigning any one
+ * of them placed ALL of them, because they shared a key. Slot is unique per
+ * controller and is what the backplane label says.
  *
  * Everything above the dispatch is pure over injected paths, so
  * tests/bay_map_test.php exercises all of it with no /boot and no HTTP.
@@ -32,11 +42,11 @@ require_once __DIR__ . '/config.php';
 
 const BAY_MAP_PATH = '/boot/config/plugins/hbaviewer/bay_map.json';
 
-/* Stored shape: "c0:p14" => {"row": 2, "col": 1}, both 0-indexed. A missing or
+/* Stored shape: "c0:s0/14" => {"row": 2, "col": 1}, both 0-indexed. A missing or
    unparseable file reads as "nothing placed yet" — a corrupt file must degrade
    to an empty grid the user can re-populate, never to a fatal on the tab.
    That promise is kept PER ENTRY, not just at the top level: every consumer
-   indexes $pos['row'], and on a hand-edited file one bad value ("c0:p1": "x")
+   indexes $pos['row'], and on a hand-edited file one bad value ("c0:s1": "x")
    is a TypeError that takes down the whole tab. A malformed entry is dropped
    rather than defaulted to 0,0 — a drive parked in a bay nobody put it in
    reads as a placement, and the tray is where an unplaced drive belongs. */
@@ -145,30 +155,82 @@ function bay_map_sanitize(array $in, int $rows, int $cols): array {
     return ['map' => $map, 'skipped' => $skipped];
 }
 
-/* The identity key for one drive row, or null when this drive carries neither
-   identifier (a controller whose payload predates either field, or a drive
-   storcli reported with an empty Connected Port Number). Null means "cannot be
-   placed" and the caller must leave it out of both lists rather than invent a
-   key that would collide with a real one. */
+/* The identity key for one drive row, or null when this drive carries no
+   positional identifier at all (a controller whose payload predates these
+   fields, or a drive storcli reported with an empty slot). Null means "cannot
+   be placed" and the caller must leave it out of both lists rather than invent
+   a key that would collide with a real one. */
 function bay_map_key(int $ctl, array $drive): ?string {
     if (isset($drive['phy']) && $drive['phy'] !== '') {
         // An expander-attached drive's PHY number is the expander's, so it is
-        // unique only within that expander. Direct-attached drives keep the
-        // 047 key shape byte-for-byte -- that is deliberate, and it is why this
-        // needs no migration: on every box without an expander (which is every
-        // box that can have a working map today) not one stored key changes.
+        // unique only within that expander.
         $exp = (string) ($drive['expander'] ?? '');
         return "c$ctl:" . ($exp !== '' ? "x$exp" : '') . 'h' . (int) $drive['phy'];
     }
-    if (isset($drive['port']) && $drive['port'] !== '') return "c$ctl:p" . (int) $drive['port'];
+    // storcli's slot, already "<eid>/<slot>" (or bare when the drive reports no
+    // enclosure) by the time it reaches here -- see parse/storcli_drives.sh.
+    // Checked against the key grammar rather than trusted: this string ends up
+    // as a JSON object key in a file on the boot flash, and a slot that does
+    // not look like a slot is a drive that cannot be placed, not a new format.
+    $slot = (string) ($drive['slot'] ?? '');
+    if ($slot !== '' && preg_match('#^\d{1,4}(/\d{1,4})?$#', $slot)) return "c$ctl:s$slot";
     return null;
 }
 
 /* Whether a string could have come out of bay_map_key(). The POST dispatch
    below is a trust boundary: without this, a crafted key writes arbitrary JSON
-   object keys into a file on the boot flash. */
+   object keys into a file on the boot flash.
+   `p` is still accepted so that a pre-#15 map survives being read back and
+   migrated; nothing emits it any more. */
 function bay_map_key_valid(string $key): bool {
-    return (bool) preg_match('/^c\d{1,3}:(x[0-9A-F]{1,16})?[ph]\d{1,4}$/', $key);
+    return (bool) preg_match('#^c\d{1,3}:((x[0-9A-F]{1,16})?[ph]\d{1,4}|s\d{1,4}(/\d{1,4})?)$#', $key);
+}
+
+/* One-time rewrite of pre-#15 "c<ctl>:p<port>" keys onto the slot keys that
+   replaced them, driven by the drive payload currently on screen.
+
+   A port maps onto a slot only where exactly ONE drive on that controller
+   reports it. Where several do, that is the #15 collision itself: the stored
+   position was never about a single drive, so there is nothing to carry over
+   and the entry is left where it is — inert, matching no drive, and displaced
+   the moment somebody assigns that cell. Deleting it would be the same guess
+   in the other direction, and this file's rule is that a key which stops
+   matching sends its drive back to the tray, visibly.
+
+   Nothing is dropped for an absent drive, either: a controller that failed to
+   enumerate, or a disk pulled for the afternoon, must not cost the placement
+   somebody walked to the rack to record.
+
+   Returns the number of keys rewritten (0 = nothing to do, and no write). */
+function bay_map_migrate_ports(array $drivesData, ?string $path = null): int {
+    $map = bay_map_read($path);
+    if ($map === []) return 0;
+    // Cheap pre-check: on every already-migrated box this is the whole cost.
+    $old = array_filter(array_keys($map), fn($k) => (bool) preg_match('/^c\d{1,3}:p\d{1,4}$/', (string) $k));
+    if ($old === []) return 0;
+
+    $slotByPort = [];   // "c0:p0" => slot key, or false once a second drive claims it
+    foreach ($drivesData['controllers'] ?? [$drivesData] as $i => $ctl) {
+        foreach ($ctl['drives'] ?? [] as $d) {
+            if (($d['port'] ?? '') === '') continue;
+            $pk  = "c" . (int) $i . ":p" . (int) $d['port'];
+            $new = bay_map_key((int) $i, $d);
+            $slotByPort[$pk] = ($new === null || isset($slotByPort[$pk])) ? false : $new;
+        }
+    }
+
+    $moved = 0;
+    foreach ($old as $pk) {
+        $new = $slotByPort[$pk] ?? null;
+        // Already occupied means the person has placed that drive since, under
+        // its new key. Theirs wins; the stale port entry is not a second vote.
+        if (!is_string($new) || isset($map[$new])) continue;
+        $map[$new] = $map[$pk];
+        unset($map[$pk]);
+        $moved++;
+    }
+    if ($moved) bay_map_write($map, $path);
+    return $moved;
 }
 
 /* Grid dimensions. Read is a plain config read; the write goes through
