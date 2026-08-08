@@ -60,10 +60,16 @@ jobs:
             -e "s|\(<!ENTITY pkgURL .*/download/\)[^/]*\(/hbaviewer.txz\">\)|\1$VER\2|" \
             hbaviewer.plg
           # pkgURL repeats the version as a literal, so all three must land.
-          grep -q "ENTITY version .*\"$VER\"" hbaviewer.plg \
-            && grep -q "ENTITY md5 .*\"$MD5\"" hbaviewer.plg \
-            && grep -q "/download/$VER/hbaviewer.txz" hbaviewer.plg \
-            || { echo "::error::plg patch missed an entity"; grep '<!ENTITY' hbaviewer.plg; exit 1; }
+          # Written as a negated if rather than `A && B && C || fail`, which
+          # reads like if-then-else but is not: the || also fires when C is the
+          # last thing that ran and failed for its own reasons.
+          if ! grep -q "ENTITY version .*\"$VER\"" hbaviewer.plg \
+            || ! grep -q "ENTITY md5 .*\"$MD5\"" hbaviewer.plg \
+            || ! grep -q "/download/$VER/hbaviewer.txz" hbaviewer.plg; then
+            echo "::error::plg patch missed an entity"
+            grep '<!ENTITY' hbaviewer.plg
+            exit 1
+          fi
 
       - name: Commit the bumped plg to main
         run: |
