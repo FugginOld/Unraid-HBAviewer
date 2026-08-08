@@ -18,6 +18,10 @@ IDENT=$(cat "$5" 2>/dev/null)
 # ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
 if [ -n "$TEMP_HEX" ]; then TEMP=$((16#${TEMP_HEX#0x})); else TEMP=""; fi
+# Some cards (SAS2008 / 9211-8i, issue #17) print the field but have nothing
+# behind it: 0x0000 means "not reported", not 0 °C. TEMP_HEX itself stays set —
+# the sanity bail below uses it to tell "answered" from "no output at all".
+[ "$TEMP" = "0" ] && TEMP=""
 
 parse_hex() { echo "$IOC" | grep "$1" | grep -oE '0x[0-9A-Fa-f]+' | head -1; }
 

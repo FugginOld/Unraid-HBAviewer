@@ -184,6 +184,9 @@ health_lsiutil() {
 
     temp_hex=$(grep "IOCTemperature:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
     if [ -n "$temp_hex" ]; then temp=$((16#${temp_hex#0x})); else temp=""; readok=false; fi
+    # 0x0000 is a sensorless card (SAS2008 / 9211-8i, issue #17), not 0 °C.
+    # readok stands: the query answered, there is just no sensor behind it.
+    [ "$temp" = "0" ] && temp=""
     band=""
     [ -n "$temp" ] && band=$(band_of "$temp")
 

@@ -141,6 +141,26 @@ foreach (glob("$dir/*.php") ?: [] as $src) {
 check('every internal HBAviewer link resolves to a content page', $bad === []);
 if ($bad) foreach ($bad as $b) echo "      $b\n";
 
+/* Same check, one directory down: every <script src> the plugin renders must
+   name a file that actually ships. Cheap before plan 057 and worth little;
+   essential after it, because the page's whole behaviour now arrives through
+   two of these. A mistyped path renders a page that looks completely normal
+   and does nothing at all — no tab switching, no bay map, no Locate — and the
+   404 is only visible in a browser console nobody has open. `?v=` cache
+   busters are stripped; *.min.js is skipped, since the vendored Chart.js is
+   gitignored and fetched by build.sh, so it is absent from a fresh checkout. */
+$badSrc = [];
+foreach (glob("$dir/*.php") ?: [] as $src) {
+    if (!preg_match_all('~<script[^>]+src="/plugins/hbaviewer/([^"?]+)~',
+                        (string) file_get_contents($src), $m)) continue;
+    foreach ($m[1] as $asset) {
+        if (str_ends_with($asset, '.min.js')) continue;
+        if (!is_file("$dir/$asset")) $badSrc[] = basename($src) . " -> $asset (no such file)";
+    }
+}
+check('every <script src> names a file that ships', $badSrc === []);
+if ($badSrc) foreach ($badSrc as $b) echo "      $b\n";
+
 /* The firmware page must not appear in Unraid's menu unless flashing is on.
    Gating the BUTTON in settings.php is not enough — a .page file with no Cond
    is listed under Settings regardless, so the entry showed up for people who

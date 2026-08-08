@@ -283,6 +283,9 @@ bash tests/run.sh
 It runs the parser goldens plus the PHP unit tests (using a local `php`, or the
 `php:8.2-cli` Docker image if `php` isn't installed), and needs GNU awk.
 
+CI additionally syntax-checks every language the plugin ships — `php -l`,
+`bash -n`, `node --check` — and runs ShellCheck, PHPStan and actionlint on top.
+
 Fixtures are **real controller output wherever possible** — captured with the
 `scripts/capture*.sh` helpers or contributed by reporters on the issue tracker,
 with identifiers masked length-preservingly so column alignment (which the
