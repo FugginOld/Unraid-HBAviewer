@@ -18,13 +18,14 @@ verified on hardware is the point of this index, and moving a file must not
 erase it. Only the file location changed; every `plans/NNN-*.md` reference in a
 commit message or issue now resolves to `plans/archive/NNN-*.md`.
 
-This year's plans and where they stand. **029 is the only plan left in
-`plans/`**, parked on a reboot the maintainer has to do. Everything else is
-executed, merged and archived, and keeps its row here — which is the whole
-point of the index.
+This year's plans and where they stand. **029 and 057 are the only plans left
+in `plans/`** — 029 parked on a reboot the maintainer has to do, 057 not
+started. Everything else is executed, merged and archived, and keeps its row
+here — which is the whole point of the index.
 
 | Plan | State | Waiting on |
 |------|-------|------------|
+| **057** | **not started**, written 2026-08-08 against `57543bd` on `dev` | nobody. Extract ~1,113 lines of inline JavaScript out of `hbaviewer.php` and `flash_view.php` into real `.js` files, so a linter can see the plugin's only first-party JS. Falls out of `bf87d73`, which gave every other language in the repo a static analyser — JavaScript was the one gap, because linguist counts those bytes as PHP, PHPStan sees inert markup and Codacy's jshint only opens `.js` files. A file move plus one CI step; **read 055's row below first**, it dangled three call sites doing exactly this |
 | **029** | executed and approved, **not merged**, parked | a reboot, then re-run the hwmon probe and diff the chip-id column |
 | **055** | **DONE, archived 2026-08-06** — merged to `dev` (`629a0c1`), suite green on the merged result, and **confirmed working on the maintainer's box**. Four follow-ups landed after the merge (`80fbb1b`, `09e3215`, `65ec48f`) | nothing. Kept here for the four things it got wrong, all found after the plan was written. **(1)** The plan's list of pieces to move was incomplete: `lockCls`/`lockAttr`/`lockNote` were missed, and cutting the flash block as a unit took `flashCsrf` with it and dangled three live call sites — caught by grepping the moved JS for every identifier it does not define, which is the check to repeat next time. **(2)** `$csrfToken` was read inside `if ($enableFlash)`, so with flashing OFF the bay map, Locate and the PHY baseline reset all depended on Unraid's `csrf_token` JS global existing; latent before the refactor, exposed by it, now read unconditionally. **(3)** Three internal links were dead — `/Tools/HBAviewer` is a `Type="menu"` container, and a `Menu="Utilities"` page is served under `/Settings/`; `view_test.php` now resolves every internal href against the real `.page` files. **(4)** The `.page` file had no `Cond`, so the firmware menu entry showed even with flashing disabled |
 | **056** | **DONE, archived 2026-08-06** — merged to `dev` (`edcd1d3`, from `8b3f8d3`), suite green on the merged result. The bridge probe came back **positive on both boxes**, so Part 1 (detection) was viable and all six steps landed rather than just the unblocked two | nothing. **@Waz confirmed it on the reporting hardware** ("Good to go", #13 comment 5211481836) — the SAS3816 in its x4 slot now reads ok with no configuration, which is the one thing no test here could establish. Probe results are baked into `tests/health_test.php` as fixtures: #13's SAS3816 (card x8 / slot x4), that reporter's other card (Gen3 in a Gen5 slot), and the maintainer's x8-in-x16. The second and third are the ones that matter — both are cards in slots **wider** than themselves, and judging against the slot alone would have called them downtrained, which is the regression this change most easily causes |
