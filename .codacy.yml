@@ -1,11 +1,62 @@
 ---
-# Codacy scans the whole repo by default, which meant 61 of 70 open alerts were
-# on things that do not ship: archived design handoffs under plans/ (30 Jshint
-# on 047's support.js, 31 remark-lint on old plan markdown) and a vendored
-# minified Chart.js bundle nobody here is going to reformat.
+# Codacy scans the whole repo with every tool it can apply, and the result was
+# 3,436 open alerts with ZERO security findings among them — every one carries
+# security_severity_level: none. That is not a clean bill of health, it is a
+# broken instrument: a real finding would be invisible in a list that long, so
+# the alert page stops being read and the tool stops doing anything.
 #
-# What is left after this is PHPMD and ShellCheck on source/ and tests/, which
-# is the code that actually runs on somebody's server.
+# Two levers below. Paths first, then tools.
+#
+# ── exclude_paths ────────────────────────────────────────────────────────────
+# Things that do not ship: archived design handoffs and old plan markdown under
+# plans/, and the vendored minified Chart.js bundle nobody here will reformat.
+# This half is CONFIRMED WORKING — remark-lint's 31 alerts on plan markdown went
+# to zero after it landed. (30 stale Jshint alerts on plans/archive/047's
+# support.js survive as ghosts: that tool stopped reporting, but GitHub only
+# auto-closes an alert when the same tool scans again and omits it. Dismiss
+# those by hand in the code-scanning UI; nothing in this file will clear them.)
+#
+# ── engines ──────────────────────────────────────────────────────────────────
+# Three tools produce 3,236 of the 3,436 and not one actionable finding between
+# them. Disabled with a reason each, because "the linter was noisy" is how a
+# useful check gets switched off next time:
+#
+#   phpcs     2,569 alerts, measuring this repo against the PEAR coding
+#             standard, which it does not follow and should not: 1,059 line
+#             length, 648 call signature, 216 snake_case function names. Taking
+#             its advice means reformatting every PHP file in the plugin,
+#             including the long comments that explain why the code is shaped
+#             the way it is — the most valuable thing in this codebase.
+#
+#   csslint     263 alerts, ALL of them the tool failing to parse modern CSS.
+#             It was archived by its own authors in 2018, before custom
+#             properties: 99 "known-properties" are `Expected (<color>) but
+#             found 'var(--text)'`, and its 24 "errors" are `Expected RBRACE`
+#             pointing at the column where a `--rail:` declaration begins.
+#             chrome.css:359-362 is valid CSS that csslint cannot read.
+#
+#   stylelint   404 alerts, pure formatting, and mostly fighting a deliberate
+#             choice: 89 single-line-max-declarations on chrome.css's one-line
+#             token rules, which are written that way to be read as a table.
+#
+# What survives is the set that can find a defect rather than a preference:
+# phpmd, shellcheck, jshint — the last of which matters from plan 057 onward,
+# because the plugin's ~1,100 lines of JavaScript now live in real .js files
+# and jshint is the only thing that has ever opened them. remark-lint stays on
+# for the root docs.
+#
+# VERIFY AFTER THE NEXT SCAN. If the counts do not drop, the engines block is
+# not the lever: codacy.yml passes CODACY_PROJECT_TOKEN, and a token-backed run
+# can take its tool selection from the Codacy project settings instead of this
+# file. In that case turn the same three off in the Codacy UI.
 exclude_paths:
   - 'plans/**'
   - '**/chart.umd.min.js'
+
+engines:
+  phpcs:
+    enabled: false
+  csslint:
+    enabled: false
+  stylelint:
+    enabled: false
