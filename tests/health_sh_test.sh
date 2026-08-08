@@ -131,6 +131,26 @@ NJSON=$(SYS_SCSI_HOST="$SROOT" bash -c "$PD"$'\n'"$LF"$'\n''
 eq "absent card leaves the link untouched" "4|0|8.0 GT/s||0|" "$NJSON"
 rm -rf "$SROOT"
 
+# ── A card that answers but has no sensor (issue #17) ────────────────────────
+# A 9211-8i prints IOCTemperature: 0x0000. Read as a number that is 0 °C, which
+# banded "normal" and graphed a flat zero line. The card is fine -- SAS2008 has
+# no onboard sensor -- so the sample must carry no temperature, while read_ok
+# stays TRUE: the query answered, unlike the absent-field case above it, which
+# means lsiutil produced nothing at all.
+HL=$(sed -n '/^health_lsiutil()/,/^}/p' "$SRC")
+[ -n "$HL" ] || { echo "FAIL  health_lsiutil not found in $SRC"; exit 1; }
+ZJSON=$(NOW=1000 UPTIME=500 SYS_SCSI_HOST=/nonexistent bash -c "$HL"$'\n''
+    require_binary() { return 0; }
+    band_of() { echo normal; }
+    _first_sas_host() { echo 0; }
+    _drive_count() { echo 7; }
+    _phys_json() { echo "[]"; }
+    hba_query() { printf "  IOCTemperature:                   0x0000\n"; }
+    health_lsiutil' 2>/dev/null)
+eq "0x0000 is no sensor, not 0 C" "null" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"temp":([^,]*),.*/\1/p')"
+eq "no band on a sensorless card"  ""     "$(str "$ZJSON" temp_band)"
+eq "the card still counts as read" "true" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"read_ok":([a-z]+).*/\1/p')"
+
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
 

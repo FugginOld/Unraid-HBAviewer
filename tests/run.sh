@@ -165,6 +165,10 @@ check events-lsiutil   get_events_lsiutil.json bash "$P/../get_event_log.sh"
 # multi-file parsers
 check hba-normal   hba_normal.json   bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 check hba-notemp   hba_notemp.json   bash "$P/hba.sh" fixtures/hba_ioc_notemp.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
+# hba-notemp omits the field; a 9211-8i PRINTS it and reads 0x0000 (issue #17).
+# Both are "no sensor" — 0 °C is not a reading, and treating it as one showed a
+# blue "normal" pill on a card that has nothing to report.
+check hba-zerotemp hba_zerotemp.json bash "$P/hba.sh" fixtures/hba_ioc_zerotemp.txt fixtures/hba_banner.txt fixtures/hba_board.txt 80
 # Firmware is four packed HEX bytes: 14000700 is P20 (0x14=20), not "14.00.07.00".
 # hba-normal covers the P20 decode; this covers a genuinely old one still tripping
 # the pre-P20 flag (10000700 = P16).

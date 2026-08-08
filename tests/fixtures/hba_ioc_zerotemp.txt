@@ -1,0 +1,9 @@
+IOUnit Page 7:
+
+  IOCTemperature:                   0x0000
+  IOCTemperatureUnits:              0x00
+  PCIeWidth:                        0x08
+  PCIeSpeed:                        0x01
+  CurrentPowerMode:                 0x00
+  BoardTemperature:                 0x0000
+  BoardTemperatureUnits:            0x00
