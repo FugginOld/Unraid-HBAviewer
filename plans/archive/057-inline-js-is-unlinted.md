@@ -1,11 +1,12 @@
 # 057 — Extract the inline JavaScript so something can lint it
 
-**State:** **EXECUTED** 2026-08-08 on `dev`. Suite green, both `.js` files pass
-`node --check`, both `.php` files pass `php -l`. **Not browser-verified** — see
-the Verification section's last paragraph, which is the only thing outstanding.
-One deviation, recorded in this plan's row in `plans/README.md`: the cache
-buster is `filemtime`, not the plg version, because no PHP file here has access
-to the plg version and the plan forbade inventing plumbing for it.
+**State:** **DONE, archived 2026-08-08.** Executed on `dev`, suite green, both
+`.js` files pass `node --check`, both `.php` files pass `php -l`, and
+**confirmed working in a browser on the maintainer's box** — the check this plan
+said no test here could perform. One deviation, recorded in this plan's row in
+`plans/README.md`: the cache buster is `filemtime`, not the plg version, because
+no PHP file here has access to the plg version and the plan forbade inventing
+plumbing for it.
 
 Written 2026-08-08 against `57543bd` on `dev`.
 
