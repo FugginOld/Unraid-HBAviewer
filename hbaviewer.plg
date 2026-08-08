@@ -13,6 +13,38 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.08###
+If you have drives sharing a controller port, your Array Map placements were
+being overwritten by each other. Thanks to @PaliKinG3, who diagnosed the cause
+correctly in the report and suggested the fix that was used, and to @jac2424,
+whose SAS9207-8i turned up a second bug on the same page.
+
+**Fixed**
+- Assigning one drive to a bay placed every other drive on the same
+  controller port into that same bay. The map keyed a placement on the
+  CONTROLLER's Connected Port Number, which is not the drive's position and
+  is shared — a SAS9305-16i reports 0(path0) for most of its drives, so one
+  assignment captured all of them and emptied the Unassigned list. It now
+  keys on the drive's own enclosure/slot, which is the backplane position and
+  matches the label on the chassis. Nothing was ever lost: the map held a
+  single entry the whole time. Existing maps are carried over automatically
+  the first time you open the Array Map — a port that belonged to exactly one
+  drive keeps its bay silently, and drives whose port collided return to the
+  tray to be placed once. A drive that simply isn't present is never dropped.
+  (#15)
+- Bay cards on SAS2 cards driven by lsiutil (9207-8i and similar) showed no
+  model, serial, temperature, health or capacity. That backend reports no
+  serial at all, and the SMART cache was joined by serial only, so the join
+  missed every drive on the card. It falls back to /dev now, and the
+  collector caches each drive's capacity. Values the controller reports
+  itself still win. (#15)
+- Host Link reported no PCIe maximum on SAS2 cards, so a downtrained link
+  could not be detected there. The card's maximum was in sysfs the whole
+  time — the backend just never resolved a PCI address, because that was
+  derived from storcli output. It now walks there from the scsi_host, so
+  both backends read the link, the card's ceiling and the slot's ceiling the
+  same way. (#14)
+
 ###2026.08.06###
 Everything below the Array Map is the same map you already built — placement
 got easier, and it can now leave the machine. Thanks to @Waz and @jac2424,
