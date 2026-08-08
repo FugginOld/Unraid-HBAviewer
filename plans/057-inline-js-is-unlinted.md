@@ -1,6 +1,13 @@
 # 057 — Extract the inline JavaScript so something can lint it
 
-**State:** not started. Written 2026-08-08 against `57543bd` on `dev`.
+**State:** **EXECUTED** 2026-08-08 on `dev`. Suite green, both `.js` files pass
+`node --check`, both `.php` files pass `php -l`. **Not browser-verified** — see
+the Verification section's last paragraph, which is the only thing outstanding.
+One deviation, recorded in this plan's row in `plans/README.md`: the cache
+buster is `filemtime`, not the plg version, because no PHP file here has access
+to the plg version and the plan forbade inventing plumbing for it.
+
+Written 2026-08-08 against `57543bd` on `dev`.
 
 **Why now:** `dev` just gained ShellCheck, PHPStan and actionlint (`bf87d73`),
 so every language this repo ships is statically analysed — except the largest

@@ -37,6 +37,14 @@ jobs:
       - name: Lint shell (bash -n on every .sh)
         run: find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
 
+      # The plugin's own JavaScript lived inside two .php files until plan 057,
+      # where linguist counted it as PHP, phpstan saw inert markup and Codacy's
+      # jshint never opened it -- ~1,100 lines, the only language here nothing
+      # analysed. Now that it is in real .js files, this is its `php -l` tier.
+      # The vendored Chart.js bundle is excluded; it is not ours to lint.
+      - name: Lint JS (node --check on every .js)
+        run: find source -name '*.js' -not -name '*.min.js' -print0 | xargs -0 -r -n1 node --check
+
       # bash -n is syntax only -- it passes unquoted word-splitting, an unset
       # var in an rm path, a [ $x = y ] that breaks on empty. These scripts
       # build paths under /boot, so that class of bug is the expensive one.

@@ -82,9 +82,11 @@ installs it; Unraid's Slackware base ships it.
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
 | `notify.php`, `scripts/notify_check.php` | Health-transition notifications (cron). |
 | `flash.php` | **The only mutating path.** See below. |
-| `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page + its JS. |
+| `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
+| `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
 | `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
-| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup, its own CSS and JS. A page rather than a tab, and its menu entry is `Cond`-gated on `ENABLE_FLASH` so it does not exist when flashing is off. |
+| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, and its menu entry is `Cond`-gated on `ENABLE_FLASH` so it does not exist when flashing is off. |
+| `flash_view.js` | The firmware page's behaviour — the four-step wizard, the upload and the flash poll. |
 
 **The house pattern for an endpoint that both mutates and shares helpers**
 (`phy_baseline.php`, `bundle.php`, `flash.php`, `export.php`): pure functions at
@@ -212,7 +214,13 @@ Conventions that exist because of specific past bugs:
   mangled bytes.
 
 CI (`.github/workflows/php.yml`) lints every `.php` with `php -l`, every `.sh`
-under `source/` and `tests/` with `bash -n`, and runs the suite on Linux.
+under `source/` and `tests/` with `bash -n`, every `.js` with `node --check`,
+and runs the suite on Linux. Above that syntax tier sit ShellCheck, PHPStan and
+actionlint; Codacy adds jshint on the `.js` files out of band. The rule the
+`.js` tier exists to hold is **no first-party code in a language nothing
+analyses** — the JavaScript spent its first year inside two `.php` files, where
+linguist counted it as PHP, PHPStan saw inert markup and jshint never opened it
+(plan 057).
 
 ## Release
 
@@ -251,7 +259,20 @@ Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
   exactly this reason.
 - **Absence is not health.** Unknown, unmeasured and stale states must render as
   grey or be omitted — never as green, and never as a zero that reads like a
-  measurement.
+  measurement. A card that answers `IOCTemperature: 0x0000` has no sensor, not a
+  temperature of zero; SAS2008 prints the field regardless (#17).
+- **The `.js` files depend on the PHP that precedes them.** `hbaviewer.php` and
+  `flash_view.php` each render a short inline `<script>` — `luCsrf`, and
+  `flashArrayStopped`/`flashCsrf`/`lock*` — and then load the static file, which
+  reads those as globals. That is the entire reason the split works without a
+  templating step, and it is also the whole load-bearing assumption: **the inline
+  block must stay above the `<script src>`, and anything the PHP interpolates
+  must be declared there rather than moved out.** `$csrfToken` is read
+  unconditionally at the top of both files, never inside a feature flag — it was
+  scoped inside `if ($enableFlash)` once, which silently made the bay map depend
+  on Unraid's `csrf_token` global existing (plan 055). `tests/view_test.php`
+  checks every `<script src>` resolves to a file that ships; a typo there renders
+  a page that looks perfectly normal and does nothing at all.
 - **`max_link_width` is the CARD's maximum, not the slot's.** Judging the
   negotiated PCIe link against it means comparing a card with itself, so an x8
   card in an x4 slot — ordinary on OEM boards and unfixable — reads as a
