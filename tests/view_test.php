@@ -173,5 +173,22 @@ check('the firmware page is menu-gated on ENABLE_FLASH',
 check('the firmware view still guards itself for a direct URL',
       str_contains((string) file_get_contents("$dir/flash_view.php"), "ENABLE_FLASH"));
 
+/* The firmware verdict rides on the view model so both surfaces read one
+   answer. The Overview card and the firmware page must never disagree about
+   whether a card is behind. */
+$vm = lsi_hba_view([
+    'board_name' => 'SAS9305-24i', 'model' => 'SAS3224', 'firmware' => '15.00.00.00',
+    'subvendor_id' => '0x1000', 'topology' => 'internal', 'status' => 'ok',
+], 1, 0);
+check('view model carries a firmware verdict', isset($vm['firmware_verdict']['status']));
+check('view model verdict is behind', ($vm['firmware_verdict']['status'] ?? '') === 'behind');
+
+/* The clause is suppressed on every state that has no verdict to give: a bare
+   colourless marker next to a version reads as a fault the user cannot act on. */
+check('behind renders a clause',   fw_overview_clause(['status' => 'behind', 'latest' => '16.00.12.00', 'terminal' => true]) !== '');
+check('suppressed renders nothing', fw_overview_clause(['status' => 'suppressed', 'detected' => '15.00.00.00']) === '');
+check('unknown renders nothing',    fw_overview_clause(['status' => 'unknown']) === '');
+check('oem renders nothing',        fw_overview_clause(['status' => 'oem_out_of_scope']) === '');
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

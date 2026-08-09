@@ -1,5 +1,30 @@
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
+    /* The firmware verdict, in full. This is the surface where a flash actually
+       happens, so unlike the Overview's one-liner it shows the reason a verdict
+       was withheld — a suppressed comparison is a fact about the index's limits,
+       not about the card, and the user is entitled to know which. */
+    function fwVerdictBlock(v) {
+        if (!v || !v.status || v.status === 'unknown') return '';
+        var rows = [], label = '', colour = '';
+        if (v.status === 'behind')  { label = 'BEHIND';         colour = v.terminal ? '#d29922' : ''; }
+        if (v.status === 'current') { label = 'CURRENT';        colour = '#3fb950'; }
+        if (v.status === 'ahead')   { label = 'AHEAD OF INDEX'; }
+        if (label) {
+            rows.push(['Firmware', '<strong'+(colour?' style="color:'+colour+'"':'')+'>'+label+'</strong>']);
+            if (v.latest) rows.push(['Latest known IT', fesc(v.latest)]);
+            if (v.branch) rows.push(['Branch', fesc(v.branch)+(v.terminal?' (terminal)':' (not final — this is a floor, not a ceiling)')]);
+        } else {
+            rows.push(['Firmware', '<span class="lu-muted">no verdict</span>']);
+        }
+        if (v.reason)     rows.push(['Why', fesc(v.reason)]);
+        if (v.confidence) rows.push(['Confidence', fesc(v.confidence)+(v.index_date?' · index '+fesc(v.index_date):'')]);
+        if (v.note)       rows.push(['Note', fesc(v.note)]);
+        return '<div class="lu-fstep">'+rows.map(function(r){
+            return '<div><label class="step" style="display:inline-block;min-width:130px">'+r[0]+'</label>'+r[1]+'</div>';
+        }).join('')+'</div>';
+    }
+
     function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
     // Errored controllers render a card with data-ctl but no data-chip, so the
     // lookup can succeed while the attribute is absent. Coalesce to '' — chip is
@@ -21,6 +46,7 @@
               return '<div class="lu-fc lu-card first" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
                 + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
                 + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
+                + fwVerdictBlock(c.firmware_verdict)
                 /* Step 1 is the TOOL, not Verify. Verify needs the flash tool, and
                    the tool upload used to live in Step 2 — so Step 1 could not be
                    completed until part of Step 2 had been, and the only way to

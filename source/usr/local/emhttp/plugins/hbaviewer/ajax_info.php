@@ -174,10 +174,18 @@ if ($type === 'overview') {
     // Always hand the JS a controllers[] array (normalizes flat + array shapes),
     // each enriched with the shared status->color/label so the JS needs no map.
     $ctls = lsi_controllers($data);
+    $fwIdx = fw_load();   // read once, not once per controller
     foreach ($ctls as &$c) {
         if (isset($c['error'])) continue;
         $c['color'] = lsi_status_color($c['status'] ?? 'ok');
         $c['label'] = lsi_status_label($c['status'] ?? 'ok');
+        $c['firmware_verdict'] = fw_evaluate([
+            'board'        => $c['board_name']   ?? '',
+            'chip'         => $c['model']        ?? '',
+            'firmware'     => $c['firmware']     ?? '',
+            'subvendor_id' => $c['subvendor_id'] ?? '',
+            'topology'     => $c['topology']     ?? 'unknown',
+        ], $fwIdx);
     }
     unset($c);
     echo json_encode(['controllers' => $ctls]);
@@ -365,7 +373,8 @@ function renderOverviewCards(array $data, array $cfg): string {
               . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
               . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
               . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'
-              . ($v['fw_old'] ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '') . '</p>'
+              . ($v['fw_old'] ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+              . fw_overview_clause($v['firmware_verdict']) . '</p>'
               . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
               . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
