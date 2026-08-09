@@ -147,8 +147,8 @@ _pci_dir_of_host() {   # $1 = scsi host number
 }
 
 # First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
-# hba_personalities below, but keeping the host NUMBER. The bundled lsiutil
-# binary only ever addresses one controller.
+# hba_personalities above, but keeping the host NUMBER, needed to key
+# _phys_json. The bundled lsiutil binary only ever addresses one controller.
 # Lives here rather than in get_hba_health.sh because the overview composer now
 # needs the same lookup to reach this card's topology and subsystem_vendor.
 _first_sas_host() {

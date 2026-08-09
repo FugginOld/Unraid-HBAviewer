@@ -37,7 +37,7 @@ fi
 # SAS correlation, this cheaper host index is only for the rollup.
 ov_storcli() {   # $1 = controller index
     local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip
-    for p in /sys/class/sas_phy/phy-"${1}":*/; do
+    for p in "${SYS_SAS_PHY:-/sys/class/sas_phy}"/phy-"${1}":*/; do
         [ -d "$p" ] || continue
         idx=$(basename "$p")
         # phy-H:N is this controller's own PHY; phy-H:N:M is a PHY on an expander

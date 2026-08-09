@@ -32,21 +32,33 @@ trap 'rm -rf "$ROOT"' EXIT
 mkdir -p "$ROOT/dev" "$ROOT/exp"
 for n in $(seq 0 14); do mkdir -p "$ROOT/dev/end_device-9:$n"; done
 
-# host3: a card behind an expander. Two signals, either of which is enough:
-# an expander-H:N entry, and end_device-H:N:M three-component children.
+# host3 and host4 each carry exactly ONE of the two disqualifying signals, never
+# both -- so a mutant that deletes either check independently still fails one of
+# these two, instead of both silently passing because the other signal covers it.
+#
+# host3: an expander-H:N entry ALONE (its end_devices are ordinary two-component
+# children, same shape as host9's). Kills a mutant that deletes/neuters the
+# SYS_SAS_EXPANDER loop -- without that loop this reads "internal".
 mkdir -p "$ROOT/exp/expander-3:0"
-mkdir -p "$ROOT/dev/end_device-3:0" "$ROOT/dev/end_device-3:0:0" "$ROOT/dev/end_device-3:0:1"
+mkdir -p "$ROOT/dev/end_device-3:0" "$ROOT/dev/end_device-3:1"
 
-# host7: present but with nothing attached at all.
-# host8: absent from both trees entirely.
+# host4: a three-component end_device-H:N:M child ALONE, no expander entry at
+# all. Kills a mutant that neuters the "*:*:*" case check -- without it this
+# reads "internal" too, since found=1 and no expander disqualifies it.
+mkdir -p "$ROOT/dev/end_device-4:0:0"
+
+# host7: no matching sysfs entries at all. This function has no way to tell
+# "host present, nothing attached" from "host absent" -- both are a glob that
+# matches nothing -- so one assertion honestly covers both, rather than two
+# identical inputs dressed up as different cases.
 
 top() { SYS_SAS_DEVICE="$ROOT/dev" SYS_SAS_EXPANDER="$ROOT/exp" \
         bash -c "$FN"$'\n''hba_topology "$1"' _ "$1"; }
 
-eq "direct-attached card is internal"          "internal" "$(top 9)"
-eq "card behind an expander is unknown"        "unknown"  "$(top 3)"
-eq "card with nothing attached is unknown"     "unknown"  "$(top 7)"
-eq "absent card is unknown"                    "unknown"  "$(top 8)"
+eq "direct-attached card is internal"                  "internal" "$(top 9)"
+eq "expander alone (no 3-component child) is unknown"  "unknown"  "$(top 3)"
+eq "3-component child alone (no expander) is unknown"  "unknown"  "$(top 4)"
+eq "no sysfs entries (present-empty or absent) is unknown" "unknown" "$(top 7)"
 
 # Another host's expander must not suppress this card. A two-HBA box where one
 # card sits behind an expander would otherwise silence both.
@@ -55,12 +67,17 @@ eq "host9 stays internal despite host3's expander" "internal" "$(top 9)"
 # subvendor: a plain sysfs attribute read, with the failure case being the one
 # that matters -- an unreadable file must yield empty, never a bare 0x0.
 PCI=$(mktemp -d); trap 'rm -rf "$ROOT" "$PCI"' EXIT
-mkdir -p "$PCI/card" "$PCI/bare"
+mkdir -p "$PCI/card" "$PCI/bare" "$PCI/spaced"
 printf '0x1000\n' > "$PCI/card/subsystem_vendor"
+printf '0x 1000\n' > "$PCI/spaced/subsystem_vendor"
 sub() { bash -c "$FN"$'\n''hba_subvendor "$1"' _ "$1"; }
 eq "subvendor read from sysfs"        "0x1000" "$(sub "$PCI/card")"
 eq "missing attribute yields empty"   ""       "$(sub "$PCI/bare")"
 eq "absent directory yields empty"    ""       "$(sub "$PCI/nope")"
+# A mutant replacing the whitespace strip with a bare "$v" survives on the
+# happy-path fixture above only because $(cat ...) already eats the trailing
+# newline -- this is the case that actually needs the strip.
+eq "internal whitespace is stripped" "0x1000" "$(sub "$PCI/spaced")"
 
 [ $fail -eq 0 ] && echo "topology: all pass"
 exit $fail
