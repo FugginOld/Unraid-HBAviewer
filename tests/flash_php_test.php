@@ -90,6 +90,31 @@ check('the endpoint lists the drop directory', str_contains($flashSrc, "action =
 check('images are chosen from a select, not typed', str_contains($jsSrc, "<select id=\"flash-fw-"));
 check('the flash reads images from the drop dir',   str_contains($flashSrc, "FLASH_DROP . '/' . \$fwName"));
 
+/* ── Firmware verdict block wiring (Task 4, round-1 review) ──────────────────
+   view_test.php/ajax_render_test.php test the PHP side of this feature in
+   full; flash_view.js has no runtime test harness (node --check only proves
+   the syntax parses), so the wiring and its two safety properties are pinned
+   as source assertions — the same idiom this file already uses above for
+   "no FormData", "no file input", etc. */
+
+// I3: a mutant that deletes the call to fwVerdictBlock() left every other
+// check in this suite green — the helper is tested, nothing proved it's used.
+check('the card wires the firmware verdict block', str_contains($jsSrc, 'fwVerdictBlock(c.firmware_verdict)'));
+
+// Minor: 'reason' is the field that quotes the untrusted board string
+// (firmware_index.php's own docblock says verdict fields are NOT pre-escaped).
+// Changing fesc(v.reason) to a bare v.reason is a mutant no PHP test can see.
+check('the reason field is escaped before it is printed', str_contains($jsSrc, 'fesc(v.reason)'));
+
+// I2: amber-on-terminal and green-on-current are fw_verdict_color()'s rule,
+// computed once in ajax_info.php and sent as v.color. A second literal copy of
+// either hex here would drift from the PHP rule invisibly — pinned as an
+// absence, so the fix (and any future regression back to a local copy) is
+// caught by grep, not by re-reading the diff.
+check('the JS does not carry its own copy of the amber/green verdict colours',
+    !str_contains($jsSrc, "'#d29922'") && !str_contains($jsSrc, "'#3fb950'"));
+check('the JS reads the verdict colour instead of recomputing it', str_contains($jsSrc, 'v.color'));
+
 /* flash_hba.sh's "not installed" message tells the user which UI step to upload
    the tool on — but the shell cannot see the UI, so renumbering the steps left
    it pointing at the wrong one. The user read the stale number off a live page.

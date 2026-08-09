@@ -6,9 +6,14 @@
        not about the card, and the user is entitled to know which. */
     function fwVerdictBlock(v) {
         if (!v || !v.status || v.status === 'unknown') return '';
-        var rows = [], label = '', colour = '';
-        if (v.status === 'behind')  { label = 'BEHIND';         colour = v.terminal ? '#d29922' : ''; }
-        if (v.status === 'current') { label = 'CURRENT';        colour = '#3fb950'; }
+        // Colour is not recomputed here: ajax_info.php already ran the one
+        // verdict through fw_verdict_color() and sent the answer as v.color —
+        // amber-on-terminal is a rule with exactly one home, and a second copy
+        // in JS is a second place for it to quietly go wrong on the very page
+        // where a flash actually happens.
+        var rows = [], label = '', colour = v.color || '';
+        if (v.status === 'behind')  { label = 'BEHIND'; }
+        if (v.status === 'current') { label = 'CURRENT'; }
         if (v.status === 'ahead')   { label = 'AHEAD OF INDEX'; }
         if (label) {
             rows.push(['Firmware', '<strong'+(colour?' style="color:'+colour+'"':'')+'>'+label+'</strong>']);

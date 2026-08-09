@@ -55,12 +55,22 @@ function fw_compare(string $a, string $b): int {
 
 /* Read the index and re-key its boards on their normalized form, so lookup is
    convention-agnostic. Returns null on anything unreadable or shapeless — the
-   caller renders 'unknown' rather than guessing. */
+   caller renders 'unknown' rather than guessing.
+   Memoized by resolved path: fw_evaluate()'s two-arg signature exists so a
+   request evaluating many controllers reads the file once, not once per
+   controller — but every caller that still calls fw_load() itself (view.php's
+   lsi_hba_view() does, once per card) would otherwise re-read and re-parse the
+   same ~14KB file per card regardless. The cache lives here, the one function
+   every path already goes through, so the win reaches all of them without
+   touching a single call site. A miss (unreadable/malformed) is cached too —
+   a missing index should not be re-stat'd per controller either. */
 function fw_load(?string $path = null): ?array {
+    static $cache = [];
     $p = $path ?? FW_INDEX_FILE;
-    if (!is_readable($p)) return null;
+    if (array_key_exists($p, $cache)) return $cache[$p];
+    if (!is_readable($p)) return $cache[$p] = null;
     $raw = json_decode((string) @file_get_contents($p), true);
-    if (!is_array($raw) || empty($raw['boards']) || !is_array($raw['boards'])) return null;
+    if (!is_array($raw) || empty($raw['boards']) || !is_array($raw['boards'])) return $cache[$p] = null;
     $keyed = [];
     foreach ($raw['boards'] as $name => $b) {
         if (!is_array($b)) continue;
@@ -68,7 +78,7 @@ function fw_load(?string $path = null): ?array {
         $keyed[fw_normalize((string) $name)] = $b;
     }
     $raw['boards'] = $keyed;
-    return $raw;
+    return $cache[$p] = $raw;
 }
 
 /* Which version this board is measured against. A resolved ROM profile has its

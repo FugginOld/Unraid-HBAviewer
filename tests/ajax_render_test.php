@@ -1161,6 +1161,42 @@ array_map('unlink', glob("$cdir/*.json") ?: []);
 if ($hSaved1 === null) @unlink($hRing1); else file_put_contents($hRing1, $hSaved1);
 if ($hSaved === null) @unlink($hRing); else file_put_contents($hRing, $hSaved);
 
+/* ── Firmware verdict wiring (Task 4, round-1 review I3) ──────────────────────
+   view_test.php pins fw_overview_clause() in isolation; nothing proved
+   renderOverviewCards() actually CALLS it. A mutant that deletes the call
+   site entirely left that suite green — the real render is exercised here so
+   removing the wiring, not just the helper, fails a test. */
+$fwOverview = ['controllers' => [[
+    'status' => 'ok', 'board_name' => 'SAS9305-24i', 'model' => 'SAS3224',
+    'firmware' => '15.00.00.00', 'subvendor_id' => '0x1000', 'topology' => 'internal',
+]]];
+$fwCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 60, 'SHOW_PCIE' => false];
+$hFw = renderOverviewCards($fwOverview, $fwCfg);
+check('the Overview card renders the firmware verdict clause', str_contains($hFw, '16.00.12.00 known'));
+
+/* Round-1 review (Important, minor): a SAS2 pre-P20 card that also resolves a
+   verdict used to show both '&#9888; pre-P20' and the clause on one line —
+   two ambers stating the same fact. The clause is strictly more informative
+   (it names the version) and wins; the older flag steps aside only when the
+   clause actually has something to say. */
+$sas2Behind = ['controllers' => [[
+    'status' => 'ok', 'fw_old' => true, 'board_name' => 'SAS9211-8i', 'model' => 'SAS2008',
+    'firmware' => '19.00.00.00', 'subvendor_id' => '0x1000', 'topology' => 'internal',
+]]];
+$hSas2Behind = renderOverviewCards($sas2Behind, $fwCfg);
+check('a verdict clause suppresses the older pre-P20 flag',
+    str_contains($hSas2Behind, '20.00.07.00 known') && !str_contains($hSas2Behind, 'pre-P20'));
+
+// Same pre-P20 card, but an unindexed board: the verdict is 'unknown' and the
+// clause is empty, so the flag it would otherwise duplicate must still show.
+$sas2NoVerdict = ['controllers' => [[
+    'status' => 'ok', 'fw_old' => true, 'board_name' => 'Some Unindexed Board', 'model' => 'SAS2008',
+    'firmware' => '19.00.00.00', 'subvendor_id' => '0x1000', 'topology' => 'internal',
+]]];
+$hSas2NoVerdict = renderOverviewCards($sas2NoVerdict, $fwCfg);
+check('the pre-P20 flag still shows when the verdict has nothing to say',
+    str_contains($hSas2NoVerdict, 'pre-P20'));
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

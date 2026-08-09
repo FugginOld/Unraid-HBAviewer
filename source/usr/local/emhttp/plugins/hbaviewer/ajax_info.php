@@ -186,6 +186,10 @@ if ($type === 'overview') {
             'subvendor_id' => $c['subvendor_id'] ?? '',
             'topology'     => $c['topology']     ?? 'unknown',
         ], $fwIdx);
+        // One rule, one home: fw_verdict_color() is the only place that knows
+        // amber is reserved for a terminal branch. The firmware page recomputes
+        // nothing — it just reads the colour this endpoint already worked out.
+        $c['firmware_verdict']['color'] = fw_verdict_color($c['firmware_verdict']);
     }
     unset($c);
     echo json_encode(['controllers' => $ctls]);
@@ -348,6 +352,9 @@ function renderOverviewCards(array $data, array $cfg): string {
             continue;
         }
         $v = lsi_hba_view($c, $port, $i);
+        // ?? [] rather than trusting the key exists: an absent verdict must
+        // render as nothing, never as a TypeError that blanks the whole panel.
+        $fwClause = fw_overview_clause($v['firmware_verdict'] ?? []);
         // Critical renders as an inverted chip (white on solid fill) — #922b21
         // measures 1.94:1 as plain text on a dark card and is unreadable there.
         $isCrit   = ($v['temp_band'] ?? '') === 'critical';
@@ -372,9 +379,14 @@ function renderOverviewCards(array $data, array $cfg): string {
               . '<div class="lu-meta">'
               . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
               . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
+              // The verdict clause is strictly more informative than the bare
+              // pre-P20 flag — it names the exact version — so once it has
+              // something to say, the older flag steps aside rather than
+              // repeating the same fact in a second amber. A suppressed or
+              // unknown verdict has nothing to say, and the flag still does.
               . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'
-              . ($v['fw_old'] ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
-              . fw_overview_clause($v['firmware_verdict']) . '</p>'
+              . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+              . $fwClause . '</p>'
               . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
               . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')

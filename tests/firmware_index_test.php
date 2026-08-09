@@ -277,5 +277,31 @@ check('behind on a non-terminal branch has no colour',
       fw_verdict_color(['status' => 'behind', 'terminal' => false]) === '');
 check('current is green', fw_verdict_color(['status' => 'current']) === '#3fb950');
 
+/* Round-1 review (Important, I1): fw_evaluate()'s two-arg signature exists so
+   a request evaluating N controllers reads the index once — but view.php's
+   lsi_hba_view() calls fw_load() itself on every card, so without a cache
+   inside fw_load() a 4-controller Overview still re-read and re-parsed the
+   ~14KB file 4 times. fw_load() now memoizes by resolved path: a file that
+   changes after the first read must not un-cache, or it is not a cache. */
+$memoPath = sys_get_temp_dir() . '/hbav_fwidx_memo_' . getmypid() . '.json';
+file_put_contents($memoPath, json_encode(['schema_version' => 1, 'updated' => '2026-01-01',
+    'boards' => ['X' => ['chip' => 'C', 'it_capable' => true, 'latest_it' => '1.0',
+                          'branch' => 'P1', 'confidence' => 'confirmed']],
+    'branches' => ['P1' => ['terminal' => true]]]));
+$firstRead = fw_load($memoPath);
+file_put_contents($memoPath, 'not valid json at all');   // changed after the first read
+check('fw_load memoizes by path (a later change is not re-read)', fw_load($memoPath) === $firstRead);
+@unlink($memoPath);
+
+// An unreadable/missing index must be cached as a miss too, so a genuinely
+// absent index is not re-stat'd once per controller either.
+$missingPath = sys_get_temp_dir() . '/hbav_fwidx_missing_' . getmypid() . '.json';
+@unlink($missingPath);
+check('fw_load caches a miss', fw_load($missingPath) === null);
+file_put_contents($missingPath, json_encode(['schema_version' => 1, 'updated' => '2026-01-01',
+    'boards' => ['X' => ['chip' => 'C', 'it_capable' => true]]]));
+check('fw_load keeps a cached miss even after the file later appears', fw_load($missingPath) === null);
+@unlink($missingPath);
+
 echo $fails === 0 ? "firmware_index: all pass\n" : "firmware_index: FAILURES\n";
 exit($fails === 0 ? 0 : 1);

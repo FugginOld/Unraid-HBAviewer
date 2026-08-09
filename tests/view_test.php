@@ -189,6 +189,30 @@ check('behind renders a clause',   fw_overview_clause(['status' => 'behind', 'la
 check('suppressed renders nothing', fw_overview_clause(['status' => 'suppressed', 'detected' => '15.00.00.00']) === '');
 check('unknown renders nothing',    fw_overview_clause(['status' => 'unknown']) === '');
 check('oem renders nothing',        fw_overview_clause(['status' => 'oem_out_of_scope']) === '');
+/* Round-1 review (Important, minor): the other two states that DO render were
+   never asserted at all — only 'behind' had a positive check, so blanking the
+   'current' or 'ahead' branch entirely was invisible to this suite. */
+check('current renders a clause', fw_overview_clause(['status' => 'current']) !== '');
+check('ahead renders a clause',   fw_overview_clause(['status' => 'ahead']) !== '');
+
+/* Round-1 review (Important, minor): 'latest' is the one field this clause
+   prints, and it is board-derived, untrusted content per firmware_index.php's
+   own docblock. Dropping the htmlspecialchars() call survives every other
+   assertion here — none of them put HTML-special characters in 'latest'. */
+$xssClause = fw_overview_clause(['status' => 'behind', 'latest' => '<script>x</script>', 'terminal' => true]);
+check('the clause escapes an untrusted latest version',
+    str_contains($xssClause, '&lt;script&gt;') && !str_contains($xssClause, '<script>'));
+
+/* Round-1 review (Important, minor): view.php's own verdict call maps
+   $data['model'] to fw_evaluate()'s 'chip' key — the field Gate 3 (RAID-on-Chip)
+   matches on. Blanking that mapping is invisible to every check above, which
+   all name a board directly; this one only resolves through the chip. */
+$roc = lsi_hba_view([
+    'board_name' => 'MegaRAID 9361-8i', 'model' => 'SAS3108', 'firmware' => '4.30.00.00',
+    'subvendor_id' => '0x1000', 'topology' => 'internal', 'status' => 'ok',
+], 1, 0);
+check('the chip mapping reaches the verdict (RAID-on-Chip detected via chip, not board)',
+    ($roc['firmware_verdict']['status'] ?? '') === 'no_it_firmware');
 
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
