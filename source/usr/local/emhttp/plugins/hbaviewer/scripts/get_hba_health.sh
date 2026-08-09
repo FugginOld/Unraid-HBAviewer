@@ -112,21 +112,6 @@ _link_from_sysfs() {   # $1 = /sys/bus/pci/devices/0000:xx:yy.z
 # sysfs prints "8.0 GT/s PCIe"; every consumer here wants the rate alone.
 _link_speed() { cat "$1" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//'; }
 
-# The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
-# unlike storcli there is no line to parse), but the kernel already knows it:
-# /sys/class/scsi_host/hostN resolves into the device tree under the card, so
-# walk up until a dir that publishes link state appears. Issue #14 — a SAS2308
-# negotiated at x4 in a chipset slot, with the card's x8 maximum sitting in
-# sysfs the whole time while the plugin reported no maximum at all.
-_pci_dir_of_host() {   # $1 = scsi host number
-    local d
-    d=$(readlink -f "${SYS_SCSI_HOST:-/sys/class/scsi_host}/host$1" 2>/dev/null)
-    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
-        [ -r "$d/current_link_width" ] && { printf '%s' "$d"; return 0; }
-        d=$(dirname "$d")
-    done
-}
-
 health_storcli() {   # $1 = controller index
     local out pci dom bus dev fn dir
     local temp fw drives band readok=true
@@ -158,18 +143,6 @@ health_storcli() {   # $1 = controller index
         "${temp:-null}" "$band" "$fw" "$drives" "$readok" \
         "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
         "$(_phys_json "$1")"
-}
-
-# First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
-# lib.sh's hba_personalities, but keeping the host NUMBER, needed to key
-# _phys_json. The bundled lsiutil binary only ever addresses one controller.
-_first_sas_host() {
-    local h
-    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
-        case "$(cat "${h}proc_name" 2>/dev/null)" in
-            mpt3sas|mpt2sas|mptsas) basename "$h" | sed 's/^host//'; return ;;
-        esac
-    done
 }
 
 health_lsiutil() {

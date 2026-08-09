@@ -15,6 +15,13 @@ PCIEW="${4:-}"      # PCIe link width  (e.g. "x8") — sysfs, read by the compos
 PCIES="${5:-}"      # PCIe link speed  (e.g. "Gen3 (8.0 GT/s)") — sysfs, read by the composer
 PWRM="${6:-}"       # power mode       (e.g. "Full") — sysfs PCI D-state, ditto
 
+# Injected by the composer, which reads them from sysfs — this file stays a pure
+# filter with no hardware access. Defaults are the suppressing values: an
+# unstated topology must never read as "internal", and an unstated subvendor
+# must never read as generic Broadcom.
+TOPOLOGY="${LSI_TOPOLOGY:-unknown}"
+SUBVENDOR="${LSI_SUBVENDOR:-}"
+
 # First "Key = Value" line for an exact key (anchored, so "Model" != "Model Number")
 val() { printf '%s\n' "$input" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
 
@@ -113,5 +120,5 @@ if [ "${PHYERR:-0}" -ge "$PHYERR_FLOOR" ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
 case "$RANK" in 2) STATUS="alert" ;; 1) STATUS="warn" ;; *) STATUS="ok" ;; esac
 
 cat <<EOF
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"temp_band":"$TEMP_BAND","cfg_band":"$CFG_BAND","status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","topology":"${TOPOLOGY}","subvendor_id":"${SUBVENDOR}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"temp_band":"$TEMP_BAND","cfg_band":"$CFG_BAND","status":"$STATUS"}
 EOF

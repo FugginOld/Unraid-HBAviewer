@@ -92,6 +92,12 @@ ov_storcli() {   # $1 = controller index
         esac
     fi
 
+    # storcli's own output carries SubVendor Id, but read it from sysfs for both
+    # backends so there is one source of truth and one thing the diagnostic
+    # bundle has to capture. $dir is already resolved above from PCI Address.
+    LSI_TOPOLOGY=$(hba_topology "$1")
+    LSI_SUBVENDOR=$([ -n "$dir" ] && hba_subvendor "$dir")
+    export LSI_TOPOLOGY LSI_SUBVENDOR
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
 }
 
@@ -124,6 +130,14 @@ ov_lsiutil() {
     # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
     # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
     hba_query -p"$PORT" -a 1,0      2>/dev/null > "$IDENT"
+    # lsiutil reports no PCI address at all, so the card is reached through its
+    # scsi_host — the same walk issue #14 added for the PCIe link maximum.
+    local hnum pdir
+    hnum=$(_first_sas_host)
+    pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
+    LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
+    LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
+    export LSI_TOPOLOGY LSI_SUBVENDOR
     bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
 }
 

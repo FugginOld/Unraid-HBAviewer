@@ -7,6 +7,8 @@
   "port_name": "ioc0",
   "board_name": "SAS9207-8i",
   "pci_location": "03:00",
+  "topology": "unknown",
+  "subvendor_id": "",
   "pcie_width": "x8",
   "pcie_speed": "Gen3 (8.0 GT/s)",
   "power_mode": "Full",

@@ -29,7 +29,8 @@ HS=$(sed -n '/^health_storcli()/,/^}/p' "$SRC")
 
 # The sysfs read itself, shared with the lsiutil path (see the #14 block below)
 # and so lifted out alongside whichever function is under test.
-PD=$(sed -n '/^_pci_dir_of_host()/,/^}/p' "$SRC")
+LIB="../source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh"
+PD=$(sed -n '/^_pci_dir_of_host()/,/^}/p' "$LIB")
 LF=$(sed -n '/^_link_from_sysfs()/,/^}/p' "$SRC"; sed -n '/^_link_speed()/,/^}/p' "$SRC")
 [ -n "$PD" ] && [ -n "$LF" ] || { echo "FAIL  link helpers not found in $SRC"; exit 1; }
 
