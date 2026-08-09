@@ -15,6 +15,11 @@
  * definition receive no new version, so a bundled file cannot go stale in a way
  * that matters. A wrong entry is fixed by a release.
  *
+ * Verdict strings (reason, note) are NOT pre-escaped. board/chip come straight
+ * from the HBA's own ROM product string -- the only untrusted content that
+ * reaches any verdict field -- and reason/note quote them. A renderer must
+ * htmlspecialchars() before printing.
+ *
  * Pure functions only above the CLI guard, so tests can require this file. */
 
 const FW_INDEX_FILE = __DIR__ . '/data/known-firmware.json';
@@ -29,7 +34,10 @@ function fw_normalize(string $name): string {
 
 /* Dotted-quad compare, shorter side zero-padded. NEVER used on NVDATA, whose
    format varies ('24.00.00.22' on 9400, hex-style '0F.0b.91.xx' on 9405W
-   multipath profiles) and which is not ordered at all. */
+   multipath profiles) and which is not ordered at all. Callers must confirm
+   both sides are a bare dotted-quad first -- fw_evaluate() does, via the shape
+   guard ahead of its one call site -- because intval() on a non-numeric part
+   silently reads as 0 rather than failing. */
 function fw_compare(string $a, string $b): int {
     $pa = array_map('intval', explode('.', $a));
     $pb = array_map('intval', explode('.', $b));
@@ -61,17 +69,26 @@ function fw_load(?string $path = null): ?array {
 }
 
 /* Which version this board is measured against. A resolved ROM profile has its
-   own track; without one, the board's standard track. */
+   own track; without one, the board's standard track. A profile key that
+   EXISTS but carries no 'version' (a plain filename string, as on HBA
+   9400-16i, rather than an object) returns null instead of silently falling
+   back to latest_it -- that fallback would compare a resolved special-purpose
+   profile against the wrong track's number. */
 function fw_track_version(array $b, ?string $profile): ?string {
-    if ($profile !== null && !empty($b['rom_profiles'][$profile]['version'])) {
-        return (string) $b['rom_profiles'][$profile]['version'];
+    if ($profile !== null) {
+        $p = $b['rom_profiles'][$profile] ?? null;
+        $v = is_array($p) ? ($p['version'] ?? null) : null;
+        return ($v !== null && $v !== '') ? (string) $v : null;
     }
     return isset($b['latest_it']) ? (string) $b['latest_it'] : null;
 }
 
 /* $ctl keys: board, chip, firmware, subvendor_id, topology, rom_profile.
-   Pass $idx to avoid re-reading the file per controller. */
-function fw_evaluate(array $ctl, ?array $idx = null): array {
+   $idx is required: the caller loads it once via fw_load() and passes it in,
+   so evaluating many controllers does not re-read the file per controller.
+   Pass null only when the index is genuinely unavailable -- that is the
+   documented "index unreadable" gate below, not a convenience default. */
+function fw_evaluate(array $ctl, ?array $idx): array {
     $board    = (string) ($ctl['board']        ?? '');
     $chip     = (string) ($ctl['chip']         ?? '');
     $fw       = (string) ($ctl['firmware']     ?? '');
@@ -79,16 +96,26 @@ function fw_evaluate(array $ctl, ?array $idx = null): array {
     $topology = (string) ($ctl['topology']     ?? 'unknown');
     $profile  = isset($ctl['rom_profile']) ? (string) $ctl['rom_profile'] : null;
 
-    if ($idx === null) {
-        return ['status' => 'unknown', 'reason' => 'the firmware index could not be read'];
-    }
-    $date = isset($idx['updated']) ? (string) $idx['updated'] : null;
-    $base = ['detected' => $fw, 'index_date' => $date];
+    // Built before gate 1 and merged into every return, including it: a
+    // renderer reads $verdict['detected'] unconditionally, and an undefined
+    // index on a missing-index verdict is a warning Unraid's webgui can leak.
+    $base = ['detected' => $fw, 'index_date' => null];
 
-    // Gate 2 — OEM rebrand. The most consequential suppression in the file: an
-    // M1015 or an H310 carries different NVDATA and BIOS, and reaching the
-    // generic version is a crossflash, a different and riskier operation.
-    if ($subven !== '' && $subven !== '0x1000') {
+    // Gate 1 — index unreadable.
+    if ($idx === null) {
+        return ['status' => 'unknown', 'reason' => 'the firmware index could not be read'] + $base;
+    }
+    $base['index_date'] = isset($idx['updated']) ? (string) $idx['updated'] : null;
+
+    // Gate 2 — OEM rebrand, or a subvendor we couldn't read at all. The most
+    // consequential suppression in the file: an M1015 or an H310 carries
+    // different NVDATA and BIOS, and reaching the generic version is a
+    // crossflash, a different and riskier operation. An unreadable
+    // subvendor_id ('') is exactly as out-of-scope as a confirmed OEM one --
+    // never treated as "assume generic", per scripts/lib.sh's contract that
+    // an unreadable attribute yields empty and suppresses, not a default that
+    // happens to look generic.
+    if ($subven !== '0x1000') {
         return ['status' => 'oem_out_of_scope', 'reason' =>
             'OEM-rebranded adapter — the index covers generic Broadcom images only, '
           . 'and reaching one from here would be a crossflash, not an upgrade'] + $base;
@@ -120,7 +147,10 @@ function fw_evaluate(array $ctl, ?array $idx = null): array {
 
     // Gate 6 — multipath. These boards run an independent version track, so a
     // card on it correctly reports a version far below the standard branch.
-    $mp = array_map('fw_normalize', $idx['multipath_track']['affected_boards'] ?? []);
+    // is_string filters a hand-edited non-string entry before it reaches
+    // fw_normalize(), which would otherwise TypeError inside the verdict path.
+    $mpBoards = array_filter($idx['multipath_track']['affected_boards'] ?? [], 'is_string');
+    $mp = array_map('fw_normalize', $mpBoards);
     if (in_array($key, $mp, true) && $topology !== 'internal') {
         return ['status' => 'suppressed', 'reason' =>
             'this board has a separate multi-path firmware track, and the topology '
@@ -128,9 +158,11 @@ function fw_evaluate(array $ctl, ?array $idx = null): array {
           . 'a version well below the standard branch'] + $base;
     }
 
-    // Gate 7 — unresolved ROM profile. The same version ships in incompatible
-    // capability profiles, so the number alone proves little.
-    if (!empty($b['rom_profiles']) && $profile === null) {
+    // Gate 7 — unresolved OR unrecognised ROM profile. The same version ships
+    // in incompatible capability profiles, so the number alone proves little,
+    // and a profile string the index doesn't recognise must not silently fall
+    // through and get compared against the standard track's number.
+    if (!empty($b['rom_profiles']) && ($profile === null || !isset($b['rom_profiles'][$profile]))) {
         return ['status' => 'suppressed', 'reason' =>
             'the installed ROM profile could not be determined, and this board ships '
           . 'the same version in profiles with different capabilities'] + $base;
@@ -141,8 +173,13 @@ function fw_evaluate(array $ctl, ?array $idx = null): array {
     if ($latest === null) {
         return ['status' => 'unknown', 'reason' => 'no known version for this board'] + $base;
     }
-    if ($fw === '') {
-        return ['status' => 'unknown', 'reason' => 'no firmware version detected on the adapter'] + $base;
+    // The detected string must be a bare dotted-quad before it reaches
+    // fw_compare(). An empty string (storcli's "unreadable" sentinel), the
+    // literal 'Unknown' (scripts/parse/hba.sh's undecoded-hex sentinel), or a
+    // whole banner like 'MPTFW-15.00.00.00-IT' would otherwise intval() its
+    // non-numeric parts to 0 and compare as 0.0.0.0 -- a false BEHIND.
+    if (!preg_match('/^\d+(\.\d+)*$/', $fw)) {
+        return ['status' => 'unknown', 'reason' => 'no usable firmware version detected on the adapter'] + $base;
     }
 
     $branch = isset($b['branch']) ? (string) $b['branch'] : null;

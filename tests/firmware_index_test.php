@@ -151,6 +151,32 @@ $v = fw_evaluate(['board' => 'SAS9211-8i', 'firmware' => '20.00.00.00',
 check('OEM subvendor is out of scope', $v['status'] === 'oem_out_of_scope');
 check('OEM reason says crossflash',    str_contains((string) $v['reason'], 'crossflash'));
 
+// C2: an unreadable subvendor_id ('') must be exactly as out-of-scope as a
+// confirmed OEM one -- never "assume generic". Board name alone doesn't save
+// it: Dell H310s and IBM M1015s routinely report the generic SAS9211-8i.
+$v = fw_evaluate(['board' => 'SAS9211-8i', 'firmware' => '20.00.00.00',
+                  'subvendor_id' => '', 'topology' => 'internal'], $idx);
+check('empty subvendor_id is out of scope, not assumed generic', $v['status'] === 'oem_out_of_scope');
+
+// I2: gate order is load-bearing. OEM must outrank every gate after it, not
+// just win when nothing else applies.
+check('OEM outranks not-indexed',
+      fw_evaluate(['board'=>'SAS9999-99i','firmware'=>'1.0.0.0','subvendor_id'=>'0x1014'], $idx)['status'] === 'oem_out_of_scope');
+check('OEM outranks RAID-on-Chip',
+      fw_evaluate(['board'=>'MegaRAID 9361-8i','chip'=>'SAS3108','firmware'=>'4.0.0.0','subvendor_id'=>'0x1014'], $idx)['status'] === 'oem_out_of_scope');
+
+// C1: a non-numeric firmware string must never reach fw_compare(), where
+// intval() reads it as 0.0.0.0 and reports a false BEHIND. 'Unknown' is
+// scripts/parse/hba.sh's undecoded-hex sentinel; the MPTFW banner is what an
+// unparsed lsiutil version string looks like if it ever reached this far.
+$v = fw_evaluate(['board' => 'SAS9211-8i', 'firmware' => 'Unknown',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('non-numeric firmware sentinel is unknown, not behind', $v['status'] === 'unknown');
+
+$v = fw_evaluate(['board' => 'SAS9305-24i', 'firmware' => 'MPTFW-15.00.00.00-IT',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('unparsed banner string is unknown, not behind', $v['status'] === 'unknown');
+
 // The multipath suppression, which is why topology detection had to exist.
 $v = fw_evaluate(['topology' => 'unknown'] + $reporter, $idx);
 check('affected board with unknown topology is suppressed', $v['status'] === 'suppressed');
@@ -174,12 +200,48 @@ $v = fw_evaluate(['board' => 'HBA 9400-16i', 'firmware' => '24.00.00.00',
                   'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
 check('unresolved ROM profile is suppressed', $v['status'] === 'suppressed');
 
+// I1: a profile string the index does NOT recognise must suppress too, not
+// silently fall through to the standard track's number. A 9405W on the
+// IT_Nexus_Multipath profile correctly runs 15.00.01.00 by design (index
+// note); comparing that against the 21.x standard track would be a false
+// BEHIND on a correctly configured card.
+$v = fw_evaluate(['board' => 'HBA 9405W-16i', 'firmware' => '15.00.01.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal',
+                  'rom_profile' => 'zzz'], $idx);
+check('unrecognised rom_profile is suppressed, not compared against the wrong track',
+      $v['status'] === 'suppressed');
+
+// I1: fw_track_version's profile branch had no test at all. A RESOLVED
+// multipath profile must compare within its own track and must not degrade
+// to latest_it (HBA 9400-16i's rom_profiles are plain filename strings, not
+// {version: ...} objects -- that shape must return null, not a stray value).
+$v = fw_evaluate(['board' => 'HBA 9405W-16i', 'firmware' => '15.00.01.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal',
+                  'rom_profile' => 'IT_Nexus_Multipath'], $idx);
+check('resolved multipath profile compares within its own track', $v['status'] === 'current');
+
 $v = fw_evaluate(['board' => 'SAS9999-99i', 'firmware' => '1.0.0.0',
                   'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
 check('unindexed board is unknown', $v['status'] === 'unknown');
 
 $v = fw_evaluate($reporter, null);
 check('no index at all is unknown', $v['status'] === 'unknown');
+
+// I3: only the terminal=>true direction was ever produced end-to-end by
+// fw_evaluate() itself (the reporter's P16 board); the non-terminal 'behind'
+// path -- where amber must NOT fire -- had no real board exercising it. HBA
+// 9500-16i is P28, terminal:false, with no rom_profiles to complicate it.
+$v = fw_evaluate(['board' => 'HBA 9500-16i', 'firmware' => '20.00.00.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('behind on a non-terminal branch is not amber',
+      $v['status'] === 'behind' && fw_verdict_color($v) === '');
+
+// I3: a 'weak'-confidence board must report its own tier, never upgrade
+// itself to 'confirmed' by falling through some other board's metadata.
+$v = fw_evaluate(['board' => 'HBA 9405W-16i', 'firmware' => '20.00.00.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal',
+                  'rom_profile' => 'Mixed_TriMode'], $idx);
+check('weak-confidence board reports weak, not confirmed', ($v['confidence'] ?? '') === 'weak');
 
 // Amber is reserved for a terminal branch. On a non-terminal branch "latest" is
 // a floor, not a ceiling, so behind renders informational.
