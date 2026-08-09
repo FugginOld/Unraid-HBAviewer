@@ -15,3 +15,7 @@ releases/
 # Claude Code local state: agent worktrees (git worktrees, not repo content)
 # and machine-local settings. Never committed.
 .claude/
+
+# Subagent-driven-development scratch: ledger, briefs, review packages.
+# Git history is the durable record; this is the controller working memory.
+.superpowers/
