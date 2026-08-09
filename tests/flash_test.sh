@@ -44,6 +44,44 @@ out=$(tool SAS3008)
 case "$out" in *' '$'\n'*|*' ') bad "tool output has trailing space" "$(printf '%s' "$out" | cat -A)" ;;
                             *) ok "tool output has no trailing whitespace" ;; esac
 
+# ── an uploaded tool on /boot must still be runnable ─────────────────────────
+# /boot is the Unraid flash drive: vfat, mounted fmask=0177. Every execute bit
+# is masked off, so a file there can NEVER be executable and chmod on it is a
+# silent no-op. find_flasher resolves on [ -x ], so the upload feature stored
+# the tool correctly and then could not see it -- the file sat in tools/ reading
+# -rw------- while the page reported no tool installed. Measured on a live box.
+# find_flasher now stages a runnable copy off /boot and returns that.
+#
+# The source's own permissions are deliberately NOT asserted here: this suite
+# runs on Windows too, where MSYS ignores chmod, so a test that depended on the
+# source being non-executable would quietly prove nothing. What matters is the
+# property that holds on every filesystem -- what comes back is executable, and
+# it is not the /boot path.
+BOOTDIR=$(mktemp -d); STAGEDIR=$(mktemp -d)
+trap 'rm -f "$FW" "$BIOS"; rm -rf "$BOOTDIR" "$STAGEDIR"' EXIT
+printf '#!/bin/sh\necho staged-tool\n' > "$BOOTDIR/sas3flash"
+LIB="../source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh"
+res=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$STAGEDIR" \
+      bash -c "source $LIB; find_flasher sas3")
+[ -n "$res" ]      && ok "uploaded tool resolves at all"        || bad "uploaded tool resolves" "got nothing"
+[ -x "$res" ]      && ok "resolved tool is executable"          || bad "not executable" "$res"
+case "$res" in "$BOOTDIR"/*) bad "returned the /boot path" "$res — that path can never be executable" ;;
+                          *) ok "resolved out of /boot into a runnable copy" ;; esac
+# Replacing the tool on /boot must take effect without a reboot.
+printf '#!/bin/sh\necho replaced\n' > "$BOOTDIR/sas3flash"
+touch "$BOOTDIR/sas3flash"
+res2=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$STAGEDIR" \
+       bash -c "source $LIB; find_flasher sas3")
+case "$(cat "$res2" 2>/dev/null)" in *replaced*) ok "a newer /boot copy is re-staged" ;;
+                                              *) bad "stale staged copy" "replacing the tool had no effect" ;; esac
+# An absent tool must still resolve to nothing rather than a stale or bogus path.
+rm -f "$BOOTDIR/sas3flash"
+EMPTYSTAGE=$(mktemp -d)
+res3=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$EMPTYSTAGE" \
+       bash -c "source $LIB; find_flasher sas3")
+rm -rf "$EMPTYSTAGE"
+[ -z "$res3" ] && ok "no tool anywhere resolves to nothing" || bad "phantom tool" "got '$res3'"
+
 # ── list mode: read-only, scoped to the referenced controller only ───────────
 out=$(FLASHER="$STUB" bash "$FH" list SAS2008 0 2>&1); has "list sas2 scoped" "FLASHER -c 0 -list"
 out=$(FLASHER="$STUB" bash "$FH" list SAS3008 1 2>&1); has "list sas3 scoped" "FLASHER -c 1 -list"

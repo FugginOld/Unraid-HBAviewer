@@ -50,11 +50,45 @@ find_flasher() {
         *)    return 1 ;;
     esac
     for c in "$tool" \
-             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool" \
-             "/boot/config/plugins/hbaviewer/tools/$tool"; do
+             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool"; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }
     done
+
+    # The user-supplied copy on /boot, staged into tmpfs before it is returned.
+    #
+    # /boot is the Unraid flash drive: vfat, mounted fmask=0177. That masks off
+    # every execute bit, so a file there can NEVER be executable and chmod on it
+    # is a silent no-op. The upload therefore worked and the tool was then
+    # invisible to this function, which resolves on [ -x ] -- the file sat in
+    # tools/ reading -rw------- while the page said no tool was installed.
+    # Measured on a live box: fmask=0177,dmask=0077.
+    #
+    # /boot is still the right place to PERSIST it (it survives a reboot, which
+    # is the whole point of the upload) and the wrong place to RUN it from. So
+    # copy it where the bit sticks and hand back that path.
+    #
+    # NOT appdata, which is the obvious answer and the wrong one: flashing
+    # requires the array to be STOPPED, and /mnt/user and /mnt/cache are
+    # unmounted when it is. A tool under appdata would be present through every
+    # test where somebody forgot to stop the array and absent for every real
+    # flash. /boot and tmpfs are the only two locations guaranteed to exist in
+    # the exact condition this feature runs in, which is why it takes both.
+    #
+    # Yes, a lookup that writes. The alternative is find_flasher and the flash
+    # itself disagreeing about whether a tool exists, which is worse: the page
+    # would say "not installed" about a tool the flash would go on to use.
+    # Re-staged whenever the /boot copy is newer, so replacing the tool takes
+    # effect without a reboot.
+    local src="${LSI_TOOLS:-/boot/config/plugins/hbaviewer/tools}/$tool"
+    [ -r "$src" ] || return 1
+    local staged="${LSI_TOOL_STAGE:-/tmp/hbaviewer-tools}/$tool"
+    if [ ! -x "$staged" ] || [ "$src" -nt "$staged" ]; then
+        mkdir -p "${staged%/*}" 2>/dev/null || return 1
+        cp -f "$src" "$staged" 2>/dev/null || return 1
+        chmod 0755 "$staged" 2>/dev/null || return 1
+    fi
+    [ -x "$staged" ] && echo "$staged"
 }
 
 # True (and export a resolved $STORCLI) iff storcli is present and enumerates a
