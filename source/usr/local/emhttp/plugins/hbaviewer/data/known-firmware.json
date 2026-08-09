@@ -1,0 +1,279 @@
+{
+  "_comment": "Known-latest IT firmware index for HBAviewer. Keyed by BOARD, not chipset -- one chip maps to multiple boards with incompatible images. 'confidence' is VERSION confidence -- how sure latest_it is the newest release -- not confidence about the chip's role; a board can be confirmed on version while its it_capable inference is only noted separately. Three tiers: 'confirmed' = version verified and its branch is terminal; 'observed-floor' = seen on a real card or community-reported, so it is a floor -- at that version is not proof of current, below it is stale; 'weak' = a single questionable source, display only, never drive an update-available claim from it alone. 'it_capable: false' means the part is RAID-on-Chip and has no IT firmware at any version; surface that as a distinct state, not as a failed lookup.",
+  "schema_version": 1,
+  "updated": "2026-08-08",
+  "boards": {
+    "SAS9211-8i": {
+      "chip": "SAS2008",
+      "generation": "sas2",
+      "backend": "lsiutil",
+      "it_capable": true,
+      "latest_it": "20.00.07.00",
+      "branch": "P20",
+      "eol": true,
+      "confidence": "confirmed",
+      "oem_variants": ["IBM M1015", "Dell H200", "Dell H310", "SAS9240-8i"],
+      "notes": "OEM variants require crossflash to generic LSI IT image, not a simple upgrade. P20 is the final branch; 20.00.04.00 had known defects, 20.00.07.00 is the recommended terminal version."
+    },
+    "SAS9201-16i": {
+      "chip": "SAS2116",
+      "generation": "sas2",
+      "backend": "lsiutil",
+      "it_capable": true,
+      "latest_it": "20.00.07.00",
+      "branch": "P20",
+      "eol": true,
+      "confidence": "confirmed"
+    },
+    "SAS9207-8i": {
+      "chip": "SAS2308",
+      "generation": "sas2",
+      "backend": "lsiutil",
+      "it_capable": true,
+      "latest_it": "20.00.07.00",
+      "branch": "P20",
+      "eol": true,
+      "confidence": "confirmed",
+      "oem_variants": ["SAS9217-8i"]
+    },
+    "SAS9300-4i": {
+      "chip": "SAS3004",
+      "generation": "sas3",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "16.00.12.00",
+      "branch": "P16",
+      "bios": "08.37.00.00",
+      "uefi_bsd": "18.00.00.00",
+      "eol": true,
+      "confidence": "confirmed"
+    },
+    "SAS9300-8i": {
+      "chip": "SAS3008",
+      "generation": "sas3",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "16.00.12.00",
+      "branch": "P16",
+      "bios": "08.37.00.00",
+      "uefi_bsd": "18.00.00.00",
+      "eol": true,
+      "confidence": "confirmed",
+      "min_recommended": "16.00.12.00",
+      "notes": "Versions below 16.00.12.00 have a controller-reset bug affecting SATA drives. Distributed via iXsystems rather than Broadcom's public download page."
+    },
+    "SAS9300-16i": {
+      "chip": "SAS3008",
+      "generation": "sas3",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "16.00.12.00",
+      "branch": "P16",
+      "eol": true,
+      "confidence": "confirmed",
+      "notes": "Dual-controller board. Flash with -fwall rather than -f or only one IOC updates."
+    },
+    "SAS9305-16i": {
+      "chip": "SAS3216",
+      "generation": "sas3",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "16.00.12.00",
+      "branch": "P16",
+      "eol": true,
+      "confidence": "confirmed",
+      "package": "9305_16i_Pkg_P16.12_IT_FW_BIOS_for_MSDOS_Windows.zip",
+      "notes": "SAS3216 treated as an IT-capable IOC by symmetry with the confirmed SAS3224, not from a card. Downgrade this board's confidence if a 9305-16i ever contradicts it."
+    },
+    "SAS9305-24i": {
+      "chip": "SAS3224",
+      "generation": "sas3",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "16.00.12.00",
+      "branch": "P16",
+      "eol": true,
+      "confidence": "confirmed",
+      "package": "9305_24i_Pkg_P16.12_IT_FW_BIOS_for_MSDOS_Windows.zip",
+      "notes": "NOT interchangeable with the 16i image despite the shared P16.12 label. SAS3224 confirmed as an IT-capable IOC (not RAID-on-Chip) from a live card: lsiutil reports MPTFW-15.00.00.00-IT with 15 JBOD drives attached."
+    },
+    "HBA 9400-8i": {
+      "chip": "SAS3408",
+      "generation": "sas3.5",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "24.00.00.00",
+      "branch": "P24",
+      "confidence": "observed-floor",
+      "source": "Broadcom KB 1211211122774",
+      "notes": "Tri-mode HBA ships a single firmware image; no IT/IR split. Flash via storcli /cx download file=<img>. Version inferred from sibling 9400-16i; confirm separately."
+    },
+    "HBA 9400-16i": {
+      "chip": "SAS3416",
+      "chip_rev": "B0",
+      "generation": "sas3.5",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "24.00.00.00",
+      "fw_package_build": "24.00.00.00",
+      "nvdata": "24.00.00.22",
+      "bios": "09.47.00.00",
+      "psoc": "05689001",
+      "confidence": "observed-floor",
+      "source": "field report, storcli /c0 show all",
+      "branch": "P24",
+      "rom_profiles": {
+        "_comment": "Same FW version ships in multiple capability profiles. Compare versions WITHIN a profile; switching profiles is a capability change, not an upgrade.",
+        "SAS_SATA": "HBA_9400-16i_SAS_SATA.bin",
+        "Mixed": "HBA_9400-16i_Mixed_Profile.bin"
+      },
+      "pci": {
+        "vendor_id": "0x1000",
+        "device_id": "0xAC",
+        "subvendor_id": "0x1000",
+        "subdevice_id": "0x3000"
+      },
+      "notes": "Confirmed to exist on a live card; NOT confirmed as the newest Broadcom release. Only IT firmware is published for this board."
+    },
+    "HBA 9405W-16i": {
+      "chip": "SAS3616",
+      "generation": "sas3.5",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "21.00.00.00",
+      "branch": "P21",
+      "confidence": "weak",
+      "profile_aware": true,
+      "rom_profiles": {
+        "_comment": "Multipath profiles sit on a SEPARATE version track (15.x), not an older release of the 21.x track. A 15.00.01.00 card on a multipath profile is correctly configured, NOT out of date.",
+        "Mixed_TriMode": {
+          "file": "HBA_9405W-16i_SAS_SATA_NVMe_FW_BIOS_UEFI.bin",
+          "version": "21.00.00.00",
+          "track": "standard"
+        },
+        "IT_Nexus_Multipath": {
+          "file": "HBA_9405W-16i_SAS_SATA_Profile_IT_Nexus.bin",
+          "version": "15.00.01.00",
+          "nvdata_prefix": "0F.0b.91",
+          "track": "multipath"
+        },
+        "Abort_Task_Set": {
+          "file": "HBA_9405W-16i_SAS_SATA_Profile_Abort_Task_Set.bin",
+          "version": "15.00.01.00",
+          "nvdata_prefix": "0F.0b.92",
+          "track": "multipath"
+        }
+      },
+      "notes": "21.00.00.00 sourced from a Broadcom download-search link whose filter names the 9400-8i, not this board -- treat as unconfirmed. Multipath package versions trace to Broadcom KB 1211211122774.",
+      "source": "Broadcom KB 1211211122774 (multipath); download-search (standard, unconfirmed)"
+    },
+    "HBA 9500-8i": {
+      "chip": "SAS3808",
+      "generation": "sas3.5",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "28.00.00.00",
+      "fw_package_build": "28.00.00.00",
+      "branch": "P28",
+      "bios": null,
+      "confidence": "observed-floor",
+      "source": "Broadcom retail package, community report",
+      "notes": "Believed to have no legacy option ROM; null BIOS is expected, not missing data. Confirm. Profile split (SAS/SATA vs Mixed NVMe) unconfirmed for this generation."
+    },
+    "HBA 9500-16i": {
+      "chip": "SAS3816",
+      "generation": "sas3.5",
+      "backend": "storcli",
+      "it_capable": true,
+      "latest_it": "28.00.00.00",
+      "fw_package_build": "28.00.00.00",
+      "branch": "P28",
+      "bios": null,
+      "confidence": "observed-floor",
+      "source": "Broadcom retail package, community report",
+      "notes": "Believed to have no legacy option ROM; null BIOS is expected, not missing data. Confirm. Profile split unconfirmed for this generation."
+    }
+  },
+  "no_it_firmware": {
+    "_comment": "RAID-on-Chip parts. No IT firmware exists at any version and they cannot be crossflashed. Detect and report explicitly.",
+    "SAS2108": ["MegaRAID 9260-8i"],
+    "SAS2208": ["MegaRAID 9271-8i"],
+    "SAS3108": ["MegaRAID 9361-8i"],
+    "SAS3508": ["MegaRAID 9460-8i"],
+    "SAS3516": ["MegaRAID 9460-16i"]
+  },
+  "multipath_track": {
+    "_comment": "Broadcom publishes separate multi-path firmware for 9300, 9302, 9305, 9400, and 9405W (KB 1211211122774). These run their own version numbering, independent of the standard branch. A board in an external multi-path configuration may correctly report a version far below its standard-track 'latest'.",
+    "affected_boards": ["SAS9300-4i", "SAS9300-8i", "SAS9300-16i", "SAS9305-16i", "SAS9305-24i", "HBA 9400-8i", "HBA 9400-16i", "HBA 9405W-16i"],
+    "known_versions": {
+      "HBA 9405W-16i": "15.00.01.00"
+    },
+    "kb": "https://www.broadcom.com/support/knowledgebase/1211211122774/firmware-for-9300-9302-9305-9400-and-9405w-hba-for-external",
+    "status": "KB page contents not yet retrieved -- package list and per-board versions unknown. The standard-track 'confirmed' versions on the affected boards are only valid for non-multipath configurations.",
+    "app_guidance": "Do not report a board as out-of-date when its configuration is unknown and it appears in affected_boards. Detect external/multipath topology first, or suppress the comparison."
+  },
+  "branches": {
+    "_comment": "Companion BIOS/UEFI versions are properties of the firmware branch, not the board. A complete flash set is FW + NVDATA + BIOS + UEFI BSD; NVDATA remains board-specific.",
+    "P16": {
+      "generation": "sas3",
+      "firmware": "16.00.12.00",
+      "bios": "08.37.00.00",
+      "uefi_bsd": "18.00.00.00",
+      "terminal": true,
+      "confirmed_on": ["SAS9300-4i", "SAS9300-8i"],
+      "inferred_on": ["SAS9300-16i", "SAS9305-16i", "SAS9305-24i"],
+      "notes": "Companion versions confirmed on two boards and assumed branch-wide for the rest. Verify before treating an inferred board's BIOS as stale."
+    },
+    "P24": {
+      "generation": "sas3.5",
+      "firmware": "24.00.00.00",
+      "bios": "09.47.00.00",
+      "uefi_bsd": null,
+      "terminal": false,
+      "profile_aware": true,
+      "confirmed_on": ["HBA 9400-16i"],
+      "notes": "Ships in multiple ROM profiles (SAS/SATA-only, Mixed NVMe) at the same version number. A version match alone does not mean the correct image is installed. Not known to be terminal -- newer releases may exist."
+    },
+    "P28": {
+      "generation": "sas3.5",
+      "firmware": "28.00.00.00",
+      "bios": null,
+      "uefi_bsd": null,
+      "terminal": false,
+      "profile_aware": null,
+      "confirmed_on": [],
+      "observed_on": ["HBA 9500-8i", "HBA 9500-16i"],
+      "notes": "Latest Broadcom retail package for SAS3808/3816. Legacy option ROM believed absent on this generation. Not known to be terminal."
+    },
+    "P21": {
+      "generation": "sas3.5",
+      "firmware": "21.00.00.00",
+      "bios": null,
+      "uefi_bsd": null,
+      "terminal": false,
+      "profile_aware": true,
+      "confirmed_on": [],
+      "observed_on": ["HBA 9405W-16i"],
+      "notes": "Standard tri-mode track only. Multipath profiles for this board run a separate 15.x track and are not comparable to this version."
+    },
+    "P20": {
+      "generation": "sas2",
+      "firmware": "20.00.07.00",
+      "bios": null,
+      "uefi_bsd": null,
+      "terminal": true,
+      "notes": "Companion BIOS/UEFI unconfirmed. sas2flash reports no FW Package Build field on this generation."
+    }
+  },
+  "parser_notes": {
+    "_comment": "Generation-specific quirks in storcli/sas3flash output that affect lookup and health parsing.",
+    "board_name_convention": "SAS3 and earlier report as 'SAS9305-24i' style. SAS3.5 (9400/9500) report as 'HBA 9400-16i' style. Normalize both before keying, or match on PCI device+subdevice ID instead.",
+    "bios_field_compound": "On 9400-generation cards 'Bios Version' is underscore-joined BIOS and FW package, e.g. '09.47.00.00_24.00.00.00'. Split on '_' and take the first field as BIOS.",
+    "personality_unsupported": "'storcli /cx show personality' returns Status = Failure / 'Un-supported Command' on 9400 HBAs. This is expected, not a fault. Do not map to a degraded or unknown health state.",
+    "thermal_source": "Check 'Temperature Sensor for ROC' and 'Temperature Sensor for Controller' before reading a temperature. On 9400 HBAs the ROC sensor is present and the controller sensor is absent; read 'ROC temperature(Degree Celcius)'. If both are absent, the thermal sub-indicator must return unknown rather than 0.",
+    "version_prefix_is_not_a_branch_check": "DO NOT infer branch from the leading version pair. Special-purpose profiles run their own version tracks -- a 9405W-16i on an IT Nexus multipath profile correctly reports 15.00.01.00 while the standard track is 21.x. Resolve the profile first, then compare within that track only.",
+    "nvdata_format_varies": "NVDATA is not consistently a decimal dotted quad. Observed forms include '24.00.00.22' (9400) and hex-style '0F.0b.91.xx' (9405W multipath profiles). Parse as an opaque string; do not coerce to numeric or version-compare it.",
+    "rom_profile_detection": "On 9400-generation cards the installed ROM profile (SAS/SATA vs Mixed NVMe) is not clearly exposed by storcli. Report profile as unknown rather than inferring it, and do not present a single 'latest firmware' download for these boards -- offering the wrong profile can silently remove NVMe support.",
+    "jbod_capability_flag": "'Support JBOD = No' on a 9400 HBA does not indicate IR mode. Drives still enumerate as JBOD. Do not infer personality from this flag."
+  }
+}

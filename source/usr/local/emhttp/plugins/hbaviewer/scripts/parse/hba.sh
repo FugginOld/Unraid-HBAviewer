@@ -15,6 +15,13 @@ BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
 IDENT=$(cat "$5" 2>/dev/null)
 
+# Injected by the composer, which reads them from sysfs — this file stays a pure
+# filter with no hardware access. Defaults are the suppressing values: an
+# unstated topology must never read as "internal", and an unstated subvendor
+# must never read as generic Broadcom.
+TOPOLOGY="${LSI_TOPOLOGY:-unknown}"
+SUBVENDOR="${LSI_SUBVENDOR:-}"
+
 # ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
 if [ -n "$TEMP_HEX" ]; then TEMP=$((16#${TEMP_HEX#0x})); else TEMP=""; fi
@@ -151,6 +158,8 @@ cat <<EOF
   "port_name": "${PORT_NAME:-ioc0}",
   "board_name": "${BOARD_NAME:-}",
   "pci_location": "${PCI_BUS:-0}:${PCI_DEV:-0}",
+  "topology": "${TOPOLOGY}",
+  "subvendor_id": "${SUBVENDOR}",
   "pcie_width": "${PCIE_WIDTH}",
   "pcie_speed": "${PCIE_SPEED}",
   "power_mode": "${POWER_MODE}",

@@ -128,3 +128,79 @@ hba_each() {
         printf '{"backend":"lsiutil","driver":"%s","controllers":[%s]}' "$(hba_driver)" "$body"
     fi
 }
+
+# The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
+# unlike storcli there is no line to parse), but the kernel already knows it:
+# /sys/class/scsi_host/hostN resolves into the device tree under the card, so
+# walk up until a dir that publishes link state appears. Issue #14 — a SAS2308
+# negotiated at x4 in a chipset slot, with the card's x8 maximum sitting in
+# sysfs the whole time while the plugin reported no maximum at all.
+# Lives here rather than in get_hba_health.sh because the overview composer now
+# needs the same walk to reach subsystem_vendor.
+_pci_dir_of_host() {   # $1 = scsi host number
+    local d
+    d=$(readlink -f "${SYS_SCSI_HOST:-/sys/class/scsi_host}/host$1" 2>/dev/null)
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        [ -r "$d/current_link_width" ] && { printf '%s' "$d"; return 0; }
+        d=$(dirname "$d")
+    done
+}
+
+# First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
+# hba_personalities above, but keeping the host NUMBER, needed to key
+# _phys_json. The bundled lsiutil binary only ever addresses one controller.
+# Lives here rather than in get_hba_health.sh because the overview composer now
+# needs the same lookup to reach this card's topology and subsystem_vendor.
+_first_sas_host() {
+    local h
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        case "$(cat "${h}proc_name" 2>/dev/null)" in
+            mpt3sas|mpt2sas|mptsas) basename "$h" | sed 's/^host//'; return ;;
+        esac
+    done
+}
+
+# Is this controller directly attached, or is there an expander in the path?
+#
+# Broadcom publishes a SEPARATE multi-path firmware track for the 9300, 9302,
+# 9305, 9400 and 9405W, with its own version numbering — a card on that track
+# correctly runs a version far below the standard branch. Comparing the two
+# tracks reports a working multipath card as badly out of date, and acting on
+# that destroys the configuration. So the firmware verdict is suppressed unless
+# the card can be shown to be internal, and this is that proof.
+#
+# Two independent signals, either sufficient to disqualify: an expander device
+# for this host, or any three-component end_device-H:N:M child (a device behind
+# something that numbers its own PHYs). The two-vs-three component rule is the
+# same one get_hba_health.sh's _phys_json uses to keep an expander's PHYs out of
+# a controller's own error counts (issue #12).
+#
+# Scoped to ONE host: a box with two HBAs, one behind an expander, must not have
+# that expander silence the other card. An empty tree is "unknown", not
+# "internal" — a card with nothing attached proves nothing about topology.
+hba_topology() {   # $1 = scsi host number -> "internal" | "unknown"
+    local d n found=0
+    for d in "${SYS_SAS_EXPANDER:-/sys/class/sas_expander}"/expander-"${1}":*; do
+        [ -e "$d" ] && { printf 'unknown'; return; }
+    done
+    for d in "${SYS_SAS_DEVICE:-/sys/class/sas_device}"/end_device-"${1}":*; do
+        [ -e "$d" ] || continue
+        found=1
+        n=$(basename "$d")
+        case "${n#end_device-}" in *:*:*) printf 'unknown'; return ;; esac
+    done
+    [ "$found" -eq 1 ] && printf 'internal' || printf 'unknown'
+}
+
+# PCI subsystem vendor for a card, from its sysfs device dir. 0x1000 is a
+# generic Broadcom board; anything else is an OEM rebrand (IBM M1015, Dell
+# H200/H310 and friends) whose NVDATA and BIOS differ, where reaching a generic
+# firmware version is a CROSSFLASH rather than an upgrade. Getting this wrong
+# tells a user to perform a materially riskier operation than the one described,
+# so an unreadable attribute must yield empty and suppress the verdict — never a
+# default that happens to look generic.
+hba_subvendor() {   # $1 = sysfs PCI device dir
+    local v
+    v=$(cat "$1/subsystem_vendor" 2>/dev/null) || return 0
+    printf '%s' "${v//[[:space:]]/}"
+}

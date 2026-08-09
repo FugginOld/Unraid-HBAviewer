@@ -105,7 +105,10 @@ check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fix
 # being applied to every tile.
 SYSPCI=$(mktemp -d)
 SYSHOST=$(mktemp -d)
-trap 'rm -rf "$SYSPCI" "$SYSHOST"' EXIT
+SYSDEV=$(mktemp -d)
+SYSEXP=$(mktemp -d)
+SYSPHY=$(mktemp -d)
+trap 'rm -rf "$SYSPCI" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY"' EXIT
 for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
     set -- $spec
     mkdir -p "$SYSPCI/$1"
@@ -114,9 +117,22 @@ for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
     printf 'D0\n'               > "$SYSPCI/$1/power_state"
 done
 
+# ov_storcli assumes host N == controller N (see its own ponytail comment) and
+# now calls hba_topology "$1" -- unpinned, that globs the REAL machine's
+# /sys/class/sas_device and /sys/class/sas_expander, so this golden would read
+# "unknown" on a dev box and silently start reading "internal" on the very
+# 9305-24i box that motivated the feature, the day someone runs this suite
+# there. c0/host0: two direct-attached end_devices, no expander -> "internal".
+# c1/host1: nothing at all -> "unknown". Different verdicts on purpose: every
+# other golden in this file records the suppressing default, so without this
+# pair nothing anywhere exercises hba_topology's positive ("internal") path
+# end to end through the composer.
+mkdir -p "$SYSDEV/end_device-0:0" "$SYSDEV/end_device-0:1"
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
-export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null SYS_PCI_ROOT="$SYSPCI"
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null \
+       SYS_PCI_ROOT="$SYSPCI" SYS_SAS_DEVICE="$SYSDEV" SYS_SAS_EXPANDER="$SYSEXP" SYS_SAS_PHY="$SYSPHY"
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
@@ -210,6 +226,10 @@ echo "=== drives sysfs (SAS transport) tests ==="
 bash drives_sysfs_test.sh; drives_sysfs_fail=$?
 
 echo
+echo "=== topology / subvendor tests ==="
+bash topology_test.sh; topology_fail=$?
+
+echo
 echo "=== drive locate tests ==="
 bash locate_sh_test.sh; locate_sh_fail=$?
 
@@ -230,7 +250,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1
