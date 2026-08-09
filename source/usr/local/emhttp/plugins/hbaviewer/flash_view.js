@@ -64,7 +64,11 @@
                 + '<div class="lu-fstep"><label class="step">Step 2 — verify the tool sees THIS card (controller /c'+i+' only)</label>'
                 +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Verify /c'+i+'</button>'
                 +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
-                + '<div class="lu-fstep"><label class="step">Step 3 — choose the model-correct image (+ optional BIOS)</label>'
+                /* No heading here: luFlashDrop() renders 3a and 3b with their own
+                   labels, because whether each is present is decided per file
+                   kind and a single heading could not say "optional" for one and
+                   not the other. */
+                + '<div class="lu-fstep">'
                 +   '<div id="flash-drop-'+i+'" class="lu-muted" style="font-size:12px">Checking…</div></div>'
                 + lockNote
                 + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
@@ -100,25 +104,38 @@
           .then(function(d){
             var dir = d.dir || '/boot/config/plugins/hbaviewer/flash';
             var imgs = d.images || [];
-            var how = '<div class="lu-muted" style="margin-top:10px">Put images in <code>'+fesc(dir)+'</code> — '
-                    + 'from your workstation:<br><code>scp firmware.bin root@'+fesc(location.hostname)+':'+fesc(dir)+'/</code>'
-                    + '<br>Then reload this page.</div>';
+            var ext = function (n) { var m = /\.([^.]+)$/.exec(n||''); return m ? m[1].toLowerCase() : ''; };
+            // Split by extension so each step offers only files of its own kind.
+            // LSI ships BIOS as .rom and firmware as .bin; .fw goes with firmware
+            // rather than being hidden, because a file the user can see in the
+            // folder and cannot select reads as a bug.
+            var bioses = imgs.filter(function (f) { return ext(f.name) === 'rom'; });
+            var fws    = imgs.filter(function (f) { return ext(f.name) !== 'rom'; });
+            var opt = function (f) {
+                return '<option value="'+fesc(f.name)+'">'+fesc(f.name)+'  ('+Math.round(f.size/1024)+' KB)</option>';
+            };
+            var missing = function (what, hint) {
+                return '<span style="color:var(--warn-text)">No ' + what + ' found.</span>'
+                     + '<div class="lu-muted" style="margin-top:6px">Put ' + hint + ' in <code>'+fesc(dir)+'</code>. '
+                     + 'Then reload this page.</div>';
+            };
             ctls.forEach(function(c,i){
               if (c.error) return;
               var box = document.getElementById('flash-drop-'+i);
               if (!box) return;
-              if (!imgs.length) {
-                box.innerHTML = '<span style="color:var(--warn-text)">No firmware image found.</span>' + how;
-                return;
-              }
               // A select, not a text field: the filename is passed to the
               // flasher, and a typo here is a failed flash at best.
-              var opts = imgs.map(function(f){
-                  return '<option value="'+fesc(f.name)+'">'+fesc(f.name)+'  ('+Math.round(f.size/1024)+' KB)</option>';
-              }).join('');
-              box.innerHTML = 'Firmware: <select id="flash-fw-'+i+'">'+opts+'</select><br><br>'
-                + 'BIOS (optional): <select id="flash-bios-'+i+'"><option value="">— none —</option>'+opts+'</select>'
-                + how;
+              var bios = bioses.length
+                  ? '<select id="flash-bios-'+i+'"><option value="">— none —</option>'+bioses.map(opt).join('')+'</select>'
+                  : missing('BIOS image', 'your BIOS file (<code>.rom</code>)');
+              var fw = fws.length
+                  ? '<select id="flash-fw-'+i+'">'+fws.map(opt).join('')+'</select>'
+                  : missing('firmware image', 'your firmware file (<code>.bin</code>)');
+              box.innerHTML =
+                  '<label class="step">Step 3a — (optional) the model-correct BIOS file, a <code>.rom</code></label>'
+                + bios
+                + '<label class="step" style="margin-top:14px">Step 3b — the model-correct firmware file, a <code>.bin</code></label>'
+                + fw;
             });
           })
           .catch(function(){
@@ -157,10 +174,9 @@
             var dir = '/boot/config/plugins/hbaviewer/flash';
             box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong>, which is <strong>not installed</strong>. '
               + 'Broadcom does not permit bundling it.'
-              + '<div class="lu-muted" style="margin-top:10px">Put it in <code>'+fesc(dir)+'</code>, '
-              + 'named exactly <code>'+fesc(t.name)+'</code> — from your workstation:'
-              + '<br><code>scp '+fesc(t.name)+' root@'+fesc(location.hostname)+':'+fesc(dir)+'/</code>'
-              + '<br>It does not need to be executable there; the plugin stages a runnable copy itself. '
+              + '<div class="lu-muted" style="margin-top:10px">Put <code>'+fesc(t.name)+'</code> in '
+              + '<code>'+fesc(dir)+'</code>, named exactly <code>'+fesc(t.name)+'</code>. '
+              + 'Use the Linux version — the bare binary with no extension, not the .exe or the EFI build. '
               + 'Then reload this page.</div>';
           })
           .catch(function(){ box.textContent = 'Could not determine the flash tool for this card.'; });
@@ -191,7 +207,11 @@
         if (!flashArrayStopped) { alert('The array is not stopped. Stop it on the Main tab and reload this page.'); return; }
         if (!ack) { alert('Tick the acknowledgement box first.'); return; }
         if (confirmTxt !== 'FLASH') { alert('Type FLASH (all caps) to confirm.'); return; }
-        if (!fw) { alert('No firmware image selected. Put one in the flash folder shown in Step 3, then reload this page.'); return; }
+        // Either alone is a real operation -- sasNflash takes -f, -b or both -- so
+        // the only thing that makes no sense is neither. flash.php re-checks this
+        // and additionally refuses BIOS-only on the storcli generation, where the
+        // BIOS is part of the firmware package.
+        if (!fw && !bios) { alert('Select a firmware image, a BIOS image, or both. Put them in the flash folder shown in Step 3, then reload this page.'); return; }
         if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
         log.style.display='block'; log.textContent='Starting flash…';
         fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})

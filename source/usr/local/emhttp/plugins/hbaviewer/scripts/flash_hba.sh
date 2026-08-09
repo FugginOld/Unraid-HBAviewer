@@ -111,18 +111,25 @@ if [ "$mode" = list ]; then
 fi
 
 # ── flash ────────────────────────────────────────────────────────────────────
-[ -n "$fw" ] || die "no firmware image given" 5
-[ -f "$fw" ] || die "firmware image not found: $fw" 5
+# Firmware and BIOS are each optional, but not both: sasNflash accepts -f, -b or
+# both, so updating only the BIOS is a real operation the tool supports and this
+# script used to refuse outright.
+[ -n "$fw" ] || [ -n "$bios" ] || die "no firmware or BIOS image given" 5
+[ -z "$fw" ]   || [ -f "$fw" ]   || die "firmware image not found: $fw" 5
 [ -z "$bios" ] || [ -f "$bios" ] || die "BIOS image not found: $bios" 5
 
 if [ "$gen" = storcli ]; then
-    # SAS3.5 / 9400: firmware package flashed via storcli. BIOS travels inside
-    # the package, so a separate BIOS file is not applicable here.
+    # SAS3.5 / 9400: firmware package flashed via storcli. The BIOS travels
+    # INSIDE that package, so there is no separate BIOS file to flash and a
+    # BIOS-only request has nothing to act on — refuse rather than silently
+    # flashing the firmware the user did not ask for.
+    [ -n "$fw" ] || die "$chip is flashed through storcli, where the BIOS is part of the firmware package. A BIOS-only flash is not possible on this generation." 5
     echo "+ storcli /c$ctl download file=$fw"
     "$tool" /c"$ctl" download file="$fw"
 else
-    # SAS2 / SAS3: sasNflash -c <N> -o -f <fw.bin> [-b <bios.rom>]
-    set -- -c "$ctl" -o -f "$fw"
+    # SAS2 / SAS3: sasNflash -c <N> -o [-f <fw.bin>] [-b <bios.rom>]
+    set -- -c "$ctl" -o
+    [ -n "$fw" ]   && set -- "$@" -f "$fw"
     [ -n "$bios" ] && set -- "$@" -b "$bios"
     echo "+ $(basename "$tool") $*"
     "$tool" "$@"

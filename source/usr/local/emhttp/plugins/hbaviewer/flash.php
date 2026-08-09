@@ -55,13 +55,30 @@ function flash_preflight(array $in): array {
         return ['ok' => false, 'error' => 'The array must be STOPPED before flashing. Stop it on the Main tab, then retry.'];
     if (!preg_match('/^\d+$/', (string) ($in['ctl'] ?? '')))
         return ['ok' => false, 'error' => 'Invalid controller index.'];
-    $fw = (string) ($in['fw'] ?? '');
-    if ($fw === '')
-        return ['ok' => false, 'error' => 'No firmware image selected. Place one in the flash folder, then reload.'];
-    if (strpos($fw, ($in['dir'] ?? FLASH_DROP) . '/') !== 0)
-        return ['ok' => false, 'error' => 'Firmware path is not permitted.'];
-    if (!is_file($fw))
-        return ['ok' => false, 'error' => 'Firmware image not found in the flash folder.'];
+    /* Firmware and BIOS are each optional, but not both. sas2flash/sas3flash
+       take -f, -b, or both, so flashing a BIOS on its own is a real operation
+       the tool supports and this used to refuse. storcli is different: on the
+       9400/9500 generation the BIOS travels inside the firmware package, so
+       there is no separate BIOS file and an image is mandatory — the caller
+       passes 'bios_ok' to say which kind of tool this is.
+       Both paths are confined and existence-checked; a name that survives
+       flash_safe_name can still point outside the drop directory. */
+    $dir  = $in['dir'] ?? FLASH_DROP;
+    $fw   = (string) ($in['fw']   ?? '');
+    $bios = (string) ($in['bios'] ?? '');
+
+    if ($fw === '' && $bios === '')
+        return ['ok' => false, 'error' => 'Select a firmware image, a BIOS image, or both. Place them in the flash folder, then reload.'];
+    if ($fw === '' && empty($in['bios_ok']))
+        return ['ok' => false, 'error' => 'This controller is flashed through storcli, where the BIOS is part of the firmware package. Select a firmware image.'];
+
+    foreach ([['firmware', $fw], ['BIOS', $bios]] as [$label, $path]) {
+        if ($path === '') continue;
+        if (strpos($path, $dir . '/') !== 0)
+            return ['ok' => false, 'error' => ucfirst($label) . ' path is not permitted.'];
+        if (!is_file($path))
+            return ['ok' => false, 'error' => ucfirst($label) . ' image not found in the flash folder.'];
+    }
     if (($in['confirm'] ?? '') !== 'FLASH')
         return ['ok' => false, 'error' => 'Type FLASH (all caps) to confirm.'];
     if (!empty($in['locked']))
@@ -162,8 +179,15 @@ if ($action === 'flash') {
     // flash ran without the BIOS the user picked.
     $biosNm  = ($_POST['bios'] ?? '') !== '' ? flash_safe_name((string) $_POST['bios'], ['bin', 'rom', 'fw']) : null;
     // Images live where the user dropped them, not where an upload put them.
-    $fw     = $fwName !== null ? FLASH_DROP . '/' . $fwName : '';
+    $fw     = $fwName  !== null ? FLASH_DROP . '/' . $fwName : '';
+    $bios   = $biosNm  !== null ? FLASH_DROP . '/' . $biosNm : '';
     $lock   = FLASH_DIR . '/flash.lock';
+    // Whether a BIOS-only flash is even meaningful is a property of the tool
+    // family, so ask the one place that knows the chip->tool map rather than
+    // matching chip prefixes here for a second time.
+    $fam    = trim((string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh')
+            . ' tool ' . escapeshellarg($chip) . ' 2>/dev/null | sed -n "s/^family=//p"'));
+    $biosOk = ($fam === 'sas2' || $fam === 'sas3');
 
     // Claim single-flight BEFORE the gate, so the check and the claim can't be
     // interleaved by a second request. Any refusal below hands the lock back.
@@ -174,6 +198,8 @@ if ($action === 'flash') {
         'stopped' => flash_array_stopped(),
         'ctl'     => $ctl,
         'fw'      => $fw,
+        'bios'    => $bios,
+        'bios_ok' => $biosOk,
         'confirm' => $_POST['confirm'] ?? '',
         'locked'  => !$owned,
     ]);
@@ -189,7 +215,7 @@ if ($action === 'flash') {
     // that captures stdout+stderr and records its exit code. Never auto-relaunched.
     @unlink(FLASH_DIR . '/flash.log');
     @unlink(FLASH_DIR . '/flash.status');
-    $bios = ($biosNm !== null && is_file(FLASH_DROP . '/' . $biosNm)) ? FLASH_DROP . '/' . $biosNm : '';
+    // $bios was validated by the preflight above; no second existence check.
     $cmd  = 'bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh') . ' flash '
           . escapeshellarg($chip) . ' ' . escapeshellarg($ctl) . ' ' . escapeshellarg($fw)
           . ($bios !== '' ? ' ' . escapeshellarg($bios) : '');

@@ -104,6 +104,21 @@ has "flash sas3 with bios" "-b $BIOS"
 out=$(STORCLI="$STUB" bash "$FH" flash SAS3416 0 "$FW" 2>&1)
 has "flash storcli download" "/c0 download file=$FW"
 
+# ── BIOS-only: a real operation the script used to refuse ────────────────────
+# sasNflash takes -f, -b or both. Updating just the BIOS is legitimate, and the
+# script hard-required a firmware image, so it was impossible through the UI.
+# storcli is the exception and must still refuse: on 9400/9500 the BIOS travels
+# inside the firmware package, so there is no separate file to flash and a
+# BIOS-only request would silently flash firmware the user did not choose.
+out=$(FLASHER="$STUB" bash "$FH" flash SAS3008 0 "" "$BIOS" 2>&1)
+has "bios-only builds -b with no -f" "FLASHER -c 0 -o -b $BIOS"
+case "$out" in *" -f "*) bad "bios-only leaked -f" "$out" ;; *) ok "bios-only sends no -f" ;; esac
+out=$(STORCLI="$STUB" bash "$FH" flash SAS3416 0 "" "$BIOS" 2>&1); rc=$?
+code "storcli bios-only exit 5" 5 "$rc"
+has "storcli bios-only says why" "part of the firmware package"
+out=$(FLASHER="$STUB" bash "$FH" flash SAS3008 0 "" "" 2>&1); rc=$?
+code "neither image exit 5" 5 "$rc"; has "neither image msg" "no firmware or BIOS image given"
+
 # ── refusals (the guards that keep a bad call from ever running a tool) ───────
 out=$(FLASHER="$STUB" bash "$FH" flash SAS9999 0 "$FW" 2>&1); rc=$?
 code "unknown chip exit 3" 3 "$rc"; has "unknown chip msg" "unknown chip"

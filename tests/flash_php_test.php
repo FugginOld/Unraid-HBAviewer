@@ -46,12 +46,27 @@ check('preflight ok',            flash_preflight($good)['ok'] === true);
 check('block disabled',          str_contains($err(['enable'=>0]),  'disabled'));
 check('block array running',     str_contains($err(['stopped'=>false]), 'STOPPED'));
 check('block bad ctl',           str_contains($err(['ctl'=>'x']),   'controller'));
-check('block missing fw',        str_contains($err(['fw'=>'']),     'No firmware'));
+/* Firmware and BIOS are each optional, but not both: sasNflash takes -f, -b or
+   both, so a BIOS-only flash is a real operation this used to refuse outright.
+   'bios_ok' says whether the tool family supports it -- on storcli the BIOS is
+   part of the firmware package, so there is no separate file to flash and an
+   image stays mandatory. */
+check('block neither fw nor bios', str_contains($err(['fw'=>'', 'bios'=>'']), 'firmware image, a BIOS image, or both'));
+$biosOnly = ['fw'=>'', 'bios'=>$dropDir . '/unit.rom', 'bios_ok'=>true];
+file_put_contents($dropDir . '/unit.rom', 'x');
+check('BIOS-only passes on a sasNflash card', flash_preflight(array_merge($good, $biosOnly))['ok'] === true);
+check('BIOS-only refused on a storcli card',
+      str_contains($err(array_merge($biosOnly, ['bios_ok'=>false])), 'part of the firmware package'));
+// Confinement applies to the BIOS path too, not just the firmware one.
+check('block bios outside the drop dir',
+      str_contains($err(['bios'=>'/tmp/evil.rom', 'bios_ok'=>true]), 'not permitted'));
+check('block bios that does not exist',
+      str_contains($err(['bios'=>$dropDir . '/nope.rom', 'bios_ok'=>true]), 'not found'));
 check('block path escape',       str_contains($err(['fw'=>'/tmp/evil.bin']), 'not permitted'));
 check('block fw outside the drop dir', str_contains($err(['fw'=>'/boot/x.bin']), 'not permitted'));
 check('block no confirm',        str_contains($err(['confirm'=>'flash']), 'Type FLASH'));
 check('block locked',            str_contains($err(['locked'=>true]), 'in progress'));
-@unlink($fw); @rmdir($dropDir);
+@unlink($fw); @unlink($dropDir . '/unit.rom'); @rmdir($dropDir);
 
 // ── flash_claim_lock: exactly one claimant wins, and a release re-arms it ────
 // This is the single-flight guarantee that stands between a double-submit and
