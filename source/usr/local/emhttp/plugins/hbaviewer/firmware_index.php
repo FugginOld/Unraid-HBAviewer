@@ -34,10 +34,13 @@ function fw_normalize(string $name): string {
 
 /* Dotted-quad compare, shorter side zero-padded. NEVER used on NVDATA, whose
    format varies ('24.00.00.22' on 9400, hex-style '0F.0b.91.xx' on 9405W
-   multipath profiles) and which is not ordered at all. Callers must confirm
-   both sides are a bare dotted-quad first -- fw_evaluate() does, via the shape
-   guard ahead of its one call site -- because intval() on a non-numeric part
-   silently reads as 0 rather than failing. */
+   multipath profiles) and which is not ordered at all. Both operands must be
+   a bare dotted-quad: $fw is shape-guarded at fw_evaluate()'s one call site
+   below; $latest comes from the index and is guaranteed by
+   tests/firmware_index_test.php's version-shape assertion rather than at
+   runtime -- intval() on a non-numeric part silently reads as 0 rather than
+   failing, so a bad hand-edited index entry would otherwise mis-sort silently
+   instead of failing the test suite. */
 function fw_compare(string $a, string $b): int {
     $pa = array_map('intval', explode('.', $a));
     $pb = array_map('intval', explode('.', $b));
@@ -75,7 +78,7 @@ function fw_load(?string $path = null): ?array {
    back to latest_it -- that fallback would compare a resolved special-purpose
    profile against the wrong track's number. */
 function fw_track_version(array $b, ?string $profile): ?string {
-    if ($profile !== null) {
+    if ($profile !== null && !empty($b['rom_profiles'])) {
         $p = $b['rom_profiles'][$profile] ?? null;
         $v = is_array($p) ? ($p['version'] ?? null) : null;
         return ($v !== null && $v !== '') ? (string) $v : null;
@@ -147,9 +150,11 @@ function fw_evaluate(array $ctl, ?array $idx): array {
 
     // Gate 6 — multipath. These boards run an independent version track, so a
     // card on it correctly reports a version far below the standard branch.
-    // is_string filters a hand-edited non-string entry before it reaches
-    // fw_normalize(), which would otherwise TypeError inside the verdict path.
-    $mpBoards = array_filter($idx['multipath_track']['affected_boards'] ?? [], 'is_string');
+    // is_array guards a hand edit that dropped the array brackets entirely;
+    // is_string then filters a hand-edited non-string element. Either shape
+    // fault would otherwise TypeError inside the verdict path.
+    $affected = $idx['multipath_track']['affected_boards'] ?? [];
+    $mpBoards = array_filter(is_array($affected) ? $affected : [], 'is_string');
     $mp = array_map('fw_normalize', $mpBoards);
     if (in_array($key, $mp, true) && $topology !== 'internal') {
         return ['status' => 'suppressed', 'reason' =>
@@ -178,7 +183,7 @@ function fw_evaluate(array $ctl, ?array $idx): array {
     // literal 'Unknown' (scripts/parse/hba.sh's undecoded-hex sentinel), or a
     // whole banner like 'MPTFW-15.00.00.00-IT' would otherwise intval() its
     // non-numeric parts to 0 and compare as 0.0.0.0 -- a false BEHIND.
-    if (!preg_match('/^\d+(\.\d+)*$/', $fw)) {
+    if (!preg_match('/^\d+(\.\d+)*\z/', $fw)) {
         return ['status' => 'unknown', 'reason' => 'no usable firmware version detected on the adapter'] + $base;
     }
 

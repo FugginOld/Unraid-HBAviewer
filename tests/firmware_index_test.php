@@ -93,6 +93,23 @@ foreach ($idx['boards'] as $name => $b) {
 check('every board has a known confidence tier', $badTier === []);
 if ($badTier) echo "      " . implode(', ', $badTier) . "\n";
 
+// New-2: every version fw_compare() will ever see from the index -- latest_it
+// and every rom_profiles[*].version -- must itself be a bare dotted number.
+// fw_compare()'s intval() reads a typo like 'P20' or '16.00.12.00-IT' as 0 on
+// whichever part doesn't parse, silently mis-sorting instead of failing loud.
+$badVer = [];
+foreach ($idx['boards'] as $name => $b) {
+    $vs = [$b['latest_it'] ?? null];
+    foreach (($b['rom_profiles'] ?? []) as $pv) {
+        if (is_array($pv) && isset($pv['version'])) $vs[] = $pv['version'];
+    }
+    foreach ($vs as $vv) {
+        if ($vv !== null && !preg_match('/^\d+(\.\d+)*\z/', (string) $vv)) $badVer[] = $name;
+    }
+}
+check('every indexed version is a bare dotted number', $badVer === []);
+if ($badVer) echo "      " . implode(', ', $badVer) . "\n";
+
 // Settled by the 2026-08-08 bundle: the live 9305-24i reports SAS3224 and runs
 // MPTFW-15.00.00.00-IT. SAS3324 does not exist; it was a typo in the manifest
 // builder that leaked into an "unconfirmed, may be RAID-on-Chip" list.
@@ -143,6 +160,15 @@ check('matching version is current', $v['status'] === 'current');
 $v = fw_evaluate(['board' => 'SAS9305-24i', 'firmware' => '17.00.00.00',
                   'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
 check('newer than index is ahead, not behind', $v['status'] === 'ahead');
+
+// New-1: fw_track_version() must not treat "a rom_profile was supplied" as
+// "this board has profiles". SAS9305-24i has no rom_profiles key at all, so a
+// caller populating rom_profile (nothing does yet, but the plan lists it as
+// an accepted $ctl key) must not lose its verdict to a false "no known
+// version" -- latest_it is right there.
+$v = fw_evaluate($reporter + ['rom_profile' => 'IT'], $idx);
+check('a board with no rom_profiles compares normally despite a supplied rom_profile',
+      $v['status'] === 'behind' && ($v['latest'] ?? '') === '16.00.12.00');
 
 // THE gate that matters. An M1015 or H310 reaching the generic image is a
 // crossflash, not an upgrade, and telling someone otherwise does real harm.
