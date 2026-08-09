@@ -102,9 +102,19 @@ if ($action === 'upload') {
         $tname = strtolower(basename(str_replace('\\', '/', (string) $_FILES['tool']['name'])));
         if (in_array($tname, ['sas2flash', 'sas3flash'], true)) {
             @mkdir(FLASH_TOOLS, 0755, true);
-            move_uploaded_file($_FILES['tool']['tmp_name'], FLASH_TOOLS . '/' . $tname);
-            @chmod(FLASH_TOOLS . '/' . $tname, 0755);
-            $out['tool'] = $tname;
+            $dest = FLASH_TOOLS . '/' . $tname;
+            move_uploaded_file($_FILES['tool']['tmp_name'], $dest);
+            @chmod($dest, 0755);
+            // Do not assume the chmod took. FLASH_TOOLS is on /boot, which is
+            // vfat: it holds no Unix permission bits, so chmod there is a silent
+            // no-op and the result depends entirely on the mount's fmask. Since
+            // find_flasher() resolves on [ -x ], a tool that is stored but not
+            // executable is invisible to the flasher while looking, to the user,
+            // exactly like a successful upload. Report what is actually true.
+            clearstatcache(true, $dest);
+            $out['tool']      = $tname;
+            $out['tool_path'] = $dest;
+            $out['tool_exec'] = is_executable($dest);
         }
     }
     echo json_encode($out ?: ['error' => 'No file uploaded.']);

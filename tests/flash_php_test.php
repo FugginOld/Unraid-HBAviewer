@@ -60,5 +60,40 @@ check('claim lock: third refused',   flash_claim_lock($lk) === false);
 check('claim lock: re-arms after release', flash_claim_lock($lk) === true);
 @unlink($lk);
 
+/* ── The firmware page's upload path ──────────────────────────────────────────
+   Source-level assertions, because there is no JS harness in this repo and
+   these three properties all failed together in a real session: the page hung
+   on "Uploading…" forever, with the message rendered beside the wrong button.
+
+   The hang was `document.getElementById(x).files[0]` on an element that no
+   longer exists — Step 1 renders no file input once the tool is found, so null
+   is the NORMAL state, not an edge case. That throws synchronously, after the
+   label is set and before the fetch exists, so no .catch can ever clear it.
+   Anything that sets "Uploading…" must be able to unset it again. */
+$jsSrc    = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash_view.js');
+$flashSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash.php');
+
+check('no unguarded .files read in the page',
+      preg_match('/getElementById\([^)]*\)\s*\.files/', $jsSrc) === 0);
+check('file inputs go through the null-safe helper',
+      str_contains($jsSrc, 'function pick(id)') && str_contains($jsSrc, 'e && e.files'));
+
+// Two Upload buttons per card now, so every call must name its target; a bare
+// luFlashUpload(i) writes into whichever span the default happens to pick.
+preg_match_all('/luFlashUpload\((.*?)\)/', $jsSrc, $m);
+$bare = array_values(array_filter($m[1], fn($a) => !str_contains($a, ',')));
+check('every upload call names its target', $bare === []);
+check('the tool upload has its own status span', str_contains($jsSrc, "flash-up-tool-'+i"));
+check('a non-JSON response is reported, not swallowed', str_contains($jsSrc, "'HTTP '+r.status"));
+
+// /boot is vfat: chmod is a silent no-op there, and find_flasher resolves on
+// [ -x ]. A stored-but-not-executable tool is invisible to the flasher while
+// looking, to the user, exactly like a successful upload.
+check('the endpoint verifies the tool is executable', str_contains($flashSrc, 'is_executable($dest)'));
+check('the page says so when it is not',              str_contains($jsSrc, 'tool_exec === false'));
+// The tool is only useful once Step 1 agrees it is there, and only the real
+// lookup can say that — re-ask rather than assume the upload worked.
+check('a stored tool re-runs the Step 1 lookup',      str_contains($jsSrc, 'luFlashTool(i)'));
+
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

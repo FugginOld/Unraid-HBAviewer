@@ -36,7 +36,7 @@
                 + '<div class="lu-fstep"><label class="step">Step 3 — upload the model-correct image (+ optional BIOS)</label>'
                 +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
                 +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"> '
-                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
+                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+',\'image\')">Upload</button> '
                 +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
                 + lockNote
                 + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
@@ -83,7 +83,8 @@
             box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong>, which is <strong>not installed</strong>. '
               + 'Broadcom does not permit bundling it.<br><br>'
               + 'Upload <code>'+fesc(t.name)+'</code>: <input type="file" id="flash-tool-'+i+'"> '
-              + '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button><br><br>'
+              + '<button class="lu-fbtn" onclick="luFlashUpload('+i+',\'tool\')">Upload</button> '
+              + '<span id="flash-up-tool-'+i+'" style="font-size:12px"></span><br><br>'
               + '<span class="lu-muted">The file must be named exactly <code>'+fesc(t.name)+'</code>. '
               + 'You can also place it at <code>/boot/config/plugins/hbaviewer/tools/'+fesc(t.name)+'</code> and <code>chmod +x</code> it.</span>';
           })
@@ -99,27 +100,71 @@
           .catch(function(){ pre.textContent='Request failed.'; });
     };
 
-    window.luFlashUpload = function (i) {
-        var out = document.getElementById('flash-up-'+i); out.style.color='var(--muted)'; out.textContent='Uploading…';
-        var fw=document.getElementById('flash-fw-'+i).files[0];
-        var bios=document.getElementById('flash-bios-'+i).files[0];
-        var tool=document.getElementById('flash-tool-'+i).files[0];
-        if (!fw && !tool) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
+    /* which = 'tool' (Step 1) or 'image' (Step 3). There are two Upload buttons
+       on every card now, so the progress text has to land beside the one that
+       was pressed — a single shared span put "Uploading…" three steps below the
+       button the user clicked.
+
+       Every input is read through pick(), which tolerates the element being
+       absent. Reading .files off a null used to throw SYNCHRONOUSLY, after
+       "Uploading…" had been set and before the fetch existed, so no .catch could
+       ever fire and the label sat there forever. Step 1 renders no file input at
+       all once the tool is found, so that null is the normal state, not an edge
+       case. Any path that sets "Uploading…" must be able to clear it. */
+    function pick(id) { var e = document.getElementById(id); return e && e.files ? e.files[0] : null; }
+
+    window.luFlashUpload = function (i, which) {
+        which = which || 'image';
+        var out = document.getElementById(which === 'tool' ? 'flash-up-tool-'+i : 'flash-up-'+i);
+        if (!out) return;
+        out.style.color='var(--muted)'; out.textContent='Uploading…';
+
         var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
-        if (fw) fd.append('firmware', fw);
-        if (bios) fd.append('bios', bios);
-        if (tool) fd.append('tool', tool);
+        var fw = null, bios = null, tool = null;
+        if (which === 'tool') {
+            tool = pick('flash-tool-'+i);
+            if (!tool) { out.style.color='var(--crit-text)'; out.textContent='Choose the flash tool file first.'; return; }
+            fd.append('tool', tool);
+        } else {
+            fw   = pick('flash-fw-'+i);
+            bios = pick('flash-bios-'+i);
+            if (!fw) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
+            fd.append('firmware', fw);
+            if (bios) fd.append('bios', bios);
+        }
+
         fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
-          .then(function(r){ return r.json(); })
+          // A non-JSON body (a PHP fatal, an upload_max_filesize refusal, the
+          // 403 when flashing is locked) used to reject inside .json() and read
+          // as a bare "Upload failed." Surface the status so the cause is
+          // visible instead of guessable.
+          .then(function(r){ return r.text().then(function(t){
+              try { return JSON.parse(t); }
+              catch(e) { throw new Error('HTTP '+r.status+' — '+(t.slice(0,160) || 'empty response')); }
+          }); })
           .then(function(d){
             if (d.error) { out.style.color='var(--crit-text)'; out.textContent=d.error; return; }
             var c=flashCard(i);
             if (d.firmware) c.setAttribute('data-fw', d.firmware);
             if (d.bios) c.setAttribute('data-bios', d.bios);
+            if (which === 'tool') {
+                if (d.tool && d.tool_exec === false) {
+                    out.style.color='var(--warn-text)';
+                    out.textContent='Stored '+d.tool+', but it is not executable — the flash drive is FAT and cannot hold the permission. Run: chmod +x '+d.tool_path;
+                    return;
+                }
+                out.style.color='var(--good-text)';
+                out.textContent = d.tool ? ('Stored '+d.tool+'.') : 'Nothing stored — the file must be named exactly as shown above.';
+                // Re-ask rather than assume: Step 1 should now say "found", and
+                // the only thing that can confirm that is the same lookup the
+                // flash itself will use.
+                if (d.tool) luFlashTool(i);
+                return;
+            }
             out.style.color='var(--good-text)';
-            out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
+            out.textContent='Stored: '+[d.firmware, d.bios].filter(Boolean).join(', ');
           })
-          .catch(function(){ out.style.color='var(--crit-text)'; out.textContent='Upload failed.'; });
+          .catch(function(e){ out.style.color='var(--crit-text)'; out.textContent='Upload failed: '+(e && e.message ? e.message : 'unknown error'); });
     };
 
     window.luFlashGo = function (i) {
