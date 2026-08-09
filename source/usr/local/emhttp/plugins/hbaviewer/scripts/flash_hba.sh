@@ -96,7 +96,7 @@ if [ "$gen" = storcli ]; then tool=$(find_storcli); else tool=$(find_flasher "$g
 # why. The chip decides the tool; say which tool, and say where it looked.
 if [ -z "$tool" ]; then
     case "$gen" in
-        sas2|sas3) die "${gen}flash is required to flash $chip, and it is not installed. Broadcom does not permit bundling it. Put it in /boot/config/plugins/hbaviewer/tools/${gen}flash (or upload it under Step 1) — it does not need to be executable there, the plugin stages a runnable copy itself. Cards on the 9400/9500 generation use storcli instead and need nothing extra." 4 ;;
+        sas2|sas3) die "${gen}flash is required to flash $chip, and it is not installed. Broadcom does not permit bundling it. Copy it to /boot/config/plugins/hbaviewer/flash/${gen}flash — the same drop directory the firmware images go in — and it does not need to be executable there, the plugin stages a runnable copy itself. Cards on the 9400/9500 generation use storcli instead and need nothing extra." 4 ;;
         storcli)   die "storcli is required to flash $chip, and it is not installed. Install the dkaser/unraid-storcli plugin from Community Applications." 4 ;;
         *)         die "no flash tool is known for $chip ($gen)" 4 ;;
     esac

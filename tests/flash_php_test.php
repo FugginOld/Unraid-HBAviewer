@@ -113,19 +113,28 @@ check('the reason field is escaped before it is printed', str_contains($jsSrc, '
 // caught by grep, not by re-reading the diff.
 check('the JS does not carry its own copy of the amber/green verdict colours',
     !str_contains($jsSrc, "'#d29922'") && !str_contains($jsSrc, "'#3fb950'"));
+// ...and neither does view.php, which DID until this was extended: it hardcoded
+// the green while delegating the amber, so "one rule, one home" was two homes and
+// the server-rendered Overview would have kept a green the rule had withdrawn.
+$viewSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/view.php');
+check('view.php does not carry its own copy of the verdict colours either',
+    !str_contains($viewSrc, '#d29922') && !str_contains($viewSrc, '#3fb950'));
 check('the JS reads the verdict colour instead of recomputing it', str_contains($jsSrc, 'v.color'));
 
-/* flash_hba.sh's "not installed" message tells the user which UI step to upload
-   the tool on — but the shell cannot see the UI, so renumbering the steps left
-   it pointing at the wrong one. The user read the stale number off a live page.
-   Pin the pair rather than the literal: whatever step the shell names must be
-   the step whose label is about the flash tool. */
+/* flash_hba.sh's "not installed" message tells the user where to put the tool.
+   It used to name tools/ and "upload it under Step 1" — a directory that is now
+   only the legacy fallback and an upload control that no longer exists anywhere,
+   and this pair-check pinned the stale STEP NUMBER, so it stayed green while the
+   sentence it guarded was wrong on the one page that writes to hardware.
+   Pin what actually has to agree: the directory the shell tells the user to copy
+   to must be the directory PHP reads images from, and the message must not send
+   them to an upload or to the legacy dir. */
 $shSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/flash_hba.sh');
-$shStep = preg_match('/upload it under Step (\d+)/', $shSrc, $sm) ? $sm[1] : null;
-$jsStep = preg_match('/Step (\d+) \x{2014} the flash tool for this card/u', $jsSrc, $jm) ? $jm[1] : null;
-check('the page has a step for the flash tool', $jsStep !== null);
-check('the shell names a step to upload on',    $shStep !== null);
-check('and they are the same step',             $shStep !== null && $shStep === $jsStep);
+$shMsg = preg_match('/^\s*sas2\|sas3\)\s*die "(.*)" 4 ;;/m', $shSrc, $sm) ? $sm[1] : '';
+check('the shell has a missing-tool message',      $shMsg !== '');
+check('it names the same drop dir PHP reads from', str_contains($shMsg, FLASH_DROP . '/'));
+check('it does not name the legacy tools dir',     !str_contains($shMsg, '/hbaviewer/tools/'));
+check('it does not send the user to an upload',    stripos($shMsg, 'upload') === false);
 
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

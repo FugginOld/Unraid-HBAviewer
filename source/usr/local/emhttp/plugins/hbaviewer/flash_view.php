@@ -137,9 +137,11 @@ if ($enableFlash) {
        a page that is not a tab, and `loaded` does not exist here. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
     /* Step 4 writes hardware, so it is greyed out and disabled while the array
-       runs. Steps 1 (read-only listing) and 2 (uploads to the plugin's own tools
-       dir) stay live on purpose — staging the image before the array goes down
-       is what keeps the outage short. `disabled` as well as pointer-events
+       runs. Steps 1-3 (which tool this chip needs, the read-only listing, and
+       picking an image out of the drop directory) stay live on purpose —
+       staging before the array goes down is what keeps the outage short. There
+       is no upload anywhere on this page; the user copies files into the drop
+       directory and Step 3 lists them. `disabled` as well as pointer-events
        because a pointer-only lock is still keyboard-reachable, which is a worse
        trap than an enabled button. Read once at render: stopping the array needs
        a page reload, same as the banner already says. */

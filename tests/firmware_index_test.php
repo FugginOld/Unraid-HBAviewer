@@ -269,13 +269,25 @@ $v = fw_evaluate(['board' => 'HBA 9405W-16i', 'firmware' => '20.00.00.00',
                   'rom_profile' => 'Mixed_TriMode'], $idx);
 check('weak-confidence board reports weak, not confirmed', ($v['confidence'] ?? '') === 'weak');
 
-// Amber is reserved for a terminal branch. On a non-terminal branch "latest" is
-// a floor, not a ceiling, so behind renders informational.
+// Colour is reserved for a terminal branch in BOTH directions. On a
+// non-terminal branch "latest" is a floor, not a ceiling: behind renders
+// informational, and current is not proof of current either -- green there was
+// unconditional, so the observed-floor boards (9500-8i, 9500-16i, 9400-8i) got a
+// hard tick from data the index's own comment says does not support one.
 check('behind on a terminal branch is amber',
       fw_verdict_color(['status' => 'behind', 'terminal' => true]) === '#d29922');
 check('behind on a non-terminal branch has no colour',
       fw_verdict_color(['status' => 'behind', 'terminal' => false]) === '');
-check('current is green', fw_verdict_color(['status' => 'current']) === '#3fb950');
+check('current on a terminal branch is green',
+      fw_verdict_color(['status' => 'current', 'terminal' => true]) === '#3fb950');
+check('current on a non-terminal branch has no colour',
+      fw_verdict_color(['status' => 'current', 'terminal' => false]) === '');
+// End to end, not just the helper: HBA 9500-16i is P28/terminal:false, and its
+// own observed-floor "latest" is what a matching card reports as current.
+$vc = fw_evaluate(['board' => 'HBA 9500-16i', 'firmware' => '28.00.00.00',
+                   'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('a real observed-floor board reads current with no colour',
+      $vc['status'] === 'current' && fw_verdict_color($vc) === '');
 
 /* Round-1 review (Important, I1): fw_evaluate()'s two-arg signature exists so
    a request evaluating N controllers reads the index once — but view.php's

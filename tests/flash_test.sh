@@ -68,8 +68,15 @@ res=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$STAGEDIR" \
 case "$res" in "$BOOTDIR"/*) bad "returned the /boot path" "$res — that path can never be executable" ;;
                           *) ok "resolved out of /boot into a runnable copy" ;; esac
 # Replacing the tool on /boot must take effect without a reboot.
+# find_flasher re-stages on [ "$src" -nt "$staged" ], and the rewrite below lands
+# in the same filesystem timestamp tick as the staging above often enough to fail
+# roughly one run in eight. Force the ORDER rather than hope for it: back-date the
+# staged copy ($res IS the staged path the call just returned) to the epoch, so
+# /boot is unambiguously newer. Do NOT "simplify" this back to a bare touch, and
+# do not date the source into the future instead -- a clock-skew guard that
+# depends on the clock is its own trap.
+touch -d '@0' "$res"
 printf '#!/bin/sh\necho replaced\n' > "$BOOTDIR/sas3flash"
-touch "$BOOTDIR/sas3flash"
 res2=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$STAGEDIR" \
        bash -c "source $LIB; find_flasher sas3")
 case "$(cat "$res2" 2>/dev/null)" in *replaced*) ok "a newer /boot copy is re-staged" ;;
@@ -109,25 +116,33 @@ code "unknown chip exit 3" 3 "$rc"; has "unknown chip msg" "unknown chip"
 # nothing caught it. This walks the actual chip list out of the firmware index
 # instead of a list somebody remembers to update.
 #
-# Two accepted outcomes per chip, and they are different answers: a family on
-# stdout, or exit 2 for a RAID-on-Chip part that no tool can flash. Exit 1 --
-# "this script has never heard of your card" -- is the bug.
+# Two outcomes, and they are different ANSWERS, so the chip decides which one is
+# right: a no_it_firmware key must exit 2 (nobody can flash it), every other
+# indexed chip must exit 0 with a family on stdout. Accepting either for every
+# chip made this blind to half the defect it exists to catch -- dropping the
+# MegaRAID parts from the RoC line routes them at a flasher as though an IT image
+# were something they could take, and the loop still passed. Exit 1 -- "this
+# script has never heard of your card" -- is always the bug.
 IDX="../source/usr/local/emhttp/plugins/hbaviewer/data/known-firmware.json"
 FN=$(sed -n '/^flasher_for_chip()/,/^}/p' "$FH")
 if [ -r "$IDX" ] && [ -n "$FN" ]; then
     # grep the chips out rather than parse JSON: no jq on Unraid, and the two
     # shapes we need ("chip": "X" under boards, and the no_it_firmware keys) are
     # both plain quoted SASnnnn tokens.
-    chips=$({ grep -oE '"chip"[[:space:]]*:[[:space:]]*"SAS[0-9]+"' "$IDX" | grep -oE 'SAS[0-9]+'
-              sed -n '/"no_it_firmware"/,/^  }/p' "$IDX" | grep -oE '"SAS[0-9]+"' | tr -d '"'; } | sort -u)
-    [ -n "$chips" ] || bad "index chip list" "found no chips in $IDX"
-    unmapped=""
-    for c in $chips; do
+    boards=$(grep -oE '"chip"[[:space:]]*:[[:space:]]*"SAS[0-9]+"' "$IDX" | grep -oE 'SAS[0-9]+' | sort -u)
+    roc=$(sed -n '/"no_it_firmware"/,/^  }/p' "$IDX" | grep -oE '"SAS[0-9]+"' | tr -d '"' | sort -u)
+    [ -n "$boards" ] && [ -n "$roc" ] || bad "index chip list" "found no chips in $IDX"
+    wrong=""
+    rocsp=" ${roc//$'\n'/ } "
+    for c in $(printf '%s\n%s\n' "$boards" "$roc" | sort -u); do
+        # A chip listed in both places is a RoC part first — that is the answer
+        # that refuses, and refusing is the safe direction.
+        case "$rocsp" in *" $c "*) want=2 ;; *) want=0 ;; esac
         bash -c "$FN"$'\n''flasher_for_chip "$1" >/dev/null' _ "$c"; rc=$?
-        [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || unmapped="$unmapped $c"
+        [ "$rc" -eq "$want" ] || wrong="$wrong $c(got $rc, want $want)"
     done
-    [ -z "$unmapped" ] && ok "every indexed chip maps to a flasher or a refusal" \
-                       || bad "unmapped chips" "no flasher family and no RoC refusal for:$unmapped"
+    [ -z "$wrong" ] && ok "every indexed chip maps to a flasher, every RoC part to a refusal" \
+                    || bad "wrong flasher answer" "flasher_for_chip gave the wrong exit for:$wrong"
 else
     bad "index reachable" "cannot read $IDX or extract flasher_for_chip"
 fi

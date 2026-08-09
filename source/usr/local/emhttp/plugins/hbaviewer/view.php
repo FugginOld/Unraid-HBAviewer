@@ -208,16 +208,21 @@ function lsi_controllers(array $data): array {
    with no explanation next to a version reads as a fault nobody can act on. */
 function fw_overview_clause(array $verdict): string {
     $s = $verdict['status'] ?? '';
-    if ($s === 'current') {
-        return ' <span style="color:#3fb950" title="Matches the newest IT firmware in the plugin&#39;s index">&#10003; current</span>';
-    }
     if ($s === 'ahead') {
         return ' <span class="lu-muted" title="Newer than the plugin&#39;s index — the index is stale, not this card">newer than index</span>';
     }
-    if ($s !== 'behind') return '';
+    if ($s !== 'current' && $s !== 'behind') return '';
+    // One rule, one home: fw_verdict_color() decides both colours, including the
+    // green. A hardcoded hex here meant a change to that rule reached the JSON
+    // endpoint and the flash page but left this server-rendered Overview green
+    // on a board the index only calls a floor. flash_php_test.php greps for the
+    // literals, so do not name one even in a comment.
     $colour = fw_verdict_color($verdict);
-    return ' <span' . ($colour !== '' ? ' style="color:' . $colour . '"' : ' class="lu-muted"')
-         . ' title="Newest IT firmware known for this board">&#9650; '
+    $span   = ' <span' . ($colour !== '' ? ' style="color:' . $colour . '"' : ' class="lu-muted"');
+    if ($s === 'current') {
+        return $span . ' title="Matches the newest IT firmware in the plugin&#39;s index">&#10003; current</span>';
+    }
+    return $span . ' title="Newest IT firmware known for this board">&#9650; '
          . htmlspecialchars((string) ($verdict['latest'] ?? '')) . ' known</span>';
 }
 

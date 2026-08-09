@@ -195,6 +195,18 @@ check('oem renders nothing',        fw_overview_clause(['status' => 'oem_out_of_
 check('current renders a clause', fw_overview_clause(['status' => 'current']) !== '');
 check('ahead renders a clause',   fw_overview_clause(['status' => 'ahead']) !== '');
 
+/* The colour rule has ONE home, fw_verdict_color(). This clause used to hardcode
+   the green, so making green conditional on a terminal branch reached the JSON
+   endpoint and the flash page and left this server-rendered Overview green. Both
+   directions, and the tick itself renders either way — it is the colour that is
+   withheld, not the clause. */
+check('current on a terminal branch is green here too',
+    str_contains(fw_overview_clause(['status' => 'current', 'terminal' => true]), 'color:#3fb950'));
+check('current on a non-terminal branch is not green here either',
+    !str_contains(fw_overview_clause(['status' => 'current', 'terminal' => false]), '#3fb950'));
+check('behind on a non-terminal branch is not amber here either',
+    !str_contains(fw_overview_clause(['status' => 'behind', 'latest' => '16.00.12.00']), '#d29922'));
+
 /* Round-1 review (Important, minor): 'latest' is the one field this clause
    prints, and it is board-derived, untrusted content per firmware_index.php's
    own docblock. Dropping the htmlspecialchars() call survives every other

@@ -102,32 +102,41 @@ check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fix
 # the directory names contain colons, which Windows cannot store — git would
 # receive a U+F03A lookalike and the lookup would silently miss on Linux.
 # c0 is x8 and c1 is x4 on purpose: the asymmetry catches one card's link state
-# being applied to every tile.
+# being applied to every tile. Same reasoning for subsystem_vendor: c0 has one
+# (a generic Broadcom 0x1000) and c1 has none, so BOTH directions of
+# hba_subvendor are pinned through the composer. Without a file there at all,
+# deleting the LSI_SUBVENDOR wiring outright left this suite green while gate 2
+# turned every controller oem_out_of_scope and the feature rendered nothing.
 SYSPCI=$(mktemp -d)
 SYSHOST=$(mktemp -d)
 SYSDEV=$(mktemp -d)
 SYSEXP=$(mktemp -d)
 SYSPHY=$(mktemp -d)
 trap 'rm -rf "$SYSPCI" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY"' EXIT
-for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
+for spec in "0000:c1:00.0 8 0x1000" "0000:65:00.0 4 -"; do
     set -- $spec
     mkdir -p "$SYSPCI/$1"
     printf '%s\n' "$2"          > "$SYSPCI/$1/current_link_width"
     printf '8.0 GT/s PCIe\n'    > "$SYSPCI/$1/current_link_speed"
     printf 'D0\n'               > "$SYSPCI/$1/power_state"
+    [ "$3" = - ] || printf '%s\n' "$3" > "$SYSPCI/$1/subsystem_vendor"
 done
 
-# ov_storcli assumes host N == controller N (see its own ponytail comment) and
-# now calls hba_topology "$1" -- unpinned, that globs the REAL machine's
-# /sys/class/sas_device and /sys/class/sas_expander, so this golden would read
-# "unknown" on a dev box and silently start reading "internal" on the very
-# 9305-24i box that motivated the feature, the day someone runs this suite
-# there. c0/host0: two direct-attached end_devices, no expander -> "internal".
-# c1/host1: nothing at all -> "unknown". Different verdicts on purpose: every
-# other golden in this file records the suppressing default, so without this
-# pair nothing anywhere exercises hba_topology's positive ("internal") path
-# end to end through the composer.
-mkdir -p "$SYSDEV/end_device-0:0" "$SYSDEV/end_device-0:1"
+# Topology, unpinned, would glob the REAL machine's /sys/class/sas_device and
+# /sys/class/sas_expander, so this golden would read "unknown" on a dev box and
+# silently start reading "internal" on the very 9305-24i box that motivated the
+# feature, the day someone runs this suite there.
+#
+# c0 is host7 on purpose, NOT host0: ov_storcli derives the host from the card's
+# own PCI device dir, and a fixture where the host number happened to equal the
+# controller index could not tell that derivation apart from the old
+# host-N-equals-controller-N guess. host7 has two direct-attached end_devices
+# and no expander -> "internal". c1 has no host under its PCI dir at all ->
+# "unknown", the fail-safe. Different verdicts on purpose: every other golden in
+# this file records the suppressing default, so without this pair nothing
+# anywhere exercises hba_topology's positive ("internal") path end to end
+# through the composer.
+mkdir -p "$SYSPCI/0000:c1:00.0/host7" "$SYSDEV/end_device-7:0" "$SYSDEV/end_device-7:1"
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null

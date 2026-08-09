@@ -33,10 +33,11 @@ fi
 # storcli overview: light `show` + `show temperature` (NOT `show all`, which does
 # a slow per-drive SMART scan). $2 to the parser is this controller's summed
 # sysfs PHY error count, for the glanceable health rollup.
-# ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
-# SAS correlation, this cheaper host index is only for the rollup.
+# ponytail: host N == controller N (holds for these HBAs) is used for the PHY
+# error rollup only -- the PHY tab uses exact SAS correlation, and topology (which
+# gates the firmware verdict) resolves its host from the card's own PCI dir below.
 ov_storcli() {   # $1 = controller index
-    local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip
+    local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip h hosts hnum
     for p in "${SYS_SAS_PHY:-/sys/class/sas_phy}"/phy-"${1}":*/; do
         [ -d "$p" ] || continue
         idx=$(basename "$p")
@@ -95,7 +96,15 @@ ov_storcli() {   # $1 = controller index
     # storcli's own output carries SubVendor Id, but read it from sysfs for both
     # backends so there is one source of truth and one thing the diagnostic
     # bundle has to capture. $dir is already resolved above from PCI Address.
-    LSI_TOPOLOGY=$(hba_topology "$1")
+    #
+    # Topology gates the multipath suppression -- a wrong answer there is a false
+    # BEHIND on a correctly configured card -- so it resolves this card's scsi
+    # host from $dir too, where the kernel publishes it, rather than from the
+    # host-N-equals-controller-N guess the rollup above can afford. Anything but
+    # exactly one host under the device reads "unknown", which suppresses.
+    hosts=(); [ -n "$dir" ] && for h in "$dir"/host*/; do [ -d "$h" ] && hosts+=("$h"); done
+    hnum=""; if [ "${#hosts[@]}" -eq 1 ]; then hnum=$(basename "${hosts[0]}"); hnum="${hnum#host}"; fi
+    LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
     LSI_SUBVENDOR=$([ -n "$dir" ] && hba_subvendor "$dir")
     export LSI_TOPOLOGY LSI_SUBVENDOR
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"

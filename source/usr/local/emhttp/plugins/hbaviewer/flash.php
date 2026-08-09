@@ -23,7 +23,6 @@ const FLASH_DIR     = '/tmp/hbav_flash';                              // job art
  * appdata would be present in every rehearsal and absent for every real flash.
  * /boot is always mounted and survives reboots. */
 const FLASH_DROP    = '/boot/config/plugins/hbaviewer/flash';
-const FLASH_TOOLS   = '/boot/config/plugins/hbaviewer/tools';        // legacy drop dir, still read
 const FLASH_VARINI  = '/var/local/emhttp/var.ini';                   // Unraid array state
 const FLASH_SCRIPTS = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
@@ -109,20 +108,15 @@ if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disable
    and this lists them. */
 if ($action === 'dropfiles') {
     header('Content-Type: application/json');
-    $out = ['dir' => FLASH_DROP, 'images' => [], 'tools' => []];
+    $out = ['dir' => FLASH_DROP, 'images' => []];
     foreach (glob(FLASH_DROP . '/*') ?: [] as $f) {
         if (!is_file($f)) continue;
         $base = basename($f);
-        if (in_array(strtolower($base), ['sas2flash', 'sas3flash'], true)) {
-            $out['tools'][] = $base;
-            continue;
-        }
         $ext = strtolower((string) pathinfo($base, PATHINFO_EXTENSION));
         if (in_array($ext, ['bin', 'rom', 'fw'], true)) {
             $out['images'][] = ['name' => $base, 'size' => (int) filesize($f)];
         }
     }
-    sort($out['tools']);
     usort($out['images'], fn($a, $b) => strcmp($a['name'], $b['name']));
     echo json_encode($out);
     exit;
@@ -163,7 +157,10 @@ if ($action === 'flash') {
     $chip   = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? '');
     $ctl    = (string) ($_POST['ctl'] ?? '');
     $fwName  = flash_safe_name((string) ($_POST['firmware'] ?? ''), ['bin', 'rom', 'fw']);
-    $biosNm  = ($_POST['bios'] ?? '') !== '' ? flash_safe_name((string) $_POST['bios'], ['rom', 'bin']) : null;
+    // Same extensions as the firmware select: the page builds BOTH dropdowns from
+    // one listing, so a .fw offered as BIOS was silently dropped here and the
+    // flash ran without the BIOS the user picked.
+    $biosNm  = ($_POST['bios'] ?? '') !== '' ? flash_safe_name((string) $_POST['bios'], ['bin', 'rom', 'fw']) : null;
     // Images live where the user dropped them, not where an upload put them.
     $fw     = $fwName !== null ? FLASH_DROP . '/' . $fwName : '';
     $lock   = FLASH_DIR . '/flash.lock';

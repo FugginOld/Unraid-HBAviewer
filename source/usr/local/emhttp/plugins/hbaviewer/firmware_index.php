@@ -213,12 +213,17 @@ function fw_evaluate(array $ctl, ?array $idx): array {
     return ['status' => 'behind', 'reason' => null] + $meta;
 }
 
-/* Amber is reserved for a TERMINAL branch. On a non-terminal branch the known
-   version is a floor, not a ceiling, so "behind" is informational rather than
-   something to act on. Hexes match chrome.css's status palette. */
+/* Colour is reserved for a TERMINAL branch, in BOTH directions. On a
+   non-terminal branch the known version is a floor, not a ceiling: "behind" is
+   informational rather than something to act on, and "current" is not proof of
+   current — the index's own observed-floor comment says so, and the 9500-8i,
+   9500-16i (P28) and 9400-8i (P24) all sit on such a branch. A hard green tick
+   there overstates data the index declines to guarantee, and the Overview has
+   no confidence line to carry the caveat. Hexes match chrome.css's palette. */
 function fw_verdict_color(array $v): string {
     $s = $v['status'] ?? '';
+    if (empty($v['terminal'])) return '';
     if ($s === 'current') return '#3fb950';
-    if ($s === 'behind' && !empty($v['terminal'])) return '#d29922';
+    if ($s === 'behind')   return '#d29922';
     return '';
 }
