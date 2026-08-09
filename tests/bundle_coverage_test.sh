@@ -56,5 +56,29 @@ else
     bad "sas_device class not dumped" "lsblk's TRAN is the bus; target_port_protocols in sas_device is the per-drive SAS-vs-SATA truth, and sas_end_device does not carry it"
 fi
 
+
+# subsystem_vendor decides whether a firmware verdict is given at all: 0x1000 is
+# a generic Broadcom board and anything else is an OEM rebrand, where reaching a
+# generic image is a crossflash rather than an upgrade. A bundle that omits it
+# cannot answer why a reporter's card shows no verdict -- which is exactly the
+# class of question this guard exists to keep answerable.
+if grep -E 'for a in .*subsystem_vendor' "$BUNDLE" >/dev/null; then
+    ok "bundle captures subsystem_vendor"
+else
+    bad "bundle missing subsystem_vendor" "get_hba_info.sh reads it to gate the firmware verdict, but pci.txt does not capture it"
+fi
+
+# hba_topology() in lib.sh checks /sys/class/sas_expander/expander-* FIRST --
+# a DIFFERENT sysfs class from /sys/class/sas_device/expander-* (already
+# captured above as sas_expander.txt, despite the confusingly similar name).
+# An expander on this class is one of the two signals that decide "internal"
+# vs "unknown", which in turn decides whether a firmware verdict is given at
+# all. A bundle that omits this class cannot show why a card got that verdict.
+if grep -E 'dump_attrs 03-sysfs/[A-Za-z_]+\.txt +/sys/class/sas_expander/expander-\*' "$BUNDLE" >/dev/null; then
+    ok "sas_expander class (the topology gate) is dumped"
+else
+    bad "sas_expander class not dumped" "hba_topology() reads /sys/class/sas_expander/expander-* first; the bundle only captured /sys/class/sas_device/expander-*, a different class"
+fi
+
 echo
 [ $fail -eq 0 ] && { echo "bundle-coverage: all pass"; exit 0; } || { echo "bundle-coverage: FAILURES"; exit 1; }
