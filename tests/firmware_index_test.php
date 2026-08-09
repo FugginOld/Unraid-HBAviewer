@@ -104,5 +104,90 @@ check('the unverified_chips typo block is gone', !isset($idx['unverified_chips']
 check('SAS9300-8i carries its SATA controller-reset note',
       str_contains((string) ($idx['boards']['SAS9300-8i']['notes'] ?? ''), 'controller-reset'));
 
+require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/firmware_index.php';
+
+// Both board-naming conventions must collapse to one key. SAS3 and earlier
+// report "SAS9305-24i"; SAS3.5 reports "HBA 9400-16i".
+check('normalize strips the SAS prefix',  fw_normalize('SAS9305-24i') === '930524i');
+check('normalize strips the HBA prefix',  fw_normalize('HBA 9400-16i') === '940016i');
+check('normalize is case-insensitive',    fw_normalize('sas9305-24i') === fw_normalize('SAS9305-24i'));
+
+check('compare equal',   fw_compare('16.00.12.00', '16.00.12.00') === 0);
+check('compare older',   fw_compare('15.00.00.00', '16.00.12.00') < 0);
+check('compare newer',   fw_compare('17.00.00.00', '16.00.12.00') > 0);
+// A short version must not sort above a long one: 16 is 16.0.0.0, not "more".
+check('compare pads the shorter side', fw_compare('16', '16.00.12.00') < 0);
+// Leading zeros are decimal, not octal, and "00" must equal 0.
+check('compare treats 00 as zero', fw_compare('16.00.12.00', '16.0.12.0') === 0);
+
+$idx = fw_load();
+check('index loads', is_array($idx));
+
+// The card from the 2026-08-08 bundle. This is the worked example in the spec
+// and the case the whole feature exists for.
+$reporter = [
+    'board' => 'SAS9305-24i', 'chip' => 'SAS3224', 'firmware' => '15.00.00.00',
+    'subvendor_id' => '0x1000', 'topology' => 'internal',
+];
+$v = fw_evaluate($reporter, $idx);
+check('reporter 9305-24i is behind',        $v['status'] === 'behind');
+check('reporter names the latest version',  ($v['latest'] ?? '') === '16.00.12.00');
+check('reporter branch is terminal',        ($v['terminal'] ?? null) === true);
+check('reporter confidence is confirmed',   ($v['confidence'] ?? '') === 'confirmed');
+check('reporter carries the board note',    str_contains((string) ($v['note'] ?? ''), 'NOT interchangeable'));
+
+$v = fw_evaluate(['board' => 'SAS9305-24i', 'firmware' => '16.00.12.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('matching version is current', $v['status'] === 'current');
+
+$v = fw_evaluate(['board' => 'SAS9305-24i', 'firmware' => '17.00.00.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('newer than index is ahead, not behind', $v['status'] === 'ahead');
+
+// THE gate that matters. An M1015 or H310 reaching the generic image is a
+// crossflash, not an upgrade, and telling someone otherwise does real harm.
+$v = fw_evaluate(['board' => 'SAS9211-8i', 'firmware' => '20.00.00.00',
+                  'subvendor_id' => '0x1014', 'topology' => 'internal'], $idx);
+check('OEM subvendor is out of scope', $v['status'] === 'oem_out_of_scope');
+check('OEM reason says crossflash',    str_contains((string) $v['reason'], 'crossflash'));
+
+// The multipath suppression, which is why topology detection had to exist.
+$v = fw_evaluate(['topology' => 'unknown'] + $reporter, $idx);
+check('affected board with unknown topology is suppressed', $v['status'] === 'suppressed');
+check('suppressed still shows the detected version', ($v['detected'] ?? '') === '15.00.00.00');
+check('suppressed carries no verdict',   !isset($v['latest']));
+
+// A board with no multipath track compares regardless of topology.
+$v = fw_evaluate(['board' => 'SAS9201-16i', 'firmware' => '19.00.00.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'unknown'], $idx);
+check('unaffected board compares despite unknown topology', $v['status'] === 'behind');
+
+// RAID-on-Chip: no IT firmware exists at any version. Distinct from a failed
+// lookup, because the answer is "never", not "not yet known".
+$v = fw_evaluate(['board' => 'MegaRAID 9361-8i', 'chip' => 'SAS3108',
+                  'firmware' => '4.00.00.00', 'subvendor_id' => '0x1000'], $idx);
+check('RAID-on-Chip reports no_it_firmware', $v['status'] === 'no_it_firmware');
+
+// Profile-aware board with no resolved profile: same version ships in
+// incompatible capability profiles, so the number alone means little.
+$v = fw_evaluate(['board' => 'HBA 9400-16i', 'firmware' => '24.00.00.00',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('unresolved ROM profile is suppressed', $v['status'] === 'suppressed');
+
+$v = fw_evaluate(['board' => 'SAS9999-99i', 'firmware' => '1.0.0.0',
+                  'subvendor_id' => '0x1000', 'topology' => 'internal'], $idx);
+check('unindexed board is unknown', $v['status'] === 'unknown');
+
+$v = fw_evaluate($reporter, null);
+check('no index at all is unknown', $v['status'] === 'unknown');
+
+// Amber is reserved for a terminal branch. On a non-terminal branch "latest" is
+// a floor, not a ceiling, so behind renders informational.
+check('behind on a terminal branch is amber',
+      fw_verdict_color(['status' => 'behind', 'terminal' => true]) === '#d29922');
+check('behind on a non-terminal branch has no colour',
+      fw_verdict_color(['status' => 'behind', 'terminal' => false]) === '');
+check('current is green', fw_verdict_color(['status' => 'current']) === '#3fb950');
+
 echo $fails === 0 ? "firmware_index: all pass\n" : "firmware_index: FAILURES\n";
 exit($fails === 0 ? 0 : 1);
