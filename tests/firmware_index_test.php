@@ -24,6 +24,20 @@ check('schema_version is 1', ($idx['schema_version'] ?? null) === 1);
 check('updated is a YYYY-MM-DD date', (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) ($idx['updated'] ?? '')));
 check('boards is a non-empty object', !empty($idx['boards']) && is_array($idx['boards']));
 
+// A deleted mandatory field is worse than a wrong value: it_capable missing
+// reads as falsy downstream and reports an IT-capable board as RAID-on-Chip;
+// branch missing drops the board out of the referential-integrity check below
+// instead of failing it. Presence, not truthiness -- a missing key must fail.
+$MANDATORY = ['chip', 'generation', 'backend', 'it_capable', 'branch', 'confidence'];
+$missingField = [];
+foreach ($idx['boards'] as $name => $b) {
+    foreach ($MANDATORY as $field) {
+        if (!array_key_exists($field, $b)) $missingField[] = "$name.$field";
+    }
+}
+check('every board has its mandatory fields', $missingField === []);
+if ($missingField) echo "      " . implode(', ', $missingField) . "\n";
+
 // An IT-capable board with no latest_it has nothing to compare against, so it
 // would silently return 'unknown' forever rather than failing loudly here.
 $noVersion = [];
@@ -41,6 +55,35 @@ foreach ($idx['boards'] as $name => $b) {
 }
 check('every board branch exists in branches', $badBranch === []);
 if ($badBranch) echo "      " . implode(', ', $badBranch) . "\n";
+
+// terminal drives whether an amber (below-floor) verdict or a red (behind a
+// terminal branch) one is shown; a missing/non-bool value silently reads as
+// false and downgrades every board on that branch.
+$badTerminal = [];
+foreach ($idx['branches'] as $name => $br) {
+    if ($name === '_comment') continue;
+    if (!is_bool($br['terminal'] ?? null)) $badTerminal[] = $name;
+}
+check('every branch has a boolean terminal', $badTerminal === []);
+if ($badTerminal) echo "      " . implode(', ', $badTerminal) . "\n";
+
+// The two structures a version-comparison lookup treats as mandatory context,
+// per the brief's own interface -- a mutant can delete either wholesale and
+// every board-level check above still passes.
+check('no_it_firmware is present', !empty($idx['no_it_firmware']));
+check('multipath_track.affected_boards all exist as boards',
+      array_diff($idx['multipath_track']['affected_boards'] ?? ['MISSING'], array_keys($idx['boards'])) === []);
+
+// A chip one keystroke away from both lists is simultaneously "flash it" and
+// "no IT firmware exists at any version" -- a consumer keying on chip gets a
+// confident, wrong answer depending on which list it checks first.
+$itChips = [];
+foreach ($idx['boards'] as $b) {
+    if (!empty($b['it_capable']) && !empty($b['chip'])) $itChips[] = $b['chip'];
+}
+$dualRole = array_intersect($itChips, array_keys($idx['no_it_firmware'] ?? []));
+check('no chip is both IT-capable and RAID-on-Chip', $dualRole === []);
+if ($dualRole) echo "      " . implode(', ', $dualRole) . "\n";
 
 $tiers = ['confirmed', 'observed-floor', 'weak'];
 $badTier = [];

@@ -1,5 +1,5 @@
 {
-  "_comment": "Known-latest IT firmware index for HBAviewer. Keyed by BOARD, not chipset -- one chip maps to multiple boards with incompatible images. 'confidence: verify' means the version is unconfirmed and must be checked against Broadcom before driving any update-available logic. 'it_capable: false' means the part is RAID-on-Chip and has no IT firmware at any version; surface that as a distinct state, not as a failed lookup.",
+  "_comment": "Known-latest IT firmware index for HBAviewer. Keyed by BOARD, not chipset -- one chip maps to multiple boards with incompatible images. 'confidence' is VERSION confidence -- how sure latest_it is the newest release -- not confidence about the chip's role; a board can be confirmed on version while its it_capable inference is only noted separately. Three tiers: 'confirmed' = version verified and its branch is terminal; 'observed-floor' = seen on a real card or community-reported, so it is a floor -- at that version is not proof of current, below it is stale; 'weak' = a single questionable source, display only, never drive an update-available claim from it alone. 'it_capable: false' means the part is RAID-on-Chip and has no IT firmware at any version; surface that as a distinct state, not as a failed lookup.",
   "schema_version": 1,
   "updated": "2026-08-08",
   "boards": {
