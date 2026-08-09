@@ -111,6 +111,26 @@ if ($action === 'upload') {
     exit;
 }
 
+/* Which flash tool does this chip need, and is it here? Read-only, no
+   controller index, touches no hardware. The firmware page asks BEFORE offering
+   Verify, so a user learns which tool to supply instead of discovering it from
+   a failure — Step 1 used to require a tool that Step 2 was where you uploaded.
+   Delegates to flash_hba.sh so the chip->tool mapping has exactly one home. */
+if ($action === 'toolinfo') {
+    header('Content-Type: application/json');
+    $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');
+    if ($chip === '') { echo json_encode(['status' => 'unknown']); exit; }
+    $raw = (string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh')
+         . ' tool ' . escapeshellarg($chip) . ' 2>/dev/null');
+    $out = ['family' => '', 'name' => '', 'path' => '', 'status' => 'unknown'];
+    foreach (explode("\n", $raw) as $line) {
+        [$k, $v] = array_pad(explode('=', $line, 2), 2, '');
+        if (array_key_exists($k, $out)) $out[$k] = $v;
+    }
+    echo json_encode($out);
+    exit;
+}
+
 if ($action === 'listall') {
     header('Content-Type: text/plain; charset=utf-8');
     $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');

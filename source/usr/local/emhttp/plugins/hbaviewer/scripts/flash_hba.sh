@@ -54,6 +54,29 @@ flasher_for_chip() {
 
 mode="$1"; chip="$2"; ctl="$3"; fw="$4"; bios="$5"
 
+# ── tool mode: which flasher does this chip need, and is it here? ─────────────
+# Read-only, no controller index, never touches hardware. Exists so the firmware
+# page can TELL the user which tool to supply before they need it, instead of
+# finding out from a failure after pressing Verify. It answers from the same
+# flasher_for_chip and find_* that the real modes use — the page must never
+# carry a second copy of the mapping, which is how SAS32xx went unflashable
+# without anyone noticing.
+#
+# Always exits 0 and always prints all four keys: "no tool for this chip" is an
+# answer the page has to render, not an error it should swallow.
+if [ "$mode" = tool ]; then
+    t=$(flasher_for_chip "$chip"); rc=$?
+    case $rc in
+        0) if [ "$t" = storcli ]; then name=storcli; path=$(find_storcli)
+           else name="${t}flash"; path=$(find_flasher "$t"); fi
+           if [ -n "$path" ]; then st=found; else st=missing; fi
+           printf 'family=%s\nname=%s\npath=%s\nstatus=%s\n' "$t" "$name" "$path" "$st" ;;
+        2) printf 'family=\nname=\npath=\nstatus=roc\n' ;;
+        *) printf 'family=\nname=\npath=\nstatus=unknown\n' ;;
+    esac
+    exit 0
+fi
+
 [ "$mode" = list ] || [ "$mode" = flash ] || die "unknown mode: '$mode'" 2
 case "$ctl" in ''|*[!0-9]*) die "controller index must be an integer: '$ctl'" 2 ;; esac
 

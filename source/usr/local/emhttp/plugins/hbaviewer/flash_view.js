@@ -21,25 +21,73 @@
               return '<div class="lu-fc lu-card first" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
                 + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
                 + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
-                + '<div class="lu-fstep"><label class="step">Step 1 — verify the flash tool sees THIS card (controller /c'+i+' only)</label>'
+                /* Step 1 is the TOOL, not Verify. Verify needs the flash tool, and
+                   the tool upload used to live in Step 2 — so Step 1 could not be
+                   completed until part of Step 2 had been, and the only way to
+                   discover which tool you needed was to press Verify and read the
+                   failure. The answer is knowable from the chip, so the page asks
+                   flash.php for it and says so up front. Filled in async by
+                   luFlashTool(); rendered empty so the card paints immediately. */
+                + '<div class="lu-fstep"><label class="step">Step 1 — the flash tool for this card</label>'
+                +   '<div id="flash-tool-info-'+i+'" class="lu-muted" style="font-size:12px">Checking…</div></div>'
+                + '<div class="lu-fstep"><label class="step">Step 2 — verify the tool sees THIS card (controller /c'+i+' only)</label>'
                 +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Verify /c'+i+'</button>'
                 +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
-                + '<div class="lu-fstep"><label class="step">Step 2 — upload the model-correct image (+ optional BIOS / tool)</label>'
+                + '<div class="lu-fstep"><label class="step">Step 3 — upload the model-correct image (+ optional BIOS)</label>'
                 +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
-                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"><br><br>'
-                +   'Flash tool if not installed (sas2flash/sas3flash): <input type="file" id="flash-tool-'+i+'"> '
+                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"> '
                 +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
                 +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
                 + lockNote
-                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 3 — confirm &amp; flash</label>'
+                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
                 +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
                 +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"'+lockAttr+'> '
                 +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')"'+lockAttr+'>Flash /c'+i+'</button></div>'
                 + '<pre id="flash-log-'+i+'" style="display:none"></pre>'
                 + '</div>';
             }).join('');
+            // Cards are in the DOM; now fill each Step 1. One request per card
+            // rather than one for the page: a mixed box (a 9300 and a 9400) needs
+            // a different answer per controller, which is the case a single
+            // page-level "pick your tool" control could never get right.
+            ctls.forEach(function(c,i){ if (!c.error) luFlashTool(i); });
           })
           .catch(function(){ el.innerHTML = '<div class="lu-error">Failed to load controllers.</div>'; });
+    };
+
+    /* Fill Step 1 for one card: which tool its chip needs, whether it is here,
+       and the upload only when it is not. Never renders a Browse button for a
+       tool that is already present -- the commonest case (9400/9500 on storcli)
+       should read as "nothing to do", not as another form to fill in. */
+    window.luFlashTool = function (i) {
+        var box = document.getElementById('flash-tool-info-'+i);
+        if (!box) return;
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'toolinfo', chip:flashChip(i), csrf_token:flashCsrf})})
+          .then(function(r){ return r.json(); })
+          .then(function(t){
+            if (t.status === 'roc') {
+              box.innerHTML = '<span style="color:var(--crit-text)">This is a RAID-on-Chip (MegaRAID) part. '
+                + 'No IT firmware exists for it at any version and it cannot be crossflashed — nothing here can flash it.</span>';
+              return;
+            }
+            if (t.status === 'unknown' || !t.name) {
+              box.innerHTML = '<span style="color:var(--warn-text)">No flash tool is known for this chip. '
+                + 'Please open an issue with a diagnostic bundle rather than guessing at a tool.</span>';
+              return;
+            }
+            if (t.status === 'found') {
+              box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong> — found at <code>'+fesc(t.path)+'</code>. '
+                + 'Nothing to do here; continue to Step 2.';
+              return;
+            }
+            box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong>, which is <strong>not installed</strong>. '
+              + 'Broadcom does not permit bundling it.<br><br>'
+              + 'Upload <code>'+fesc(t.name)+'</code>: <input type="file" id="flash-tool-'+i+'"> '
+              + '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button><br><br>'
+              + '<span class="lu-muted">The file must be named exactly <code>'+fesc(t.name)+'</code>. '
+              + 'You can also place it at <code>/boot/config/plugins/hbaviewer/tools/'+fesc(t.name)+'</code> and <code>chmod +x</code> it.</span>';
+          })
+          .catch(function(){ box.textContent = 'Could not determine the flash tool for this card.'; });
     };
 
     window.luFlashList = function (i) {

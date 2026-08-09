@@ -13,6 +13,37 @@ bad() { echo "FAIL  $1 -- $2"; fail=1; }
 has()  { case "$out" in *"$2"*) ok "$1" ;; *) bad "$1" "want '$2' in: $out" ;; esac; }
 code() { [ "$2" = "$3" ] && ok "$1" || bad "$1" "want exit $2 got $3"; }
 
+# ── tool mode: what the firmware page asks BEFORE offering Verify ────────────
+# Step 1 used to be "verify the flash tool sees this card" while the tool upload
+# lived in Step 2 — you could not finish step one without doing part of step two,
+# and the only way to learn which tool you needed was to press the button and
+# read the failure. The page now asks this first. It must always exit 0 and
+# always print all four keys: "no tool for this chip" is an answer to render,
+# not an error to swallow, and a missing key renders as undefined on the page.
+tool() { env -u FLASHER -u STORCLI bash "$FH" tool "$1" 2>&1; }
+keys() { printf '%s' "$1" | grep -cE '^(family|name|path|status)='; }
+
+out=$(tool SAS3008); rc=$?
+code "tool mode exits 0"        0 "$rc"
+[ "$(keys "$out")" = 4 ] && ok "tool mode prints all four keys" || bad "tool keys" "want 4, got: $out"
+has "9300 wants sas3flash"      "name=sas3flash"
+has "9300 reports it missing"   "status=missing"
+out=$(tool SAS3224); has "9305 wants sas3flash too" "name=sas3flash"
+out=$(tool SAS3416); has "9400 wants storcli"       "name=storcli"
+out=$(tool SAS3108); has "RoC has no tool"          "status=roc"
+out=$(tool SAS9999); has "unknown chip has no tool" "status=unknown"
+
+# Found: the page renders "nothing to do" off this, so the path must come back.
+out=$(FLASHER="$STUB" bash "$FH" tool SAS3008 2>&1)
+has "resolved tool reports found" "status=found"
+has "resolved tool reports path"  "path=$STUB"
+
+# No trailing whitespace on any value — the page parses these as key=value and a
+# stray space becomes part of a rendered path. This bit once already.
+out=$(tool SAS3008)
+case "$out" in *' '$'\n'*|*' ') bad "tool output has trailing space" "$(printf '%s' "$out" | cat -A)" ;;
+                            *) ok "tool output has no trailing whitespace" ;; esac
+
 # ── list mode: read-only, scoped to the referenced controller only ───────────
 out=$(FLASHER="$STUB" bash "$FH" list SAS2008 0 2>&1); has "list sas2 scoped" "FLASHER -c 0 -list"
 out=$(FLASHER="$STUB" bash "$FH" list SAS3008 1 2>&1); has "list sas3 scoped" "FLASHER -c 1 -list"
