@@ -16,7 +16,7 @@
 - **No network access at runtime.** The index is read from disk. Nothing fetches.
 - **PHP 8.2** — the version Unraid 7.x ships. Must pass `phpstan --level=3`.
 - **ShellCheck at `-S warning`** with the repo's four exclusions: `SC1090,SC2034,SC2207,SC1007`.
-- **House pattern for PHP modules:** pure functions at the top, `if (PHP_SAPI === 'cli') return;` in the middle, HTTP dispatch below. This is what lets a test `require` the file without triggering dispatch.
+- **House pattern for PHP modules:** pure functions at the top, then `if (PHP_SAPI === 'cli') return;`, then the HTTP dispatch. That guard is what lets a test `require` an endpoint without triggering its dispatch — so it belongs in a file that HAS a dispatch. A pure library gets the functions and no guard; a trailing guard with nothing after it is a no-op.
 - **A new PHP test must be registered in BOTH invocation lines of `tests/run_php.sh`** — the local-`php` line and the Docker fallback. Missing the second is how a test silently never runs in CI.
 - **A new shell test must be added in THREE places in `tests/run.sh`** — the `bash <name>.sh; <name>_fail=$?` invocation, and the `[ $<name>_fail -eq 0 ]` clause in the final gate at line 233. Missing the gate clause means the test can fail while the suite reports `--- all pass ---`.
 - **Never run `UPDATE=1 bash run.sh`.** It rewrites every golden. Regenerate individual goldens with the explicit commands given in Task 2.
@@ -289,7 +289,7 @@ Expected: `FAIL  hba_topology/hba_subvendor not found in ../source/.../lib.sh`, 
 
 - [ ] **Step 3: Move the two shared sysfs helpers into lib.sh and add the two new functions**
 
-Cut two blocks verbatim from `scripts/get_hba_health.sh` — `_pci_dir_of_host` with its comment (lines 115-128) and `_first_sas_host` with its comment (lines 154-162) — append both to `scripts/lib.sh`, then add the two new functions after them. `get_hba_health.sh` sources `lib.sh`, so it keeps working; `health_sh_test.sh` extracts `_pci_dir_of_host` and must be repointed (Step 4), but does not extract `_first_sas_host`, so nothing else changes:
+Cut two blocks verbatim from `scripts/get_hba_health.sh` — `_pci_dir_of_host` with its comment (lines 115-128) and `_first_sas_host` with its comment (lines 163-173) — append both to `scripts/lib.sh`, then add the two new functions after them. `get_hba_health.sh` sources `lib.sh`, so it keeps working; `health_sh_test.sh` extracts `_pci_dir_of_host` and must be repointed (Step 4), but does not extract `_first_sas_host`, so nothing else changes:
 
 ```bash
 # The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
@@ -369,7 +369,7 @@ hba_subvendor() {   # $1 = sysfs PCI device dir
 }
 ```
 
-Then **delete** both originals and their comments from `get_hba_health.sh`: `_pci_dir_of_host` (lines 115-128) and `_first_sas_host` (lines 154-162). That script already sources `lib.sh`, so both calls keep resolving. Verify no copy remains: `grep -c '^_first_sas_host()\|^_pci_dir_of_host()' scripts/get_hba_health.sh` must print `0`.
+Then **delete** both originals and their comments from `get_hba_health.sh`: `_pci_dir_of_host` (lines 115-128) and `_first_sas_host` (lines 163-173). That script already sources `lib.sh`, so both calls keep resolving. Verify no copy remains: `grep -c '^_first_sas_host()\|^_pci_dir_of_host()' scripts/get_hba_health.sh` must print `0`.
 
 - [ ] **Step 4: Point health_sh_test.sh at the new home**
 
