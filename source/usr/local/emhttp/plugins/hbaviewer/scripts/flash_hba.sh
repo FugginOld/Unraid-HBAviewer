@@ -66,7 +66,18 @@ esac
 
 # Resolve the tool for this generation (storcli reuses the existing seam).
 if [ "$gen" = storcli ]; then tool=$(find_storcli); else tool=$(find_flasher "$gen"); fi
-[ -n "$tool" ] || die "flash tool for $chip ($gen) not found — install it or upload it in Settings" 4
+# Name the BINARY, not the family. "flash tool for SAS3008 (sas3) not found" sent
+# a maintainer looking for an inconsistency between two of his own boxes: one has
+# 9400s, which flash via storcli and never want sas3flash at all, so the same
+# plugin asked for a tool on one machine and not the other with no way to see
+# why. The chip decides the tool; say which tool, and say where it looked.
+if [ -z "$tool" ]; then
+    case "$gen" in
+        sas2|sas3) die "${gen}flash is required to flash $chip, and it is not installed. Broadcom does not permit bundling it. Put it in /boot/config/plugins/hbaviewer/tools/${gen}flash (or upload it under Step 2), and make sure it is executable. Cards on the 9400/9500 generation use storcli instead and need nothing extra." 4 ;;
+        storcli)   die "storcli is required to flash $chip, and it is not installed. Install the dkaser/unraid-storcli plugin from Community Applications." 4 ;;
+        *)         die "no flash tool is known for $chip ($gen)" 4 ;;
+    esac
+fi
 
 if [ "$mode" = list ]; then
     # Scope to THE referenced controller (not -listall / show-all) so the operator
