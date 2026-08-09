@@ -189,8 +189,8 @@ seen."
 ### Task 2: The composer collects topology and subvendor_id
 
 **Files:**
-- Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh` (add `_pci_dir_of_host`, `hba_topology`, `hba_subvendor`)
-- Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_health.sh:121-128` (remove the moved `_pci_dir_of_host`)
+- Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh` (add `_pci_dir_of_host`, `_first_sas_host`, `hba_topology`, `hba_subvendor`)
+- Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_health.sh` (remove the two moved functions)
 - Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh` (both backends export the two vars)
 - Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/hba.sh` (emit the two fields)
 - Modify: `source/usr/local/emhttp/plugins/hbaviewer/scripts/parse/storcli_overview.sh` (emit the two fields)
@@ -287,9 +287,9 @@ bash tests/topology_test.sh
 
 Expected: `FAIL  hba_topology/hba_subvendor not found in ../source/.../lib.sh`, exit 1.
 
-- [ ] **Step 3: Move `_pci_dir_of_host` into lib.sh and add the two new functions**
+- [ ] **Step 3: Move the two shared sysfs helpers into lib.sh and add the two new functions**
 
-Cut this block verbatim from `scripts/get_hba_health.sh` (lines 115-128, the comment and the function) and append it to `scripts/lib.sh`, then add the two new functions after it:
+Cut two blocks verbatim from `scripts/get_hba_health.sh` — `_pci_dir_of_host` with its comment (lines 115-128) and `_first_sas_host` with its comment (lines 154-162) — append both to `scripts/lib.sh`, then add the two new functions after them. `get_hba_health.sh` sources `lib.sh`, so it keeps working; `health_sh_test.sh` extracts `_pci_dir_of_host` and must be repointed (Step 4), but does not extract `_first_sas_host`, so nothing else changes:
 
 ```bash
 # The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
@@ -306,6 +306,20 @@ _pci_dir_of_host() {   # $1 = scsi host number
     while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
         [ -r "$d/current_link_width" ] && { printf '%s' "$d"; return 0; }
         d=$(dirname "$d")
+    done
+}
+
+# First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
+# hba_personalities below, but keeping the host NUMBER. The bundled lsiutil
+# binary only ever addresses one controller.
+# Lives here rather than in get_hba_health.sh because the overview composer now
+# needs the same lookup to reach this card's topology and subsystem_vendor.
+_first_sas_host() {
+    local h
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        case "$(cat "${h}proc_name" 2>/dev/null)" in
+            mpt3sas|mpt2sas|mptsas) basename "$h" | sed 's/^host//'; return ;;
+        esac
     done
 }
 
@@ -355,7 +369,7 @@ hba_subvendor() {   # $1 = sysfs PCI device dir
 }
 ```
 
-Then **delete** the original `_pci_dir_of_host` and its comment from `get_hba_health.sh` (lines 115-128). That script already sources `lib.sh`, so it keeps working.
+Then **delete** both originals and their comments from `get_hba_health.sh`: `_pci_dir_of_host` (lines 115-128) and `_first_sas_host` (lines 154-162). That script already sources `lib.sh`, so both calls keep resolving. Verify no copy remains: `grep -c '^_first_sas_host()\|^_pci_dir_of_host()' scripts/get_hba_health.sh` must print `0`.
 
 - [ ] **Step 4: Point health_sh_test.sh at the new home**
 
@@ -452,12 +466,7 @@ In `ov_lsiutil()`, immediately before the final `bash "$DIR/parse/hba.sh" ...` l
     # lsiutil reports no PCI address at all, so the card is reached through its
     # scsi_host — the same walk issue #14 added for the PCIe link maximum.
     local hnum pdir
-    for hnum in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
-        case "$(cat "${hnum}proc_name" 2>/dev/null)" in
-            mpt3sas|mpt2sas|mptsas) hnum=$(basename "$hnum" | sed 's/^host//'); break ;;
-            *) hnum="" ;;
-        esac
-    done
+    hnum=$(_first_sas_host)
     pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
     LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
     LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
@@ -560,9 +569,12 @@ wrong verdict there tells someone to do something materially riskier than what
 is on screen, so an unreadable attribute yields empty and suppresses rather than
 defaulting to something that looks generic.
 
-_pci_dir_of_host moves to lib.sh because the overview composer now needs the
-same scsi_host walk that issue #14 added for the PCIe maximum; health_sh_test.sh
-extracts it from its new home.
+_pci_dir_of_host and _first_sas_host both move to lib.sh, because the overview
+composer now needs the same scsi_host lookup and the same walk that issue #14
+added for the PCIe maximum. Moving beats copying: a second _first_sas_host would
+have been the third place in this repo that filters hosts by personality.
+health_sh_test.sh extracts _pci_dir_of_host from its new home; it never
+extracted the other.
 
 Both parsers take the values by environment rather than positionally. Their
 positional slots are already full, and eighteen golden invocations would have
@@ -869,11 +881,9 @@ function fw_verdict_color(array $v): string {
     if ($s === 'behind' && !empty($v['terminal'])) return '#d29922';
     return '';
 }
-
-if (PHP_SAPI === 'cli') return;
 ```
 
-There is no HTTP dispatch below the guard: this module is a library, included by `view.php` and `ajax_info.php`. The guard is kept so the file matches the house pattern and cannot later grow a dispatch that fires during tests.
+**No `if (PHP_SAPI === 'cli') return;` line here.** The other root-level PHP files carry one because they are endpoints with an HTTP dispatch below it that must not fire when a test requires the file. This module is a library included by `view.php` and `ajax_info.php` — it has no dispatch, so the guard would be a no-op on the last line of the file, and dead code that a reader has to think about. Add it if and when a dispatch is ever added.
 
 - [ ] **Step 4: Run and verify it passes**
 
