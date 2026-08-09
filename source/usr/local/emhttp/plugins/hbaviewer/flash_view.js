@@ -33,11 +33,8 @@
                 + '<div class="lu-fstep"><label class="step">Step 2 — verify the tool sees THIS card (controller /c'+i+' only)</label>'
                 +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Verify /c'+i+'</button>'
                 +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
-                + '<div class="lu-fstep"><label class="step">Step 3 — upload the model-correct image (+ optional BIOS)</label>'
-                +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
-                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"> '
-                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+',\'image\')">Upload</button> '
-                +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
+                + '<div class="lu-fstep"><label class="step">Step 3 — choose the model-correct image (+ optional BIOS)</label>'
+                +   '<div id="flash-drop-'+i+'" class="lu-muted" style="font-size:12px">Checking…</div></div>'
                 + lockNote
                 + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
                 +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
@@ -51,8 +48,54 @@
             // a different answer per controller, which is the case a single
             // page-level "pick your tool" control could never get right.
             ctls.forEach(function(c,i){ if (!c.error) luFlashTool(i); });
+            // One listing for the page, not one per card: the drop directory is
+            // shared, and asking N times for the same answer is how the last
+            // round of requests-per-card got out of hand.
+            luFlashDrop(ctls);
           })
           .catch(function(){ el.innerHTML = '<div class="lu-error">Failed to load controllers.</div>'; });
+    };
+
+    /* Step 3 for every card, from one listing of the shared drop directory.
+       There is no upload button anywhere on this page and there cannot be: a
+       multipart POST to any .php behind Unraid's nginx never completes, because
+       auth_request hands its subrequest the original Content-Length with no body
+       and PHP's multipart parser waits forever on it. Measured -- the same POST
+       to the same script answers in 12ms urlencoded and never answers at all as
+       multipart. So the user places files and this shows what it found. */
+    window.luFlashDrop = function (ctls) {
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'dropfiles', csrf_token:flashCsrf})})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            var dir = d.dir || '/boot/config/plugins/hbaviewer/flash';
+            var imgs = d.images || [];
+            var how = '<div class="lu-muted" style="margin-top:10px">Put images in <code>'+fesc(dir)+'</code> — '
+                    + 'from your workstation:<br><code>scp firmware.bin root@'+fesc(location.hostname)+':'+fesc(dir)+'/</code>'
+                    + '<br>Then reload this page.</div>';
+            ctls.forEach(function(c,i){
+              if (c.error) return;
+              var box = document.getElementById('flash-drop-'+i);
+              if (!box) return;
+              if (!imgs.length) {
+                box.innerHTML = '<span style="color:var(--warn-text)">No firmware image found.</span>' + how;
+                return;
+              }
+              // A select, not a text field: the filename is passed to the
+              // flasher, and a typo here is a failed flash at best.
+              var opts = imgs.map(function(f){
+                  return '<option value="'+fesc(f.name)+'">'+fesc(f.name)+'  ('+Math.round(f.size/1024)+' KB)</option>';
+              }).join('');
+              box.innerHTML = 'Firmware: <select id="flash-fw-'+i+'">'+opts+'</select><br><br>'
+                + 'BIOS (optional): <select id="flash-bios-'+i+'"><option value="">— none —</option>'+opts+'</select>'
+                + how;
+            });
+          })
+          .catch(function(){
+            ctls.forEach(function(c,i){
+              var box = document.getElementById('flash-drop-'+i);
+              if (box) box.textContent = 'Could not read the flash folder.';
+            });
+          });
     };
 
     /* Fill Step 1 for one card: which tool its chip needs, whether it is here,
@@ -80,13 +123,14 @@
                 + 'Nothing to do here; continue to Step 2.';
               return;
             }
+            var dir = '/boot/config/plugins/hbaviewer/flash';
             box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong>, which is <strong>not installed</strong>. '
-              + 'Broadcom does not permit bundling it.<br><br>'
-              + 'Upload <code>'+fesc(t.name)+'</code>: <input type="file" id="flash-tool-'+i+'"> '
-              + '<button class="lu-fbtn" onclick="luFlashUpload('+i+',\'tool\')">Upload</button> '
-              + '<span id="flash-up-tool-'+i+'" style="font-size:12px"></span><br><br>'
-              + '<span class="lu-muted">The file must be named exactly <code>'+fesc(t.name)+'</code>. '
-              + 'You can also place it at <code>/boot/config/plugins/hbaviewer/tools/'+fesc(t.name)+'</code> and <code>chmod +x</code> it.</span>';
+              + 'Broadcom does not permit bundling it.'
+              + '<div class="lu-muted" style="margin-top:10px">Put it in <code>'+fesc(dir)+'</code>, '
+              + 'named exactly <code>'+fesc(t.name)+'</code> — from your workstation:'
+              + '<br><code>scp '+fesc(t.name)+' root@'+fesc(location.hostname)+':'+fesc(dir)+'/</code>'
+              + '<br>It does not need to be executable there; the plugin stages a runnable copy itself. '
+              + 'Then reload this page.</div>';
           })
           .catch(function(){ box.textContent = 'Could not determine the flash tool for this card.'; });
     };
@@ -100,83 +144,23 @@
           .catch(function(){ pre.textContent='Request failed.'; });
     };
 
-    /* which = 'tool' (Step 1) or 'image' (Step 3). There are two Upload buttons
-       on every card now, so the progress text has to land beside the one that
-       was pressed — a single shared span put "Uploading…" three steps below the
-       button the user clicked.
-
-       Every input is read through pick(), which tolerates the element being
-       absent. Reading .files off a null used to throw SYNCHRONOUSLY, after
-       "Uploading…" had been set and before the fetch existed, so no .catch could
-       ever fire and the label sat there forever. Step 1 renders no file input at
-       all once the tool is found, so that null is the normal state, not an edge
-       case. Any path that sets "Uploading…" must be able to clear it. */
-    function pick(id) { var e = document.getElementById(id); return e && e.files ? e.files[0] : null; }
-
-    window.luFlashUpload = function (i, which) {
-        which = which || 'image';
-        var out = document.getElementById(which === 'tool' ? 'flash-up-tool-'+i : 'flash-up-'+i);
-        if (!out) return;
-        out.style.color='var(--muted)'; out.textContent='Uploading…';
-
-        var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
-        var fw = null, bios = null, tool = null;
-        if (which === 'tool') {
-            tool = pick('flash-tool-'+i);
-            if (!tool) { out.style.color='var(--crit-text)'; out.textContent='Choose the flash tool file first.'; return; }
-            fd.append('tool', tool);
-        } else {
-            fw   = pick('flash-fw-'+i);
-            bios = pick('flash-bios-'+i);
-            if (!fw) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
-            fd.append('firmware', fw);
-            if (bios) fd.append('bios', bios);
-        }
-
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
-          // A non-JSON body (a PHP fatal, an upload_max_filesize refusal, the
-          // 403 when flashing is locked) used to reject inside .json() and read
-          // as a bare "Upload failed." Surface the status so the cause is
-          // visible instead of guessable.
-          .then(function(r){ return r.text().then(function(t){
-              try { return JSON.parse(t); }
-              catch(e) { throw new Error('HTTP '+r.status+' — '+(t.slice(0,160) || 'empty response')); }
-          }); })
-          .then(function(d){
-            if (d.error) { out.style.color='var(--crit-text)'; out.textContent=d.error; return; }
-            var c=flashCard(i);
-            if (d.firmware) c.setAttribute('data-fw', d.firmware);
-            if (d.bios) c.setAttribute('data-bios', d.bios);
-            if (which === 'tool') {
-                if (d.tool && d.tool_exec === false) {
-                    out.style.color='var(--warn-text)';
-                    out.textContent='Stored '+d.tool+', but it is not executable — the flash drive is FAT and cannot hold the permission. Run: chmod +x '+d.tool_path;
-                    return;
-                }
-                out.style.color='var(--good-text)';
-                out.textContent = d.tool ? ('Stored '+d.tool+'.') : 'Nothing stored — the file must be named exactly as shown above.';
-                // Re-ask rather than assume: Step 1 should now say "found", and
-                // the only thing that can confirm that is the same lookup the
-                // flash itself will use.
-                if (d.tool) luFlashTool(i);
-                return;
-            }
-            out.style.color='var(--good-text)';
-            out.textContent='Stored: '+[d.firmware, d.bios].filter(Boolean).join(', ');
-          })
-          .catch(function(e){ out.style.color='var(--crit-text)'; out.textContent='Upload failed: '+(e && e.message ? e.message : 'unknown error'); });
-    };
 
     window.luFlashGo = function (i) {
         var log = document.getElementById('flash-log-'+i);
-        var c = flashCard(i);
-        var fw = c.getAttribute('data-fw'); var bios = c.getAttribute('data-bios') || '';
+        // Straight off the Step 3 selects. These used to come from data-fw /
+        // data-bios attributes that the upload response set -- there is no
+        // upload now, and the selects only ever contain names the server found
+        // in the drop directory, so there is nothing to mistype.
+        var fwEl   = document.getElementById('flash-fw-'+i);
+        var biosEl = document.getElementById('flash-bios-'+i);
+        var fw   = fwEl   ? fwEl.value   : '';
+        var bios = biosEl ? biosEl.value : '';
         var ack = document.getElementById('flash-ack-'+i).checked;
         var confirmTxt = document.getElementById('flash-confirm-'+i).value;
         if (!flashArrayStopped) { alert('The array is not stopped. Stop it on the Main tab and reload this page.'); return; }
         if (!ack) { alert('Tick the acknowledgement box first.'); return; }
         if (confirmTxt !== 'FLASH') { alert('Type FLASH (all caps) to confirm.'); return; }
-        if (!fw) { alert('Upload a firmware image first.'); return; }
+        if (!fw) { alert('No firmware image selected. Put one in the flash folder shown in Step 3, then reload this page.'); return; }
         if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
         log.style.display='block'; log.textContent='Starting flash…';
         fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})

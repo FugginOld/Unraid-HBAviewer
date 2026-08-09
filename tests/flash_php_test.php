@@ -32,10 +32,14 @@ check('array started -> false', flash_array_stopped($ini) === false);
 check('missing varini -> false', flash_array_stopped($ini) === false);
 
 // ── flash_preflight: happy path + every hard block ───────────────────────────
+// The drop dir is injected rather than hardcoded: it is on /boot in production
+// and a test must not write there. flash_preflight takes 'dir' for this.
+$dropDir = sys_get_temp_dir() . '/hbav_drop_' . getmypid();
+@mkdir($dropDir, 0755, true);
 @mkdir(FLASH_DIR, 0755, true);
-$fw = FLASH_DIR . '/unit.bin';
+$fw = $dropDir . '/unit.bin';
 file_put_contents($fw, 'x');
-$good = ['enable'=>1, 'stopped'=>true, 'ctl'=>'0', 'fw'=>$fw, 'confirm'=>'FLASH', 'locked'=>false];
+$good = ['enable'=>1, 'stopped'=>true, 'ctl'=>'0', 'fw'=>$fw, 'confirm'=>'FLASH', 'locked'=>false, 'dir'=>$dropDir];
 $err  = fn($ov) => flash_preflight(array_merge($good, $ov))['error'];
 
 check('preflight ok',            flash_preflight($good)['ok'] === true);
@@ -44,9 +48,10 @@ check('block array running',     str_contains($err(['stopped'=>false]), 'STOPPED
 check('block bad ctl',           str_contains($err(['ctl'=>'x']),   'controller'));
 check('block missing fw',        str_contains($err(['fw'=>'']),     'No firmware'));
 check('block path escape',       str_contains($err(['fw'=>'/tmp/evil.bin']), 'not permitted'));
+check('block fw outside the drop dir', str_contains($err(['fw'=>'/boot/x.bin']), 'not permitted'));
 check('block no confirm',        str_contains($err(['confirm'=>'flash']), 'Type FLASH'));
 check('block locked',            str_contains($err(['locked'=>true]), 'in progress'));
-@unlink($fw);
+@unlink($fw); @rmdir($dropDir);
 
 // ── flash_claim_lock: exactly one claimant wins, and a release re-arms it ────
 // This is the single-flight guarantee that stands between a double-submit and
@@ -60,40 +65,30 @@ check('claim lock: third refused',   flash_claim_lock($lk) === false);
 check('claim lock: re-arms after release', flash_claim_lock($lk) === true);
 @unlink($lk);
 
-/* ── The firmware page's upload path ──────────────────────────────────────────
-   Source-level assertions, because there is no JS harness in this repo and
-   these three properties all failed together in a real session: the page hung
-   on "Uploading…" forever, with the message rendered beside the wrong button.
+/* ── The firmware page has no upload, and must not grow one ──────────────────
+   A multipart POST to any .php behind Unraid's nginx never completes.
+   auth_request issues its subrequest to /auth-request.php carrying the original
+   Content-Length but no body; PHP starts its rfc1867 parser and blocks on bytes
+   that never arrive, and the request dies at fastcgi_read_timeout. Measured on
+   a live box: the identical POST to the identical script returned HTTP 302 in
+   12ms as urlencoded and never returned at all as multipart, at 1KB and at
+   660KB alike, so it is the content type and not the size.
 
-   The hang was `document.getElementById(x).files[0]` on an element that no
-   longer exists — Step 1 renders no file input once the tool is found, so null
-   is the NORMAL state, not an edge case. That throws synchronously, after the
-   label is set and before the fetch exists, so no .catch can ever clear it.
-   Anything that sets "Uploading…" must be able to unset it again. */
+   The page therefore has no Browse button anywhere and the endpoint has no
+   upload action. Re-adding either would look like a feature and behave like a
+   ten-minute hang, so both are pinned shut. */
 $jsSrc    = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash_view.js');
 $flashSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash.php');
 
-check('no unguarded .files read in the page',
-      preg_match('/getElementById\([^)]*\)\s*\.files/', $jsSrc) === 0);
-check('file inputs go through the null-safe helper',
-      str_contains($jsSrc, 'function pick(id)') && str_contains($jsSrc, 'e && e.files'));
-
-// Two Upload buttons per card now, so every call must name its target; a bare
-// luFlashUpload(i) writes into whichever span the default happens to pick.
-preg_match_all('/luFlashUpload\((.*?)\)/', $jsSrc, $m);
-$bare = array_values(array_filter($m[1], fn($a) => !str_contains($a, ',')));
-check('every upload call names its target', $bare === []);
-check('the tool upload has its own status span', str_contains($jsSrc, "flash-up-tool-'+i"));
-check('a non-JSON response is reported, not swallowed', str_contains($jsSrc, "'HTTP '+r.status"));
-
-// /boot is vfat: chmod is a silent no-op there, and find_flasher resolves on
-// [ -x ]. A stored-but-not-executable tool is invisible to the flasher while
-// looking, to the user, exactly like a successful upload.
-check('the endpoint verifies the tool is executable', str_contains($flashSrc, 'is_executable($dest)'));
-check('the page says so when it is not',              str_contains($jsSrc, 'tool_exec === false'));
-// The tool is only useful once Step 1 agrees it is there, and only the real
-// lookup can say that — re-ask rather than assume the upload worked.
-check('a stored tool re-runs the Step 1 lookup',      str_contains($jsSrc, 'luFlashTool(i)'));
+check('the page sends no multipart body',   !str_contains($jsSrc, 'new FormData'));
+check('the page has no file input',         !str_contains($jsSrc, 'type="file"'));
+check('the endpoint has no upload action',  !str_contains($flashSrc, "action === 'upload'"));
+check('and no move_uploaded_file',          !str_contains($flashSrc, 'move_uploaded_file'));
+// What replaced it: the server lists the drop directory and the page offers
+// only names it actually found there.
+check('the endpoint lists the drop directory', str_contains($flashSrc, "action === 'dropfiles'"));
+check('images are chosen from a select, not typed', str_contains($jsSrc, "<select id=\"flash-fw-"));
+check('the flash reads images from the drop dir',   str_contains($flashSrc, "FLASH_DROP . '/' . \$fwName"));
 
 /* flash_hba.sh's "not installed" message tells the user which UI step to upload
    the tool on — but the shell cannot see the UI, so renumbering the steps left

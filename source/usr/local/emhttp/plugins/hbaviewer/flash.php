@@ -13,8 +13,17 @@
 
 require_once __DIR__ . '/config.php';
 
-const FLASH_DIR     = '/tmp/hbav_flash';                              // uploads + job artifacts
-const FLASH_TOOLS   = '/boot/config/plugins/hbaviewer/tools';        // persisted user-uploaded flashers
+const FLASH_DIR     = '/tmp/hbav_flash';                              // job artifacts: log, status, lock
+/* The one directory the user drops everything into: the flash tool, the
+ * firmware image and the optional BIOS. There is no upload form, because
+ * uploading is not possible here -- see the note above the 'dropfiles' action.
+ *
+ * On /boot, for the same reason the tool is: flashing requires the array to be
+ * STOPPED, and /mnt/user and /mnt/cache are unmounted when it is. Anything under
+ * appdata would be present in every rehearsal and absent for every real flash.
+ * /boot is always mounted and survives reboots. */
+const FLASH_DROP    = '/boot/config/plugins/hbaviewer/flash';
+const FLASH_TOOLS   = '/boot/config/plugins/hbaviewer/tools';        // legacy drop dir, still read
 const FLASH_VARINI  = '/var/local/emhttp/var.ini';                   // Unraid array state
 const FLASH_SCRIPTS = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
@@ -49,11 +58,11 @@ function flash_preflight(array $in): array {
         return ['ok' => false, 'error' => 'Invalid controller index.'];
     $fw = (string) ($in['fw'] ?? '');
     if ($fw === '')
-        return ['ok' => false, 'error' => 'No firmware image selected. Upload it first.'];
-    if (strpos($fw, FLASH_DIR . '/') !== 0)
+        return ['ok' => false, 'error' => 'No firmware image selected. Place one in the flash folder, then reload.'];
+    if (strpos($fw, ($in['dir'] ?? FLASH_DROP) . '/') !== 0)
         return ['ok' => false, 'error' => 'Firmware path is not permitted.'];
     if (!is_file($fw))
-        return ['ok' => false, 'error' => 'Firmware image not found. Upload it first.'];
+        return ['ok' => false, 'error' => 'Firmware image not found in the flash folder.'];
     if (($in['confirm'] ?? '') !== 'FLASH')
         return ['ok' => false, 'error' => 'Type FLASH (all caps) to confirm.'];
     if (!empty($in['locked']))
@@ -85,39 +94,37 @@ if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disable
 // here). The client sends Unraid's csrf_token so that layer passes it through.
 @mkdir(FLASH_DIR, 0755, true);
 
-if ($action === 'upload') {
+/* What has the user dropped in? Read-only listing of FLASH_DROP, so the page
+   can offer the files that are actually there instead of a text box to mistype
+   a filename into.
+   
+   There is no upload action, and there cannot be one. A multipart POST to any
+   .php behind Unraid's nginx never completes: auth_request issues its subrequest
+   to /auth-request.php carrying the original Content-Length but no body, PHP
+   starts its rfc1867 parser and blocks on bytes that never arrive, and the
+   request dies at fastcgi_read_timeout. Measured on a live box -- the identical
+   POST to the identical script returns HTTP 302 in 12ms urlencoded and never
+   returns at all as multipart. That is a platform issue no plugin can work
+   around except by not sending multipart, so the user places files directly
+   and this lists them. */
+if ($action === 'dropfiles') {
     header('Content-Type: application/json');
-    $out = [];
-    if (!empty($_FILES['firmware']['tmp_name']) && is_uploaded_file($_FILES['firmware']['tmp_name'])) {
-        $name = flash_safe_name((string) $_FILES['firmware']['name'], ['bin', 'rom', 'fw']);
-        if ($name === null) { echo json_encode(['error' => 'Firmware must be a .bin / .rom file.']); exit; }
-        move_uploaded_file($_FILES['firmware']['tmp_name'], FLASH_DIR . '/' . $name);
-        $out['firmware'] = $name;
-    }
-    if (!empty($_FILES['bios']['tmp_name']) && is_uploaded_file($_FILES['bios']['tmp_name'])) {
-        $name = flash_safe_name((string) $_FILES['bios']['name'], ['rom', 'bin']);
-        if ($name !== null) { move_uploaded_file($_FILES['bios']['tmp_name'], FLASH_DIR . '/' . $name); $out['bios'] = $name; }
-    }
-    if (!empty($_FILES['tool']['tmp_name']) && is_uploaded_file($_FILES['tool']['tmp_name'])) {
-        $tname = strtolower(basename(str_replace('\\', '/', (string) $_FILES['tool']['name'])));
-        if (in_array($tname, ['sas2flash', 'sas3flash'], true)) {
-            @mkdir(FLASH_TOOLS, 0755, true);
-            $dest = FLASH_TOOLS . '/' . $tname;
-            move_uploaded_file($_FILES['tool']['tmp_name'], $dest);
-            @chmod($dest, 0755);
-            // Do not assume the chmod took. FLASH_TOOLS is on /boot, which is
-            // vfat: it holds no Unix permission bits, so chmod there is a silent
-            // no-op and the result depends entirely on the mount's fmask. Since
-            // find_flasher() resolves on [ -x ], a tool that is stored but not
-            // executable is invisible to the flasher while looking, to the user,
-            // exactly like a successful upload. Report what is actually true.
-            clearstatcache(true, $dest);
-            $out['tool']      = $tname;
-            $out['tool_path'] = $dest;
-            $out['tool_exec'] = is_executable($dest);
+    $out = ['dir' => FLASH_DROP, 'images' => [], 'tools' => []];
+    foreach (glob(FLASH_DROP . '/*') ?: [] as $f) {
+        if (!is_file($f)) continue;
+        $base = basename($f);
+        if (in_array(strtolower($base), ['sas2flash', 'sas3flash'], true)) {
+            $out['tools'][] = $base;
+            continue;
+        }
+        $ext = strtolower((string) pathinfo($base, PATHINFO_EXTENSION));
+        if (in_array($ext, ['bin', 'rom', 'fw'], true)) {
+            $out['images'][] = ['name' => $base, 'size' => (int) filesize($f)];
         }
     }
-    echo json_encode($out ?: ['error' => 'No file uploaded.']);
+    sort($out['tools']);
+    usort($out['images'], fn($a, $b) => strcmp($a['name'], $b['name']));
+    echo json_encode($out);
     exit;
 }
 
@@ -157,7 +164,8 @@ if ($action === 'flash') {
     $ctl    = (string) ($_POST['ctl'] ?? '');
     $fwName  = flash_safe_name((string) ($_POST['firmware'] ?? ''), ['bin', 'rom', 'fw']);
     $biosNm  = ($_POST['bios'] ?? '') !== '' ? flash_safe_name((string) $_POST['bios'], ['rom', 'bin']) : null;
-    $fw     = $fwName !== null ? FLASH_DIR . '/' . $fwName : '';
+    // Images live where the user dropped them, not where an upload put them.
+    $fw     = $fwName !== null ? FLASH_DROP . '/' . $fwName : '';
     $lock   = FLASH_DIR . '/flash.lock';
 
     // Claim single-flight BEFORE the gate, so the check and the claim can't be
@@ -184,7 +192,7 @@ if ($action === 'flash') {
     // that captures stdout+stderr and records its exit code. Never auto-relaunched.
     @unlink(FLASH_DIR . '/flash.log');
     @unlink(FLASH_DIR . '/flash.status');
-    $bios = ($biosNm !== null && is_file(FLASH_DIR . '/' . $biosNm)) ? FLASH_DIR . '/' . $biosNm : '';
+    $bios = ($biosNm !== null && is_file(FLASH_DROP . '/' . $biosNm)) ? FLASH_DROP . '/' . $biosNm : '';
     $cmd  = 'bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh') . ' flash '
           . escapeshellarg($chip) . ' ' . escapeshellarg($ctl) . ' ' . escapeshellarg($fw)
           . ($bios !== '' ? ' ' . escapeshellarg($bios) : '');

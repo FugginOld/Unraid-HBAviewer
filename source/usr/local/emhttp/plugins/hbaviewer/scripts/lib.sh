@@ -80,8 +80,15 @@ find_flasher() {
     # would say "not installed" about a tool the flash would go on to use.
     # Re-staged whenever the /boot copy is newer, so replacing the tool takes
     # effect without a reboot.
-    local src="${LSI_TOOLS:-/boot/config/plugins/hbaviewer/tools}/$tool"
-    [ -r "$src" ] || return 1
+    # The single drop directory the firmware page tells users to scp into, then
+    # the pre-2026.08.09 tools/ location so anyone who already placed a tool
+    # there is not stranded by the rename.
+    local d src=""
+    for d in "${LSI_TOOLS:-/boot/config/plugins/hbaviewer/flash}" \
+             /boot/config/plugins/hbaviewer/tools; do
+        [ -r "$d/$tool" ] && { src="$d/$tool"; break; }
+    done
+    [ -n "$src" ] || return 1
     local staged="${LSI_TOOL_STAGE:-/tmp/hbaviewer-tools}/$tool"
     if [ ! -x "$staged" ] || [ "$src" -nt "$staged" ]; then
         mkdir -p "${staged%/*}" 2>/dev/null || return 1
