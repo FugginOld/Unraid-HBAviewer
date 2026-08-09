@@ -599,7 +599,7 @@ read to confirm it shows only the two new keys."
   - `fw_normalize(string $name): string` — collapses both board-naming conventions to one key.
   - `fw_compare(string $a, string $b): int` — dotted-quad compare, returns `<0`, `0`, `>0`.
   - `fw_load(?string $path = null): ?array` — reads and re-keys the index; `null` when unreadable.
-  - `fw_evaluate(array $ctl, ?array $idx = null): array` — the verdict. `$ctl` accepts keys `board`, `chip`, `firmware`, `subvendor_id`, `topology`, `rom_profile`. Always returns an array with `status` (one of `current`, `behind`, `ahead`, `no_it_firmware`, `oem_out_of_scope`, `suppressed`, `unknown`) and `reason` (string or `null`), plus, when known, `detected`, `latest`, `branch`, `terminal` (bool), `confidence`, `note`, `index_date`.
+  - `fw_evaluate(array $ctl, ?array $idx): array` — the verdict. **`$idx` is required**, with no default: a forgotten argument must be an `ArgumentCountError` that phpstan catches at level 3, not a silent `unknown` that renders nothing. Pass `null` only when the index is genuinely unavailable. `$ctl` accepts keys `board`, `chip`, `firmware`, `subvendor_id`, `topology`, `rom_profile`. Always returns an array with `status` (one of `current`, `behind`, `ahead`, `no_it_firmware`, `oem_out_of_scope`, `suppressed`, `unknown`) and `reason` (string or `null`), plus, when known, `detected`, `latest`, `branch`, `terminal` (bool), `confidence`, `note`, `index_date`.
   - `fw_verdict_color(array $v): string` — a hex colour, or `''` for no colour.
 
 - [ ] **Step 1: Write the failing lookup tests**
@@ -1007,7 +1007,7 @@ In `lsi_hba_view()`, immediately before the `return [` statement, add:
         'firmware'     => $data['firmware']     ?? '',
         'subvendor_id' => $data['subvendor_id'] ?? '',
         'topology'     => $data['topology']     ?? 'unknown',
-    ]);
+    ], fw_load());
 ```
 
 And add to the returned array, after the `'fw_old'` line:
