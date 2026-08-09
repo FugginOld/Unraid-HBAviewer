@@ -43,11 +43,11 @@ if ($enableFlash) {
 .lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
 .lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
 /* One column per controller instead of a stack. Nothing in a flash card is
-   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
+   wider than its Step 3 file rows, so on a two-HBA box the whole right half of
    the frame was dead space with the second card pushed below the fold.
    auto-fit, not a literal 2: the controller count is whatever the box has — one
    card still fills the frame, three wrap to a second row. 420px is the floor at
-   which Step 2 stops wrapping badly; under that (narrow window, phone) it
+   which Step 3 stops wrapping badly; under that (narrow window, phone) it
    collapses to a single column by itself, so this needs no media query.
    align-items:start because a controller that errored renders a two-line card,
    and stretching it to match a full one just makes a tall empty box. */
@@ -60,7 +60,7 @@ if ($enableFlash) {
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
 .lu-fstep { margin: 14px 0; }
 .lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-/* Locked state (plan 037): while the array runs, Step 3 is dimmed and inert.
+/* Locked state (plan 037): while the array runs, Step 4 is dimmed and inert.
    COSMETIC ONLY — flash.php's flash_array_stopped() and luFlashGo's
    !flashArrayStopped alert are the actual gate. Deleting this CSS must still
    leave flashing blocked; if it ever doesn't, the safety model has inverted.
@@ -136,7 +136,7 @@ if ($enableFlash) {
        `loaded['flash'] = true` — tab-loader bookkeeping with nothing to book on
        a page that is not a tab, and `loaded` does not exist here. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
-    /* Step 3 writes hardware, so it is greyed out and disabled while the array
+    /* Step 4 writes hardware, so it is greyed out and disabled while the array
        runs. Steps 1 (read-only listing) and 2 (uploads to the plugin's own tools
        dir) stay live on purpose — staging the image before the array goes down
        is what keeps the outage short. `disabled` as well as pointer-events

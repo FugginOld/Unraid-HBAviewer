@@ -95,5 +95,17 @@ check('the page says so when it is not',              str_contains($jsSrc, 'tool
 // lookup can say that — re-ask rather than assume the upload worked.
 check('a stored tool re-runs the Step 1 lookup',      str_contains($jsSrc, 'luFlashTool(i)'));
 
+/* flash_hba.sh's "not installed" message tells the user which UI step to upload
+   the tool on — but the shell cannot see the UI, so renumbering the steps left
+   it pointing at the wrong one. The user read the stale number off a live page.
+   Pin the pair rather than the literal: whatever step the shell names must be
+   the step whose label is about the flash tool. */
+$shSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/flash_hba.sh');
+$shStep = preg_match('/upload it under Step (\d+)/', $shSrc, $sm) ? $sm[1] : null;
+$jsStep = preg_match('/Step (\d+) \x{2014} the flash tool for this card/u', $jsSrc, $jm) ? $jm[1] : null;
+check('the page has a step for the flash tool', $jsStep !== null);
+check('the shell names a step to upload on',    $shStep !== null);
+check('and they are the same step',             $shStep !== null && $shStep === $jsStep);
+
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
