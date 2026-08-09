@@ -96,7 +96,21 @@ if ($enableFlash) {
   <a class="lu-settings-link" href="/Tools/HBAviewer_Monitor">&#8592; Back to HBAviewer</a>
 </div>
 
-<?php if (!$enableFlash): ?>
+<?php if (LSI_FLASH_LOCKED): ?>
+  <!-- Locked by the maintainer, not by the user's toggle. The menu entry is
+       deliberately left alone: somebody who turned flashing on and finds the
+       page gone learns nothing, while a page that explains itself does. -->
+  <div class="lu-card first">
+    <div class="lu-danger">
+      <strong>&#9888; Firmware/BIOS flashing is disabled in this release.</strong>
+      <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
+    </div>
+    <p class="lu-muted" style="margin:0">
+      Everything else on the Monitor is unaffected. Watch the plugin's changelog
+      for the release that turns this back on.
+    </p>
+  </div>
+<?php elseif (!$enableFlash): ?>
   <!-- Not merely hidden: a page that offered controls flash.php would refuse is
        worse than one that says plainly why there are none. -->
   <div class="lu-card first">

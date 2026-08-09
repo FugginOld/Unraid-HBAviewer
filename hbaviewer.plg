@@ -13,6 +13,23 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.09###
+Firmware/BIOS flashing is switched off in this release while it gets more
+testing. Nothing else changes.
+
+**Changed**
+- **Firmware/BIOS flashing is disabled for now.** It is the one part of this
+  plugin that writes to your controller, and a wrong or mismatched image
+  bricks it permanently — so while it is being tested on more hardware it
+  stays off rather than staying available and unverified. The Settings card
+  is greyed out and the firmware page explains itself instead of offering
+  the wizard. If you had flashing enabled, that setting is remembered and
+  comes back with it; you do not need to do anything.
+- Every request to the flashing endpoint is refused outright, not merely
+  hidden — a page left open in another tab cannot reach it either. Monitor,
+  Array Map, Locate, SMART, PHY Health, notifications and the diagnostic
+  bundle are all unaffected.
+
 ###2026.08.08.1###
 A card that cannot measure its own temperature now says so instead of
 reporting zero. Thanks to @NotAnotherForumName, whose diagnostics bundle

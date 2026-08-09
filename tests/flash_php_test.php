@@ -60,5 +60,47 @@ check('claim lock: third refused',   flash_claim_lock($lk) === false);
 check('claim lock: re-arms after release', flash_claim_lock($lk) === true);
 @unlink($lk);
 
+/* ── The maintainer lock ──────────────────────────────────────────────────────
+   Flashing is disabled for everyone in this release, over and above the user's
+   own ENABLE_FLASH toggle, until the path has been tested on more hardware.
+
+   These assertions are deliberately annoying: flipping LSI_FLASH_LOCKED back to
+   false fails the first one, which is the point. Reactivation should be a
+   decision somebody makes and edits a test for, not something that happens
+   because a constant drifted.
+
+   The source-order check is crude but it is the only property that matters and
+   it cannot be tested any other way without HTTP: the 403 must come BEFORE any
+   line that can reach flash_hba.sh. A lock placed after the dispatch is not a
+   lock. Same technique bundle_coverage_test.sh already uses. */
+$flashSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash.php');
+
+check('this release ships with flashing locked', LSI_FLASH_LOCKED === true);
+check('the lock explains itself to the user',    trim(LSI_FLASH_LOCK_NOTE) !== '');
+
+// Match the invocation, not the string: the file's header comment names
+// flash_hba.sh several lines above the lock, and an earlier draft of this
+// assertion matched that and failed. FLASH_SCRIPTS . '/flash_hba.sh' appears
+// only where the script is actually run.
+$lockPos  = strpos($flashSrc, 'if (LSI_FLASH_LOCKED)');
+$firstRun = strpos($flashSrc, "FLASH_SCRIPTS . '/flash_hba.sh'");
+check('flash.php refuses on the lock',           $lockPos !== false);
+check('the flasher is invoked at all',           $firstRun !== false);
+check('the refusal precedes every flash_hba.sh invocation',
+      $lockPos !== false && $firstRun !== false && $lockPos < $firstRun);
+
+// The UI half. Not the real gate -- flash.php is -- but a page offering buttons
+// the endpoint would refuse is its own kind of bug, so both surfaces are pinned.
+$settingsSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/settings.php');
+$viewSrc     = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/flash_view.php');
+check('settings disables the toggle while locked',
+      str_contains($settingsSrc, "LSI_FLASH_LOCKED ? 'disabled' : ''"));
+check('settings hides the way in while locked',
+      str_contains($settingsSrc, '!LSI_FLASH_LOCKED && (int)$cfg[\'ENABLE_FLASH\'] === 1'));
+check('settings holds the saved value while locked',
+      str_contains($settingsSrc, "LSI_FLASH_LOCKED\n            ? (int) (lsi_config_read()['ENABLE_FLASH'] ?? 0)"));
+check('the firmware page leads with the lock',
+      str_contains($viewSrc, '<?php if (LSI_FLASH_LOCKED): ?>'));
+
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
