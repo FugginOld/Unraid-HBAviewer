@@ -384,9 +384,17 @@ function renderOverviewCards(array $data, array $cfg): string {
               // something to say, the older flag steps aside rather than
               // repeating the same fact in a second amber. A suppressed or
               // unknown verdict has nothing to say, and the flag still does.
-              . '<p>Firmware: <span>' . htmlspecialchars($v['firmware']) . '</span>'
+              /* Version and verdict live in ONE span. .lu-meta p is a flex row with
+                 justify-content:space-between, so every direct child becomes a
+                 separately-spaced column: a second span sent the version to the
+                 middle of the row and the verdict to the right edge, with the label
+                 stranded on the left. Keeping them in one child preserves the
+                 label-left / value-right shape every other row in this card has.
+                 The pre-P20 chip had the same defect before the verdict existed —
+                 it just only showed on SAS2 cards, so nobody had seen it. */
+              . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
               . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
-              . $fwClause . '</p>'
+              . $fwClause . '</span></p>'
               . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
               . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
               . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')

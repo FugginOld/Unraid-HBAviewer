@@ -1174,6 +1174,17 @@ $fwCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 60, 'SHOW_PCIE' => false];
 $hFw = renderOverviewCards($fwOverview, $fwCfg);
 check('the Overview card renders the firmware verdict clause', str_contains($hFw, '16.00.12.00 known'));
 
+/* And renders it INSIDE the value span. `.lu-meta p` is a flex row with
+   justify-content:space-between, so every direct child of the <p> becomes its
+   own spaced column. Appending the clause as a sibling of the value span put
+   three children on the row: the label pinned left, the version stranded in the
+   middle and the verdict on the right edge — the label-left/value-right shape
+   every other row has, broken on this one row only. Caught in a browser, not by
+   this suite, because the assertion above only proves the text is present
+   somewhere. This pins the structure that makes it land in the right place. */
+check('the verdict sits inside the version span, not beside it',
+      (bool) preg_match('~<p>Firmware: <span>[^<]*15\.00\.00\.00.*?known</span></span></p>~s', $hFw));
+
 /* Round-1 review (Important, minor): a SAS2 pre-P20 card that also resolves a
    verdict used to show both '&#9888; pre-P20' and the clause on one line —
    two ambers stating the same fact. The clause is strictly more informative
