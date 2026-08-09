@@ -138,6 +138,41 @@ done
 # through the composer.
 mkdir -p "$SYSPCI/0000:c1:00.0/host7" "$SYSDEV/end_device-7:0" "$SYSDEV/end_device-7:1"
 
+# ── A whole card for the lsiutil composer ────────────────────────────────────
+# The storcli fixture above cannot serve this: ov_lsiutil never sees a storcli
+# PCI Address, it walks UP from the scsi_host to find the card, so the host has
+# to sit physically inside the PCI dir the way the kernel arranges it —
+#   <pci dev>/hostN/scsi_host/hostN
+# with SYS_SCSI_HOST pointing at that scsi_host dir, which is what readlink -f
+# resolves to on hardware. Same shape health_sh_test.sh already uses.
+#
+# Why it exists at all: every lsiutil route check below stops at require_binary,
+# so nothing ever reached ov_lsiutil's tail, where LSI_TOPOLOGY and
+# LSI_SUBVENDOR are derived. Deleting BOTH derivations left this entire suite
+# green — while gate 2, reading an empty subvendor, turned every controller
+# oem_out_of_scope and the firmware verdict rendered nothing at all, with no
+# error anywhere. That is the SAS2 population: 9211-8i, IBM M1015, Dell
+# H200/H310 — exactly the OEM-rebrand cohort the gate exists to protect.
+#
+# host3, not host0: the number must not coincide with the controller index, or
+# the golden cannot tell the derivation apart from a hardcoded 0.
+SYSL=$(mktemp -d)
+trap 'rm -rf "$SYSPCI" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL"' EXIT
+LCARD="$SYSL/0000:03:00.0"
+mkdir -p "$LCARD/host3/scsi_host/host3"
+printf '8\n'             > "$LCARD/current_link_width"
+printf '8.0 GT/s PCIe\n' > "$LCARD/current_link_speed"
+printf 'D0\n'            > "$LCARD/power_state"
+printf '0x1000\n'        > "$LCARD/subsystem_vendor"
+printf 'mpt2sas\n'       > "$LCARD/host3/scsi_host/host3/proc_name"
+# Matches hba_board.txt, which is where the JSON's board_name actually comes
+# from — sysfs board_name is only read on the SAS3-refusal path. One card, one
+# name, so a reader is not left wondering which is authoritative.
+printf 'SAS9207-8i\n'    > "$LCARD/host3/scsi_host/host3/board_name"
+# Two direct-attached drives and no expander -> "internal", so this golden pins
+# hba_topology's positive answer on the lsiutil path too.
+mkdir -p "$SYSDEV/end_device-3:0" "$SYSDEV/end_device-3:1"
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
 export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null \
@@ -147,6 +182,14 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
+# The lsiutil composer, all the way through — the only check that reaches
+# ov_lsiutil's tail. STORCLI= (empty, not /nonexistent) so find_storcli falls
+# through to probing PATH; like the personality checks below, this assumes no
+# real storcli is installed on the machine running the suite.
+# STUB_FIX is overridden: the exported value points at fixtures/storcli for the
+# checks above, and the lsiutil captures live one level up in fixtures/.
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
+check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
 # Controller generation comes from proc_name, never from /sys/module — the merged
 # mpt3sas driver reports proc_name=mpt2sas for SAS2 cards (issue #3). host9 is a
 # non-SAS host that must be ignored by the filter.

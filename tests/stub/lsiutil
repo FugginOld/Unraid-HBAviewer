@@ -2,7 +2,20 @@
 # Test stub: pretends to be the lsiutil binary, replaying a captured fixture per
 # menu command. Mirrors stub/storcli so the module's lsiutil dispatch path (the
 # currently-untested backend half) gets coverage. STUB_FIX points at fixtures.
+#
+# The four overview queries are here so ov_lsiutil can run to completion. Before
+# that it could not: every lsiutil route test stopped at require_binary, so the
+# composer's tail -- where LSI_TOPOLOGY and LSI_SUBVENDOR are derived -- was
+# never reached by anything, and deleting both derivations left the whole suite
+# green while gate 2 turned every SAS2 card oem_out_of_scope.
+#
+# Order matters: -a 1,0 must be matched before the bare-banner catch-all, and
+# "25,2,0,0" before it too, or the looser patterns swallow them.
 case "$*" in
-    *"35,0"*)  cat "$STUB_FIX/events_entries.txt" ;;   # -e -a 35,0 : firmware log
-    *)         echo "stub: unhandled args: $*" >&2; exit 1 ;;
+    *"35,0"*)     cat "$STUB_FIX/events_entries.txt" ;;   # -e -a 35,0 : firmware log
+    *"25,2,0,0"*) cat "$STUB_FIX/hba_ioc.txt"       ;;    # IOUnit page 7: temp, PCIe, power
+    *"1,0"*)      cat "$STUB_FIX/hba_ident_it.txt"  ;;    # identify: firmware image, IT/IR
+    *-b*)         cat "$STUB_FIX/hba_board.txt"     ;;    # board name / assembly / tracer
+    "")           cat "$STUB_FIX/hba_banner.txt"    ;;    # no args: the port banner
+    *)            echo "stub: unhandled args: $*" >&2; exit 1 ;;
 esac
