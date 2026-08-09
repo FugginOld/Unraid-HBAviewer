@@ -21,15 +21,34 @@ source "$DIR/lib.sh"          # find_flasher, find_storcli
 die() { echo "flash_hba: $1" >&2; exit "$2"; }
 
 # Chip string (SAS2008 / SAS3008 / SAS3416 …) -> flash tool family.
-#   SAS2xxx      -> sas2flash
-#   SAS30xx/31xx -> sas3flash
-#   SAS34xx/35xx -> storcli (/cN download)
+#   SAS2xxx           -> sas2flash
+#   SAS30xx/31xx/32xx -> sas3flash
+#   SAS34xx-38xx      -> storcli (/cN download)
+#
+# Returns 0 with the family on stdout, 2 for a RAID-on-Chip part, 1 for a chip
+# this script does not know. The caller distinguishes 1 from 2: "we cannot" and
+# "nobody can" are different answers and the second one saves a support round.
+#
+# The globs were originally SAS2*, SAS30*|SAS31*, SAS34*|SAS35*, which left
+# SAS32xx, SAS36xx and SAS38xx matching nothing at all — five of the thirteen
+# boards in data/known-firmware.json, including the whole 9305 family, could not
+# reach a flasher and reported "unsupported/unknown chip" on a card that flashes
+# perfectly well with sas3flash. Found by running the mapping against every chip
+# in the index rather than the two the tests happened to use.
 flasher_for_chip() {
     case "$1" in
-        SAS2*)          echo sas2 ;;
-        SAS30*|SAS31*)  echo sas3 ;;
-        SAS34*|SAS35*)  echo storcli ;;
-        *)              return 1 ;;
+        # RAID-on-Chip first: these are MegaRAID parts with no IT firmware at any
+        # version, and they cannot be crossflashed to one. Named before the family
+        # globs below, which would otherwise hand SAS3108 to sas3flash and
+        # SAS3508/SAS3516 to storcli as though an IT image were a thing they could
+        # take. Same five as no_it_firmware in data/known-firmware.json — if that
+        # list grows, grow this one with it.
+        SAS2108|SAS2208|SAS3108|SAS3508|SAS3516) return 2 ;;
+
+        SAS2*)                       echo sas2 ;;      # 9200/9201/9207/9211
+        SAS30*|SAS31*|SAS32*)        echo sas3 ;;      # 9300, 9305
+        SAS34*|SAS35*|SAS36*|SAS38*) echo storcli ;;   # 9400, 9405W, 9500 tri-mode
+        *)                           return 1 ;;
     esac
 }
 
@@ -38,7 +57,12 @@ mode="$1"; chip="$2"; ctl="$3"; fw="$4"; bios="$5"
 [ "$mode" = list ] || [ "$mode" = flash ] || die "unknown mode: '$mode'" 2
 case "$ctl" in ''|*[!0-9]*) die "controller index must be an integer: '$ctl'" 2 ;; esac
 
-gen=$(flasher_for_chip "$chip") || die "unsupported/unknown chip: '$chip'" 3
+gen=$(flasher_for_chip "$chip")
+case $? in
+    0) ;;
+    2) die "$chip is a RAID-on-Chip part (MegaRAID). No IT firmware exists for it at any version and it cannot be crossflashed, so nothing here can flash it." 3 ;;
+    *) die "unsupported/unknown chip: '$chip'" 3 ;;
+esac
 
 # Resolve the tool for this generation (storcli reuses the existing seam).
 if [ "$gen" = storcli ]; then tool=$(find_storcli); else tool=$(find_flasher "$gen"); fi

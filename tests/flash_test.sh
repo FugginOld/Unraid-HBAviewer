@@ -31,6 +31,50 @@ has "flash storcli download" "/c0 download file=$FW"
 # ── refusals (the guards that keep a bad call from ever running a tool) ───────
 out=$(FLASHER="$STUB" bash "$FH" flash SAS9999 0 "$FW" 2>&1); rc=$?
 code "unknown chip exit 3" 3 "$rc"; has "unknown chip msg" "unknown chip"
+
+# ── every chip the plugin can DETECT must reach a flasher, or say why not ─────
+# The mapping shipped with globs for SAS2*, SAS30*|SAS31* and SAS34*|SAS35*,
+# which silently left SAS32xx (9305-16i/-24i), SAS36xx (9405W) and SAS38xx
+# (9500) matching nothing — the user saw "unsupported/unknown chip" on cards
+# that flash fine. The two chips the tests above happen to use both matched, so
+# nothing caught it. This walks the actual chip list out of the firmware index
+# instead of a list somebody remembers to update.
+#
+# Two accepted outcomes per chip, and they are different answers: a family on
+# stdout, or exit 2 for a RAID-on-Chip part that no tool can flash. Exit 1 --
+# "this script has never heard of your card" -- is the bug.
+IDX="../source/usr/local/emhttp/plugins/hbaviewer/data/known-firmware.json"
+FN=$(sed -n '/^flasher_for_chip()/,/^}/p' "$FH")
+if [ -r "$IDX" ] && [ -n "$FN" ]; then
+    # grep the chips out rather than parse JSON: no jq on Unraid, and the two
+    # shapes we need ("chip": "X" under boards, and the no_it_firmware keys) are
+    # both plain quoted SASnnnn tokens.
+    chips=$({ grep -oE '"chip"[[:space:]]*:[[:space:]]*"SAS[0-9]+"' "$IDX" | grep -oE 'SAS[0-9]+'
+              sed -n '/"no_it_firmware"/,/^  }/p' "$IDX" | grep -oE '"SAS[0-9]+"' | tr -d '"'; } | sort -u)
+    [ -n "$chips" ] || bad "index chip list" "found no chips in $IDX"
+    unmapped=""
+    for c in $chips; do
+        bash -c "$FN"$'\n''flasher_for_chip "$1" >/dev/null' _ "$c"; rc=$?
+        [ "$rc" -eq 0 ] || [ "$rc" -eq 2 ] || unmapped="$unmapped $c"
+    done
+    [ -z "$unmapped" ] && ok "every indexed chip maps to a flasher or a refusal" \
+                       || bad "unmapped chips" "no flasher family and no RoC refusal for:$unmapped"
+else
+    bad "index reachable" "cannot read $IDX or extract flasher_for_chip"
+fi
+
+# The 9305 family specifically -- the regression that started this, and the one
+# board family in the index with a real card behind it in a bug report.
+out=$(FLASHER="$STUB" bash "$FH" list SAS3224 0 2>&1); has "9305-24i lists via sas3flash" "FLASHER -c 0 -list"
+out=$(FLASHER="$STUB" bash "$FH" list SAS3216 0 2>&1); has "9305-16i lists via sas3flash" "FLASHER -c 0 -list"
+out=$(STORCLI="$STUB" bash "$FH" list SAS3616 0 2>&1); has "9405W lists via storcli"      "FLASHER /c0 show"
+out=$(STORCLI="$STUB" bash "$FH" list SAS3816 0 2>&1); has "9500-16i lists via storcli"   "FLASHER /c0 show"
+
+# RAID-on-Chip is refused by name, not routed at a tool that cannot help.
+out=$(FLASHER="$STUB" bash "$FH" list SAS3108 0 2>&1); rc=$?
+code "RoC exit 3" 3 "$rc"; has "RoC msg names the reason" "RAID-on-Chip"
+out=$(STORCLI="$STUB" bash "$FH" list SAS3516 0 2>&1); rc=$?
+code "RoC 9460 exit 3" 3 "$rc"; has "RoC 9460 refused" "cannot be crossflashed"
 out=$(env -u FLASHER -u STORCLI bash "$FH" list SAS2008 0 2>&1); rc=$?
 code "missing tool exit 4" 4 "$rc"
 out=$(FLASHER="$STUB" bash "$FH" flash SAS2008 x "$FW" 2>&1); rc=$?
