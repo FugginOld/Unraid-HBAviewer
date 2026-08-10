@@ -163,10 +163,18 @@ check('it does not send the user to an upload',    stripos($shMsg, 'upload') ===
    Flashing is disabled for everyone in this release, over and above the user's
    own ENABLE_FLASH toggle, until the path has been tested on more hardware.
 
-   These assertions are deliberately annoying: flipping LSI_FLASH_LOCKED back to
-   false fails the first one, which is the point. Reactivation should be a
-   decision somebody makes and edits a test for, not something that happens
-   because a constant drifted.
+   These assertions are deliberately annoying: unlocking has to be a decision
+   somebody makes and edits a test for, not something that happens because a
+   line drifted during a merge.
+
+   The lock is now computed from an unlock FILE rather than written as a
+   literal, so the assertion is on the source and not on the runtime value.
+   LSI_FLASH_LOCKED === true would pass or fail depending on whether the
+   machine running the suite happens to have that file -- green in CI, red on
+   the maintainer's own unlocked box, which is a test reporting where it ran
+   rather than what the code says. What has to hold is the POLARITY: absent
+   file means locked. Dropping the '!' is the mutant that matters, and it
+   fails this.
 
    The source-order check is crude but it is the only property that matters and
    it cannot be tested any other way without HTTP: the 403 must come BEFORE any
@@ -174,7 +182,11 @@ check('it does not send the user to an upload',    stripos($shMsg, 'upload') ===
    lock. Same technique bundle_coverage_test.sh already uses.
 
    $flashSrc is already loaded above, by the no-upload block. */
-check('this release ships with flashing locked', LSI_FLASH_LOCKED === true);
+$cfgSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/config.php');
+check('the lock defaults to on, and unlocking needs a file that ships with nothing',
+      str_contains($cfgSrc, "define('LSI_FLASH_LOCKED', !file_exists(LSI_FLASH_UNLOCK));"));
+check('the unlock file lives on the flash drive, so it survives a reboot',
+      str_contains($cfgSrc, "const LSI_FLASH_UNLOCK = '/boot/config/plugins/hbaviewer/.flash-unlock';"));
 check('the lock explains itself to the user',    trim(LSI_FLASH_LOCK_NOTE) !== '');
 
 // Match the invocation, not the string: the file's header comment names

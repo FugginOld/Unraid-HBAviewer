@@ -7,9 +7,9 @@
 const LSI_CFG = '/boot/config/plugins/hbaviewer/hbaviewer.cfg';
 
 /* ── Firmware flashing: maintainer lock ───────────────────────────────────────
- * Set true to disable firmware/BIOS flashing outright, over and above the
- * user's own ENABLE_FLASH toggle. Flip to false to reactivate; nothing else
- * needs editing, and no user's saved setting is touched while it is on.
+ * Flashing is disabled outright, over and above the user's own ENABLE_FLASH
+ * toggle, unless the unlock file below exists. No user's saved setting is
+ * touched while the lock is on.
  *
  * ENABLE_FLASH is the USER saying "I might flash a card". This is the
  * MAINTAINER saying "not right now" — two different questions, so two
@@ -26,8 +26,27 @@ const LSI_CFG = '/boot/config/plugins/hbaviewer/hbaviewer.cfg';
  * Locked 2026-08-09: the flash path needs more testing on real hardware before
  * it is offered again. It is the one surface in this plugin that writes to a
  * controller, and a wrong image bricks it permanently — so the default while
- * in doubt is off. */
-const LSI_FLASH_LOCKED = true;
+ * in doubt is off.
+ *
+ * WHY A FILE AND NOT A CONSTANT. The lock has to be off on the box it is being
+ * tested on and on for everyone else. Expressing that as a source difference
+ * meant main and dev disagreeing about this line forever, and every merge
+ * between them was a chance to ship the wrong value — the failure mode being
+ * to silently hand a half-tested flasher to every user. A file moves the
+ * difference off the branch and onto the machine, so the two branches carry
+ * identical code and the default is locked no matter which one you install.
+ *
+ * It is not a security boundary and does not pretend to be: anyone who can
+ * create this file already has root on the box and could run sas3flash by
+ * hand. It guards against reaching the flasher by clicking, which is the
+ * accident actually worth preventing.
+ *
+ * To test on your own machine:  touch /boot/config/plugins/hbaviewer/.flash-unlock
+ * To lock it again:             rm   /boot/config/plugins/hbaviewer/.flash-unlock */
+const LSI_FLASH_UNLOCK = '/boot/config/plugins/hbaviewer/.flash-unlock';
+// define(), not const: a const initialiser cannot call a function. Consumers
+// see the same name and cannot tell the difference.
+define('LSI_FLASH_LOCKED', !file_exists(LSI_FLASH_UNLOCK));
 const LSI_FLASH_LOCK_NOTE = 'Firmware/BIOS flashing is temporarily disabled while it undergoes further testing. '
     . 'This is the one part of the plugin that writes to your controller, and a wrong or mismatched image '
     . 'bricks it permanently — so it stays off until it has been verified on more hardware. '
