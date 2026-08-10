@@ -34,9 +34,12 @@ function flash_array_stopped(string $varini = FLASH_VARINI): bool {
     return is_array($ini) && strtoupper((string) ($ini['mdState'] ?? '')) === 'STOPPED';
 }
 
-/* Confine an uploaded filename to a safe basename with an allowed extension.
-   Strips any path, whitelists the charset, rejects empties/dotfiles. Returns
-   the safe basename or null. */
+/* Confine a client-supplied filename to a safe basename with an allowed
+   extension. Strips any path, whitelists the charset, rejects empties/dotfiles.
+   Returns the safe basename or null.
+   The page only ever offers names the server itself found in the drop
+   directory, so this is defence in depth rather than the primary check — the
+   value still arrives in a POST field and is still nobody's to trust. */
 function flash_safe_name(string $name, array $allowedExt): ?string {
     $base = basename(str_replace('\\', '/', $name));       // kill any path component
     $base = preg_replace('/[^A-Za-z0-9._-]/', '', $base);   // whitelist charset

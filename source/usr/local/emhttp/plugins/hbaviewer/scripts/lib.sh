@@ -38,8 +38,9 @@ find_storcli() {
 }
 
 # Locate the per-generation flash tool — sibling of find_storcli, same posture
-# (proprietary, never bundled: probe PATH + common sbin dirs + the plugin's
-# persisted upload dir). $1 = "sas2" | "sas3". Honors a preset $FLASHER (tests).
+# (proprietary, never bundled: probe PATH + common sbin dirs + the drop
+# directory the user places it in). $1 = "sas2" | "sas3". Honors a preset
+# $FLASHER (tests).
 # Prints the resolved path, or nothing if not found.
 find_flasher() {
     local gen="$1" tool c
@@ -59,14 +60,15 @@ find_flasher() {
     #
     # /boot is the Unraid flash drive: vfat, mounted fmask=0177. That masks off
     # every execute bit, so a file there can NEVER be executable and chmod on it
-    # is a silent no-op. The upload therefore worked and the tool was then
-    # invisible to this function, which resolves on [ -x ] -- the file sat in
-    # tools/ reading -rw------- while the page said no tool was installed.
+    # is a silent no-op. The file therefore lands correctly and is then invisible
+    # to this function, which resolves on [ -x ] -- it sat in the drop directory
+    # reading -rw------- while the page said no tool was installed.
     # Measured on a live box: fmask=0177,dmask=0077.
     #
-    # /boot is still the right place to PERSIST it (it survives a reboot, which
-    # is the whole point of the upload) and the wrong place to RUN it from. So
-    # copy it where the bit sticks and hand back that path.
+    # /boot is still the right place to PERSIST it -- it survives a reboot, and
+    # it stays mounted when the array is stopped, which flashing requires -- and
+    # the wrong place to RUN it from. So copy it where the bit sticks and hand
+    # back that path.
     #
     # NOT appdata, which is the obvious answer and the wrong one: flashing
     # requires the array to be STOPPED, and /mnt/user and /mnt/cache are

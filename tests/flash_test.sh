@@ -75,7 +75,9 @@ case "$res" in "$BOOTDIR"/*) bad "returned the /boot path" "$res — that path c
 # /boot is unambiguously newer. Do NOT "simplify" this back to a bare touch, and
 # do not date the source into the future instead -- a clock-skew guard that
 # depends on the clock is its own trap.
-touch -d '@0' "$res"
+# -t, not -d '@0': the @epoch form is a GNU coreutils extension that BusyBox and
+# BSD touch reject, and this file argues for portability three lines up.
+touch -t 200001010000 "$res"
 printf '#!/bin/sh\necho replaced\n' > "$BOOTDIR/sas3flash"
 res2=$(env -u FLASHER LSI_TOOLS="$BOOTDIR" LSI_TOOL_STAGE="$STAGEDIR" \
        bash -c "source $LIB; find_flasher sas3")
@@ -146,7 +148,15 @@ if [ -r "$IDX" ] && [ -n "$FN" ]; then
     # both plain quoted SASnnnn tokens.
     boards=$(grep -oE '"chip"[[:space:]]*:[[:space:]]*"SAS[0-9]+"' "$IDX" | grep -oE 'SAS[0-9]+' | sort -u)
     roc=$(sed -n '/"no_it_firmware"/,/^  }/p' "$IDX" | grep -oE '"SAS[0-9]+"' | tr -d '"' | sort -u)
-    [ -n "$boards" ] && [ -n "$roc" ] || bad "index chip list" "found no chips in $IDX"
+    # Skip the loop outright when the extraction came back empty, rather than
+    # recording the failure and running anyway: a renamed key in the index gave
+    # both "FAIL index chip list" and "PASS every indexed chip maps to a
+    # flasher" in the same run. The exit code was still non-zero, so CI caught
+    # it -- but a contradictory PASS is noise on the exact line someone is
+    # reading while they work out what broke.
+    if [ -z "$boards" ] || [ -z "$roc" ]; then
+      bad "index chip list" "found no chips in $IDX -- the loop below is skipped"
+    else
     wrong=""
     rocsp=" ${roc//$'\n'/ } "
     for c in $(printf '%s\n%s\n' "$boards" "$roc" | sort -u); do
@@ -158,6 +168,7 @@ if [ -r "$IDX" ] && [ -n "$FN" ]; then
     done
     [ -z "$wrong" ] && ok "every indexed chip maps to a flasher, every RoC part to a refusal" \
                     || bad "wrong flasher answer" "flasher_for_chip gave the wrong exit for:$wrong"
+    fi
 else
     bad "index reachable" "cannot read $IDX or extract flasher_for_chip"
 fi

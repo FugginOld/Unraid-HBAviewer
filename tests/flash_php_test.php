@@ -102,6 +102,14 @@ check('and no move_uploaded_file',          !str_contains($flashSrc, 'move_uploa
 // What replaced it: the server lists the drop directory and the page offers
 // only names it actually found there.
 check('the endpoint lists the drop directory', str_contains($flashSrc, "action === 'dropfiles'"));
+
+/* The firmware and BIOS selects are populated from one listing, so the two
+   flash_safe_name allowlists must agree or a file the page offered is silently
+   dropped on arrival -- a .fw picked as BIOS used to vanish and the flash ran
+   without it. The comment in flash.php says they must match; nothing failed if
+   someone narrowed one back. Same defect class as a rule with two homes. */
+check('firmware and BIOS accept the same extensions',
+      substr_count($flashSrc, "['bin', 'rom', 'fw']") >= 3);
 check('images are chosen from a select, not typed', str_contains($jsSrc, "<select id=\"flash-fw-"));
 check('the flash reads images from the drop dir',   str_contains($flashSrc, "FLASH_DROP . '/' . \$fwName"));
 
