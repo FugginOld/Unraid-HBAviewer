@@ -68,7 +68,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
         'SHOW_EVENTS'     => isset($_POST['show_events']) ? 1 : 0,
         'SHOW_PERF'       => isset($_POST['show_perf'])   ? 1 : 0,
-        'ENABLE_FLASH'    => isset($_POST['enable_flash'])  ? 1 : 0,
+        // A disabled checkbox posts nothing, which the line below would read as
+        // "off" and write — silently discarding a setting the user never
+        // changed and cannot currently change back. While locked, keep what is
+        // on disk so their choice is still there when flashing returns.
+        'ENABLE_FLASH'    => LSI_FLASH_LOCKED
+            ? (int) (lsi_config_read()['ENABLE_FLASH'] ?? 0)
+            : (isset($_POST['enable_flash']) ? 1 : 0),
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
         'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
         'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
@@ -138,8 +144,17 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-s-control { flex: 1; }
 .lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
 .lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
+/* A card the maintainer has switched off. Greyed by opacity rather than by
+   recolouring: the danger notice inside it keeps its own colour relationships,
+   and its text stays selectable and readable by a screen reader. The heading
+   dot loses its glow so a locked card is distinguishable at a glance, not only
+   by reading it. pointer-events stays ON — the note must remain selectable, and
+   the one interactive control is `disabled`, which is the real lock. */
+.lu-s-card.is-locked { opacity: .72; }
+.lu-s-card.is-locked h3::before { background: var(--faint); box-shadow: none; }
 .lu-toggle { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
 .lu-toggle input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.lu-toggle input[type=checkbox]:disabled { cursor: not-allowed; }
 .lu-toggle span { font-size: 13px; color: var(--text); }
 .lu-toggle small { font-size: 11px; color: var(--faint); margin-left: auto; }
 .lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: var(--good-text); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
@@ -345,8 +360,14 @@ foreach ($bands as $floor => $label) {
 
     </div><!-- /.lu-s-grid — Advanced is a full-width footer, see the CSS -->
 
-    <div class="lu-s-card">
+    <div class="lu-s-card<?= LSI_FLASH_LOCKED ? ' is-locked' : '' ?>">
       <h3>Advanced — Firmware Flashing</h3>
+      <?php if (LSI_FLASH_LOCKED): ?>
+      <div class="lu-danger">
+        <strong>&#9888; Disabled in this release.</strong>
+        <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
+      </div>
+      <?php else: ?>
       <div class="lu-danger">
         <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
         <strong>brick</strong> your controller if the wrong image is used. The array
@@ -354,10 +375,17 @@ foreach ($bands as $floor => $label) {
         (sas2flash / sas3flash) are not bundled — you supply the model-correct image
         and tool. Leave this off unless you know exactly what you are doing.
       </div>
+      <?php endif; ?>
       <label class="lu-toggle">
-        <input type="checkbox" name="enable_flash" <?= lu_checked((int)$cfg['ENABLE_FLASH']) ?>>
+        <?php /* Disabled, not removed: the tick still shows what you had set, and
+                 the save handler holds that value rather than reading the absent
+                 POST field as "off". */ ?>
+        <input type="checkbox" name="enable_flash" <?= lu_checked((int)$cfg['ENABLE_FLASH']) ?>
+               <?= LSI_FLASH_LOCKED ? 'disabled' : '' ?>>
         <span>Enable firmware/BIOS flashing (advanced)</span>
-        <small>save, then use the Firmware/BIOS Update button below</small>
+        <small><?= LSI_FLASH_LOCKED
+            ? 'unavailable until further testing — your setting is remembered'
+            : 'save, then use the Firmware/BIOS Update button below' ?></small>
       </label>
     </div>
 
@@ -373,7 +401,7 @@ foreach ($bands as $floor => $label) {
                notice, rather than finding it beside the monitoring tabs on a
                page left open. $cfg is re-read after a save, so this appears the
                moment the box is ticked and saved. */ ?>
-      <?php if ((int)$cfg['ENABLE_FLASH'] === 1): ?>
+      <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
       <a class="lu-btn danger" href="/Settings/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>

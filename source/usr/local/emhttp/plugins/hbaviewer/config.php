@@ -6,6 +6,33 @@
 
 const LSI_CFG = '/boot/config/plugins/hbaviewer/hbaviewer.cfg';
 
+/* ── Firmware flashing: maintainer lock ───────────────────────────────────────
+ * Set true to disable firmware/BIOS flashing outright, over and above the
+ * user's own ENABLE_FLASH toggle. Flip to false to reactivate; nothing else
+ * needs editing, and no user's saved setting is touched while it is on.
+ *
+ * ENABLE_FLASH is the USER saying "I might flash a card". This is the
+ * MAINTAINER saying "not right now" — two different questions, so two
+ * different switches rather than forcing the user's answer to a value they
+ * did not choose and would silently lose on their next Save.
+ *
+ * Honoured at four places, and the order matters: flash.php refuses every
+ * action with a 403 (the only one that is actually load-bearing — a UI that
+ * merely looks disabled is not disabled), flash_view.php renders the reason
+ * instead of the wizard, and settings.php greys the card and holds the stored
+ * value. A page offering controls the endpoint would refuse is worse than one
+ * that says plainly why there are none.
+ *
+ * Locked 2026-08-09: the flash path needs more testing on real hardware before
+ * it is offered again. It is the one surface in this plugin that writes to a
+ * controller, and a wrong image bricks it permanently — so the default while
+ * in doubt is off. */
+const LSI_FLASH_LOCKED = true;
+const LSI_FLASH_LOCK_NOTE = 'Firmware/BIOS flashing is temporarily disabled while it undergoes further testing. '
+    . 'This is the one part of the plugin that writes to your controller, and a wrong or mismatched image '
+    . 'bricks it permanently — so it stays off until it has been verified on more hardware. '
+    . 'Nothing else is affected, and your setting is remembered for when it returns.';
+
 // key => [default, min, max]   (SHOW_* are booleans expressed as 0/1)
 const LSI_SCHEMA = [
     'HBA_PORT'        => [1,  1, 8],

@@ -108,6 +108,10 @@ $cfg    = lsi_config_read();
 $enable = (int) $cfg['ENABLE_FLASH'];
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
 
+// The maintainer lock outranks the user's toggle and is checked first, so a
+// stale page, a bookmarked POST or a hand-rolled curl all hit the same wall.
+// This is the gate that actually disables flashing; everything else is signage.
+if (LSI_FLASH_LOCKED) { http_response_code(403); echo LSI_FLASH_LOCK_NOTE; exit; }
 if ($enable !== 1) { http_response_code(403); echo 'Firmware flashing is disabled.'; exit; }
 // CSRF is enforced by Unraid's platform layer (a token-less POST never reaches
 // here). The client sends Unraid's csrf_token so that layer passes it through.
