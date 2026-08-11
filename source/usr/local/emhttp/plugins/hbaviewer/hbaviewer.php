@@ -133,7 +133,8 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   <button class="lu-tab-btn" type="button"
           onclick="location.href='/Tools/HBAviewer_Flash'">&#9888; Firmware</button>
   <?php endif; ?>
-  <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
+  <button class="lu-tab-btn lu-tab-right" type="button"
+          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->

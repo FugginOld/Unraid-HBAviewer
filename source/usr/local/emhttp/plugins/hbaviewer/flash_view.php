@@ -93,7 +93,16 @@ if ($enableFlash) {
            a page and the link silently went nowhere. The monitor is the xmenu
            entry under it — the same URL dashboard.php and settings.php have
            always used. */ ?>
-  <a class="lu-settings-link" href="/Tools/HBAviewer_Monitor">&#8592; Back to HBAviewer</a>
+  <?php /* Same two tabs the Monitor's strip ends with, so leaving this page
+           looks the same wherever you are in the plugin. lu-tab-right on the
+           first one pushes the pair away from the heading; the second follows
+           it. */ ?>
+  <div class="lu-tabs" style="border-bottom:none;margin-bottom:0">
+    <button class="lu-tab-btn lu-tab-right" type="button"
+            onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
+    <button class="lu-tab-btn" type="button"
+            onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
+  </div>
 </div>
 
 <?php if (LSI_FLASH_LOCKED): ?>
