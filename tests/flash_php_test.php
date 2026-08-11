@@ -340,6 +340,29 @@ check('A: the dual card is keyed by its WHOLE list, not its first index',
 check('A: and the whole list is what the gate then accepts',
       flash_ctl_is_card('0,1', 'SAS3008', flash_cards_from($dualRaw)) === true);
 
+/* RAID-on-Chip refused by BOARD, not only by chip.
+   flash_hba.sh refuses five chips that only ever ship as MegaRAID. Entry-level
+   MegaRAID shares silicon with indexed HBAs and slips straight through that
+   net: a 9440-8i is a SAS3408 like the HBA 9400-8i, a 9341-8i is a SAS3008 like
+   the 9300-8i. Both match a tool prefix, both would be handed a flasher, and no
+   IT firmware exists for either. Keyed on the board name because the subdevice
+   IDs are not to hand and the name closes the whole family rather than the two
+   models we happen to know of. */
+$rocRaw = $dualRaw;
+$rocRaw['controllers'] = [$dualRaw['controllers'][0]];
+$rocRaw['controllers'][0]['board_name'] = 'MegaRAID 9440-8i';
+$rocRaw['controllers'][0]['model']      = 'SAS3408';
+check('a MegaRAID board is not offered as a flashable card',
+      flash_cards_from($rocRaw) === []);
+check('and the gate therefore refuses it',
+      flash_ctl_is_card('0', 'SAS3408', flash_cards_from($rocRaw)) === false);
+/* Case is not ours to choose -- storcli's spelling is not guaranteed. */
+$rocRaw['controllers'][0]['board_name'] = 'megaraid 9341-8i';
+check('the board-name match is case-insensitive', flash_cards_from($rocRaw) === []);
+/* The guard must not eat ordinary hardware: an HBA on the same silicon stays. */
+check('an HBA sharing that silicon is still offered',
+      array_keys(flash_cards_from($dualRaw)) === ['0,1']);
+
 /* MUTANT B -- drop the alnum filter on the model. The dispatch filters the
    CLIENT's chip, so an unfiltered map value can never equal it and every flash
    on a backend whose model carries a space or a dash is refused. A gate that

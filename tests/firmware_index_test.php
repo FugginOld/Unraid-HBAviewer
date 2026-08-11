@@ -332,5 +332,71 @@ file_put_contents($missingPath, json_encode(['schema_version' => 1, 'updated' =>
 check('fw_load keeps a cached miss even after the file later appears', fw_load($missingPath) === null);
 @unlink($missingPath);
 
+/* ── Structural invariants of the index ──────────────────────────────────────
+   Ported from a proposed schema-2 validator (docs/proposals/) after checking
+   that the current data already satisfies all four. That is the point: they are
+   true today by care rather than by enforcement, and each one is a rule the
+   index states in prose and could not check. Keeping them here means schema 1
+   gets the guarantees without the migration, and a schema-2 loader inherits a
+   passing suite instead of writing these from scratch. */
+
+/* Re-read the file rather than reusing $idx: by this point $idx is fw_load()'s
+   view, whose board keys have been through fw_normalize() -- SAS9300-16i is
+   stored as 930016i. Checking the multipath list against those keys reports all
+   eight as dangling, which is how this block failed the first time it ran.
+   Same normalisation mismatch that made the card-grouping map match nothing.
+   These invariants are about the data as AUTHORED, so they read the file. */
+$RAW = json_decode((string) file_get_contents($INDEX), true);
+$B   = $RAW['boards']   ?? [];
+$BR  = $RAW['branches'] ?? [];
+
+/* 'confirmed' means equality is meaningful in BOTH directions, which is only
+   true on a terminal branch — on a floor, matching proves nothing. A confirmed
+   row on a non-terminal branch is the single most consequential hand-edit error
+   possible here: it turns "you are at the floor" into "you are up to date". */
+$badConfirmed = [];
+foreach ($B as $name => $b) {
+    if (($b['confidence'] ?? '') !== 'confirmed') continue;
+    $br = (string) ($b['branch'] ?? '');
+    if (empty($BR[$br]['terminal'])) $badConfirmed[] = "$name/$br";
+}
+check('no board claims confirmed on a non-terminal branch', $badConfirmed === []);
+if ($badConfirmed) echo "      " . implode(', ', $badConfirmed) . "
+";
+
+/* The multipath list suppresses verdicts, so a name that matches no board is a
+   suppression that silently never fires. */
+$dangling = array_values(array_filter(
+    $RAW["multipath_track"]["affected_boards"] ?? [],
+    static fn(string $m): bool => !isset($B[$m])));
+check('every multipath-affected board resolves to a real board', $dangling === []);
+if ($dangling) echo "      " . implode(', ', $dangling) . "
+";
+
+/* Every indexed chip must reach a tool, or the firmware page offers a card it
+   cannot flash. Patterns mirror flasher_for_chip() in scripts/flash_hba.sh. */
+$unreachable = [];
+foreach ($B as $name => $b) {
+    $c = (string) ($b['chip'] ?? '');
+    if (!preg_match('/^SAS2|^SAS3[012]|^SAS3[4568]/', $c)) $unreachable[] = "$name($c)";
+}
+check('every indexed chip matches a flash-tool prefix', $unreachable === []);
+if ($unreachable) echo "      " . implode(', ', $unreachable) . "
+";
+
+/* A chip on the no-IT-firmware list that is ALSO an indexed board is a direct
+   contradiction: one half of the file says flash it, the other says it cannot
+   be flashed at any version. */
+$contradictions = [];
+foreach (array_keys($RAW["no_it_firmware"] ?? []) as $rc) {
+    if ($rc === '_comment') continue;
+    foreach ($B as $name => $b) {
+        if (($b['chip'] ?? '') === $rc) $contradictions[] = "$name/$rc";
+    }
+}
+check('no refused chip is also an indexed board', $contradictions === []);
+if ($contradictions) echo "      " . implode(', ', $contradictions) . "
+";
+
 echo $fails === 0 ? "firmware_index: all pass\n" : "firmware_index: FAILURES\n";
 exit($fails === 0 ? 0 : 1);

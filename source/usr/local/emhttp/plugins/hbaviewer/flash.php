@@ -146,7 +146,24 @@ function flash_cards_from(array $data): array {
     $out    = [];
     foreach (lsi_group_cards($ctls, $counts) as $g) {
         $first = $ctls[$g[0]] ?? [];
-        if (count($g) < ($counts[fw_normalize((string) ($first['board_name'] ?? ''))] ?? 1)) continue;
+        $board = (string) ($first['board_name'] ?? '');
+        /* RAID-on-Chip, refused by BOARD as well as by chip.
+         *
+         * flash_hba.sh refuses five chips that only ever ship as MegaRAID. That
+         * net cannot catch the entry-level cards which share silicon with an
+         * indexed HBA: a MegaRAID 9440-8i is a SAS3408, the same chip as the
+         * HBA 9400-8i, so it matches SAS34* and is handed storcli. Same for the
+         * 9341-8i on SAS3008 against the 9300-8i. No IT firmware exists for
+         * either, and the verdict path already declines them (they are not
+         * indexed) — it is only the flash path that would offer a tool.
+         *
+         * Keyed on the reported board name rather than a PCI subdevice because
+         * the subdevice IDs are not to hand, and the name is what the backend
+         * already gives us. It costs nothing and closes the whole family
+         * instead of the two models we happen to know about. No indexed board
+         * carries this string. */
+        if (stripos($board, 'megaraid') !== false) continue;
+        if (count($g) < ($counts[fw_normalize($board)] ?? 1)) continue;
         $out[implode(',', $g)] = (string) preg_replace('/[^A-Za-z0-9]/', '',
             (string) ($first['model'] ?? ''));
     }
