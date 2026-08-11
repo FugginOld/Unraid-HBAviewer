@@ -337,81 +337,88 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []):
     return $age . luTable(['Device', 'Unraid', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
 }
 
-/* Render the Overview cards (one per controller) — same markup the Monitor page
-   used to emit server-side, moved here so the initial load is async. */
-function renderOverviewCards(array $data, array $cfg): string {
+/* One controller, one card -- the markup this page has always emitted. Pulled
+   out of renderOverviewCards's loop so a dual-IOC board can compose a grouped
+   card from the same pieces instead of a second copy of them drifting apart. */
+function renderControllerCard(array $c, int $i, array $cfg, string $driver): string {
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
-    $driver    = $data['driver'] ?? '';
-    $out = '<div class="lu-ov-grid">';
-    foreach (lsi_controllers($data) as $i => $c) {
-        if (isset($c['error'])) {
-            $out .= '<div class="lu-card first"><div class="lu-error"><strong>Controller ' . $i . ':</strong> '
-                  . htmlspecialchars($c['error']) . '</div></div>';
-            continue;
-        }
-        $v = lsi_hba_view($c, $port, $i);
-        // ?? [] rather than trusting the key exists: an absent verdict must
-        // render as nothing, never as a TypeError that blanks the whole panel.
-        $fwClause = fw_overview_clause($v['firmware_verdict'] ?? []);
-        // Critical renders as an inverted chip (white on solid fill) — #922b21
-        // measures 1.94:1 as plain text on a dark card and is unreadable there.
-        $isCrit   = ($v['temp_band'] ?? '') === 'critical';
-        $tempChip = $isCrit
-            ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
-            : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
-        // The gauge reads 0-110C. Gradient ids must not collide when several
-        // controllers render on one page, hence the index — and the Health tab
-        // lives in the same DOM, so it uses its own prefix.
-        [$gDark, $gLight] = $v['temp_grad'];
-        $frac  = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
-        $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
-              . '<div class="lu-overview-row">'
-              . '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
-              . '<div class="lu-arc-wrap">'
-              . lsi_gauge_svg('lu-grad-' . $i, $frac, [$gDark, $gLight])
-              . '<div class="lu-arc-readout">'
-              . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
-              . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
-              . '<span class="lu-temp-band">' . $tempChip . '</span>'
-              . '</div>'
-              . '<div class="lu-meta">'
-              . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
-              . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
-              // The verdict clause is strictly more informative than the bare
-              // pre-P20 flag — it names the exact version — so once it has
-              // something to say, the older flag steps aside rather than
-              // repeating the same fact in a second amber. A suppressed or
-              // unknown verdict has nothing to say, and the flag still does.
-              /* Version and verdict live in ONE span. .lu-meta p is a flex row with
-                 justify-content:space-between, so every direct child becomes a
-                 separately-spaced column: a second span sent the version to the
-                 middle of the row and the verdict to the right edge, with the label
-                 stranded on the left. Keeping them in one child preserves the
-                 label-left / value-right shape every other row in this card has.
-                 The pre-P20 chip had the same defect before the verdict existed —
-                 it just only showed on SAS2 cards, so nobody had seen it. */
-              . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
-              . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
-              . $fwClause . '</span></p>'
-              . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
-              . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
-              . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
-              . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
-              . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
-              . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
-              . '<p>Last read: <span>' . lsi_time() . '</span></p>'
-              . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
-              . '</div></div>';
-        if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
-            $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
-            foreach ($v['pcie'] as $item) {
-                $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
-            }
-            $out .= '</div>';
+    $out = '';
+    if (isset($c['error'])) {
+        return '<div class="lu-card first"><div class="lu-error"><strong>Controller ' . $i . ':</strong> '
+             . htmlspecialchars($c['error']) . '</div></div>';
+    }
+    $v = lsi_hba_view($c, $port, $i);
+    // ?? [] rather than trusting the key exists: an absent verdict must
+    // render as nothing, never as a TypeError that blanks the whole panel.
+    $fwClause = fw_overview_clause($v['firmware_verdict'] ?? []);
+    // Critical renders as an inverted chip (white on solid fill) — #922b21
+    // measures 1.94:1 as plain text on a dark card and is unreadable there.
+    $isCrit   = ($v['temp_band'] ?? '') === 'critical';
+    $tempChip = $isCrit
+        ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
+        : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
+    // The gauge reads 0-110C. Gradient ids must not collide when several
+    // controllers render on one page, hence the index — and the Health tab
+    // lives in the same DOM, so it uses its own prefix.
+    [$gDark, $gLight] = $v['temp_grad'];
+    $frac  = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
+    $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
+          . '<div class="lu-overview-row">'
+          . '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
+          . '<div class="lu-arc-wrap">'
+          . lsi_gauge_svg('lu-grad-' . $i, $frac, [$gDark, $gLight])
+          . '<div class="lu-arc-readout">'
+          . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
+          . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
+          . '<span class="lu-temp-band">' . $tempChip . '</span>'
+          . '</div>'
+          . '<div class="lu-meta">'
+          . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
+          . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
+          // The verdict clause is strictly more informative than the bare
+          // pre-P20 flag — it names the exact version — so once it has
+          // something to say, the older flag steps aside rather than
+          // repeating the same fact in a second amber. A suppressed or
+          // unknown verdict has nothing to say, and the flag still does.
+          /* Version and verdict live in ONE span. .lu-meta p is a flex row with
+             justify-content:space-between, so every direct child becomes a
+             separately-spaced column: a second span sent the version to the
+             middle of the row and the verdict to the right edge, with the label
+             stranded on the left. Keeping them in one child preserves the
+             label-left / value-right shape every other row in this card has.
+             The pre-P20 chip had the same defect before the verdict existed —
+             it just only showed on SAS2 cards, so nobody had seen it. */
+          . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
+          . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+          . $fwClause . '</span></p>'
+          . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
+          . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
+          . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
+          . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
+          . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
+          . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+          . '<p>Last read: <span>' . lsi_time() . '</span></p>'
+          . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
+          . '</div></div>';
+    if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
+        $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
+        foreach ($v['pcie'] as $item) {
+            $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
         }
         $out .= '</div>';
+    }
+    return $out . '</div>';
+}
+
+/* Render the Overview cards (one per controller) — same markup the Monitor page
+   used to emit server-side, moved here so the initial load is async. */
+function renderOverviewCards(array $data, array $cfg): string {
+    $driver = $data['driver'] ?? '';
+    $out = '<div class="lu-ov-grid">';
+    foreach (lsi_controllers($data) as $i => $c) {
+        $out .= renderControllerCard($c, $i, $cfg, $driver);
     }
     return $out . '</div>';
 }
