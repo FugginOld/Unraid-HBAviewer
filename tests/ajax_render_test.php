@@ -1208,6 +1208,97 @@ $hSas2NoVerdict = renderOverviewCards($sas2NoVerdict, $fwCfg);
 check('the pre-P20 flag still shows when the verdict has nothing to say',
     str_contains($hSas2NoVerdict, 'pre-P20'));
 
+/* ── A dual-IOC board is ONE card ─────────────────────────────────────────────
+   A dual-IOC board renders as ONE card with a sub-card per controller. Both
+   temperatures must survive: two dies, two sensors, and one number standing for
+   two would be a wrong reading rather than a simplification. */
+$dualCfg  = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 1];
+$dualData = ['driver' => 'mpt3sas 54.100.00.00', 'controllers' => [
+    ['model' => 'SAS3008', 'board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0',
+     'temp' => 56, 'temp_band' => 'normal',   'cfg_band' => 'warning', 'status' => 'ok',
+     'firmware' => '16.00.12.00', 'bios' => '08.15.00.00', 'mode' => 'IT',
+     'pci_location' => '00:84:00:00', 'drive_count' => '2'],
+    ['model' => 'SAS3008', 'board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0',
+     'temp' => 71, 'temp_band' => 'elevated', 'cfg_band' => 'warning', 'status' => 'warn',
+     'firmware' => '16.00.12.00', 'bios' => '08.15.00.00', 'mode' => 'IT',
+     'pci_location' => '00:86:00:00', 'drive_count' => '6'],
+]];
+$html = renderOverviewCards($dualData, $dualCfg);
+
+check('one parent card for a dual-IOC board', substr_count($html, 'lu-card-parent') === 1);
+check('a sub-card per controller',            substr_count($html, 'lu-card-ioc') === 2);
+check('a gauge per controller',               substr_count($html, 'lu-arc-wrap') === 2);
+check('a temperature band chip per controller', substr_count($html, 'lu-temp-band') === 2);
+check('both temperatures are shown',          str_contains($html, '>56<') && str_contains($html, '>71<'));
+check('the board name appears once',          substr_count($html, 'SAS9300-16i') === 1);
+check('each IOC keeps its own drive count',
+      str_contains($html, '>2 connected<') && str_contains($html, '>6 connected<'));
+
+/* The worst-of badge, asserted on the VALUE and not merely on the wrapper's
+   existence. A parent that always reports the first IOC's status is the
+   likeliest way this ships broken: here IOC 0 is ok and IOC 1 is warn, so a
+   parent reading NORMAL is a green light over an overheating die. */
+check('the parent takes the worse status',    str_contains($html, 'lu-card-parent" data-status="warn"'));
+/* The board's own badge is the one with no id -- every IOC badge carries
+   `id="lu-badge-N"`. Matching on that rather than on "a WARNING somewhere after
+   lu-card-parent", which the second IOC's own badge satisfies whatever the
+   parent says. */
+check('the parent badge reads the worse label',
+      substr_count($html, '<span class="lu-badge">WARNING</span>') === 1);
+check('each IOC still shows its own badge',
+      str_contains($html, '>NORMAL</span>') && str_contains($html, '>WARNING</span>'));
+/* Board-level facts are stated once, on the parent -- never repeated per IOC. */
+check('board-level rows are not repeated per IOC',
+      substr_count($html, '<p>Chip:') === 1 && substr_count($html, '<p>Firmware:') === 1
+      && substr_count($html, '<p>BIOS:') === 1 && substr_count($html, '<p>Driver:') === 1
+      && substr_count($html, '<p>Mode:') === 1 && substr_count($html, '<p>Last read:') === 1
+      && substr_count($html, '<p>Badge Sensitivity:') === 1);
+
+/* The case that must NOT change. A single-IOC card grows no wrapper: everyone
+   without a dual board sees exactly the page they saw before. */
+$soloData = ['driver' => 'mpt3sas 54.100.00.00', 'controllers' => [$dualData['controllers'][0]]];
+$soloData['controllers'][0]['board_name'] = 'SAS9300-8i';
+$soloData['controllers'][0]['card_id']    = '0000:00:11.0';
+$solo = renderOverviewCards($soloData, $dualCfg);
+check('a single-IOC card grows no parent wrapper',
+      !str_contains($solo, 'lu-card-parent') && !str_contains($solo, 'lu-card-ioc'));
+
+/* Real pipeline output for the maintainer's 9300-16i: two SAS3008s in one slot,
+   both reading normal but at DIFFERENT temperatures (60 and 62) -- equal
+   airflow, not one sensor. Same file tests/card_group_test.php feeds through
+   the grouper, so the renderer is exercised on the hardware's own JSON. */
+$realDual = json_decode((string) file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true);
+$realHtml = renderOverviewCards($realDual, $dualCfg);
+check('the real dual-IOC capture renders one card',   substr_count($realHtml, 'lu-card-parent') === 1);
+check('the real dual-IOC capture keeps both IOCs',    substr_count($realHtml, 'lu-card-ioc') === 2);
+check('the real dual-IOC capture keeps both sensors',
+      str_contains($realHtml, '>60<') && str_contains($realHtml, '>62<'));
+/* The PCIe link is the SLOT's, so it is stated once on the board and not per
+   IOC — width, speed, power mode and PCI location, the same four items the
+   plain card lists. The location shown is the first IOC's PCI function; the
+   second (00:86:00:00) is deliberately not a second row, because the row
+   describes the board's link rather than each function's address. */
+check('the PCIe row belongs to the board, not each IOC',
+      substr_count($realHtml, 'lu-pcie-row') === 1
+      && substr_count($realHtml, 'lu-pcie-item') === 4
+      && substr_count($realHtml, 'PCI Location') === 1);
+
+/* Non-adjacent members: lsi_group_cards() sorts groups by first member, so an
+   unrelated card sitting BETWEEN the two IOCs still yields [[0,2],[1]]. The
+   renderer must index $ctls by the member number, never by position. */
+$sandwich = ['driver' => 'mpt3sas 54.100.00.00', 'controllers' => [
+    $dualData['controllers'][0],
+    ['model' => 'SAS2308', 'board_name' => 'SAS9207-8i', 'card_id' => '0000:00:11.0',
+     'temp' => 48, 'temp_band' => 'normal', 'cfg_band' => 'warning', 'status' => 'ok',
+     'firmware' => '20.00.07.00', 'mode' => 'IT', 'drive_count' => '4'],
+    $dualData['controllers'][1],
+]];
+$sw = renderOverviewCards($sandwich, $dualCfg);
+check('a card between the two IOCs still groups them', substr_count($sw, 'lu-card-parent') === 1);
+check('the interloper renders as its own plain card',  str_contains($sw, 'SAS9207-8i'));
+check('the grouped members are the right two',
+      str_contains($sw, '>56<') && str_contains($sw, '>71<') && str_contains($sw, '>48<'));
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

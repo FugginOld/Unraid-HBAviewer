@@ -18,6 +18,8 @@ require_once __DIR__ . '/phy_baseline.php';
 require_once __DIR__ . '/bay_map.php';
 // And locate.php's, so the tables can ask which drives are currently blinking.
 require_once __DIR__ . '/locate.php';
+// Which controllers are one physical card (a 9300-16i is two IOCs on one board).
+require_once __DIR__ . '/card_group.php';
 
 /* Where the background SMART collector writes. ABOVE the dispatch on purpose:
    a `function` is hoisted and can be called from anywhere in the file, but a
@@ -337,6 +339,30 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []):
     return $age . luTable(['Device', 'Unraid', 'Model', 'Type', 'Serial', 'Health', 'Temp', 'Reallocated', 'Pending', 'Power-On'], $rows);
 }
 
+/* The temperature tile: the half-circle gauge, the reading, and the band chip
+   under it. ONE copy, because two callers draw it now -- a plain card once per
+   board, a grouped card once per IOC -- and two dies read through two slightly
+   different instruments is a discrepancy nobody could explain.
+   $i keys the gradient id, which must be unique across every gauge in the DOM
+   (the Health tab lives in the same document and uses its own prefix). */
+function luTempTile(array $v, int $i): string {
+    // Critical renders as an inverted chip (white on solid fill) — #922b21
+    // measures 1.94:1 as plain text on a dark card and is unreadable there.
+    $tempChip = ($v['temp_band'] ?? '') === 'critical'
+        ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
+        : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
+    // The gauge reads 0-110C.
+    $frac = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
+    return '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
+         . '<div class="lu-arc-wrap">'
+         . lsi_gauge_svg('lu-grad-' . $i, $frac, $v['temp_grad'])
+         . '<div class="lu-arc-readout">'
+         . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
+         . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
+         . '<span class="lu-temp-band">' . $tempChip . '</span>'
+         . '</div>';
+}
+
 /* One controller, one card -- the markup this page has always emitted. Pulled
    out of renderOverviewCards's loop so a dual-IOC board can compose a grouped
    card from the same pieces instead of a second copy of them drifting apart. */
@@ -353,27 +379,10 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     // ?? [] rather than trusting the key exists: an absent verdict must
     // render as nothing, never as a TypeError that blanks the whole panel.
     $fwClause = fw_overview_clause($v['firmware_verdict'] ?? []);
-    // Critical renders as an inverted chip (white on solid fill) — #922b21
-    // measures 1.94:1 as plain text on a dark card and is unreadable there.
-    $isCrit   = ($v['temp_band'] ?? '') === 'critical';
-    $tempChip = $isCrit
-        ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
-        : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
-    // The gauge reads 0-110C. Gradient ids must not collide when several
-    // controllers render on one page, hence the index — and the Health tab
-    // lives in the same DOM, so it uses its own prefix.
     [$gDark, $gLight] = $v['temp_grad'];
-    $frac  = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
     $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
           . '<div class="lu-overview-row">'
-          . '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
-          . '<div class="lu-arc-wrap">'
-          . lsi_gauge_svg('lu-grad-' . $i, $frac, [$gDark, $gLight])
-          . '<div class="lu-arc-readout">'
-          . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
-          . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
-          . '<span class="lu-temp-band">' . $tempChip . '</span>'
-          . '</div>'
+          . luTempTile($v, $i)
           . '<div class="lu-meta">'
           . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
           . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
@@ -412,13 +421,111 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     return $out . '</div>';
 }
 
-/* Render the Overview cards (one per controller) — same markup the Monitor page
-   used to emit server-side, moved here so the initial load is async. */
+/* A dual-IOC board: one card for the board, one sub-card per controller.
+ *
+ * Board-level fields come from the first member. Both IOCs of a 9300-16i report
+ * the same model, chip, firmware, BIOS and PCIe link, because those describe the
+ * card; reading them from member 0 rather than merging avoids inventing a rule
+ * for a disagreement that cannot happen on a working board.
+ *
+ * Temperature is the exception and must never be merged: two dies, two sensors.
+ * On the maintainer's card they read 60C and 62C -- close because they share
+ * airflow and load, not because they are one reading.
+ *
+ * $group holds INDICES into $ctls and they are NOT necessarily contiguous:
+ * lsi_group_cards() sorts groups by first member, so an unrelated card sitting
+ * between the two IOCs yields [[0,2],[1]]. Everything below indexes by the
+ * member number, never by position. */
+function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver): string {
+    $port      = $cfg['HBA_PORT'];
+    $threshold = $cfg['ALERT_THRESHOLD'];
+    $showPcie  = $cfg['SHOW_PCIE'];
+    $head      = $ctls[$group[0]];
+    $hv        = lsi_hba_view($head, $port, (int) $group[0]);
+    $fwClause  = fw_overview_clause($hv['firmware_verdict'] ?? []);
+    // Worst-of, so the parent says something true about the board: a card whose
+    // second IOC is overheating must not show a green badge because its first
+    // one is fine.
+    $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
+    $worst = 'ok';
+    foreach ($group as $i) {
+        $s = (string) ($ctls[$i]['status'] ?? 'ok');
+        if (($rank[$s] ?? 0) > ($rank[$worst] ?? 0)) { $worst = $s; }
+    }
+
+    $out = '<div class="lu-card first lu-card-parent" data-status="' . htmlspecialchars($worst) . '"'
+         . ' style="--sc:' . lsi_status_color($worst) . '">'
+         . '<div class="lu-meta">'
+         . '<p>Model: <span>' . htmlspecialchars($hv['model']) . '</span></p>'
+         . '<p>Chip: <span>' . htmlspecialchars($hv['chip']) . '</span></p>'
+         // Same one-span shape as the plain card: .lu-meta p is a flex row, so a
+         // verdict beside the version rather than inside it strands the label.
+         . '<p>Firmware: <span>' . htmlspecialchars($hv['firmware'])
+         . ($hv['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+         . $fwClause . '</span></p>'
+         . ($hv['bios'] !== '' ? '<p>BIOS: <span>' . htmlspecialchars($hv['bios']) . '</span></p>' : '')
+         . ($driver     !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
+         . ($hv['mode'] !== '' ? '<p>Mode: <span>' . htmlspecialchars($hv['mode']) . '</span></p>' : '')
+         . '<p>Badge Sensitivity: <span>' . htmlspecialchars($hv['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+         . '<p>Last read: <span>' . lsi_time() . '</span></p>'
+         . '<p>HBA Health: <span class="lu-badge">' . lsi_status_label($worst) . '</span></p>'
+         . '</div>';
+
+    foreach ($group as $i) {
+        $c = $ctls[$i];
+        // --sc/--td/--tl are restated on the sub-card so this IOC's gauge and
+        // badge take ITS colours, not the board rollup's.
+        if (isset($c['error'])) {
+            $out .= '<div class="lu-card-ioc" data-ctl="' . $i . '">'
+                  . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
+                  . '<div class="lu-error">' . htmlspecialchars($c['error']) . '</div></div>';
+            continue;
+        }
+        $v = lsi_hba_view($c, $port, (int) $i);
+        [$gDark, $gLight] = $v['temp_grad'];
+        $out .= '<div class="lu-card-ioc" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
+              . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
+              . '<div class="lu-overview-row">'
+              . luTempTile($v, (int) $i)
+              . '<div class="lu-meta">'
+              . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
+              . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
+              . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
+              . '</div></div></div>';
+    }
+
+    // One PCIe row for the board: the link is the slot's, and both IOCs report
+    // the same width and speed through it.
+    if ($showPcie && (($head['pcie_width'] ?? '') || ($head['pcie_speed'] ?? ''))) {
+        $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
+        foreach ($hv['pcie'] as $item) {
+            $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
+        }
+        $out .= '</div>';
+    }
+    return $out . '</div>';
+}
+
+/* Render the Overview cards (one per CARD, which is usually one per controller)
+   — same markup the Monitor page used to emit server-side, moved here so the
+   initial load is async. */
 function renderOverviewCards(array $data, array $cfg): string {
     $driver = $data['driver'] ?? '';
-    $out = '<div class="lu-ov-grid">';
-    foreach (lsi_controllers($data) as $i => $c) {
-        $out .= renderControllerCard($c, $i, $cfg, $driver);
+    $out    = '<div class="lu-ov-grid">';
+    $ctls   = lsi_controllers($data);
+    // fw_load(), never a hand-built map: fw_load() re-keys every board through
+    // fw_normalize(), so a literal 'SAS9300-16i' key would miss every lookup and
+    // nothing would ever group. The read is memoized inside fw_load().
+    $groups = lsi_group_cards($ctls, lsi_ioc_counts(fw_load()));
+    foreach ($groups as $g) {
+        // A group of one is the old path exactly -- same function, no wrapper,
+        // byte-identical output. That is what keeps every existing golden green
+        // and every user without a dual-IOC board seeing no change at all.
+        if (count($g) === 1) {
+            $out .= renderControllerCard($ctls[$g[0]], (int) $g[0], $cfg, $driver);
+            continue;
+        }
+        $out .= renderGroupedCard($ctls, $g, $cfg, $driver);
     }
     return $out . '</div>';
 }
