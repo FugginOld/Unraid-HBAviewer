@@ -7,6 +7,7 @@
   "port_name": "ioc0",
   "board_name": "SAS9207-8i",
   "pci_location": "03:00",
+  "card_id": "",
   "topology": "internal",
   "subvendor_id": "0x1000",
   "pcie_width": "x8",

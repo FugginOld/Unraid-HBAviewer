@@ -21,6 +21,7 @@ IDENT=$(cat "$5" 2>/dev/null)
 # must never read as generic Broadcom.
 TOPOLOGY="${LSI_TOPOLOGY:-unknown}"
 SUBVENDOR="${LSI_SUBVENDOR:-}"
+CARD_ID="${LSI_CARD_ID:-}"
 
 # ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
@@ -158,6 +159,7 @@ cat <<EOF
   "port_name": "${PORT_NAME:-ioc0}",
   "board_name": "${BOARD_NAME:-}",
   "pci_location": "${PCI_BUS:-0}:${PCI_DEV:-0}",
+  "card_id": "${CARD_ID}",
   "topology": "${TOPOLOGY}",
   "subvendor_id": "${SUBVENDOR}",
   "pcie_width": "${PCIE_WIDTH}",

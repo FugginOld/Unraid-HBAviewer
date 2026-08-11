@@ -106,7 +106,10 @@ ov_storcli() {   # $1 = controller index
     hnum=""; if [ "${#hosts[@]}" -eq 1 ]; then hnum=$(basename "${hosts[0]}"); hnum="${hnum#host}"; fi
     LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
     LSI_SUBVENDOR=$([ -n "$dir" ] && hba_subvendor "$dir")
-    export LSI_TOPOLOGY LSI_SUBVENDOR
+    # The slot, for grouping the two IOCs of a dual-controller board. Same
+    # $dir the subvendor read uses, so it costs one more sysfs resolve.
+    LSI_CARD_ID=$([ -n "$dir" ] && hba_card_id "$dir")
+    export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
 }
 
@@ -146,7 +149,11 @@ ov_lsiutil() {
     pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
     LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
     LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
-    export LSI_TOPOLOGY LSI_SUBVENDOR
+    # Always resolves to one card here: lsiutil addresses a single controller,
+    # so this path never produces two entries to group. Emitted anyway so the
+    # field means the same thing on both backends.
+    LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
+    export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
     bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
 }
 
