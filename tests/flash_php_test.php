@@ -359,6 +359,27 @@ check('and the gate therefore refuses it',
 /* Case is not ours to choose -- storcli's spelling is not guaranteed. */
 $rocRaw['controllers'][0]['board_name'] = 'megaraid 9341-8i';
 check('the board-name match is case-insensitive', flash_cards_from($rocRaw) === []);
+
+/* OEM rebrands: the same subvendor gate fw_evaluate() applies to a verdict.
+   Writing a generic Broadcom image to a Dell H310 is a crossflash, not an
+   upgrade, and it also covers the rebranded MegaRAID that carries no
+   "MegaRAID" string. PRESENT-AND-WRONG refuses; ABSENT allows -- suppressing a
+   verdict costs a badge, refusing a flash costs the card, and a backend that
+   does not publish subsystem_vendor must not make every card unflashable. */
+$oemRaw = $dualRaw;
+$oemRaw['controllers'][0]['subvendor_id'] = '0x1028';   // Dell
+$oemRaw['controllers'][1]['subvendor_id'] = '0x1028';
+check('an OEM-rebranded card is not offered as flashable', flash_cards_from($oemRaw) === []);
+$blankRaw = $dualRaw;
+$blankRaw['controllers'][0]['subvendor_id'] = '';
+$blankRaw['controllers'][1]['subvendor_id'] = '';
+check('an unreadable subvendor still allows the flash',
+      array_keys(flash_cards_from($blankRaw)) === ['0,1']);
+$caseRaw = $dualRaw;
+$caseRaw['controllers'][0]['subvendor_id'] = '0X1000';
+$caseRaw['controllers'][1]['subvendor_id'] = '0X1000';
+check('the subvendor comparison is case-insensitive',
+      array_keys(flash_cards_from($caseRaw)) === ['0,1']);
 /* The guard must not eat ordinary hardware: an HBA on the same silicon stays. */
 check('an HBA sharing that silicon is still offered',
       array_keys(flash_cards_from($dualRaw)) === ['0,1']);

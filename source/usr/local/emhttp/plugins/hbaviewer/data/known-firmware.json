@@ -94,9 +94,9 @@
       "latest_it": "16.00.12.00",
       "branch": "P16",
       "eol": true,
-      "confidence": "confirmed",
+      "confidence": "observed-floor",
       "package": "9305_24i_Pkg_P16.12_IT_FW_BIOS_for_MSDOS_Windows.zip",
-      "notes": "NOT interchangeable with the 16i image despite the shared P16.12 label. SAS3224 confirmed as an IT-capable IOC (not RAID-on-Chip) from a live card: lsiutil reports MPTFW-15.00.00.00-IT with 15 JBOD drives attached."
+      "notes": "NOT interchangeable with the 16i image despite the shared P16.12 label. SAS3224 confirmed as an IT-capable IOC (not RAID-on-Chip) from a live card: lsiutil reports MPTFW-15.00.00.00-IT with 15 JBOD drives attached. Confidence lowered from confirmed to observed-floor 2026-08-11: that observation proves IT-capability and says nothing about 16.00.12.00 on this board -- the only version seen on a 24i is BELOW the listed one, so equality here is not evidence of current. Restore to confirmed when a 24i is observed running 16.00.12.00."
     },
     "HBA 9400-8i": {
       "chip": "SAS3408",

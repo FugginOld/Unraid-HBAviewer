@@ -132,6 +132,14 @@ if ($badVer) echo "      " . implode(', ', $badVer) . "\n";
 // builder that leaked into an "unconfirmed, may be RAID-on-Chip" list.
 check('SAS9305-24i is present and IT-capable', !empty($idx['boards']['SAS9305-24i']['it_capable']));
 check('SAS9305-24i chip is SAS3224', ($idx['boards']['SAS9305-24i']['chip'] ?? '') === 'SAS3224');
+/* Downgraded 2026-08-11. The live card reported MPTFW-15.00.00.00-IT, which
+   proves the part is IT-capable and says nothing about 16.00.12.00 on this
+   board -- the only version ever seen on a 24i is BELOW the listed one.
+   'confirmed' means equality is meaningful in both directions; here it would
+   claim that matching proves current, on no evidence. Pinned so restoring it
+   is a decision someone makes and edits a test for. */
+check('SAS9305-24i is observed-floor, not confirmed',
+      ($idx['boards']['SAS9305-24i']['confidence'] ?? '') === 'observed-floor');
 check('the unverified_chips typo block is gone', !isset($idx['unverified_chips']));
 
 // The most useful field in the file, and the one a UI change could drop.
@@ -167,7 +175,13 @@ $v = fw_evaluate($reporter, $idx);
 check('reporter 9305-24i is behind',        $v['status'] === 'behind');
 check('reporter names the latest version',  ($v['latest'] ?? '') === '16.00.12.00');
 check('reporter branch is terminal',        ($v['terminal'] ?? null) === true);
-check('reporter confidence is confirmed',   ($v['confidence'] ?? '') === 'confirmed');
+/* The property here is that the tier is SURFACED, not what it happens to be.
+   Hardcoding the value made this fail the moment the 24i was re-tiered, which
+   is a test reporting a data edit as a plumbing break. Compare against the
+   index instead: still catches a verdict that drops confidence entirely (null
+   never equals a real tier), and the value itself is pinned with the data. */
+check('reporter surfaces the index confidence',
+      ($v['confidence'] ?? null) === ($idx['boards'][fw_normalize('SAS9305-24i')]['confidence'] ?? 'MISSING'));
 check('reporter carries the board note',    str_contains((string) ($v['note'] ?? ''), 'NOT interchangeable'));
 
 $v = fw_evaluate(['board' => 'SAS9305-24i', 'firmware' => '16.00.12.00',
@@ -373,14 +387,34 @@ check('every multipath-affected board resolves to a real board', $dangling === [
 if ($dangling) echo "      " . implode(', ', $dangling) . "
 ";
 
-/* Every indexed chip must reach a tool, or the firmware page offers a card it
-   cannot flash. Patterns mirror flasher_for_chip() in scripts/flash_hba.sh. */
+/* Every indexed chip must reach a tool, or the firmware page offers a card and
+   then dies at exit 3 when you press Flash.
+
+   The patterns are PARSED OUT OF flash_hba.sh rather than copied here. A copy
+   is what made this check worthless once already: the real arms were
+   SAS30*|SAS31* and SAS34*|SAS35* while a transcription of them elsewhere
+   claimed SAS32* and SAS36*|SAS38* too, so five indexed boards -- both 9305s,
+   the 9405W and both 9500s -- could not reach a flasher, while a check written
+   against the copy reported all thirteen fine. Fixed in 894666d; reading the
+   shell is what stops the copy drifting again. */
+$SH = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/flash_hba.sh');
+$fn = preg_match('/^flasher_for_chip\(\)\s*\{(.*?)^\}/ms', $SH, $m) ? $m[1] : '';
+check('flasher_for_chip() was found in flash_hba.sh', $fn !== '');
+// Only the arms that yield a tool. The refusal arm (return 2) and the catch-all
+// (return 1) match chips too, but deliberately provide no flasher.
+$globs = [];
+if (preg_match_all('/^\s*([A-Za-z0-9_*|]+)\)\s*echo\s+\w+/m', $fn, $mm)) {
+    foreach ($mm[1] as $arm) { foreach (explode('|', $arm) as $g) $globs[] = $g; }
+}
+check('flash-tool globs were parsed out of the shell', count($globs) >= 3);
 $unreachable = [];
 foreach ($B as $name => $b) {
     $c = (string) ($b['chip'] ?? '');
-    if (!preg_match('/^SAS2|^SAS3[012]|^SAS3[4568]/', $c)) $unreachable[] = "$name($c)";
+    $hit = false;
+    foreach ($globs as $g) { if (fnmatch($g, $c)) { $hit = true; break; } }
+    if (!$hit) $unreachable[] = "$name($c)";
 }
-check('every indexed chip matches a flash-tool prefix', $unreachable === []);
+check('every indexed chip matches a flash-tool glob in flash_hba.sh', $unreachable === []);
 if ($unreachable) echo "      " . implode(', ', $unreachable) . "
 ";
 

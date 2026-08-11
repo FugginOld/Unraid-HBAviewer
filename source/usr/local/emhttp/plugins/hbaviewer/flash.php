@@ -163,6 +163,27 @@ function flash_cards_from(array $data): array {
          * instead of the two models we happen to know about. No indexed board
          * carries this string. */
         if (stripos($board, 'megaraid') !== false) continue;
+        /* OEM rebrands, the same gate fw_evaluate() applies to a verdict.
+         *
+         * A Dell H310 or IBM M1015 carries a different SubVendor ID and ships
+         * different NVDATA and BIOS, so writing a generic Broadcom image to one
+         * is a CROSSFLASH, not an upgrade — a materially riskier operation than
+         * the page describes. It also covers the MegaRAID the name match above
+         * cannot: an OEM-rebranded RAID card need not carry "MegaRAID" in its
+         * product string, but it will carry a foreign subvendor.
+         *
+         * PRESENT-AND-WRONG refuses; ABSENT allows. That asymmetry is
+         * deliberate and is where this differs from the verdict path, which
+         * suppresses on an unreadable value. Suppressing a verdict costs a
+         * badge; refusing a flash costs the operator their card, and a backend
+         * that simply does not publish subsystem_vendor would make every card
+         * on that machine unflashable. A gate that fails closed on working
+         * hardware is still a broken gate.
+         *
+         * Deliberate crossflashing is a real thing people do with these cards.
+         * It stays possible from a console; what it stops being is a button. */
+        $subven = strtolower(trim((string) ($first['subvendor_id'] ?? '')));
+        if ($subven !== '' && $subven !== '0x1000') continue;
         if (count($g) < ($counts[fw_normalize($board)] ?? 1)) continue;
         $out[implode(',', $g)] = (string) preg_replace('/[^A-Za-z0-9]/', '',
             (string) ($first['model'] ?? ''));

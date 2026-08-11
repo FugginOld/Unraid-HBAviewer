@@ -47,7 +47,7 @@ unless it can prove the topology is internal.
 | SAS9300-8i | SAS3008 | 16.00.12.00 | P16 | 08.37.00.00 | 18.00.00.00 | confirmed | multipath |
 | SAS9300-16i | SAS3008 ×2 | 16.00.12.00 | P16 | branch-inferred | branch-inferred | confirmed | dual IOC, multipath |
 | SAS9305-16i | SAS3216 | 16.00.12.00 | P16 | branch-inferred | branch-inferred | confirmed | multipath |
-| SAS9305-24i | SAS3224 | 16.00.12.00 | P16 | branch-inferred | branch-inferred | confirmed | multipath |
+| SAS9305-24i | SAS3224 | 16.00.12.00 | P16 | branch-inferred | branch-inferred | observed-floor | multipath |
 
 - **SAS9300-8i** — below 16.00.12.00 there is a controller-reset bug affecting
   SATA drives. Distributed via iXsystems, not Broadcom's public download page.
@@ -58,7 +58,11 @@ unless it can prove the topology is internal.
   SAS3224, not from a live card. Downgrade if a 9305-16i ever contradicts it.
 - **SAS9305-24i** — **not interchangeable with the 16i image** despite the shared
   P16.12 label. Confirmed IT-capable from a live card: lsiutil reports
-  MPTFW-15.00.00.00-IT with 15 JBOD drives attached.
+  MPTFW-15.00.00.00-IT with 15 JBOD drives attached. **Downgraded to
+  `observed-floor` on 2026-08-11**: that observation proves the part is
+  IT-capable and says nothing about 16.00.12.00 on this board — the only
+  version ever seen on a 24i is *below* the listed one, so a match here is not
+  evidence of current.
 
 ## SAS3.5 tri-mode · flash tool `storcli`
 
