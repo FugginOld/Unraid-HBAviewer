@@ -243,8 +243,11 @@ check('it is a standalone page under the HBAviewer menu',
       str_contains($flashPage, 'Menu="HBAviewer"'));
 check('the button in settings points at the URL that placement produces',
       str_contains($settingsSrc, 'href="/Tools/HBAviewer_Flash"'));
+// The Monitor's tab navigates from onclick, not href -- it has to be a <button>
+// to pick up the theme styling the rest of the strip gets -- so match the path
+// itself rather than the attribute that carries it.
 check('and so does the Monitor tab',
-      str_contains($monSrc, 'href="/Tools/HBAviewer_Flash"'));
+      str_contains($monSrc, "'/Tools/HBAviewer_Flash'"));
 
 /* Both entrances carry the same two conditions. A tab that appeared on a
    locked install would be the Utilities tile's mistake in a new place. */

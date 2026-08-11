@@ -124,8 +124,14 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
            have already read the notice and opted in. It is a link, not a pane:
            the flash page owns its own CSS, JS and array-state read, and
            inlining it here would load all three on every Monitor visit. */ ?>
+  <?php /* A <button> and not an <a>, even though it navigates: Unraid's theme
+           styles the tab strip by element, so an anchor here rendered as bare
+           text beside the filled pills of every real tab. No colour of its own
+           -- the warning sign carries the meaning, and fighting whichever theme
+           the user picked is not worth the CSS. */ ?>
   <?php if (!LSI_FLASH_LOCKED && (int) $cfg['ENABLE_FLASH'] === 1): ?>
-  <a class="lu-tab-btn lu-tab-danger" href="/Tools/HBAviewer_Flash">&#9888; Firmware</a>
+  <button class="lu-tab-btn" type="button"
+          onclick="location.href='/Tools/HBAviewer_Flash'">&#9888; Firmware</button>
   <?php endif; ?>
   <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
 </div>
