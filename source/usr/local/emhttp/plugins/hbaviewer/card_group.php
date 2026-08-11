@@ -15,18 +15,26 @@
  * be one the index says carries that many IOCs, and the count must match
  * exactly. Everything unrecognised stays split, which is the old behaviour. */
 
-/* board name => expected IOC count. Absent from the index, or absent from a
+require_once __DIR__ . '/firmware_index.php';   // fw_normalize()
+
+/* normalized board name (fw_normalize -- same key space fw_load() re-keys the
+   index into) => expected IOC count. Absent from the index, or absent from a
    board's entry, means one -- the overwhelmingly common case, and the one that
    cannot merge anything. */
 function lsi_ioc_counts(?array $idx): array {
     $out = [];
     foreach (($idx['boards'] ?? []) as $board => $b) {
-        $out[$board] = max(1, (int) ($b['ioc_count'] ?? 1));
+        if (!is_array($b)) continue;
+        $out[fw_normalize((string) $board)] = max(1, (int) ($b['ioc_count'] ?? 1));
     }
     return $out;
 }
 
-/* Returns groups of INDICES into $ctls, in input order. A controller that does
+/* Returns groups of INDICES into $ctls. Groups are sorted by their first
+   member, so they appear in the order that member was first seen -- but a
+   group's members are NOT necessarily contiguous in $ctls: a lone controller
+   between two members of an earlier bucket still emits its own group in
+   between, e.g. [16i@X, 8i@Y, 16i@X] -> [[0,2],[1]]. A controller that does
    not group comes back as a group of one, so callers never special-case. */
 function lsi_group_cards(array $ctls, array $iocCounts): array {
     // Bucket by slot+board. Both, not just slot: two different boards in one
@@ -43,9 +51,9 @@ function lsi_group_cards(array $ctls, array $iocCounts): array {
     }
 
     $groups = [];
-    foreach ($buckets as $key => $members) {
+    foreach ($buckets as $members) {
         $board = (string) ($ctls[$members[0]]['board_name'] ?? '');
-        $want  = $iocCounts[$board] ?? 1;
+        $want  = $iocCounts[fw_normalize($board)] ?? 1;
         // Exactly, not "at least": a count that does not match means the
         // topology is not the one this board is known to have, and guessing
         // from there is how two cards become one.

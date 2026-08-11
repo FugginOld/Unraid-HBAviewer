@@ -14,7 +14,13 @@ function ctl(string $board, string $card): array {
     return ['board_name' => $board, 'card_id' => $card];
 }
 
-$counts = ['SAS9300-16i' => 2];
+// $iocCounts keys are normalized (fw_normalize), the same key space
+// lsi_ioc_counts() and fw_load() both produce -- NOT the raw board_name
+// strings $ctls carries. A literal 'SAS9300-16i' key here would silently
+// match nothing (fw_normalize('SAS9300-16i') === '930016i') and mask exactly
+// the bug that shipped: lsi_group_cards() looking up an unnormalized board
+// name against a normalized index.
+$counts = [fw_normalize('SAS9300-16i') => 2];
 
 // The case the feature exists for.
 $dual = [ctl('SAS9300-16i', '0000:80:01.0'), ctl('SAS9300-16i', '0000:80:01.0')];
@@ -62,12 +68,32 @@ check('groups come back in input order',
            ctl('SAS9300-16i', '0000:80:01.0'), ctl('SAS9300-16i', '0000:80:01.0')],
           $counts) === [[0], [1, 2]]);
 
-// The count map comes from the index, and a board without ioc_count means 1.
+// The count map comes from the index, keyed on the SAME normalized form
+// fw_load() re-keys the index into, and a board without ioc_count means 1.
 $idx = ['boards' => ['SAS9300-16i' => ['ioc_count' => 2], 'SAS9300-8i' => []]];
 $fromIdx = lsi_ioc_counts($idx);
-check('ioc_count is read from the index',      ($fromIdx['SAS9300-16i'] ?? 0) === 2);
-check('a board without ioc_count means one',   ($fromIdx['SAS9300-8i'] ?? 0) === 1);
+check('ioc_count is read from the index',      ($fromIdx[fw_normalize('SAS9300-16i')] ?? 0) === 2);
+check('a board without ioc_count means one',   ($fromIdx[fw_normalize('SAS9300-8i')] ?? 0) === 1);
 check('no index at all yields no counts',      lsi_ioc_counts(null) === []);
+
+// A group of one that lands between two members of an earlier bucket, so the
+// sort by first-member is load-bearing, not cosmetic: without it this comes
+// back [[0],[2],[1]].
+$interleaved = [ctl('SAS9300-8i', '0000:80:01.0'), ctl('SAS9300-16i', '0000:00:11.0'),
+                ctl('SAS9300-8i', '0000:80:01.0')];
+check('a lone group between two same-bucket indices still sorts by input order',
+      lsi_group_cards($interleaved, $counts) === [[0], [1], [2]]);
+
+// The gap this whole feature almost fell into: the golden proves the shell
+// pipeline can EMIT a groupable pair; this proves the grouper actually
+// ACCEPTS what the pipeline emits, using the real index -- not a hand-keyed
+// map. fw_load() re-keys board names through fw_normalize() ('SAS9300-16i' ->
+// '930016i'); lsi_ioc_counts() and lsi_group_cards() must agree on that same
+// normalized key space or this never fires against real data.
+$realIdx    = fw_load(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/data/known-firmware.json');
+$goldenCtls = json_decode(file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true)['controllers'];
+check('the real pipeline output groups against the real index',
+      lsi_group_cards($goldenCtls, lsi_ioc_counts($realIdx)) === [[0, 1]]);
 
 echo $fails === 0 ? "card_group: all pass\n" : "card_group: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

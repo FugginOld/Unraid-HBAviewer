@@ -9,7 +9,7 @@ Basics :
 Controller = 0
 Product Name = SAS9300-16i
 Serial Number = SP0016IOC0
-PCI Address = 00:82:00:00
+PCI Address = 00:84:00:00
 
 Version :
 =======

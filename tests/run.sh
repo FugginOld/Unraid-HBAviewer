@@ -203,13 +203,17 @@ mkdir -p "$SYSDEV/end_device-3:0" "$SYSDEV/end_device-3:1"
 # sharing ONE slot, was otherwise only ever produced by hand-written PHP
 # arrays in card_group_test.php, never by the real shell pipeline. This gives
 # hba_card_id a tree where both IOCs of one SAS9300-16i sit behind a shared
-# root port (0000:80:01.0), each in its own PCI function beneath it, matching
-# hba_card_id's own doc comment.
+# root port (0000:80:01.0) via an intermediate switch hop (0000:82:00.0) --
+# one extra segment beyond the root port, so this also pins that
+# hba_card_id's "${rest%%/*}" resolves the SLOT regardless of how many more
+# levels sit below it, the same depth-independence its own doc comment's
+# real-hardware example (root port / upstream switch port / downstream switch
+# port / IOC function) relies on.
 SYSDUAL_ROOT=$(mktemp -d)
-SYSDUAL="$SYSDUAL_ROOT/pci0000:80/0000:80:01.0"
-mkdir -p "$SYSDUAL/0000:82:00.0" "$SYSDUAL/0000:86:00.0"
+SYSDUAL="$SYSDUAL_ROOT/pci0000:80/0000:80:01.0/0000:82:00.0"
+mkdir -p "$SYSDUAL/0000:84:00.0" "$SYSDUAL/0000:86:00.0"
 trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL_ROOT" "$SYSDUAL_ROOT"' EXIT
-for d in 0000:82:00.0 0000:86:00.0; do
+for d in 0000:84:00.0 0000:86:00.0; do
     printf '8\n'             > "$SYSDUAL/$d/current_link_width"
     printf '8.0 GT/s PCIe\n' > "$SYSDUAL/$d/current_link_speed"
     printf 'D0\n'            > "$SYSDUAL/$d/power_state"
