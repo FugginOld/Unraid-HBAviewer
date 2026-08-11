@@ -58,8 +58,15 @@
 .lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
 /* Pushes a tab to the right-hand end of the strip. Used by Settings, which is
    a destination rather than a view and should not sit in the run of tabs that
-   switch panes in place. */
-.lu-tab-right { margin-left: auto; }
+   switch panes in place.
+
+   !important, and scoped to the strip: Unraid's theme styles these buttons
+   with a `margin` SHORTHAND, which resets margin-left after ours and left
+   Settings sitting against the previous tab instead of the frame. A shorthand
+   always beats a longhand written before it, whatever the specificity, so the
+   only fixes are to win on cascade order -- which a theme sheet we do not own
+   makes unreliable -- or to say important once, here. */
+.lu-tabs > .lu-tab-right { margin-left: auto !important; }
 .lu-settings-link {
     margin-left: auto; padding: 11px 14px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
     color: var(--text); text-decoration: none; transition: color 0.15s;
