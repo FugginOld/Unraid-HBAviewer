@@ -162,7 +162,8 @@ unit-tested, and enforced **server-side**:
 - array must be STOPPED, failing closed on a missing or unreadable `var.ini`
 - read-only verify scoped to the target **card** — every controller on it, and nothing else
 - controller argument validated by one `flash_ctl_list()` both call sites share — shape (`/^\d+(,\d+)*\z/`; `\z`, not `$`, or a trailing newline slips through), size (`LSI_MAX_IOCS`) and uniqueness
-- and, on the mutating action only, **membership**: `flash_ctl_is_card()` requires the posted list to *be* one of the groups `lsi_group_cards()` derives from the live hardware at flash time
+- and, on the mutating action only, **membership**: `flash_ctl_is_card()` requires the posted list to *be* one of the cards `flash_card_chips()` derives from the live hardware at flash time, **and** the posted chip to be the one that card actually reports — the chip picks the flash tool, and a stale page carries a stale `data-chip` as readily as a stale `data-ctl`
+- every gate in `flash_preflight()` **fails closed on a missing input**, including `card`; the one that did not was the most dangerous one there
 - typed `FLASH` confirmation plus an acknowledgement checkbox
 - single-flight lock, never auto-retried
 - image filenames confined to one directory (`flash_safe_name()`)
@@ -196,6 +197,17 @@ written" — is the safe outcome, and sharing one code made the two
 machine-indistinguishable with only free text between a safe retry and a dead
 card. The partial message names which controller holds which half and tells the
 operator not to reboot. A failure on the *first* write stops there.
+
+**The membership read happens before the lock is claimed.** `flash_card_chips()`
+shells out to `get_hba_info.sh` and can take a minute on a slow controller, and
+`flash_claim_lock()` has no TTL recovery the way `cached_read()` does. A PHP
+death inside the claim→launch window (fpm timeout, fatal, worker recycle)
+therefore orphans the lock: every later flash is refused "already in progress"
+and `?action=status` reports a run that does not exist, until `/tmp` clears at
+reboot — on a box taken offline specifically to flash. The read is pure, so
+nothing about the ordering matters; a source assertion in `flash_php_test.php`
+pins the two positions because prose cannot. The page also names the wait, so
+nobody double-presses into the lock while the read is running.
 
 `flash_rc` is reset **inside** the loop, not merely left unset. It is assigned
 only on failure, so a value inherited from the environment made iteration 1

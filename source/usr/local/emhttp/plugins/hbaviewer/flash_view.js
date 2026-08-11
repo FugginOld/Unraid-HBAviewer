@@ -1,9 +1,17 @@
-    // ' is escaped as well as " because ctl is interpolated into a single-quoted
-    // JS string inside a double-quoted HTML attribute (the onclick handlers
-    // below), so the apostrophe is a delimiter in this file's markup and not
-    // just decoration. Unreachable with a server-generated list of digits, but
-    // an escaper that does not cover its own context is a trap for the next
-    // value someone passes through it.
+    /* HTML-escapes for an attribute VALUE or a text node. ' is covered because
+       this file also writes attribute values delimited by apostrophes.
+
+       It is NOT sufficient for the body of an onclick handler, and must not be
+       relied on as if it were. The browser decodes entity references in the
+       attribute BEFORE handing the result to the JS parser, so &#39; becomes a
+       live apostrophe again and closes the string —
+       onclick="luFlashGo('&#39;);alert(1);//')" executes. What keeps the
+       onclick handlers below safe is not this function: it is that the only
+       value they interpolate is a server-built list of digits and commas
+       (ajax_info.php's implode(',', $group)), which flash.php independently
+       re-validates against /^\d+(,\d+)*\z/ before it can reach anything.
+       Interpolating any other value into a handler needs a real JS escape, or
+       addEventListener instead of an inline attribute. */
     function fesc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 
     /* The firmware verdict, in full. This is the surface where a flash actually
@@ -243,7 +251,14 @@
         // board the flash writes both in sequence — the operator is confirming
         // two writes, and a prompt naming one of them would be a lie.
         if (!window.confirm('FINAL confirmation: flash controller '+ctlLabel(ctl)+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
-        log.style.display='block'; log.textContent='Starting flash…';
+        /* Names the wait, because there is one. flash.php re-reads the hardware
+           to confirm these controllers really are one of this box's cards and
+           still carry the chip the page claims, and that read can take up to a
+           minute on a slow controller — a bare "Starting flash…" sitting there
+           silently is what makes someone press the button again. */
+        log.style.display='block';
+        log.textContent='Checking these controllers really are one of your cards… '
+          + 'this can take up to a minute on a slow controller.';
         fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(ctl), ctl:ctl, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})
           .then(function(r){ return r.json(); })
           .then(function(d){

@@ -39,7 +39,7 @@ $dropDir = sys_get_temp_dir() . '/hbav_drop_' . getmypid();
 @mkdir(FLASH_DIR, 0755, true);
 $fw = $dropDir . '/unit.bin';
 file_put_contents($fw, 'x');
-$good = ['enable'=>1, 'stopped'=>true, 'ctl'=>'0', 'fw'=>$fw, 'confirm'=>'FLASH', 'locked'=>false, 'dir'=>$dropDir];
+$good = ['enable'=>1, 'stopped'=>true, 'ctl'=>'0', 'card'=>true, 'fw'=>$fw, 'confirm'=>'FLASH', 'locked'=>false, 'dir'=>$dropDir];
 $err  = fn($ov) => flash_preflight(array_merge($good, $ov))['error'];
 
 check('preflight ok',            flash_preflight($good)['ok'] === true);
@@ -53,13 +53,21 @@ check('accept a dual-IOC card\'s controller list',
       flash_preflight(array_merge($good, ['ctl'=>'0,1']))['ok'] === true);
 check('block a malformed controller list', str_contains($err(['ctl'=>'0,,1']), 'controller'));
 check('block a list longer than any real card', str_contains($err(['ctl'=>'0,1,2,3,4,5,6,7']), 'controller'));
-/* 'card' is the membership answer, injected because it needs the live
-   hardware (flash_ctl_is_card / flash_card_groups, exercised further down).
-   Absent means "not checked", which is what every pre-existing case here
-   relies on; present and false is a hard block. */
+/* 'card' is the membership-and-chip answer, injected because it needs the live
+   hardware (flash_ctl_is_card / flash_card_chips, exercised further down).
+   It FAILS CLOSED on absence, like every other gate here. It used to be
+   `array_key_exists('card', $in) && !$in['card']`, which made the most
+   dangerous gate in the plugin the only one that defaulted to allow: deleting
+   the 'card' => … line from the dispatch then broke nothing behavioural, only a
+   str_contains() on that literal line — which also went red for a cosmetic
+   reflow of its whitespace. This third case is the one that cannot be fooled by
+   either. */
 check('block a list that is not one of this box\'s cards',
       str_contains($err(['card'=>false]), 'not one of the controller cards'));
-check('accept one that is', flash_preflight(array_merge($good, ['card'=>true]))['ok'] === true);
+$unchecked = $good; unset($unchecked['card']);
+check('block when nobody checked at all',
+      str_contains(flash_preflight($unchecked)['error'], 'not one of the controller cards'));
+check('accept one that is', flash_preflight($good)['ok'] === true);
 /* Firmware and BIOS are each optional, but not both: sasNflash takes -f, -b or
    both, so a BIOS-only flash is a real operation this used to refuse outright.
    'bios_ok' says whether the tool family supports it -- on storcli the BIOS is
@@ -255,31 +263,88 @@ $realIdx  = fw_load(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/dat
 $dualCtls = json_decode((string) file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true)['controllers'];
 $dualGrp  = lsi_group_cards($dualCtls, lsi_ioc_counts($realIdx));
 check('the dual-IOC golden really is one card of two', $dualGrp === [[0, 1]]);
-check('that card\'s own list is accepted',     flash_ctl_is_card('0,1', $dualGrp) === true);
-check('half of it is refused',                 flash_ctl_is_card('0',   $dualGrp) === false);
-check('the other half is refused',             flash_ctl_is_card('1',   $dualGrp) === false);
-check('a superset is refused',                 flash_ctl_is_card('0,1,2', $dualGrp) === false);
-check('a reordered list is refused',           flash_ctl_is_card('1,0', $dualGrp) === false);
-check('a controller that is not there is refused', flash_ctl_is_card('9', $dualGrp) === false);
+// The map flash_card_chips() builds from that grouping: list => the chip the
+// card actually reports. Built here the same way the function does, so these
+// exercise the matcher against real pipeline output rather than a fixture.
+$dual = [];
+foreach ($dualGrp as $g) { $dual[implode(',', $g)] = (string) $dualCtls[$g[0]]['model']; }
+check('the golden card reports SAS3008', ($dual['0,1'] ?? '') === 'SAS3008');
+
+check('that card\'s own list is accepted',     flash_ctl_is_card('0,1', 'SAS3008', $dual) === true);
+check('half of it is refused',                 flash_ctl_is_card('0',   'SAS3008', $dual) === false);
+check('the other half is refused',             flash_ctl_is_card('1',   'SAS3008', $dual) === false);
+check('a superset is refused',                 flash_ctl_is_card('0,1,2', 'SAS3008', $dual) === false);
+check('a reordered list is refused',           flash_ctl_is_card('1,0', 'SAS3008', $dual) === false);
+check('a controller that is not there is refused', flash_ctl_is_card('9', 'SAS3008', $dual) === false);
+// A leading zero is a different string and must not normalise into a match.
+check('a leading-zero variant is refused',     flash_ctl_is_card('00,1', 'SAS3008', $dual) === false);
+check('whitespace is refused',                 flash_ctl_is_card('0, 1', 'SAS3008', $dual) === false);
+check('a trailing newline is refused',         flash_ctl_is_card("0,1\n", 'SAS3008', $dual) === false);
+
+/* ── The chip is half the tuple, and it was still the client's word ──────────
+   The chip decides which flash tool runs. Re-deriving the controller list from
+   hardware and then trusting the posted chip left the stale-page vector — the
+   one this check exists for — half open: a stale page carries a stale data-chip
+   as readily as a stale data-ctl. ctl=0,1&chip=SAS2008 against a box whose card
+   0,1 is a SAS3008 passed membership and reached flash_hba.sh, which resolves
+   sas2flash and runs it on a SAS3 card. */
+check('the right list with the WRONG chip is refused',
+      flash_ctl_is_card('0,1', 'SAS2008', $dual) === false);
+check('an empty chip is refused',       flash_ctl_is_card('0,1', '', $dual) === false);
+check('a card reporting no chip is refused', flash_ctl_is_card('0,1', 'SAS3008', ['0,1' => '']) === false);
+check('the chip match is exact, not a prefix', flash_ctl_is_card('0,1', 'SAS300', $dual) === false);
+
 // The non-adjacent case, which is the shape an index-derived check would fail:
 // [16i@X, 8i@Y, 16i@X] groups as [[0,2],[1]].
-$mixed = [
-    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0'],
-    ['board_name' => 'SAS9300-8i',  'card_id' => '0000:00:11.0'],
-    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0'],
+$mixedCtls = [
+    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0', 'model' => 'SAS3008'],
+    ['board_name' => 'SAS9300-8i',  'card_id' => '0000:00:11.0', 'model' => 'SAS2008'],
+    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0', 'model' => 'SAS3008'],
 ];
-$mixedGrp = lsi_group_cards($mixed, lsi_ioc_counts($realIdx));
-check('a non-adjacent card is accepted by its own list', flash_ctl_is_card('0,2', $mixedGrp) === true);
-check('the lone card between its halves too',            flash_ctl_is_card('1',   $mixedGrp) === true);
-check('but not the adjacent pair that is two cards',     flash_ctl_is_card('0,1', $mixedGrp) === false);
-// No groups at all -- a backend error, or no controllers -- refuses everything.
+$mixed = [];
+foreach (lsi_group_cards($mixedCtls, lsi_ioc_counts($realIdx)) as $g) {
+    $mixed[implode(',', $g)] = (string) $mixedCtls[$g[0]]['model'];
+}
+check('a non-adjacent card is accepted by its own list', flash_ctl_is_card('0,2', 'SAS3008', $mixed) === true);
+check('the lone card between its halves too',            flash_ctl_is_card('1',   'SAS2008', $mixed) === true);
+check('but not the adjacent pair that is two cards',     flash_ctl_is_card('0,1', 'SAS3008', $mixed) === false);
+// ...and the neighbouring card's chip does not unlock this one.
+check('one card\'s chip does not authorise another',     flash_ctl_is_card('1', 'SAS3008', $mixed) === false);
+// No cards at all -- a backend error, or no controllers -- refuses everything.
 // The same read draws the card the operator pressed Flash on, so there is
 // nothing legitimate to lose by failing closed here.
-check('an unreadable backend refuses every flash', flash_ctl_is_card('0', []) === false);
+check('an unreadable backend refuses every flash', flash_ctl_is_card('0', 'SAS3008', []) === false);
+
 check('the flash action asks the live hardware',
-      str_contains($flashSrc, "'card'    => flash_ctl_is_card(\$ctl, flash_card_groups())"));
-check('and derives the groups the same way the page does',
-      str_contains($flashSrc, 'lsi_group_cards(lsi_controllers($data), lsi_ioc_counts(fw_load()))'));
+      str_contains($flashSrc, 'flash_ctl_is_card($ctl, $chip, flash_card_chips())'));
+/* ...and the answer actually reaches the gate. Deleting the 'card' entry from
+   the preflight array is now fail-CLOSED rather than fail-open, so it cannot
+   brick anything -- but it would refuse every flash on the box with no test
+   noticing, which is its own kind of broken. Matched as a pattern, not a
+   literal line: the previous spelling of this assertion also went red for a
+   cosmetic reflow of the array's whitespace, which is a pin nobody can trust. */
+check('and the answer it gets reaches the gate',
+      (bool) preg_match('/[\'"]card[\'"]\s*=>\s*\$isCard\b/', $flashSrc));
+check('and derives the cards the same way the page does',
+      str_contains($flashSrc, 'lsi_group_cards($ctls, lsi_ioc_counts(fw_load()))'));
+/* The read is a shell_exec that can take a minute, and flash_claim_lock() has
+   no TTL recovery -- a PHP death between the claim and the launch orphans the
+   lock, and every later flash is then refused "already in progress" until /tmp
+   clears at reboot. So the read must happen BEFORE the claim. Positions, not
+   prose, because this is an ordering property and nothing else can see it. */
+$posRead = strpos($flashSrc, 'flash_ctl_is_card($ctl, $chip, flash_card_chips())');
+$posLock = strpos($flashSrc, 'flash_claim_lock($lock)');
+$posRun  = strpos($flashSrc, "shell_exec('nohup sh -c '");
+check('the hardware read happens before the lock is claimed',
+      $posRead !== false && $posLock !== false && $posRead < $posLock);
+check('and the lock is still claimed before the job launches',
+      $posLock !== false && $posRun !== false && $posLock < $posRun);
+// ...and a malformed list must not pay for the read at all.
+check('a bad list short-circuits the read',
+      str_contains($flashSrc, 'flash_ctl_list($ctl) !== null && flash_ctl_is_card('));
+// The page says a wait is coming, so nobody double-presses into the lock.
+check('the page warns that the check takes time',
+      str_contains($jsSrc, 'this can take up to a minute on a slow controller'));
 /* Where the list comes from: the firmware page is fed one entry per CARD by
    ajax_info.php's overview JSON, and each entry carries its own controller
    number(s). The page must never use the array index as a controller number --

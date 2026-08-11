@@ -91,24 +91,44 @@ function flash_ctl_list(string $ctl): ?array {
  * Exact string equality against implode(',', $group), not a subset test: half a
  * dual-IOC card is not a card, and writing one of its two IOCs is the partial
  * flash this feature spends its error handling trying to prevent.
- * No groups at all (backend error, no controllers) means no card matches and
+ * No cards at all (backend error, no controllers) means nothing matches and
  * every flash is refused — the same read is what draws the card the operator
- * pressed Flash on, so there is nothing legitimate to lose. */
-function flash_ctl_is_card(string $ctl, array $groups): bool {
-    foreach ($groups as $g) {
-        if (implode(',', $g) === $ctl) return true;
-    }
-    return false;
+ * pressed Flash on, so there is nothing legitimate to lose.
+ *
+ * The CHIP is checked here too, against the same live read, because it decides
+ * which flash tool runs. Re-deriving the controller list from hardware and then
+ * taking the client's word for the chip left half the tuple trusted: the vector
+ * this whole check exists for is a stale page, and a stale page carries a stale
+ * data-chip exactly as readily as a stale data-ctl. `ctl=0,1&chip=SAS2008`
+ * against a box whose card 0,1 is a SAS3008 otherwise passed membership and
+ * reached flash_hba.sh, which resolves sas2flash and runs it. */
+function flash_ctl_is_card(string $ctl, string $chip, array $cards): bool {
+    $want = $cards[$ctl] ?? '';
+    return $want !== '' && $want === $chip;
 }
 
-/* The live grouping, read at flash time rather than trusted from the client.
- * Same pipeline and same grouper as ajax_info.php's overview JSON. Returns []
- * on any backend failure, which flash_ctl_is_card() turns into a refusal. */
-function flash_card_groups(): array {
+/* Every card on this box: "0,1" => the chip that card actually reports.
+ *
+ * Read at flash time rather than trusted from the client. Same pipeline and
+ * same grouper as ajax_info.php's overview JSON, so the acceptable lists are by
+ * construction the cards the page can offer. [] on any backend failure, which
+ * flash_ctl_is_card() turns into a refusal.
+ *
+ * The chip is passed through the SAME alnum filter the dispatch applies to the
+ * client's value. Comparing a filtered string against an unfiltered one would
+ * refuse every flash on any backend whose model string carries a space or a
+ * dash — a gate that fails closed on working hardware is still a broken gate. */
+function flash_card_chips(): array {
     $raw  = shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/get_hba_info.sh') . ' 2>/dev/null');
     $data = json_decode((string) $raw, true);
     if (!is_array($data) || isset($data['error'])) return [];
-    return lsi_group_cards(lsi_controllers($data), lsi_ioc_counts(fw_load()));
+    $ctls = lsi_controllers($data);
+    $out  = [];
+    foreach (lsi_group_cards($ctls, lsi_ioc_counts(fw_load())) as $g) {
+        $out[implode(',', $g)] = (string) preg_replace('/[^A-Za-z0-9]/', '',
+            (string) ($ctls[$g[0]]['model'] ?? ''));
+    }
+    return $out;
 }
 
 /* Pure preflight gate for a flash request. Returns [ok=>bool, error=>string].
@@ -120,14 +140,18 @@ function flash_preflight(array $in): array {
     if (empty($in['stopped']))
         return ['ok' => false, 'error' => 'The array must be STOPPED before flashing. Stop it on the Main tab, then retry.'];
     /* Shape, size and uniqueness — one spelling, shared with the 'listall'
-       action below (see flash_ctl_list). 'card' is the membership answer, which
-       needs the live hardware and so is injected rather than read here: it is
-       false only when the caller checked and the list is not one of this box's
-       cards. Tests that do not exercise membership leave it unset. */
+       action below (see flash_ctl_list). */
     if (flash_ctl_list((string) ($in['ctl'] ?? '')) === null)
         return ['ok' => false, 'error' => 'Invalid controller index.'];
-    if (array_key_exists('card', $in) && !$in['card'])
-        return ['ok' => false, 'error' => 'That is not one of the controller cards in this server. Reload the firmware page and try again.'];
+    /* 'card' is the membership-and-chip answer. It needs the live hardware, so
+       it is injected rather than read here — but it FAILS CLOSED on absence,
+       like every other gate in this function. It used to be
+       `array_key_exists('card', $in) && !$in['card']`, which made the most
+       dangerous gate in the plugin the only one that defaulted to allow: delete
+       the 'card' => … line from the dispatch and nothing behavioural noticed,
+       only a str_contains() on that literal line. */
+    if (empty($in['card']))
+        return ['ok' => false, 'error' => 'That is not one of the controller cards in this server, or its chip has changed since the page loaded. Reload the firmware page and try again.'];
     /* Firmware and BIOS are each optional, but not both. sas2flash/sas3flash
        take -f, -b, or both, so flashing a BIOS on its own is a real operation
        the tool supports and this used to refuse. storcli is different: on the
@@ -272,6 +296,25 @@ if ($action === 'flash') {
             . ' tool ' . escapeshellarg($chip) . ' 2>/dev/null | sed -n "s/^family=//p"'));
     $biosOk = ($fam === 'sas2' || $fam === 'sas3');
 
+    /* Is this list one of THIS box's cards, running the chip the page claims?
+     *
+     * ABOVE the lock, deliberately. flash_card_chips() reads the hardware and
+     * can take up to a minute on a slow controller, and flash_claim_lock() has
+     * no TTL recovery the way cached_read() does — so a PHP death anywhere in
+     * that window (fpm timeout, fatal, worker recycle) would orphan the lock and
+     * leave every later flash refused "already in progress", with ?action=status
+     * reporting a run that does not exist, until /tmp clears at reboot. On a box
+     * taken offline specifically to flash, that is a bad place to get stuck.
+     * Nothing about the ordering matters: this is a pure read.
+     *
+     * Short-circuited on the cheap shape check so a malformed list — or a
+     * request that was never going to be accepted — does not pay for the read.
+     * The remaining gates (array running, confirm string, lock) can still spend
+     * it; they are all page-state failures a reload fixes, and splitting the
+     * preflight to avoid that would put the ordering of the gates at the mercy
+     * of how expensive each one is. */
+    $isCard = flash_ctl_list($ctl) !== null && flash_ctl_is_card($ctl, $chip, flash_card_chips());
+
     // Claim single-flight BEFORE the gate, so the check and the claim can't be
     // interleaved by a second request. Any refusal below hands the lock back.
     $owned = flash_claim_lock($lock);
@@ -283,12 +326,8 @@ if ($action === 'flash') {
         'fw'      => $fw,
         'bios'    => $bios,
         'bios_ok' => $biosOk,
-        // The list must BE one of this box's cards, not merely look like a
-        // list. Re-derived here from the live hardware — the client is the one
-        // thing that cannot be asked. A full read, but this is the request
-        // that writes firmware with the array stopped, and it is the same read
-        // that drew the card the operator pressed Flash on.
-        'card'    => flash_ctl_is_card($ctl, flash_card_groups()),
+        // Computed above the lock; see the comment there. Absent means refused.
+        'card'    => $isCard,
         'confirm' => $_POST['confirm'] ?? '',
         'locked'  => !$owned,
     ]);

@@ -97,7 +97,13 @@ els.set('flash-content', mkEl('flash-content'));
 
 const tick = () => new Promise((r) => setImmediate(r));
 
+/* check() only counts what it REACHES. A mutant that makes the page render the
+   wrong ids throws partway through — getElementById returns null and the
+   handler dereferences it — and the run then reports whatever small number of
+   failures it happened to get to, which reads like a near-miss rather than a
+   file that does not work. Anything escaping main() is itself a failure. */
 (async function main() {
+  try {
     vm.createContext(ctx);
     vm.runInContext(fs.readFileSync(SRC, 'utf8'), ctx);   // luFlashInit() runs on load
     for (let n = 0; n < 8; n++) await tick();             // let the promise chains settle
@@ -122,28 +128,40 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('one tool lookup per card', tool.length === 2);
     check('the tool lookup carries the card chip', tool.some((c) => c.params.get('chip') === 'SAS3008'));
 
-    /* ── THE MUTANT KILLER: what actually goes on the wire ──────────────────── */
-    ctx.luFlashList('0,2');
+    /* ── THE MUTANT KILLER: what actually goes on the wire ───────────────────
+       Both handlers are driven with the argument EXTRACTED FROM THE MARKUP, not
+       with a literal. Passing '0,2' by hand only proves the handler does not
+       truncate its own argument; it says nothing about what the page hands it,
+       and that is where the whole failure lives. A mutant that leaves data-ctl,
+       the ids and both labels correct and truncates only the onclick argument —
+       luFlashGo('+ctl.split(',')[0]+') — renders a card reading "Flash /c0, /c2"
+       that POSTs ctl=0. Nothing else in this suite can see it. */
+    const listArg  = (/onclick="luFlashList\('([^']*)'\)"/.exec(html)  || [])[1];
+    const flashArg = (/onclick="luFlashGo\('([^']*)'\)"/.exec(html)    || [])[1];
+    check('the Verify button is wired to the whole list', listArg  === '0,2');
+    check('the Flash button is wired to the whole list',  flashArg === '0,2');
+
+    ctx.luFlashList(listArg);
     await tick();
     const listall = calls.filter((c) => c.params.get('action') === 'listall').pop();
-    check('Verify POSTs the whole controller list', listall && listall.params.get('ctl') === '0,2');
-    check('and it is percent-encoded, not split',   listall && listall.body.includes('ctl=0%2C2'));
+    check('Verify POSTs the whole controller list', !!listall && listall.params.get('ctl') === '0,2');
+    check('and it is percent-encoded, not split',   !!listall && listall.body.includes('ctl=0%2C2'));
 
     els.get('flash-ack-0,2').checked   = true;
     els.get('flash-confirm-0,2').value = 'FLASH';
     els.get('flash-fw-0,2').value      = 'fw.bin';
     els.get('flash-bios-0,2').value    = '';
-    ctx.luFlashGo('0,2');
+    ctx.luFlashGo(flashArg);
     await tick(); await tick();
     const flash = calls.filter((c) => c.params.get('action') === 'flash').pop();
-    check('Flash POSTs the whole controller list', flash && flash.params.get('ctl') === '0,2');
+    check('Flash POSTs the whole controller list', !!flash && flash.params.get('ctl') === '0,2');
     check('with the chip and the chosen image',
-          flash && flash.params.get('chip') === 'SAS3008' && flash.params.get('firmware') === 'fw.bin');
+          !!flash && flash.params.get('chip') === 'SAS3008' && flash.params.get('firmware') === 'fw.bin');
     // The confirmation the operator reads must name every controller about to
     // be written; a dialog naming one of two is a lie about a bricking action.
     let prompt = '';
     ctx.confirm = (m) => { prompt = m; return false; };
-    ctx.luFlashGo('0,2');
+    ctx.luFlashGo(flashArg);
     check('the final confirmation names both controllers', prompt.includes('/c0, /c2'));
     ctx.confirm = () => true;
 
@@ -165,6 +183,9 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('a plain failure keeps the generic line', elog.includes('Flash tool exited with an error'));
     check('and is never called partial',            !elog.includes('PARTIAL FLASH'));
 
-    console.log(fails === 0 ? 'flash_js: all pass' : `flash_js: ${fails} FAILED`);
-    process.exit(fails === 0 ? 0 : 1);
+  } catch (e) {
+    check('the page ran to completion without throwing — ' + e.message, false);
+  }
+  console.log(fails === 0 ? 'flash_js: all pass' : `flash_js: ${fails} FAILED`);
+  process.exit(fails === 0 ? 0 : 1);
 })();
