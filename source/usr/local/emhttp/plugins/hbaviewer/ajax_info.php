@@ -494,6 +494,11 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
         // answer to 00:84:00:00 and 00:86:00:00, and that address is how a card
         // is correlated with lspci and `storcli /cN`. Showing the board one of
         // them, labelled as the board's, put a wrong address on the page.
+        // Gated on SHOW_PCIE alone, deliberately — NOT on pcie_width/pcie_speed
+        // the way the board's row below is. Those two come from sysfs and can be
+        // absent; the address comes from the backend that enumerated the card and
+        // is the identity of the die, so a board with no sysfs link data now
+        // shows both addresses where the flat page showed neither.
         $loc = $showPcie ? (string) ($c['pci_location'] ?? '') : '';
         $out .= '<div class="lu-card-ioc" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
@@ -513,6 +518,9 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     if ($showPcie && (($head['pcie_width'] ?? '') || ($head['pcie_speed'] ?? ''))) {
         $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
         foreach ($hv['pcie'] as $item) {
+            // Matched on the label lsi_hba_view() assigns (view.php). Renaming it
+            // there would put the address back on the board — the item COUNT
+            // asserted in ajax_render_test.php is what catches that, not this line.
             if ($item['label'] === 'PCI Location') continue;
             $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
         }

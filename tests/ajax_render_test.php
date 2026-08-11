@@ -1278,10 +1278,16 @@ check('the real dual-IOC capture keeps both sensors',
    is what a person matches against lspci and `storcli /cN`. The flat page showed
    both 00:84:00:00 and 00:86:00:00; a single board-level row would have labelled
    one of them as the board's and dropped the other off the Overview entirely. */
+/* The item COUNT is the real guard: the renderer skips the location by matching
+   the label lsi_hba_view() gives it, so a rename there would silently restore
+   the fourth item. The second clause asserts on the ADDRESS rather than on that
+   same label — the row is the last thing in the card, so any `00:8…` appearing
+   after it opens is a per-function address on a board-level row, whatever the
+   label happens to be called. */
 check('the board PCIe row carries only slot-level facts',
       substr_count($realHtml, 'lu-pcie-row') === 1
       && substr_count($realHtml, 'lu-pcie-item') === 3
-      && !str_contains($realHtml, 'lu-pcie-item">PCI Location'));
+      && !preg_match('~lu-pcie-row.*?00:8~s', $realHtml));
 check('each IOC states its own PCI location',
       substr_count($realHtml, '<p>PCI Location:') === 2
       && str_contains($realHtml, '>00:84:00:00<') && str_contains($realHtml, '>00:86:00:00<'));

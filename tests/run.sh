@@ -11,6 +11,17 @@ cd "$(dirname "$0")" || exit 2
 P="../source/usr/local/emhttp/plugins/hbaviewer/scripts/parse"
 fail=0
 
+# Run a PHP script through the SAME fallback tests/run_php.sh uses: the local
+# interpreter when the box has one (Unraid does), otherwise a throwaway
+# php:8.2-cli container. A bare `php` here reported FAIL rather than "no
+# interpreter" on a host without one — and this file's own header promises the
+# fallback. Paths are relative to tests/, which is where run.sh already stands.
+php_run() {
+    if command -v php >/dev/null 2>&1; then php "$@"; return; fi
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests php:8.2-cli php "$@"
+}
+
 check() {  # name  expected_file  command...
     local name=$1 exp=$2; shift 2
     local got; got=$("$@")
@@ -68,7 +79,24 @@ check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh
 # the grouped card from the same pieces, and the whole safety argument for that
 # rests on the ungrouped path being untouched. Nothing else in the suite reads
 # the HTML, so a refactor could rewrite every card and stay green.
-check overview-single-html overview_single.html php render_overview.php expected/storcli_overview.json
+#
+# NEVER regenerate these two with UPDATE=1. Every other golden here records what
+# a parser currently emits, and regenerating it after an intentional change is
+# the workflow. These two record what the Overview emitted BEFORE the dual-IOC
+# branch (rendered at acb52d68), and that provenance cannot be recovered from
+# the repo once overwritten — a golden rebuilt by the code it exists to police
+# proves nothing. If one legitimately has to change, render it from acb52d68
+# again, or delete it and say why.
+#
+# Two fixtures, because the PCIe row is gated on pcie_width/pcie_speed and
+# storcli_overview.json has neither: that golden contains no `lu-pcie` at all,
+# so the row went unpinned until _pcie was added beside it.
+if command -v php >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+    check overview-single-html      overview_single.html      php_run render_overview.php expected/storcli_overview.json
+    check overview-single-pcie-html overview_single_pcie.html php_run render_overview.php expected/storcli_overview_pcie.json
+else
+    echo "SKIP  overview-single-html / overview-single-pcie-html (no php and no docker)"
+fi
 
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
