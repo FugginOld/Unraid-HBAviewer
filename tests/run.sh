@@ -108,22 +108,29 @@ check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fix
 # deleting the LSI_SUBVENDOR wiring outright left this suite green while gate 2
 # turned every controller oem_out_of_scope and the feature rendered nothing.
 #
-# The device dirs sit under a fake host bridge and root port, because that is
-# what hba_card_id walks. A flat tree resolves to an empty card_id, which would
-# pin the "cannot tell" case in every golden and let a deleted sysfs walk pass.
+# The device dirs sit under a fake host bridge, because that is what
+# hba_card_id walks. A flat tree with no bridge at all resolves to an empty
+# card_id, which would pin the "cannot tell" case in every golden and let a
+# deleted sysfs walk pass.
+#
+# c0 and c1 sit directly ON the bridge, not behind a shared root port: two
+# distinct boards (a 9400-16i and a 9400-8i) cannot physically share a slot,
+# so each must resolve to ITS OWN address ("a device on the host bridge is
+# its own slot" — the same case topology_test.sh already pins directly).
+# Modelling this as two separate root ports instead (each card behind its
+# own 0000:80:0N.0) would need get_hba_info.sh's composer to see each device
+# through a distinct symlinked path, the way real /sys/bus/pci/devices does
+# it — but `ln -s` is a silent no-op in this repo's Windows/MSYS test shell
+# (exit 0, no actual link produced; same reason topology_test.sh's own
+# symlink case is SKIP here), so this uses the symlink-free case instead.
 SYSPCI_ROOT=$(mktemp -d)
-SYSPCI="$SYSPCI_ROOT/pci0000:80/0000:80:01.0"
+SYSPCI="$SYSPCI_ROOT/pci0000:80"
 mkdir -p "$SYSPCI"
 SYSHOST=$(mktemp -d)
 SYSDEV=$(mktemp -d)
 SYSEXP=$(mktemp -d)
 SYSPHY=$(mktemp -d)
 trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY"' EXIT
-# c0 and c1 both land directly under $SYSPCI, so they share one card_id
-# ("0000:80:01.0") — an artifact of this fixture tree having a single root
-# port, not two boards. It causes no accidental grouping: grouping (a later
-# task) also requires matching board names and a known IOC count, and this
-# tree's two controllers are a 9400-16i and a 9400-8i.
 for spec in "0000:c1:00.0 8 0x1000" "0000:65:00.0 4 -"; do
     set -- $spec
     mkdir -p "$SYSPCI/$1"
@@ -167,8 +174,14 @@ mkdir -p "$SYSPCI/0000:c1:00.0/host7" "$SYSDEV/end_device-7:0" "$SYSDEV/end_devi
 #
 # host3, not host0: the number must not coincide with the controller index, or
 # the golden cannot tell the derivation apart from a hardcoded 0.
-SYSL=$(mktemp -d)
-trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL"' EXIT
+# Nested under a fake host bridge and root port, same correction as $SYSPCI
+# above and for the same reason: a flat tree resolves card_id to "" whether
+# the LSI_CARD_ID wiring exists or not, which cannot tell a live sysfs walk
+# from a deleted one.
+SYSL_ROOT=$(mktemp -d)
+SYSL="$SYSL_ROOT/pci0000:00/0000:00:02.0"
+mkdir -p "$SYSL"
+trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL_ROOT"' EXIT
 LCARD="$SYSL/0000:03:00.0"
 mkdir -p "$LCARD/host3/scsi_host/host3"
 printf '8\n'             > "$LCARD/current_link_width"

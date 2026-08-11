@@ -149,9 +149,10 @@ ov_lsiutil() {
     pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
     LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
     LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
-    # Always resolves to one card here: lsiutil addresses a single controller,
-    # so this path never produces two entries to group. Emitted anyway so the
-    # field means the same thing on both backends.
+    # At most one card here: lsiutil addresses a single controller, so this
+    # path never produces two entries to group — resolves to empty whenever
+    # the ancestry isn't visible, same as the storcli path. Emitted anyway so
+    # the field means the same thing on both backends.
     LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
     export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
     bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
