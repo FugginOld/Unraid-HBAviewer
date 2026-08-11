@@ -21,7 +21,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          tools: phpstan
+          # PINNED. Unpinned, setup-php resolves whatever is current, and the
+          # majors disagree about this codebase: 2.x reports no errors where
+          # 1.12 reports two in ajax_info.php. Green CI was a property of the
+          # resolver, not of the code. Bump deliberately.
+          tools: phpstan:2.1
 
       # The parsers use GNU awk, which Unraid (Slackware) ships as `awk`.
       # ubuntu-latest defaults to mawk, so make gawk the default here.

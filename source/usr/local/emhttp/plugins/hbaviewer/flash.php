@@ -184,7 +184,30 @@ function flash_cards_from(array $data): array {
          * It stays possible from a console; what it stops being is a button. */
         $subven = strtolower(trim((string) ($first['subvendor_id'] ?? '')));
         if ($subven !== '' && $subven !== '0x1000') continue;
-        if (count($g) < ($counts[fw_normalize($board)] ?? 1)) continue;
+        $key = fw_normalize($board);
+        if (count($g) < ($counts[$key] ?? 1)) continue;
+        /* The under-count guard above asks the BOARD how many controllers it
+         * should have — but board_name is also what lsi_group_cards() buckets
+         * on, so the one input whose absence causes a dual card to split in two
+         * is the same input the guard needs in order to notice. With it empty
+         * the lookup misses, the count defaults to 1, and both halves sail
+         * through as single-controller cards: the half-card flash again.
+         *
+         * No live backend produces it — storcli reads Product Name and falls
+         * back to Model, and the lsiutil path emits one controller — so this
+         * closes a hole in the rule rather than an observed failure. It stays
+         * because "fails closed on a degraded read" should be true of degraded
+         * reads generally, not only of the one that was reported.
+         *
+         * Narrow on purpose: a lone controller, no board name, sharing a slot
+         * with another controller. Two NAMED cards behind one riser switch are
+         * untouched, which is the case the grouping rule deliberately protects. */
+        if (count($g) === 1 && $key === '') {
+            $cid = (string) ($first['card_id'] ?? '');
+            $sharing = 0;
+            foreach ($ctls as $c) { if ((string) ($c['card_id'] ?? '') === $cid) $sharing++; }
+            if ($cid !== '' && $sharing > 1) continue;
+        }
         $out[implode(',', $g)] = (string) preg_replace('/[^A-Za-z0-9]/', '',
             (string) ($first['model'] ?? ''));
     }
@@ -211,7 +234,7 @@ function flash_preflight(array $in): array {
        the 'card' => … line from the dispatch and nothing behavioural noticed,
        only a str_contains() on that literal line. */
     if (empty($in['card']))
-        return ['ok' => false, 'error' => 'That is not one of the controller cards in this server, or its chip has changed since the page loaded. Reload the firmware page and try again.'];
+        return ['ok' => false, 'error' => 'That is not one of the controller cards in this server, or its chip has changed since the page loaded, or one of its controllers could not be read just now. Reload the firmware page and try again. If it keeps refusing, check that every controller on the card reports a temperature on the Overview: a card whose controllers cannot all be read is deliberately not flashable, because writing one controller of a dual-controller board leaves the two running different firmware.'];
     /* Firmware and BIOS are each optional, but not both. sas2flash/sas3flash
        take -f, -b, or both, so flashing a BIOS on its own is a real operation
        the tool supports and this used to refuse. storcli is different: on the

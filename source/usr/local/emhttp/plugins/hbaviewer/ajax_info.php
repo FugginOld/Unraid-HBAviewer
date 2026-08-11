@@ -115,7 +115,11 @@ if ($type === 'smart_all') {
    -n standby so a sleeping drive is never woken. */
 if ($type === 'smart') {
     header('Content-Type: text/html; charset=utf-8');
-    $serial = preg_replace('/[^A-Za-z0-9_.:-]/', '', $_GET['serial'] ?? '');
+    // (string) cast: serial[]=x makes preg_replace return an ARRAY, which then
+    // reaches escapeshellarg() below as a TypeError -- an uncaught 500 on a
+    // read-only endpoint. Fourth and last of the four sites with this shape;
+    // the other three are in flash.php.
+    $serial = preg_replace('/[^A-Za-z0-9_.:-]/', '', (string) ($_GET['serial'] ?? ''));
     if ($serial === '') { echo '<span class="lu-muted">no serial</span>'; exit; }
 
     $dev = trim((string) shell_exec(

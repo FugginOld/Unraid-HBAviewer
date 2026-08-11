@@ -217,8 +217,14 @@ check('a partial flash has its own exit code',
    that is not a whole card, so the single instruction given in the one state
    this feature exists to make loud was rejected by the gate. Re-running the
    whole card rewrites both controllers, which is both accepted and safe. */
+/* Anchored to the die LINE, not to the file. str_contains($shSrc,'WHOLE CARD')
+   was satisfied by the explanatory comment above the die, so rewording the
+   message itself -- "Reflash /c$one now" -- left the suite green while undoing
+   the fix. The exit code is already pinned this way; the guidance that goes
+   with it is the part an operator actually acts on, so it gets the same
+   treatment. */
 check('and directs the operator at the WHOLE CARD, which the gate accepts',
-      str_contains($shSrc, 'WHOLE CARD'));
+      (bool) preg_match('/die "PARTIAL FLASH\..*WHOLE CARD.*" 7$/m', $shSrc));
 check('and never at the failed controller alone',
       !str_contains($shSrc, 'Re-run the flash for /c'));
 check('a clean failure keeps the old one',     str_contains($shSrc, 'nothing was written" 6'));
@@ -380,6 +386,30 @@ $caseRaw['controllers'][0]['subvendor_id'] = '0X1000';
 $caseRaw['controllers'][1]['subvendor_id'] = '0X1000';
 check('the subvendor comparison is case-insensitive',
       array_keys(flash_cards_from($caseRaw)) === ['0,1']);
+
+/* The under-count guard asks the BOARD how many controllers it should have, so
+   an empty board_name blinds it -- and board_name is also what the grouper
+   buckets on, which is what split the card in the first place. Both halves
+   would otherwise pass as single-controller cards: the half-card flash again,
+   reached through the one field whose absence causes the split. */
+$namelessRaw = $dualRaw;
+$namelessRaw['controllers'][0]['board_name'] = '';
+$namelessRaw['controllers'][1]['board_name'] = '';
+check('halves of a slot-sharing card with no board name are not offered',
+      flash_cards_from($namelessRaw) === []);
+/* And the case that must survive it: a genuinely single-controller card whose
+   board name is unreadable is still flashable -- it shares its slot with
+   nothing, so there is no missing sibling to worry about. */
+$loneRaw = ['controllers' => [
+    ['board_name' => '', 'model' => 'SAS2308', 'card_id' => '0000:00:11.0', 'subvendor_id' => '0x1000'],
+]];
+/* Asserted through the gate rather than on array_keys(): a single-controller
+   card's key is implode(',', [0]) === "0", which PHP silently coerces to the
+   INTEGER 0 as an array key, while a dual card's "0,1" stays a string. The
+   gate's own lookup coerces the same way, so it is unaffected -- but a test
+   comparing key types is testing PHP, not us. */
+check('a lone card with no board name is still flashable',
+      flash_ctl_is_card('0', 'SAS2308', flash_cards_from($loneRaw)) === true);
 /* The guard must not eat ordinary hardware: an HBA on the same silicon stays. */
 check('an HBA sharing that silicon is still offered',
       array_keys(flash_cards_from($dualRaw)) === ['0,1']);
