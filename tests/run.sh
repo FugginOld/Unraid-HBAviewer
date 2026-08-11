@@ -174,10 +174,9 @@ mkdir -p "$SYSPCI/0000:c1:00.0/host7" "$SYSDEV/end_device-7:0" "$SYSDEV/end_devi
 #
 # host3, not host0: the number must not coincide with the controller index, or
 # the golden cannot tell the derivation apart from a hardcoded 0.
-# Nested under a fake host bridge and root port, same correction as $SYSPCI
-# above and for the same reason: a flat tree resolves card_id to "" whether
-# the LSI_CARD_ID wiring exists or not, which cannot tell a live sysfs walk
-# from a deleted one.
+# Nested one level deeper than $SYSPCI: a device behind a root port, so this
+# golden also pins the case where the slot is an ancestor rather than the
+# device itself.
 SYSL_ROOT=$(mktemp -d)
 SYSL="$SYSL_ROOT/pci0000:00/0000:00:02.0"
 mkdir -p "$SYSL"
@@ -197,6 +196,25 @@ printf 'SAS9207-8i\n'    > "$LCARD/host3/scsi_host/host3/board_name"
 # hba_topology's positive answer on the lsiutil path too.
 mkdir -p "$SYSDEV/end_device-3:0" "$SYSDEV/end_device-3:1"
 
+# ── A dual-IOC card for the storcli composer (route-storcli-dual, below) ────
+# Every storcli fixture elsewhere in this file produces controllers with
+# DISTINCT card_ids (c0 and c1 each sit directly on the host bridge, i.e. on
+# their own slot) -- so the feature's own precondition, two controllers
+# sharing ONE slot, was otherwise only ever produced by hand-written PHP
+# arrays in card_group_test.php, never by the real shell pipeline. This gives
+# hba_card_id a tree where both IOCs of one SAS9300-16i sit behind a shared
+# root port (0000:80:01.0), each in its own PCI function beneath it, matching
+# hba_card_id's own doc comment.
+SYSDUAL_ROOT=$(mktemp -d)
+SYSDUAL="$SYSDUAL_ROOT/pci0000:80/0000:80:01.0"
+mkdir -p "$SYSDUAL/0000:82:00.0" "$SYSDUAL/0000:86:00.0"
+trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL_ROOT" "$SYSDUAL_ROOT"' EXIT
+for d in 0000:82:00.0 0000:86:00.0; do
+    printf '8\n'             > "$SYSDUAL/$d/current_link_width"
+    printf '8.0 GT/s PCIe\n' > "$SYSDUAL/$d/current_link_speed"
+    printf 'D0\n'            > "$SYSDUAL/$d/power_state"
+done
+
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
 export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null \
@@ -204,6 +222,12 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
+# Two SAS3008 IOCs both reporting board name SAS9300-16i, both resolving (via
+# SYSDUAL above) to the same root port -> the same card_id. The only check in
+# this suite that would catch the composer emitting DIFFERENT card_ids for a
+# genuine dual-IOC board -- everything else pins the split (distinct-slot) case.
+STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" \
+check route-storcli-dual storcli_dual.json bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # The lsiutil composer, all the way through — the only check that reaches

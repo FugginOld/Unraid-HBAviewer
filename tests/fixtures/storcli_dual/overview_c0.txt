@@ -1,0 +1,34 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Basics :
+======
+Controller = 0
+Product Name = SAS9300-16i
+Serial Number = SP0016IOC0
+PCI Address = 00:82:00:00
+
+Version :
+=======
+FW Package Build = 16.00.12.00
+FW Version = 16.00.12.00
+BIOS Version = 08.37.00.00_18.00.00.00
+Physical Drives = 8
+
+PCI Version :
+===========
+Vendor Id = 0x1000
+Device Id = 0x97
+Host Interface = PCIE
+
+TOPOLOGY :
+========
+EID:Slt DID State DG      Size Intf Med SED PI SeSz Model            Sp
+0:0       3 JBOD  -   3.637 TB SAS  HDD -   -  512B HUS726T4TAL5204  -
+
+EID-Enclosure Device ID|Slt-Slot No|DID-Device ID|DG-DriveGroup
+UGood-Unconfigured Good|UBad-Unconfigured Bad|Intf-Interface
+Med-Media Type|SED-Self Encryptive Drive|PI-Protection Info

@@ -71,6 +71,7 @@
       "branch": "P16",
       "eol": true,
       "confidence": "confirmed",
+      "ioc_count": 2,
       "notes": "Dual-controller board. Flash with -fwall rather than -f or only one IOC updates."
     },
     "SAS9305-16i": {

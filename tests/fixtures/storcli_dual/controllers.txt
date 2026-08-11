@@ -1,0 +1,19 @@
+CLI Version = 007.3404.0000.0000 April 18, 2025
+Operating system = Linux 6.18.38-Unraid
+Status Code = 0
+Status = Success
+Description = None
+
+Number of Controllers = 2
+Host Name = Golem
+Operating System  = Linux 6.18.38-Unraid
+
+IT System Overview :
+==================
+
+---------------------------------------------------------------------------
+Ctl Model        AdapterType   VendId DevId SubVendId SubDevId PCI Address
+---------------------------------------------------------------------------
+  0 SAS9300-16i    SAS3008     0x1000  0x97    0x1000   0x30E0 00:82:00:00
+  1 SAS9300-16i    SAS3008     0x1000  0x97    0x1000   0x30E0 00:86:00:00
+---------------------------------------------------------------------------
