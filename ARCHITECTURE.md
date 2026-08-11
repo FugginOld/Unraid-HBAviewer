@@ -163,6 +163,7 @@ unit-tested, and enforced **server-side**:
 - read-only verify scoped to the target **card** — every controller on it, and nothing else
 - controller argument validated by one `flash_ctl_list()` both call sites share — shape (`/^\d+(,\d+)*\z/`; `\z`, not `$`, or a trailing newline slips through), size (`LSI_MAX_IOCS`) and uniqueness
 - and, on the mutating action only, **membership**: `flash_ctl_is_card()` requires the posted list to *be* one of the cards `flash_card_chips()` derives from the live hardware at flash time, **and** the posted chip to be the one that card actually reports — the chip picks the flash tool, and a stale page carries a stale `data-chip` as readily as a stale `data-ctl`
+- that derivation, `flash_cards_from()` (the pure half, unit-tested against the pipeline goldens), **drops any group smaller than the `ioc_count` its board declares**. A per-controller parser error carries no `card_id`, so a 9300-16i with one unreadable IOC groups as `[[0],[1]]` and the surviving half would otherwise be a perfectly valid single-controller "card" — flashing it writes one IOC of a two-IOC board and reports success. The board is unflashable until the read is clean; boards declaring no count default to 1 and are unaffected
 - every gate in `flash_preflight()` **fails closed on a missing input**, including `card`; the one that did not was the most dangerous one there
 - typed `FLASH` confirmation plus an acknowledgement checkbox
 - single-flight lock, never auto-retried
@@ -195,8 +196,11 @@ first succeeded. It has its **own exit code, 7**, which `flash.php` turns into
 `done: 'partial'` and the page into its own red banner. 6 — "nothing was
 written" — is the safe outcome, and sharing one code made the two
 machine-indistinguishable with only free text between a safe retry and a dead
-card. The partial message names which controller holds which half and tells the
-operator not to reboot. A failure on the *first* write stops there.
+card. The partial message names which controller holds which half, tells the
+operator not to reboot, and sends them at the **whole card** — the membership
+gate accepts a card's complete controller list and nothing less, so "re-flash
+just the one that failed" would be refused, and rewriting both is the safe
+action anyway. A failure on the *first* write stops there.
 
 **The membership read happens before the lock is claimed.** `flash_card_chips()`
 shells out to `get_hba_info.sh` and can take a minute on a slow controller, and

@@ -84,13 +84,14 @@ function flash_ctl_list(string $ctl): ?array {
  * The whole justification for looping the card's indices instead of -fwall is
  * "the card's OWN controllers, nothing else", and nothing but this enforces it:
  * a crafted POST or a stale page can otherwise name any set of controllers that
- * passes the shape check. $groups comes from the same lsi_group_cards() the
- * Overview and the firmware page's JSON use, so the set of acceptable lists is
- * by construction the set of cards the page can actually offer.
+ * passes the shape check. $cards comes from flash_cards_from(), over the same
+ * lsi_group_cards() the Overview and the firmware page's JSON use, so the set of
+ * acceptable lists is by construction the set of cards the page can offer.
  *
- * Exact string equality against implode(',', $group), not a subset test: half a
- * dual-IOC card is not a card, and writing one of its two IOCs is the partial
- * flash this feature spends its error handling trying to prevent.
+ * $cards is a map "0,1" => chip, keyed by the card's whole controller list, so
+ * the lookup is exact string equality and not a subset test: half a dual-IOC
+ * card is not a card, and writing one of its two IOCs is the partial flash this
+ * feature spends its error handling trying to prevent.
  * No cards at all (backend error, no controllers) means nothing matches and
  * every flash is refused — the same read is what draws the card the operator
  * pressed Flash on, so there is nothing legitimate to lose.
@@ -119,14 +120,35 @@ function flash_ctl_is_card(string $ctl, string $chip, array $cards): bool {
  * refuse every flash on any backend whose model string carries a space or a
  * dash — a gate that fails closed on working hardware is still a broken gate. */
 function flash_card_chips(): array {
-    $raw  = shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/get_hba_info.sh') . ' 2>/dev/null');
-    $data = json_decode((string) $raw, true);
-    if (!is_array($data) || isset($data['error'])) return [];
-    $ctls = lsi_controllers($data);
-    $out  = [];
-    foreach (lsi_group_cards($ctls, lsi_ioc_counts(fw_load())) as $g) {
+    return flash_cards_from((array) json_decode(
+        (string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/get_hba_info.sh') . ' 2>/dev/null'),
+        true));
+}
+
+/* The pure half of flash_card_chips(): one backend payload in, the card map out.
+ * Split off so the gate that decides what may be written is unit-testable
+ * against the real pipeline goldens instead of a copy of its body in a test.
+ *
+ * Fails closed on a DEGRADED read. A per-controller parser error (storcli's
+ * overview emits {"error":…} when a controller's temperature is unreadable)
+ * carries no card_id, so it never buckets with its sibling and the dual board
+ * comes back as two groups of one instead of one group of two. Left alone, the
+ * surviving half is a perfectly valid single-controller "card" and flashing it
+ * writes one IOC of a two-IOC board — reported as success, with an instruction
+ * to reboot: exactly the mismatch this feature exists to prevent. So a group
+ * smaller than the ioc_count its board declares is dropped, and a 9300-16i with
+ * one unreadable IOC is unflashable until the read is clean. Boards that declare
+ * no count default to 1 and are unaffected. */
+function flash_cards_from(array $data): array {
+    if (isset($data['error'])) return [];
+    $ctls   = lsi_controllers($data);
+    $counts = lsi_ioc_counts(fw_load());
+    $out    = [];
+    foreach (lsi_group_cards($ctls, $counts) as $g) {
+        $first = $ctls[$g[0]] ?? [];
+        if (count($g) < ($counts[fw_normalize((string) ($first['board_name'] ?? ''))] ?? 1)) continue;
         $out[implode(',', $g)] = (string) preg_replace('/[^A-Za-z0-9]/', '',
-            (string) ($ctls[$g[0]]['model'] ?? ''));
+            (string) ($first['model'] ?? ''));
     }
     return $out;
 }
@@ -247,7 +269,9 @@ if ($action === 'dropfiles') {
    Delegates to flash_hba.sh so the chip->tool mapping has exactly one home. */
 if ($action === 'toolinfo') {
     header('Content-Type: application/json');
-    $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');
+    // Cast before the filter: chip[]=x makes preg_replace return an ARRAY, and
+    // escapeshellarg() then throws a TypeError -> a 500 instead of a refusal.
+    $chip = preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['chip'] ?? $_GET['chip'] ?? ''));
     if ($chip === '') { echo json_encode(['status' => 'unknown']); exit; }
     $raw = (string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh')
          . ' tool ' . escapeshellarg($chip) . ' 2>/dev/null');
@@ -262,7 +286,7 @@ if ($action === 'toolinfo') {
 
 if ($action === 'listall') {
     header('Content-Type: text/plain; charset=utf-8');
-    $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');
+    $chip = preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['chip'] ?? $_GET['chip'] ?? ''));
     $ctl  = (string) ($_POST['ctl'] ?? $_GET['ctl'] ?? '');
     /* Same validator as the flash action's, so the two cannot drift. NOT the
        membership check: this is read-only (`-list` per controller, nothing
@@ -278,7 +302,7 @@ if ($action === 'listall') {
 
 if ($action === 'flash') {
     header('Content-Type: application/json');
-    $chip   = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? '');
+    $chip   = preg_replace('/[^A-Za-z0-9]/', '', (string) ($_POST['chip'] ?? ''));
     $ctl    = (string) ($_POST['ctl'] ?? '');
     $fwName  = flash_safe_name((string) ($_POST['firmware'] ?? ''), ['bin', 'rom', 'fw']);
     // Same extensions as the firmware select: the page builds BOTH dropdowns from

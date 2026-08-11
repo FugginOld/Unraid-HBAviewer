@@ -208,7 +208,19 @@ check('and tells the operator not to reboot', str_contains($shSrc, 'Do NOT reboo
    state and the safe one record the same value in flash.status, leaving only
    free text between a safe retry and a dead card. 7 is the partial; flash.php
    turns it into done=partial and the page into its own banner. */
-check('a partial flash has its own exit code', str_contains($shSrc, 'before doing anything else." 7'));
+// Matched on the PARTIAL FLASH die itself rather than on its closing words, so
+// rewording the recovery advice cannot silently unpin the exit code.
+check('a partial flash has its own exit code',
+      (bool) preg_match('/die "PARTIAL FLASH\..*" 7$/m', $shSrc));
+/* The recovery it names must be one the server will actually accept. It used to
+   say "re-run the flash for /c$one" -- and flash_ctl_is_card() refuses a list
+   that is not a whole card, so the single instruction given in the one state
+   this feature exists to make loud was rejected by the gate. Re-running the
+   whole card rewrites both controllers, which is both accepted and safe. */
+check('and directs the operator at the WHOLE CARD, which the gate accepts',
+      str_contains($shSrc, 'WHOLE CARD'));
+check('and never at the failed controller alone',
+      !str_contains($shSrc, 'Re-run the flash for /c'));
 check('a clean failure keeps the old one',     str_contains($shSrc, 'nothing was written" 6'));
 check('flash.php maps 7 to its own state',     str_contains($flashSrc, "\$exit === 7)      \$res['done'] = 'partial'"));
 check('and the page renders that state',       str_contains($jsSrc, "d.done === 'partial'"));
@@ -260,14 +272,18 @@ check('the cap is named, not a magic number',        LSI_MAX_IOCS === 4);
    Driven with the real pipeline golden through the real index, the same way
    card_group_test.php does, rather than hand-built arrays. */
 $realIdx  = fw_load(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/data/known-firmware.json');
-$dualCtls = json_decode((string) file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true)['controllers'];
+$dualRaw  = json_decode((string) file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true);
+$dualCtls = $dualRaw['controllers'];
 $dualGrp  = lsi_group_cards($dualCtls, lsi_ioc_counts($realIdx));
 check('the dual-IOC golden really is one card of two', $dualGrp === [[0, 1]]);
-// The map flash_card_chips() builds from that grouping: list => the chip the
-// card actually reports. Built here the same way the function does, so these
-// exercise the matcher against real pipeline output rather than a fixture.
-$dual = [];
-foreach ($dualGrp as $g) { $dual[implode(',', $g)] = (string) $dualCtls[$g[0]]['model']; }
+/* The map the gate is fed: list => the chip that card actually reports. Built
+   by the PRODUCER, flash_cards_from(), not by a copy of its body here. The copy
+   this replaces had already drifted -- it omitted the alnum preg_replace -- so
+   every assertion below was exercising the matcher against a map no production
+   code path can produce. Four mutations of flash_card_chips() survived the
+   whole suite because of it; see the flash_cards_from block further down. */
+$dual = flash_cards_from($dualRaw);
+check('the golden card is one map entry keyed by its whole list', array_keys($dual) === ['0,1']);
 check('the golden card reports SAS3008', ($dual['0,1'] ?? '') === 'SAS3008');
 
 check('that card\'s own list is accepted',     flash_ctl_is_card('0,1', 'SAS3008', $dual) === true);
@@ -301,10 +317,7 @@ $mixedCtls = [
     ['board_name' => 'SAS9300-8i',  'card_id' => '0000:00:11.0', 'model' => 'SAS2008'],
     ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0', 'model' => 'SAS3008'],
 ];
-$mixed = [];
-foreach (lsi_group_cards($mixedCtls, lsi_ioc_counts($realIdx)) as $g) {
-    $mixed[implode(',', $g)] = (string) $mixedCtls[$g[0]]['model'];
-}
+$mixed = flash_cards_from(['controllers' => $mixedCtls]);
 check('a non-adjacent card is accepted by its own list', flash_ctl_is_card('0,2', 'SAS3008', $mixed) === true);
 check('the lone card between its halves too',            flash_ctl_is_card('1',   'SAS2008', $mixed) === true);
 check('but not the adjacent pair that is two cards',     flash_ctl_is_card('0,1', 'SAS3008', $mixed) === false);
@@ -314,6 +327,72 @@ check('one card\'s chip does not authorise another',     flash_ctl_is_card('1', 
 // The same read draws the card the operator pressed Flash on, so there is
 // nothing legitimate to lose by failing closed here.
 check('an unreadable backend refuses every flash', flash_ctl_is_card('0', 'SAS3008', []) === false);
+
+/* ── flash_cards_from(): the producer of everything above ────────────────────
+   The gate is only as good as the map it is handed, and the map was built by a
+   function with no test of its own: four separate mutations of it survived the
+   entire suite. Each check below is the one that kills one of them.
+
+   MUTANT A -- key the map by $g[0] instead of implode(',', $g). Refuses every
+   dual flash AND accepts half of one, since the key becomes a bare index. */
+check('A: the dual card is keyed by its WHOLE list, not its first index',
+      array_keys(flash_cards_from($dualRaw)) === ['0,1']);
+check('A: and the whole list is what the gate then accepts',
+      flash_ctl_is_card('0,1', 'SAS3008', flash_cards_from($dualRaw)) === true);
+
+/* MUTANT B -- drop the alnum filter on the model. The dispatch filters the
+   CLIENT's chip, so an unfiltered map value can never equal it and every flash
+   on a backend whose model carries a space or a dash is refused. A gate that
+   fails closed on working hardware is still a broken gate. */
+$spacedRaw = $dualRaw;
+$spacedRaw['controllers'][0]['model'] = 'SAS 3008 (rev 02)';
+$spacedRaw['controllers'][1]['model'] = 'SAS 3008 (rev 02)';
+check('B: the model is put through the same alnum filter as the posted chip',
+      (flash_cards_from($spacedRaw)['0,1'] ?? '') === 'SAS3008rev02');
+
+/* MUTANT C -- drop the isset($data['error']) guard. get_hba_info.sh reports a
+   whole-backend failure as a top-level error while still carrying whatever it
+   scraped; trusting that payload means flashing off a read that failed. */
+check('C: a top-level backend error yields no cards at all',
+      flash_cards_from(['error' => 'storcli not found', 'controllers' => $dualCtls]) === []);
+
+/* MUTANT D -- take end($g)'s model rather than $g[0]'s. Invisible on the golden,
+   where both IOCs report the same chip; the chip picks the FLASH TOOL, so on any
+   card whose members disagree it hands the gate the wrong half's answer. */
+$skewRaw = $dualRaw;
+$skewRaw['controllers'][1]['model'] = 'SAS2008';
+check('D: the chip comes from the group\'s FIRST member',
+      (flash_cards_from($skewRaw)['0,1'] ?? '') === 'SAS3008');
+
+/* BLOCKER 1 -- a DEGRADED read must not present half a dual board as a card.
+   storcli_overview.sh emits a per-controller {"error":...} when ROC temperature
+   is missing. That entry has no card_id, so it never buckets with its sibling
+   and the 9300-16i comes back as [[0],[1]] instead of [[0,1]]. The surviving
+   half is then a perfectly well-formed single-controller "card", and flashing it
+   writes ONE IOC of a two-IOC board -- exit 0, "Flash completed, REBOOT the
+   server". Any group smaller than the ioc_count its board declares is dropped,
+   so the card is unflashable until the read is clean. */
+$degradedRaw = $dualRaw;
+$degradedRaw['controllers'][1] = ['error' => 'No temperature in storcli output. Check the controller index.'];
+$degraded = flash_cards_from($degradedRaw);
+check('the degraded read no longer offers the surviving half as a card',
+      !isset($degraded['0']) && !isset($degraded[0]));
+check('and half of the dual card is REFUSED after a one-IOC read failure',
+      flash_ctl_is_card('0', 'SAS3008', $degraded) === false);
+check('the whole card is refused too -- it was never grouped',
+      flash_ctl_is_card('0,1', 'SAS3008', $degraded) === false);
+/* Fail-closed only for boards that DECLARE a count. A single-IOC board has no
+   ioc_count, defaults to 1, and must be entirely unaffected by any of this. */
+check('a single-IOC board is untouched by the fail-closed rule',
+      flash_cards_from(['controllers' => [
+          ['board_name' => 'SAS9300-8i', 'card_id' => '0000:00:11.0', 'model' => 'SAS3008'],
+      ]]) === ['0' => 'SAS3008']);
+/* ...and so is a board this plugin has never heard of. */
+check('an unknown board still groups as one card of one',
+      flash_cards_from(['controllers' => [
+          ['board_name' => 'Some Future HBA', 'card_id' => '0000:00:12.0', 'model' => 'SAS4116'],
+      ]]) === ['0' => 'SAS4116']);
+check('no controllers at all yields no cards', flash_cards_from(['controllers' => []]) === []);
 
 check('the flash action asks the live hardware',
       str_contains($flashSrc, 'flash_ctl_is_card($ctl, $chip, flash_card_chips())'));
@@ -326,7 +405,13 @@ check('the flash action asks the live hardware',
 check('and the answer it gets reaches the gate',
       (bool) preg_match('/[\'"]card[\'"]\s*=>\s*\$isCard\b/', $flashSrc));
 check('and derives the cards the same way the page does',
-      str_contains($flashSrc, 'lsi_group_cards($ctls, lsi_ioc_counts(fw_load()))'));
+      str_contains($flashSrc, 'lsi_group_cards($ctls, $counts)')
+      && str_contains($flashSrc, 'lsi_ioc_counts(fw_load())'));
+/* The wrapper must stay thin: everything the checks above prove lives in
+   flash_cards_from(), and logic that creeps back into flash_card_chips() is
+   logic no test can reach (it shells out to real hardware). */
+check('flash_card_chips() only decodes and delegates',
+      (bool) preg_match('/function flash_card_chips\(\): array \{\s*return flash_cards_from\(/', $flashSrc));
 /* The read is a shell_exec that can take a minute, and flash_claim_lock() has
    no TTL recovery -- a PHP death between the claim and the launch orphans the
    lock, and every later flash is then refused "already in progress" until /tmp

@@ -72,7 +72,7 @@
       "eol": true,
       "confidence": "confirmed",
       "ioc_count": 2,
-      "notes": "Dual-controller board. Flash with -fwall rather than -f or only one IOC updates."
+      "notes": "Dual-controller board: one card carrying two SAS3008 IOCs. HBAviewer shows and flashes it as a single card, writing both controllers in sequence from the one image you select. Nothing else in the server is touched."
     },
     "SAS9305-16i": {
       "chip": "SAS3216",

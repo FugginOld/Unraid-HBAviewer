@@ -174,6 +174,15 @@ const tick = () => new Promise((r) => setImmediate(r));
     check('it says the firmware now differs',      /DIFFERENT firmware/.test(plog));
     check('it says do not reboot',                 plog.includes('Do NOT reboot'));
     check('it is not the generic error line',      !plog.includes('Flash tool exited with an error'));
+    /* The recovery it names has to be one the server will accept. The banner
+       used to say "re-run the flash for that controller", and flash.php's
+       membership gate refuses any list that is not a whole card — so the single
+       instruction given in the loudest state this feature has was rejected on
+       arrival. Re-running the whole card rewrites both and is the safe action. */
+    check('it sends the operator back at the WHOLE CARD', plog.includes('WHOLE CARD'));
+    check('and says that rewrites both controllers',      /BOTH controllers/.test(plog));
+    check('and not at the failed controller alone',
+          !/flash for (that|the failed) controller/.test(plog));
 
     STATUS = { running: false, exit: 6, done: 'error', log: 'nothing was written' };
     els.get('flash-log-0,2').textContent = '';

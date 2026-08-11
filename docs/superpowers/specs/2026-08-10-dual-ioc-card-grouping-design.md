@@ -188,8 +188,11 @@ version and stating that the card must not be rebooted until the second write
 succeeds — not a generic failure. A silent or vague failure here is worse than
 the two-card display it replaces.
 
-The loop does not stop early on success and does not skip the second write for
-any reason short of the tool being gone.
+The loop does not stop early on success. It *does* stop on a failed **first**
+write, reporting that nothing was written — deliberately: continuing after a
+failure would create the very mismatch the paragraph above is about, and a run
+that wrote nothing is safe to retry. Only a failure on a *later* write, with an
+earlier one already committed, produces the partial state and its own exit code.
 
 ## 7. Testing
 

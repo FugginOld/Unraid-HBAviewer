@@ -47,6 +47,23 @@ foreach ($idx['boards'] as $name => $b) {
 check('every it_capable board has a latest_it', $noVersion === []);
 if ($noVersion) echo "      " . implode(', ', $noVersion) . "\n";
 
+/* ioc_count is the ONE field in this index that merges two separate controllers
+   into a single flashable card. Add it to a board that does not have two IOCs
+   and the plugin offers "Controller /c0, /c1" for two unrelated HBAs, then
+   writes one image to both. Adding "ioc_count": 2 to SAS9300-8i currently
+   survives every other assertion in this suite, and the hardware facts behind
+   the field are otherwise recorded only in a planning ledger. So pin the set:
+   a board joins it only when someone has the board in hand. */
+$withIoc = [];
+foreach ($idx['boards'] as $name => $b) {
+    if (array_key_exists('ioc_count', $b)) $withIoc[] = $name;
+}
+sort($withIoc);
+check('exactly the confirmed dual-IOC boards carry ioc_count', $withIoc === ['SAS9300-16i']);
+if ($withIoc !== ['SAS9300-16i']) echo "      got: " . implode(', ', $withIoc) . "\n";
+// And its value: 1 would silently un-merge the card, 3 would refuse to merge it.
+check('SAS9300-16i declares two IOCs', ($idx['boards']['SAS9300-16i']['ioc_count'] ?? null) === 2);
+
 // A branch reference with no branch entry makes 'terminal' silently false,
 // which downgrades an amber verdict to informational without saying why.
 $badBranch = [];

@@ -181,7 +181,12 @@ for one in $(printf '%s' "$ctl" | tr ',' ' '); do
         # what flash.php turns into done=partial and the page into its own
         # banner.
         if [ -n "$done_ok" ]; then
-            die "PARTIAL FLASH. Controller(s) /c$done_ok on this card were written successfully and /c$one FAILED. The two controllers on this board are now running different firmware. Do NOT reboot. Re-run the flash for /c$one before doing anything else." 7
+            # Re-run the WHOLE CARD, not /c$one alone. The membership gate in
+            # flash.php only accepts a card's complete controller list, so a
+            # request naming one half is refused -- and rewriting both is the
+            # safe action anyway: it puts the same image on every controller of
+            # the board, which is the state the failed run was aiming for.
+            die "PARTIAL FLASH. Controller(s) /c$done_ok on this card were written successfully and /c$one FAILED. The two controllers on this board are now running different firmware. Do NOT reboot. Re-run the flash for the WHOLE CARD (all of its controllers, the same way you started this one) before doing anything else -- that rewrites both controllers with the same image and is the safe action." 7
         fi
         die "flash of /c$one failed and nothing was written" 6
     fi

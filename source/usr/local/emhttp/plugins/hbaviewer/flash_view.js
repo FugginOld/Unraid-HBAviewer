@@ -283,8 +283,15 @@
                is safe — so this gets its own banner rather than the generic
                "code N" line that used to cover both. */
             else if (d.done === 'partial') {
+                /* Re-run the WHOLE CARD. The server-side membership gate only
+                   accepts a card's complete controller list, so "re-flash just
+                   the one that failed" is refused — and rewriting both is the
+                   safe action regardless: it puts one image on every controller
+                   of the board, which is where the failed run was headed. */
                 log.textContent += '\n\n⚠ PARTIAL FLASH — this card\'s controllers are now running DIFFERENT firmware.'
-                  + '\nDo NOT reboot. Read the log above: it names the controller that failed. Re-run the flash for that controller before doing anything else.';
+                  + '\nDo NOT reboot. Read the log above: it names the controller that failed.'
+                  + '\nRe-run the flash for the WHOLE CARD — the same Flash button, the same image — before doing anything else.'
+                  + ' That rewrites BOTH controllers with the same firmware and is the safe action; flashing only the failed controller is refused.';
                 if (log.style) log.style.border = '2px solid var(--crit-text, #e74c3c)';
             }
             else if (d.done === 'error') log.textContent += '\n\n✖ Flash tool exited with an error (code '+d.exit+'). Read the log above; do NOT reboot — reflash the correct image first.';

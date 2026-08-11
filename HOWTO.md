@@ -363,10 +363,13 @@ written are that card's own, never every controller in the system.
 If the second write fails after the first has succeeded, the board is left with
 its two controllers on **different firmware**. That gets its own red banner, not
 the generic failure line: it names which controller holds which half and tells
-you **not to reboot**. Re-run the flash for the controller that failed before
-doing anything else; rebooting a half-flashed board is what turns a failed
-update into a dead card. A failure on the *first* write stops there and reports
-that nothing was written — that one is safe to retry.
+you **not to reboot**. Re-run the flash for the **whole card** — the same Flash
+button with the same image — before doing anything else. That rewrites *both*
+controllers and is the safe action; flashing only the controller that failed is
+refused, because the server accepts a card's complete controller list and
+nothing less. Rebooting a half-flashed board is what turns a failed update into
+a dead card. A failure on the *first* write stops there and reports that nothing
+was written — that one is safe to retry.
 
 ## Troubleshooting
 
