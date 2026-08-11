@@ -20,8 +20,11 @@ eq() {  # name  want  got
     if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 -- want '$2', got '$3'"; fail=1; fi
 }
 
-FN=$(sed -n '/^hba_topology()/,/^}/p' "$SRC"; sed -n '/^hba_subvendor()/,/^}/p' "$SRC")
+FN=$(sed -n '/^hba_topology()/,/^}/p' "$SRC"; sed -n '/^hba_subvendor()/,/^}/p' "$SRC"
+     sed -n '/^hba_card_id()/,/^}/p' "$SRC")
 [ -n "$FN" ] || { echo "FAIL  hba_topology/hba_subvendor not found in $SRC"; exit 1; }
+eval "$FN"   # defines hba_card_id for direct calls below; hba_topology/hba_subvendor
+             # keep using the bash -c wrappers above, which need env var overrides.
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
@@ -78,6 +81,31 @@ eq "absent directory yields empty"    ""       "$(sub "$PCI/nope")"
 # happy-path fixture above only because $(cat ...) already eats the trailing
 # newline -- this is the case that actually needs the strip.
 eq "internal whitespace is stripped" "0x1000" "$(sub "$PCI/spaced")"
+
+# ── hba_card_id ──────────────────────────────────────────────────────────────
+# The maintainer's SAS9300-16i: two SAS3008 IOCs behind a switch of the card's
+# own, both in slot 0000:80:01.0. Captured from Raven, where the two hosts
+# resolve through 0000:80:01.0 -> 0000:82:00.0 -> {0000:83:00.0, 0000:83:09.0}.
+CARD=$ROOT/devices
+DUAL=$CARD/pci0000:80/0000:80:01.0/0000:82:00.0
+mkdir -p "$DUAL/0000:83:00.0/0000:84:00.0" "$DUAL/0000:83:09.0/0000:86:00.0"
+# An unrelated single-IOC card in a different slot.
+mkdir -p "$CARD/pci0000:00/0000:00:11.0/0000:06:00.0"
+# A device sitting directly on the host bridge, no bridge in between.
+mkdir -p "$CARD/pci0000:00/0000:00:1f.2"
+
+eq "both IOCs of one card share a slot" \
+   "0000:80:01.0" "$(hba_card_id "$DUAL/0000:83:00.0/0000:84:00.0")"
+eq "and the second IOC agrees" \
+   "0000:80:01.0" "$(hba_card_id "$DUAL/0000:83:09.0/0000:86:00.0")"
+eq "a card in another slot does not" \
+   "0000:00:11.0" "$(hba_card_id "$CARD/pci0000:00/0000:00:11.0/0000:06:00.0")"
+eq "a device on the host bridge is its own slot" \
+   "0000:00:1f.2" "$(hba_card_id "$CARD/pci0000:00/0000:00:1f.2")"
+eq "a path with no host bridge yields empty" \
+   "" "$(hba_card_id "$ROOT")"
+eq "a missing path yields empty" \
+   "" "$(hba_card_id "$ROOT/nope/0000:99:00.0")"
 
 [ $fail -eq 0 ] && echo "topology: all pass"
 exit $fail

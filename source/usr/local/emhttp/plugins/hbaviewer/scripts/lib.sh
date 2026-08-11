@@ -247,3 +247,33 @@ hba_subvendor() {   # $1 = sysfs PCI device dir
     v=$(cat "$1/subsystem_vendor" 2>/dev/null) || return 0
     printf '%s' "${v//[[:space:]]/}"
 }
+
+# The physical slot a controller occupies, named by its PCI root port -- the
+# first device under the host bridge in the resolved sysfs path. Two
+# controllers sharing one are on the same board, because two cards cannot
+# occupy one slot. pci_location cannot answer this and board_name must not:
+# two SEPARATE 9300-8i cards report the same name, so grouping on it would
+# merge unrelated hardware, which is worse than not grouping at all.
+#
+# A SAS9300-16i carries a PCIe switch of its own, so its two SAS3008 IOCs
+# differ at every level below the root port:
+#   pci0000:80/0000:80:01.0/0000:82:00.0/0000:83:00.0/0000:84:00.0
+#   pci0000:80/0000:80:01.0/0000:82:00.0/0000:83:09.0/0000:86:00.0
+#
+# Empty when the ancestry is not visible -- an absent entry, a flat test tree,
+# or a backend that reports no PCI address. Callers MUST treat empty as "do not
+# group", including against other empties: two unknowns are not a match.
+hba_card_id() {   # $1 = sysfs PCI device dir -> "0000:80:01.0" | ""
+    local real rest
+    real=$(readlink -f "$1" 2>/dev/null) || return 0
+    case "$real" in
+        */pci[0-9][0-9][0-9][0-9]:[0-9a-f][0-9a-f]/*) ;;
+        *) return 0 ;;
+    esac
+    rest="${real#*/pci[0-9][0-9][0-9][0-9]:[0-9a-f][0-9a-f]/}"
+    rest="${rest%%/*}"
+    case "$rest" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-9])
+            printf '%s' "$rest" ;;
+    esac
+}
