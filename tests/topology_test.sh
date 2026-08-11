@@ -1,5 +1,5 @@
 #!/bin/bash
-# Self-asserting checks for hba_topology and hba_subvendor in lib.sh.
+# Self-asserting checks for hba_topology, hba_subvendor and hba_card_id in lib.sh.
 #
 # Topology decides whether a firmware verdict is shown at all. Broadcom ships a
 # separate multi-path firmware track for the 9300/9305/9400/9405W with its own
@@ -22,9 +22,10 @@ eq() {  # name  want  got
 
 FN=$(sed -n '/^hba_topology()/,/^}/p' "$SRC"; sed -n '/^hba_subvendor()/,/^}/p' "$SRC"
      sed -n '/^hba_card_id()/,/^}/p' "$SRC")
-[ -n "$FN" ] || { echo "FAIL  hba_topology/hba_subvendor not found in $SRC"; exit 1; }
+[ -n "$FN" ] || { echo "FAIL  hba_topology/hba_subvendor/hba_card_id not found in $SRC"; exit 1; }
 eval "$FN"   # defines hba_card_id for direct calls below; hba_topology/hba_subvendor
-             # keep using the bash -c wrappers above, which need env var overrides.
+             # keep using the bash -c wrappers (top()/sub(), defined further down),
+             # which need env var overrides that a top-level eval can't provide per-call.
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT
@@ -106,6 +107,25 @@ eq "a path with no host bridge yields empty" \
    "" "$(hba_card_id "$ROOT")"
 eq "a missing path yields empty" \
    "" "$(hba_card_id "$ROOT/nope/0000:99:00.0")"
+
+# Production hands us /sys/bus/pci/devices/0000:83:00.0, a symlink into
+# /sys/devices. Without readlink -f every real card resolves to empty and the
+# feature silently never groups. Skipped where symlinks are unavailable
+# (Windows without Developer Mode); CI runs ubuntu-latest, where it executes.
+LNK=$CARD/bus; mkdir -p "$LNK"
+if ln -s "$DUAL/0000:83:00.0/0000:84:00.0" "$LNK/0000:84:00.0" 2>/dev/null && [ -L "$LNK/0000:84:00.0" ]; then
+    eq "a symlinked device resolves to its real slot" \
+       "0000:80:01.0" "$(hba_card_id "$LNK/0000:84:00.0")"
+fi
+
+# Kills the trailing validation: a non-address directory under the host bridge.
+mkdir -p "$CARD/pci0000:00/not-a-device/0000:07:00.0"
+eq "a non-address child of the host bridge yields empty" \
+   "" "$(hba_card_id "$CARD/pci0000:00/not-a-device/0000:07:00.0")"
+
+# Kills the host-bridge case guard: relative input, which %%/* cannot blank.
+eq "a relative path with no host bridge yields empty" \
+   "" "$(cd "$CARD" && hba_card_id "0000:06:00.0")"
 
 [ $fail -eq 0 ] && echo "topology: all pass"
 exit $fail

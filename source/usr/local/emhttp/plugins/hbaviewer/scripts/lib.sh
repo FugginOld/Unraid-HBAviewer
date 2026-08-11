@@ -250,10 +250,12 @@ hba_subvendor() {   # $1 = sysfs PCI device dir
 
 # The physical slot a controller occupies, named by its PCI root port -- the
 # first device under the host bridge in the resolved sysfs path. Two
-# controllers sharing one are on the same board, because two cards cannot
-# occupy one slot. pci_location cannot answer this and board_name must not:
-# two SEPARATE 9300-8i cards report the same name, so grouping on it would
-# merge unrelated hardware, which is worse than not grouping at all.
+# controllers sharing one are on the same board unless a switch sits between
+# them and the root port, which is why grouping also requires ioc_count to
+# match the group size exactly. pci_location cannot answer this and
+# board_name must not: two SEPARATE 9300-8i cards report the same name, so
+# grouping on it would merge unrelated hardware, which is worse than not
+# grouping at all.
 #
 # A SAS9300-16i carries a PCIe switch of its own, so its two SAS3008 IOCs
 # differ at every level below the root port:
