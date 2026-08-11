@@ -116,6 +116,8 @@ LNK=$CARD/bus; mkdir -p "$LNK"
 if ln -s "$DUAL/0000:83:00.0/0000:84:00.0" "$LNK/0000:84:00.0" 2>/dev/null && [ -L "$LNK/0000:84:00.0" ]; then
     eq "a symlinked device resolves to its real slot" \
        "0000:80:01.0" "$(hba_card_id "$LNK/0000:84:00.0")"
+else
+    echo "SKIP  symlink fixture (ln -s unavailable)"
 fi
 
 # Kills the trailing validation: a non-address directory under the host bridge.
@@ -123,7 +125,9 @@ mkdir -p "$CARD/pci0000:00/not-a-device/0000:07:00.0"
 eq "a non-address child of the host bridge yields empty" \
    "" "$(hba_card_id "$CARD/pci0000:00/not-a-device/0000:07:00.0")"
 
-# Kills the host-bridge case guard: relative input, which %%/* cannot blank.
+# A relative input: readlink -f absolutises it, so this exercises the no-pci
+# path, not the guard. The guard itself cannot be killed by any fixture --
+# see task-1-report.md, "Mutant C".
 eq "a relative path with no host bridge yields empty" \
    "" "$(cd "$CARD" && hba_card_id "0000:06:00.0")"
 

@@ -278,7 +278,7 @@ echo "=== drives sysfs (SAS transport) tests ==="
 bash drives_sysfs_test.sh; drives_sysfs_fail=$?
 
 echo
-echo "=== topology / subvendor tests ==="
+echo "=== topology / subvendor / card_id tests ==="
 bash topology_test.sh; topology_fail=$?
 
 echo

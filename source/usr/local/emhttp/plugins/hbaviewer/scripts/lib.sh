@@ -268,6 +268,9 @@ hba_subvendor() {   # $1 = sysfs PCI device dir
 hba_card_id() {   # $1 = sysfs PCI device dir -> "0000:80:01.0" | ""
     local real rest
     real=$(readlink -f "$1" 2>/dev/null) || return 0
+    # Redundant while readlink -f guarantees an absolute path (${rest%%/*} then
+    # blanks it), and load-bearing the moment it does not: a relative input would
+    # otherwise print a bogus slot ID -- the failure that merges unrelated cards.
     case "$real" in
         */pci[0-9][0-9][0-9][0-9]:[0-9a-f][0-9a-f]/*) ;;
         *) return 0 ;;
