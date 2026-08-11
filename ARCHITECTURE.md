@@ -85,7 +85,7 @@ installs it; Unraid's Slackware base ships it.
 | `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
 | `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
-| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, and its menu entry is `Cond`-gated on `ENABLE_FLASH` so it does not exist when flashing is off. |
+| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, `Cond`-gated on `ENABLE_FLASH` so the route does not exist when flashing is off. Declares `Menu="HBAviewer_Settings"`, not `Menu="Utilities"`: it deliberately renders **no tile of its own**, so the button on the settings page is the only way in and nobody reaches the flasher without passing the danger notice. Placement is inherited from that parent, which is why the URL is still `/Settings/HBAviewer_Flash` and why `settings.php`'s hardcoded href keeps working. |
 | `flash_view.js` | The firmware page's behaviour — the four-step wizard, the upload and the flash poll. |
 
 **The house pattern for an endpoint that both mutates and shares helpers**

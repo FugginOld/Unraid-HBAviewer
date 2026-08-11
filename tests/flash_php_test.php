@@ -216,5 +216,28 @@ check('settings holds the saved value while locked',
 check('the firmware page leads with the lock',
       str_contains($flashViewSrc, '<?php if (LSI_FLASH_LOCKED): ?>'));
 
+/* ── One way in ───────────────────────────────────────────────────────────────
+   settings.php's comment has always said its button is "the way in to firmware
+   flashing, and the only one" -- deliberately not on the Monitor, so reaching
+   the flasher means passing the page where you turned it on and read the danger
+   notice. It was not the only one. The page also declared Menu="Utilities",
+   which put a second tile beside HBAviewer's own in Settings -> Utilities: a
+   door straight to the flasher that skipped the notice entirely, and one that
+   stayed visible on a locked install for anyone who had ever ticked the box.
+
+   Hanging the page off HBAviewer_Settings instead keeps the same /Settings/
+   URL -- the root is inherited from the parent, which is itself Utilities --
+   so the hardcoded href below still resolves. That pairing is the fragile
+   part, and it is why the href is pinned here next to the Menu it depends on:
+   they are one fact stored in two files, and nothing else would notice them
+   drifting apart until a user clicked the button and got a 404. */
+$flashPage = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/HBAviewer_Flash.page');
+check('the firmware page is not a second Utilities tile',
+      !str_contains($flashPage, 'Menu="Utilities"'));
+check('it hangs off the settings page instead',
+      str_contains($flashPage, 'Menu="HBAviewer_Settings"'));
+check('the button in settings points at the URL that placement produces',
+      str_contains($settingsSrc, 'href="/Settings/HBAviewer_Flash"'));
+
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
