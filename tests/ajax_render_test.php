@@ -1273,15 +1273,22 @@ check('the real dual-IOC capture renders one card',   substr_count($realHtml, 'l
 check('the real dual-IOC capture keeps both IOCs',    substr_count($realHtml, 'lu-card-ioc') === 2);
 check('the real dual-IOC capture keeps both sensors',
       str_contains($realHtml, '>60<') && str_contains($realHtml, '>62<'));
-/* The PCIe link is the SLOT's, so it is stated once on the board and not per
-   IOC — width, speed, power mode and PCI location, the same four items the
-   plain card lists. The location shown is the first IOC's PCI function; the
-   second (00:86:00:00) is deliberately not a second row, because the row
-   describes the board's link rather than each function's address. */
-check('the PCIe row belongs to the board, not each IOC',
+/* Width, speed and power mode are the SLOT's: one row, on the board. PCI
+   Location is NOT — each IOC answers to its own PCI function, and that address
+   is what a person matches against lspci and `storcli /cN`. The flat page showed
+   both 00:84:00:00 and 00:86:00:00; a single board-level row would have labelled
+   one of them as the board's and dropped the other off the Overview entirely. */
+check('the board PCIe row carries only slot-level facts',
       substr_count($realHtml, 'lu-pcie-row') === 1
-      && substr_count($realHtml, 'lu-pcie-item') === 4
-      && substr_count($realHtml, 'PCI Location') === 1);
+      && substr_count($realHtml, 'lu-pcie-item') === 3
+      && !str_contains($realHtml, 'lu-pcie-item">PCI Location'));
+check('each IOC states its own PCI location',
+      substr_count($realHtml, '<p>PCI Location:') === 2
+      && str_contains($realHtml, '>00:84:00:00<') && str_contains($realHtml, '>00:86:00:00<'));
+// SHOW_PCIE off hides the per-IOC location too, exactly as it hides the row.
+check('SHOW_PCIE off hides the per-IOC location',
+      !str_contains(renderOverviewCards($realDual, ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 0]),
+                    'PCI Location'));
 
 /* Non-adjacent members: lsi_group_cards() sorts groups by first member, so an
    unrelated card sitting BETWEEN the two IOCs still yields [[0,2],[1]]. The
@@ -1298,6 +1305,40 @@ check('a card between the two IOCs still groups them', substr_count($sw, 'lu-car
 check('the interloper renders as its own plain card',  str_contains($sw, 'SAS9207-8i'));
 check('the grouped members are the right two',
       str_contains($sw, '>56<') && str_contains($sw, '>71<') && str_contains($sw, '>48<'));
+
+/* ── The worst-of rollup, and WHICH member the board is read from ─────────────
+   The fixtures above cannot see three real defects, because their only dual
+   board is ordered (ok, warn): "worst child" and "last child" coincide, `alert`
+   is never rendered, and the group's first member happens to be slot 0. This
+   one puts an unrelated card in slot 0 and the two IOCs after it, in both
+   orders, so the group is [1,2] and the two statuses that must be ranked are
+   warn and alert.
+
+   It kills four mutants the earlier fixtures let live: `$worst = $s`
+   unconditional (parent = last child), `'alert' => 1` (alert ties warn, so a
+   board with an alerting die reads WARNING), `$worst = $head['status']`, and
+   `$ctls[$group[0]]` -> `array_values($ctls)[0]` (board read from slot 0
+   instead of from the first MEMBER). */
+$sloIoc   = ['model' => 'SAS2308', 'board_name' => 'SAS9207-8i', 'card_id' => '0000:00:11.0',
+             'temp' => 48, 'temp_band' => 'normal', 'cfg_band' => 'warning', 'status' => 'ok',
+             'firmware' => '20.00.07.00', 'mode' => 'IT', 'drive_count' => '4'];
+$iocWarn  = $dualData['controllers'][1];                       // 71C, warn
+$iocAlert = $dualData['controllers'][1];
+$iocAlert['status']       = 'alert';
+$iocAlert['temp']         = 79;
+$iocAlert['temp_band']    = 'alert';
+$iocAlert['pci_location'] = '00:88:00:00';
+
+$A = renderOverviewCards(['driver' => 'd', 'controllers' => [$sloIoc, $iocWarn, $iocAlert]], $dualCfg);
+$B = renderOverviewCards(['driver' => 'd', 'controllers' => [$sloIoc, $iocAlert, $iocWarn]], $dualCfg);
+check('alert outranks warn whichever IOC carries it',
+      substr_count($A, '<span class="lu-badge">ALERT</span>') === 1
+   && substr_count($B, '<span class="lu-badge">ALERT</span>') === 1);
+check('the parent data-status is the worst, not the last',
+      str_contains($A, 'data-status="alert"') && str_contains($B, 'data-status="alert"'));
+check('the parent is built from member 1, not slot 0',
+      preg_match('~lu-card-parent.*?<p>Model: <span>SAS9300-16i~s', $A) === 1
+   && substr_count($A, 'SAS9207-8i') === 1);
 
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";

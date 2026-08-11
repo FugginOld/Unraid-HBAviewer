@@ -63,6 +63,13 @@ done
 check phy-under-floor phy_under_floor.json bash -c "bash '$P/storcli_overview.sh' 76 8   < fixtures/storcli/rollup_healthy.txt"
 check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh' 76 100 < fixtures/storcli/rollup_healthy.txt"
 
+# The rendered Overview itself, not just the JSON behind it. A single-IOC card
+# must keep emitting the same bytes it always has: dual-IOC grouping composes
+# the grouped card from the same pieces, and the whole safety argument for that
+# rests on the ungrouped path being untouched. Nothing else in the suite reads
+# the HTML, so a refactor could rewrite every card and stay green.
+check overview-single-html overview_single.html php render_overview.php expected/storcli_overview.json
+
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
 # Enclosure-less controllers (blank EID in PD LIST) address drives /c0/sN. Real

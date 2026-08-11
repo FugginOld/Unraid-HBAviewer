@@ -440,8 +440,11 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
-    $head      = $ctls[$group[0]];
-    $hv        = lsi_hba_view($head, $port, (int) $group[0]);
+    // The FIRST MEMBER, which is not necessarily slot 0 of $ctls -- an unrelated
+    // card can sort between two IOCs of one board (see this function's header).
+    $first     = (int) $group[0];
+    $head      = $ctls[$first];
+    $hv        = lsi_hba_view($head, $port, $first);
     $fwClause  = fw_overview_clause($hv['firmware_verdict'] ?? []);
     // Worst-of, so the parent says something true about the board: a card whose
     // second IOC is overheating must not show a green badge because its first
@@ -471,7 +474,11 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
          . '<p>HBA Health: <span class="lu-badge">' . lsi_status_label($worst) . '</span></p>'
          . '</div>';
 
-    foreach ($group as $i) {
+    foreach ($group as $n) {
+        // Cast once: $i is interpolated into ids and attributes a dozen times
+        // below, and two idioms for the same value ten lines apart is how one
+        // of them eventually gets forgotten.
+        $i = (int) $n;
         $c = $ctls[$i];
         // --sc/--td/--tl are restated on the sub-card so this IOC's gauge and
         // badge take ITS colours, not the board rollup's.
@@ -481,24 +488,32 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
                   . '<div class="lu-error">' . htmlspecialchars($c['error']) . '</div></div>';
             continue;
         }
-        $v = lsi_hba_view($c, $port, (int) $i);
+        $v = lsi_hba_view($c, $port, $i);
         [$gDark, $gLight] = $v['temp_grad'];
+        // PCI Location is per FUNCTION, not per slot: the two IOCs of a 9300-16i
+        // answer to 00:84:00:00 and 00:86:00:00, and that address is how a card
+        // is correlated with lspci and `storcli /cN`. Showing the board one of
+        // them, labelled as the board's, put a wrong address on the page.
+        $loc = $showPcie ? (string) ($c['pci_location'] ?? '') : '';
         $out .= '<div class="lu-card-ioc" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
               . '<div class="lu-overview-row">'
-              . luTempTile($v, (int) $i)
+              . luTempTile($v, $i)
               . '<div class="lu-meta">'
+              . ($loc !== '' ? '<p>PCI Location: <span>' . htmlspecialchars($loc) . '</span></p>' : '')
               . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
               . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
               . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
               . '</div></div></div>';
     }
 
-    // One PCIe row for the board: the link is the slot's, and both IOCs report
-    // the same width and speed through it.
+    // One PCIe row for the board: width, speed and power mode are the SLOT's,
+    // and both IOCs report them identically through it. PCI Location is not --
+    // it belongs to each function and is rendered per sub-card above.
     if ($showPcie && (($head['pcie_width'] ?? '') || ($head['pcie_speed'] ?? ''))) {
         $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
         foreach ($hv['pcie'] as $item) {
+            if ($item['label'] === 'PCI Location') continue;
             $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
         }
         $out .= '</div>';
