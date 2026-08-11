@@ -74,6 +74,7 @@ installs it; Unraid's Slackware base ships it.
 | `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
 | `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
+| `card_group.php` | Which controllers are one physical CARD. A SAS9300-16i is one board carrying two SAS3008 IOCs — two PCI functions, two indices, two temperature sensors — and only the display should say "one card". `lsi_group_cards()` buckets by PCI root port **and** board name and merges only when the count matches the index's `ioc_count` exactly, because a riser can put two genuinely separate cards behind one root port. Everything unrecognised stays split. Consumed by the Overview (`renderOverviewCards`) and by the firmware page's JSON, which is what makes a dual-IOC board verify and flash as one card. |
 | `health.php` | The five indicators, the rolling sample ring, the rollup. |
 | `phy_baseline.php` | The `/boot` baseline store, delta and rate maths, reset detection. |
 | `bay_map.php` | The `/boot` drive-bay assignment store, the identity key, the grid size and the lock. Second mutating path after `flash.php` — see below. |
@@ -86,7 +87,7 @@ installs it; Unraid's Slackware base ships it.
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
 | `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
 | `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, `Cond`-gated on `ENABLE_FLASH` so the route does not exist when flashing is off. Declares `Menu="HBAviewer"`, so it is a standalone page under Tools alongside the Monitor — the same shape `HBAviewer_Monitor.page` uses. **Not** `Menu="Utilities"` (planted a second icon in Settings → Utilities that bypassed the danger notice) and **not** `Menu="HBAviewer_Settings"` (Unraid stacks the children of an `xmenu` parent onto one page, so the whole flash page rendered inline below the settings form). `Menu=` also decides the URL root, so `/Tools/HBAviewer_Flash` is hardcoded in two places — the Monitor's tab and the Settings button. All three are pinned together in `flash_php_test.php`. |
-| `flash_view.js` | The firmware page's behaviour — the four-step wizard, the upload and the flash poll. |
+| `flash_view.js` | The firmware page's behaviour — the four-step wizard and the flash poll. Everything here is keyed by `c.ctl`, the controller number(s) the card covers (`"0,1"` on a dual-IOC board), never by the array index: `?type=overview` returns one entry per CARD, and a card's position in that array is not a controller number. |
 
 **The house pattern for an endpoint that both mutates and shares helpers**
 (`phy_baseline.php`, `bundle.php`, `flash.php`, `export.php`): pure functions at
@@ -159,10 +160,27 @@ unit-tested, and enforced **server-side**:
 
 - opt-in toggle (`ENABLE_FLASH`, default off)
 - array must be STOPPED, failing closed on a missing or unreadable `var.ini`
-- read-only verify scoped to the single target controller
+- read-only verify scoped to the target **card** — every controller on it, and nothing else
+- controller argument validated as `/^\d+(,\d+)*\z/` at both call sites (`\z`, not `$`: a trailing newline must not reach the flasher)
 - typed `FLASH` confirmation plus an acknowledgement checkbox
 - single-flight lock, never auto-retried
 - upload filename sanitisation confined to one directory
+
+**A dual-IOC board is one card and is flashed as one.** A SAS9300-16i carries
+two SAS3008 controllers, and leaving one of them behind would leave the board
+running two firmware versions. `flash_hba.sh` therefore takes a comma-separated
+controller list and **loops it** — deliberately *not* the flasher's flash-all
+switch, which Broadcom recommends for these boards: that switch means every
+controller in the *system*, so on a box holding a 9300-16i and a 9300-8i it
+would write the 16i image to the 8i and brick it. The same reasoning bars the
+list-everything flag from the verify path.
+
+The loop's own hazard is a **partial flash**: the second write failing after the
+first succeeded. That never surfaces as a generic error. It exits 6 with a
+message naming which controller holds which half and telling the operator not to
+reboot, because rebooting on a half-flashed board is what turns a failed update
+into a dead card. A failure on the *first* write says nothing was written, which
+is a different and much safer answer, and the loop stops there.
 
 The greyed-out Step 3 in the UI is an **affordance**, not a control. Deleting
 all of that CSS must still leave flashing blocked. If a change ever makes the

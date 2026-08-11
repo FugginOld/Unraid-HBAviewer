@@ -56,7 +56,15 @@ function flash_preflight(array $in): array {
         return ['ok' => false, 'error' => 'Firmware flashing is disabled. Enable it in Settings first.'];
     if (empty($in['stopped']))
         return ['ok' => false, 'error' => 'The array must be STOPPED before flashing. Stop it on the Main tab, then retry.'];
-    if (!preg_match('/^\d+$/', (string) ($in['ctl'] ?? '')))
+    /* One index, or the comma-separated list of indices that a dual-IOC board
+       carries — a SAS9300-16i is one card with two SAS3008 controllers and both
+       are written together (see the loop in flash_hba.sh). Digits and commas
+       only, anchored with \z rather than $ so a trailing newline cannot slip
+       through. This exact pattern is repeated in the 'listall' action below and
+       pinned in flash_php_test.php: it is what stands between a form field and
+       a script that writes firmware to a controller, so it is worth having one
+       spelling of it that a grep can find. */
+    if (!preg_match('/^\d+(,\d+)*\z/', (string) ($in['ctl'] ?? '')))
         return ['ok' => false, 'error' => 'Invalid controller index.'];
     /* Firmware and BIOS are each optional, but not both. sas2flash/sas3flash
        take -f, -b, or both, so flashing a BIOS on its own is a real operation
@@ -170,7 +178,9 @@ if ($action === 'listall') {
     header('Content-Type: text/plain; charset=utf-8');
     $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');
     $ctl  = (string) ($_POST['ctl'] ?? $_GET['ctl'] ?? '');
-    if ($chip === '' || !preg_match('/^\d+$/', $ctl)) { echo 'Invalid controller.'; exit; }
+    // Same pattern as flash_preflight()'s — one card's controller list, digits
+    // and commas only. Keep the two spellings identical.
+    if ($chip === '' || !preg_match('/^\d+(,\d+)*\z/', $ctl)) { echo 'Invalid controller.'; exit; }
     echo (string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh')
         . ' list ' . escapeshellarg($chip) . ' ' . escapeshellarg($ctl) . ' 2>&1');
     exit;

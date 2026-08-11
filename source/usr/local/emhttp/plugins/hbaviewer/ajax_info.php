@@ -194,7 +194,25 @@ if ($type === 'overview') {
         $c['firmware_verdict']['color'] = fw_verdict_color($c['firmware_verdict']);
     }
     unset($c);
-    echo json_encode(['controllers' => $ctls]);
+    /* One entry per CARD, not per controller. This JSON feeds the firmware page
+       alone, and a SAS9300-16i is one board carrying two SAS3008 IOCs that must
+       be verified and flashed together — see the loop in scripts/flash_hba.sh.
+       Board-level fields come from the first member: both IOCs report the same
+       model, firmware and BIOS, because those describe the card.
+       'ctl' is the entry's own controller number(s), and it exists precisely so
+       the page never uses the array index as one — a group's members are NOT
+       necessarily contiguous, so index and controller number are different
+       facts (card_group.php's header has the [[0,2],[1]] case).
+       $fwIdx, never a hand-built map: lsi_ioc_counts() keys on fw_normalize(),
+       the same key space fw_load() re-keys the index into, and a literal
+       'SAS9300-16i' key would miss every lookup and group nothing. */
+    $cards = [];
+    foreach (lsi_group_cards($ctls, lsi_ioc_counts($fwIdx)) as $g) {
+        $card = $ctls[$g[0]];
+        $card['ctl'] = implode(',', $g);
+        $cards[] = $card;
+    }
+    echo json_encode(['controllers' => $cards]);
     exit;
 }
 

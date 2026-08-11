@@ -334,9 +334,9 @@ invisible until you have ticked the box on the page that carries the warning,
 so nobody arrives at the flasher without having read what it costs to get
 wrong — and both disappear again the moment flashing is turned off.
 
-Per controller:
+Per card:
 
-1. **Verify** — a read-only listing **scoped to that one controller**, so you
+1. **Verify** — a read-only listing **scoped to that one card**, so you
    confirm the tool sees the exact card you are about to write to.
 2. **Upload** — the model-correct image for *your* card (optionally a BIOS
    `.rom`, and the flash tool itself if it is not in `PATH`). This step stays
@@ -349,6 +349,20 @@ Per controller:
 The array-stopped rule, the typed confirmation, the single-flight lock and the
 upload confinement are all enforced **server-side** — the greyed-out UI is an
 affordance, not the control.
+
+**A dual-controller board is one card, and is flashed as one.** A SAS9300-16i
+is a single board carrying two SAS3008 controllers, so the page shows it as one
+entry labelled with both — `Controller /c0, /c1`. Verify lists both, and the
+flash writes both **in sequence**, one controller after the other, from the one
+image you selected. Nothing else on the machine is touched: the controllers
+written are that card's own, never every controller in the system.
+
+If the second write fails after the first has succeeded, the board is left with
+its two controllers on **different firmware**. The log says so explicitly —
+which controller holds which half, and that you must **not reboot**. Re-run the
+flash for the controller that failed before doing anything else; rebooting a
+half-flashed board is what turns a failed update into a dead card. A failure on
+the first write stops there and reports that nothing was written.
 
 ## Troubleshooting
 

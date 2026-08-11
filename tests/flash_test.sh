@@ -121,6 +121,79 @@ has "storcli bios-only says why" "part of the firmware package"
 out=$(FLASHER="$STUB" bash "$FH" flash SAS3008 0 "" "" 2>&1); rc=$?
 code "neither image exit 5" 5 "$rc"; has "neither image msg" "no firmware or BIOS image given"
 
+# ── a dual-IOC board is ONE card: the controller argument takes a list ────────
+# A SAS9300-16i carries two SAS3008 controllers on one board, so verifying and
+# flashing it means covering both. Broadcom's advice for these boards is the
+# flasher's flash-all switch, which this deliberately does NOT use: that switch
+# means every controller in the SYSTEM, so on a box holding a 9300-16i and a
+# 9300-8i it writes the 16i image to the 8i and bricks it. Looping the card's
+# own indices meets the same intent -- never leave one IOC behind -- with no
+# blast radius. The same reasoning bars the list-everything flag from verify.
+out=$(FLASHER="$STUB" bash "$FH" list SAS3008 0,1 2>&1)
+has "verify covers IOC 0"  "FLASHER -c 0 -list"
+has "verify covers IOC 1"  "FLASHER -c 1 -list"
+case "$out" in *-listall*) bad "verify listed the whole system" "$out" ;;
+                        *) ok "verify never lists every controller in the system" ;; esac
+out=$(STORCLI="$STUB" bash "$FH" list SAS3416 0,1 2>&1)
+has "storcli verify covers IOC 0" "FLASHER /c0 show"
+has "storcli verify covers IOC 1" "FLASHER /c1 show"
+
+# Both IOCs written, and the loop does not stop after the first succeeds.
+out=$(FLASHER="$STUB" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
+code "flashing a dual-IOC card exits 0" 0 "$rc"
+n=$(printf '%s\n' "$out" | grep -c -- 'FLASHER -c [01] -o')
+[ "$n" = 2 ] && ok "flash writes both IOCs" || bad "flash writes both IOCs" "got $n writes in: $out"
+case "$out" in *fwall*) bad "flash used the flash-all switch" "$out" ;;
+                     *) ok "flash never writes every controller in the system" ;; esac
+out=$(STORCLI="$STUB" bash "$FH" flash SAS3416 0,1 "$FW" 2>&1)
+n=$(printf '%s\n' "$out" | grep -c -- 'FLASHER /c[01] download')
+[ "$n" = 2 ] && ok "storcli flash writes both IOCs" || bad "storcli flash writes both IOCs" "got $n in: $out"
+
+# A single index still behaves exactly as it always did -- one write, no loop
+# visible to anyone with an ordinary card.
+out=$(FLASHER="$STUB" bash "$FH" flash SAS3008 0 "$FW" 2>&1)
+n=$(printf '%s\n' "$out" | grep -c -- 'FLASHER -c')
+[ "$n" = 1 ] && ok "a single controller is still a single write" || bad "single write" "got $n in: $out"
+
+# ── the partial flash: the one genuinely new hazard this loop introduces ──────
+# If the second write fails after the first succeeded, the board is left with
+# two IOCs on different firmware. Rebooting there is what turns a failed update
+# into a dead card, so this must never surface as a generic failure: it has to
+# name which controller holds which half and say not to reboot.
+FAILDIR=$(mktemp -d)
+trap 'rm -f "$FW" "$BIOS"; rm -rf "$BOOTDIR" "$STAGEDIR" "$FAILDIR"' EXIT
+printf '#!/bin/sh\necho "FLASHER $*"\ncase " $* " in *" -c 1 "*|*" /c1 "*) exit 9 ;; esac\nexit 0\n' > "$FAILDIR/flasher"
+chmod +x "$FAILDIR/flasher"
+out=$(FLASHER="$FAILDIR/flasher" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
+code "a partial flash exits 6"            6 "$rc"
+has "a partial flash says PARTIAL FLASH"  "PARTIAL FLASH"
+has "it names the IOC that succeeded"     "/c0"
+has "it names the IOC that failed"        "/c1 FAILED"
+has "it tells the operator not to reboot" "Do NOT reboot"
+# The FIRST write failing is a different, much safer answer: nothing was
+# written, and saying "partial" there would send the operator hunting a
+# mismatch that does not exist.
+printf '#!/bin/sh\necho "FLASHER $*"\ncase " $* " in *" -c 0 "*) exit 9 ;; esac\nexit 0\n' > "$FAILDIR/flasher"
+out=$(FLASHER="$FAILDIR/flasher" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
+code "a first-write failure exits 6" 6 "$rc"
+has "and says nothing was written"   "nothing was written"
+case "$out" in *"PARTIAL FLASH"*) bad "cried partial on a clean failure" "$out" ;;
+                               *) ok "a clean failure is not reported as partial" ;; esac
+# It must also stop: the second IOC is not written after the first failed.
+n=$(printf '%s\n' "$out" | grep -c -- 'FLASHER -c 1')
+[ "$n" = 0 ] && ok "a failed first write does not go on to the second IOC" \
+             || bad "kept flashing after a failure" "$out"
+
+# The list shape is validated before anything runs -- this value becomes the
+# -c argument of a tool that writes firmware.
+slipped=""
+for badctl in "" "," "0," ",1" "0,,1" "0;1" "0 1" "-1" "0,x"; do
+    env -u FLASHER -u STORCLI bash "$FH" flash SAS3008 "$badctl" "$FW" >/dev/null 2>&1
+    [ $? -eq 2 ] || slipped="$slipped '$badctl'"
+done
+[ -z "$slipped" ] && ok "malformed controller lists are refused" \
+                  || bad "malformed controller list accepted" "not refused with exit 2:$slipped"
+
 # ── refusals (the guards that keep a bad call from ever running a tool) ───────
 out=$(FLASHER="$STUB" bash "$FH" flash SAS9999 0 "$FW" 2>&1); rc=$?
 code "unknown chip exit 3" 3 "$rc"; has "unknown chip msg" "unknown chip"

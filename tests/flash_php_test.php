@@ -46,6 +46,12 @@ check('preflight ok',            flash_preflight($good)['ok'] === true);
 check('block disabled',          str_contains($err(['enable'=>0]),  'disabled'));
 check('block array running',     str_contains($err(['stopped'=>false]), 'STOPPED'));
 check('block bad ctl',           str_contains($err(['ctl'=>'x']),   'controller'));
+/* A dual-IOC board is one card and arrives as a list of its controllers -- the
+   preflight has to let that through, and only that. The pattern itself is
+   exercised exhaustively further down; these two prove the gate uses it. */
+check('accept a dual-IOC card\'s controller list',
+      flash_preflight(array_merge($good, ['ctl'=>'0,1']))['ok'] === true);
+check('block a malformed controller list', str_contains($err(['ctl'=>'0,,1']), 'controller'));
 /* Firmware and BIOS are each optional, but not both: sasNflash takes -f, -b or
    both, so a BIOS-only flash is a real operation this used to refuse outright.
    'bios_ok' says whether the tool family supports it -- on storcli the BIOS is
@@ -158,6 +164,68 @@ check('the shell has a missing-tool message',      $shMsg !== '');
 check('it names the same drop dir PHP reads from', str_contains($shMsg, FLASH_DROP . '/'));
 check('it does not name the legacy tools dir',     !str_contains($shMsg, '/hbaviewer/tools/'));
 check('it does not send the user to an upload',    stripos($shMsg, 'upload') === false);
+
+/* ── A dual-IOC board is ONE card, flashed as one ────────────────────────────
+   The flasher's flash-all switch means every controller in the SYSTEM, not
+   every controller on this card. On a box with a 9300-16i and a 9300-8i it
+   would write the 16i image to the 8i. The loop in flash_hba.sh replaces it and
+   must stay replaced; the same reasoning bars the list-everything flag from the
+   verify path. Pinned as absences so a grep, not a re-read of a diff, catches a
+   regression on the one file in this plugin that writes to hardware.
+   $shSrc is already loaded above, by the missing-tool-message block. */
+check('the flasher never uses -fwall',        !str_contains($shSrc, 'fwall'));
+check('verification never uses -listall',     !str_contains($shSrc, '-listall'));
+/* The partial flash is the one genuinely new failure the loop introduces: a
+   board left with its two IOCs on different firmware. It must never be reported
+   as a generic failure -- rebooting on a half-flashed board is what turns a
+   failed update into a dead card. */
+check('a partial flash says so explicitly',   str_contains($shSrc, 'PARTIAL FLASH'));
+check('and tells the operator not to reboot', str_contains($shSrc, 'Do NOT reboot'));
+
+/* The controller argument reaches a script that writes firmware. One spelling
+   of the pattern, in both validating call sites, so a grep finds all of it. */
+check('the controller list is validated as digits and commas only',
+      str_contains($flashSrc, "preg_match('/^\\d+(,\\d+)*\\z/'"));
+check('both call sites validate it the same way',
+      substr_count($flashSrc, "'/^\\d+(,\\d+)*\\z/'") === 2);
+// \z, not $: '0,1\n' matches /^\d+(,\d+)*$/ and must not reach the flasher.
+check('a trailing newline does not pass the controller check',
+      preg_match('/^\d+(,\d+)*\z/', "0,1\n") === 0);
+check('a controller list passes it',  preg_match('/^\d+(,\d+)*\z/', '0,1') === 1);
+check('a bare index still passes it', preg_match('/^\d+(,\d+)*\z/', '3') === 1);
+foreach ([',', '0,', ',1', '0,,1', '0;1', '0 1', '-1', ''] as $mal) {
+    check("the controller check refuses '" . $mal . "'",
+          preg_match('/^\d+(,\d+)*\z/', $mal) === 0);
+}
+/* Where the list comes from: the firmware page is fed one entry per CARD by
+   ajax_info.php's overview JSON, and each entry carries its own controller
+   number(s). The page must never use the array index as a controller number --
+   a group's members are not necessarily contiguous, so the two are different
+   facts (card_group.php's header has the [[0,2],[1]] case). card_group_test.php
+   proves the grouping itself against real pipeline output; these pin the wiring
+   on both sides of it, which no PHP test can reach (the overview branch lives
+   inside the HTTP dispatch, and flash_view.js has no runtime harness). */
+$ajaxSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+// fw_load()'s index, never a hand-built map: lsi_ioc_counts() keys on
+// fw_normalize(), so a literal 'SAS9300-16i' key misses every lookup and
+// nothing ever groups. That defect has shipped on this feature once already.
+check('the firmware page is fed cards grouped through the real index',
+      str_contains($ajaxSrc, 'lsi_group_cards($ctls, lsi_ioc_counts($fwIdx))'));
+check('and each entry carries its own controller list',
+      str_contains($ajaxSrc, "\$card['ctl'] = implode(',', \$g);"));
+check('the page sends that list, not an array index, to the verify action',
+      str_contains($jsSrc, "action:'listall', chip:flashChip(ctl), ctl:ctl"));
+check('and to the flash action',
+      str_contains($jsSrc, "action:'flash', chip:flashChip(ctl), ctl:ctl"));
+check('the card element is keyed by the controller list',
+      str_contains($jsSrc, 'data-ctl="\'+ctl+\'"'));
+check('the tool lookup is keyed by it too', str_contains($jsSrc, 'luFlashTool(c.ctl)'));
+// The whole point: no callback in this file takes a loop index any more.
+check('no handler is passed the array index as a controller number',
+      !str_contains($jsSrc, 'ctl:i') && !str_contains($jsSrc, 'luFlashTool(i)')
+      && !str_contains($jsSrc, 'luFlashList(\'+i+\')') && !str_contains($jsSrc, 'luFlashGo(\'+i+\')'));
+// The operator has to see that Verify and Flash cover both controllers.
+check('the card names every controller it covers', str_contains($jsSrc, 'ctlLabel(c.ctl)'));
 
 /* ── The maintainer lock ──────────────────────────────────────────────────────
    Flashing is disabled for everyone in this release, over and above the user's
