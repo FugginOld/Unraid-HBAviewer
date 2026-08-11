@@ -1,5 +1,5 @@
 Cond="(int)((@parse_ini_file('/boot/config/plugins/hbaviewer/hbaviewer.cfg') ?: [])['ENABLE_FLASH'] ?? 0) === 1"
-Menu="HBAviewer_Settings"
+Menu="HBAviewer"
 Title="HBAviewer Firmware"
 Icon="icon.png"
 Tag="hbaviewer-flash"

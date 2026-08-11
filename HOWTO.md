@@ -324,15 +324,15 @@ Attach the archive to a GitHub issue.
 > **Flashing can permanently brick a controller.** Off by default, and for
 > people who already know how to flash an LSI/Broadcom HBA from a console.
 
-**Settings → Advanced — Firmware Flashing → Enable → Save.** A red
-**⚠ Firmware/BIOS Update** button then appears at the bottom right of that same
-Settings page, and opens the firmware page. Enabling flashing adds **no new
-icon** to User Utilities — the button is the only entrance.
+**Settings → Advanced — Firmware Flashing → Enable → Save.** Two ways in then
+appear, and not before: a red **⚠ Firmware/BIOS Update** button at the bottom
+right of that same Settings page, and a red **⚠ Firmware** tab at the end of
+the HBA Monitor's tab strip, after Performance.
 
-That button is the only way in, and the Monitor has no link to it. Flashing is
-the one thing in this plugin that writes to hardware, so reaching it means
-coming back through the page where you enabled it and read the warning — not
-finding it beside the monitoring tabs on a page you left open.
+Enabling flashing adds **no new icon** to User Utilities. Both entrances are
+invisible until you have ticked the box on the page that carries the warning,
+so nobody arrives at the flasher without having read what it costs to get
+wrong — and both disappear again the moment flashing is turned off.
 
 Per controller:
 

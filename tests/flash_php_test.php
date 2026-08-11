@@ -216,28 +216,40 @@ check('settings holds the saved value while locked',
 check('the firmware page leads with the lock',
       str_contains($flashViewSrc, '<?php if (LSI_FLASH_LOCKED): ?>'));
 
-/* ── One way in ───────────────────────────────────────────────────────────────
-   settings.php's comment has always said its button is "the way in to firmware
-   flashing, and the only one" -- deliberately not on the Monitor, so reaching
-   the flasher means passing the page where you turned it on and read the danger
-   notice. It was not the only one. The page also declared Menu="Utilities",
-   which put a second tile beside HBAviewer's own in Settings -> Utilities: a
-   door straight to the flasher that skipped the notice entirely, and one that
-   stayed visible on a locked install for anyone who had ever ticked the box.
+/* ── Where the firmware page lives, and the two links that must agree ────────
+   Menu= decides both the placement and the URL root, and two hardcoded hrefs
+   depend on the answer. That is one fact in three files, and nothing else
+   would notice them drifting apart until a user clicked and got a 404 -- so
+   all three are pinned together, here.
 
-   Hanging the page off HBAviewer_Settings instead keeps the same /Settings/
-   URL -- the root is inherited from the parent, which is itself Utilities --
-   so the hardcoded href below still resolves. That pairing is the fragile
-   part, and it is why the href is pinned here next to the Menu it depends on:
-   they are one fact stored in two files, and nothing else would notice them
-   drifting apart until a user clicked the button and got a 404. */
+   Menu="Utilities" put a second tile beside HBAviewer's own in Settings ->
+   Utilities: a door straight to the flasher that skipped the danger notice,
+   and one that stayed visible on a locked install for anyone who had ever
+   ticked the box -- an icon leading to a page that only says "disabled".
+   Menu="HBAviewer_Settings" removed the tile but rendered the whole flash page
+   inline underneath the settings form, because Unraid stacks the children of
+   an xmenu parent onto one page.
+
+   Menu="HBAviewer" is the shape HBAviewer_Monitor.page already proves works:
+   HBAviewer.page is Type="menu", a real container, so its children are
+   standalone pages under /Tools/. */
 $flashPage = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/HBAviewer_Flash.page');
+$monSrc    = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
 check('the firmware page is not a second Utilities tile',
       !str_contains($flashPage, 'Menu="Utilities"'));
-check('it hangs off the settings page instead',
-      str_contains($flashPage, 'Menu="HBAviewer_Settings"'));
+check('nor stacked inline under the settings form',
+      !str_contains($flashPage, 'Menu="HBAviewer_Settings"'));
+check('it is a standalone page under the HBAviewer menu',
+      str_contains($flashPage, 'Menu="HBAviewer"'));
 check('the button in settings points at the URL that placement produces',
-      str_contains($settingsSrc, 'href="/Settings/HBAviewer_Flash"'));
+      str_contains($settingsSrc, 'href="/Tools/HBAviewer_Flash"'));
+check('and so does the Monitor tab',
+      str_contains($monSrc, 'href="/Tools/HBAviewer_Flash"'));
+
+/* Both entrances carry the same two conditions. A tab that appeared on a
+   locked install would be the Utilities tile's mistake in a new place. */
+check('the Monitor tab is gated on the lock and the user toggle',
+      str_contains($monSrc, "!LSI_FLASH_LOCKED && (int) \$cfg['ENABLE_FLASH'] === 1"));
 
 echo $fails === 0 ? "flash_php: all pass\n" : "flash_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

@@ -395,14 +395,17 @@ foreach ($bands as $floor => $label) {
       <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block"
          onclick="return confirm('The HBA Monitor reads live information from your controller(s).\n\nThe first load can take up to 60 seconds while it queries the hardware. After you press OK, the Monitor opens and shows a \'Loading HBA information\' banner until it is ready.\n\nPress OK to continue.')">Open HBAviewer Monitor</a>
       <?php endif; ?>
-      <?php /* The way in to firmware flashing, and the only one — it is
-               deliberately NOT a link on the Monitor. Reaching it means coming
-               through the page where you turned it on and read the danger
-               notice, rather than finding it beside the monitoring tabs on a
-               page left open. $cfg is re-read after a save, so this appears the
-               moment the box is ticked and saved. */ ?>
+      <?php /* One of two ways in; the Monitor's tab strip carries the other,
+               and both are gated on this same pair of conditions so neither can
+               appear until the box below is ticked and the maintainer lock is
+               off. $cfg is re-read after a save, so this appears the moment the
+               box is ticked and saved.
+
+               The href must track HBAviewer_Flash.page's Menu, which decides
+               the URL root: Menu="HBAviewer" hangs the page off HBAviewer.page,
+               and that is a Tools page. Pinned in flash_php_test.php. */ ?>
       <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Settings/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 
