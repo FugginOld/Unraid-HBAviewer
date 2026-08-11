@@ -1,4 +1,10 @@
-    function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    // ' is escaped as well as " because ctl is interpolated into a single-quoted
+    // JS string inside a double-quoted HTML attribute (the onclick handlers
+    // below), so the apostrophe is a delimiter in this file's markup and not
+    // just decoration. Unreachable with a server-generated list of digits, but
+    // an escaper that does not cover its own context is a trap for the next
+    // value someone passes through it.
+    function fesc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 
     /* The firmware verdict, in full. This is the surface where a flash actually
        happens, so unlike the Overview's one-liner it shows the reason a verdict
@@ -255,6 +261,17 @@
             log.textContent = d.log || '(waiting for output…)';
             if (d.running) { setTimeout(function(){ luFlashPoll(ctl); }, 2000); return; }
             if (d.done === 'success') log.textContent += '\n\n✔ Flash completed. REBOOT the server to load the new firmware. (Linux flashers update the BIOS but cannot erase it.)';
+            /* Its own state, not a variant of 'error'. A partial flash left the
+               two controllers of one board on different firmware, and the log
+               above names which is which. The two outcomes ask opposite things
+               of the operator — 'error' means nothing was written and a retry
+               is safe — so this gets its own banner rather than the generic
+               "code N" line that used to cover both. */
+            else if (d.done === 'partial') {
+                log.textContent += '\n\n⚠ PARTIAL FLASH — this card\'s controllers are now running DIFFERENT firmware.'
+                  + '\nDo NOT reboot. Read the log above: it names the controller that failed. Re-run the flash for that controller before doing anything else.';
+                if (log.style) log.style.border = '2px solid var(--crit-text, #e74c3c)';
+            }
             else if (d.done === 'error') log.textContent += '\n\n✖ Flash tool exited with an error (code '+d.exit+'). Read the log above; do NOT reboot — reflash the correct image first.';
           })
           .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(ctl); }, 3000); });

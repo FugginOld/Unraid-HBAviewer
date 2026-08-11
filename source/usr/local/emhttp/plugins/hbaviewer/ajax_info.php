@@ -1,6 +1,7 @@
 <?PHP
 /* HBAviewer AJAX endpoint
- * ?type=overview  → JSON  (temperature + card info, for auto-refresh)
+ * ?type=overview  → JSON  (one entry per CARD, each carrying its own `ctl`;
+ *                          consumed by the firmware page and nothing else)
  * ?type=phy       → HTML  (PHY health table)
  * ?type=drives    → HTML  (attached drives table)
  * ?type=events    → HTML  (event log table)

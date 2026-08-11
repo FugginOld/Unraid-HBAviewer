@@ -12,6 +12,11 @@
  */
 
 require_once __DIR__ . '/config.php';
+// lsi_controllers(), and which of them are one physical CARD. The flash action
+// re-derives the grouping server-side so a posted controller list can be
+// checked against the cards that actually exist — see flash_ctl_is_card().
+require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/card_group.php';
 
 const FLASH_DIR     = '/tmp/hbav_flash';                              // job artifacts: log, status, lock
 /* The one directory the user drops everything into: the flash tool, the
@@ -48,6 +53,64 @@ function flash_safe_name(string $name, array $allowedExt): ?string {
     return in_array($ext, $allowedExt, true) ? $base : null;
 }
 
+/* Validate the controller argument and return its parts, or null.
+ *
+ * A dual-IOC board is one card and arrives as a list of its controller numbers
+ * ("0,1"), so this is not a single integer any more. Three properties, all of
+ * them because the value ends up as the -c argument of a tool that writes
+ * firmware, and both call sites need exactly the same answer:
+ *
+ *   shape  — digits and commas only, no empty element. Anchored with \z rather
+ *            than $, or a trailing newline slips through.
+ *   size   — at most LSI_MAX_IOCS entries. Shape alone accepts 0,1,2,3,4,5,6,7,
+ *            which writes one image to eight controllers: exactly the -fwall
+ *            blast radius the loop in flash_hba.sh exists to avoid.
+ *   unique — no controller written twice in one run.
+ *
+ * This is a bound, not an identity. Only flash_ctl_is_card() below can say the
+ * list is THIS CARD's, and the mutating action uses both. */
+const LSI_MAX_IOCS = 4;   // largest ioc_count in the index is 2; 4 is slack
+
+function flash_ctl_list(string $ctl): ?array {
+    if (!preg_match('/^\d+(,\d+)*\z/', $ctl)) return null;
+    $parts = explode(',', $ctl);
+    if (count($parts) > LSI_MAX_IOCS)            return null;
+    if (count($parts) !== count(array_unique($parts))) return null;
+    return $parts;
+}
+
+/* Is $ctl exactly one of this box's cards?
+ *
+ * The whole justification for looping the card's indices instead of -fwall is
+ * "the card's OWN controllers, nothing else", and nothing but this enforces it:
+ * a crafted POST or a stale page can otherwise name any set of controllers that
+ * passes the shape check. $groups comes from the same lsi_group_cards() the
+ * Overview and the firmware page's JSON use, so the set of acceptable lists is
+ * by construction the set of cards the page can actually offer.
+ *
+ * Exact string equality against implode(',', $group), not a subset test: half a
+ * dual-IOC card is not a card, and writing one of its two IOCs is the partial
+ * flash this feature spends its error handling trying to prevent.
+ * No groups at all (backend error, no controllers) means no card matches and
+ * every flash is refused — the same read is what draws the card the operator
+ * pressed Flash on, so there is nothing legitimate to lose. */
+function flash_ctl_is_card(string $ctl, array $groups): bool {
+    foreach ($groups as $g) {
+        if (implode(',', $g) === $ctl) return true;
+    }
+    return false;
+}
+
+/* The live grouping, read at flash time rather than trusted from the client.
+ * Same pipeline and same grouper as ajax_info.php's overview JSON. Returns []
+ * on any backend failure, which flash_ctl_is_card() turns into a refusal. */
+function flash_card_groups(): array {
+    $raw  = shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/get_hba_info.sh') . ' 2>/dev/null');
+    $data = json_decode((string) $raw, true);
+    if (!is_array($data) || isset($data['error'])) return [];
+    return lsi_group_cards(lsi_controllers($data), lsi_ioc_counts(fw_load()));
+}
+
 /* Pure preflight gate for a flash request. Returns [ok=>bool, error=>string].
    The handler injects real values; tests inject fakes. Order = user-friendliest
    failure first, but every check is a hard block. */
@@ -56,16 +119,15 @@ function flash_preflight(array $in): array {
         return ['ok' => false, 'error' => 'Firmware flashing is disabled. Enable it in Settings first.'];
     if (empty($in['stopped']))
         return ['ok' => false, 'error' => 'The array must be STOPPED before flashing. Stop it on the Main tab, then retry.'];
-    /* One index, or the comma-separated list of indices that a dual-IOC board
-       carries — a SAS9300-16i is one card with two SAS3008 controllers and both
-       are written together (see the loop in flash_hba.sh). Digits and commas
-       only, anchored with \z rather than $ so a trailing newline cannot slip
-       through. This exact pattern is repeated in the 'listall' action below and
-       pinned in flash_php_test.php: it is what stands between a form field and
-       a script that writes firmware to a controller, so it is worth having one
-       spelling of it that a grep can find. */
-    if (!preg_match('/^\d+(,\d+)*\z/', (string) ($in['ctl'] ?? '')))
+    /* Shape, size and uniqueness — one spelling, shared with the 'listall'
+       action below (see flash_ctl_list). 'card' is the membership answer, which
+       needs the live hardware and so is injected rather than read here: it is
+       false only when the caller checked and the list is not one of this box's
+       cards. Tests that do not exercise membership leave it unset. */
+    if (flash_ctl_list((string) ($in['ctl'] ?? '')) === null)
         return ['ok' => false, 'error' => 'Invalid controller index.'];
+    if (array_key_exists('card', $in) && !$in['card'])
+        return ['ok' => false, 'error' => 'That is not one of the controller cards in this server. Reload the firmware page and try again.'];
     /* Firmware and BIOS are each optional, but not both. sas2flash/sas3flash
        take -f, -b, or both, so flashing a BIOS on its own is a real operation
        the tool supports and this used to refuse. storcli is different: on the
@@ -178,9 +240,13 @@ if ($action === 'listall') {
     header('Content-Type: text/plain; charset=utf-8');
     $chip = preg_replace('/[^A-Za-z0-9]/', '', $_POST['chip'] ?? $_GET['chip'] ?? '');
     $ctl  = (string) ($_POST['ctl'] ?? $_GET['ctl'] ?? '');
-    // Same pattern as flash_preflight()'s — one card's controller list, digits
-    // and commas only. Keep the two spellings identical.
-    if ($chip === '' || !preg_match('/^\d+(,\d+)*\z/', $ctl)) { echo 'Invalid controller.'; exit; }
+    /* Same validator as the flash action's, so the two cannot drift. NOT the
+       membership check: this is read-only (`-list` per controller, nothing
+       written) and re-deriving the grouping needs a full hardware read, which
+       would put a minute between pressing Verify and seeing output on the very
+       button that exists to be quick. The size and uniqueness bounds inside
+       flash_ctl_list() are what keep the fan-out finite here. */
+    if ($chip === '' || flash_ctl_list($ctl) === null) { echo 'Invalid controller.'; exit; }
     echo (string) shell_exec('bash ' . escapeshellarg(FLASH_SCRIPTS . '/flash_hba.sh')
         . ' list ' . escapeshellarg($chip) . ' ' . escapeshellarg($ctl) . ' 2>&1');
     exit;
@@ -217,6 +283,12 @@ if ($action === 'flash') {
         'fw'      => $fw,
         'bios'    => $bios,
         'bios_ok' => $biosOk,
+        // The list must BE one of this box's cards, not merely look like a
+        // list. Re-derived here from the live hardware — the client is the one
+        // thing that cannot be asked. A full read, but this is the request
+        // that writes firmware with the array stopped, and it is the same read
+        // that drew the card the operator pressed Flash on.
+        'card'    => flash_ctl_is_card($ctl, flash_card_groups()),
         'confirm' => $_POST['confirm'] ?? '',
         'locked'  => !$owned,
     ]);
@@ -255,7 +327,15 @@ if ($action === 'status') {
         'exit'    => $running ? null : $exit,
         'log'     => is_file($log) ? (string) file_get_contents($log) : '',
     ];
+    /* 7 is flash_hba.sh's partial flash: one IOC of a dual-controller board
+       written, the other not. It gets its own state rather than folding into
+       'error' because the two demand opposite things of the operator — 'error'
+       means nothing was written and the card is safe, 'partial' means the card
+       is running two firmware versions and must not be rebooted. Sharing one
+       code left those machine-indistinguishable, with only the log text between
+       a safe retry and a dead card. */
     if (!$running && $exit === 0)          $res['done'] = 'success';
+    elseif (!$running && $exit === 7)      $res['done'] = 'partial';
     elseif (!$running && $exit !== null)   $res['done'] = 'error';
     echo json_encode($res);
     exit;

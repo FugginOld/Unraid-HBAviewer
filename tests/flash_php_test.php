@@ -52,6 +52,14 @@ check('block bad ctl',           str_contains($err(['ctl'=>'x']),   'controller'
 check('accept a dual-IOC card\'s controller list',
       flash_preflight(array_merge($good, ['ctl'=>'0,1']))['ok'] === true);
 check('block a malformed controller list', str_contains($err(['ctl'=>'0,,1']), 'controller'));
+check('block a list longer than any real card', str_contains($err(['ctl'=>'0,1,2,3,4,5,6,7']), 'controller'));
+/* 'card' is the membership answer, injected because it needs the live
+   hardware (flash_ctl_is_card / flash_card_groups, exercised further down).
+   Absent means "not checked", which is what every pre-existing case here
+   relies on; present and false is a hard block. */
+check('block a list that is not one of this box\'s cards',
+      str_contains($err(['card'=>false]), 'not one of the controller cards'));
+check('accept one that is', flash_preflight(array_merge($good, ['card'=>true]))['ok'] === true);
 /* Firmware and BIOS are each optional, but not both: sasNflash takes -f, -b or
    both, so a BIOS-only flash is a real operation this used to refuse outright.
    'bios_ok' says whether the tool family supports it -- on storcli the BIOS is
@@ -166,37 +174,112 @@ check('it does not name the legacy tools dir',     !str_contains($shMsg, '/hbavi
 check('it does not send the user to an upload',    stripos($shMsg, 'upload') === false);
 
 /* ── A dual-IOC board is ONE card, flashed as one ────────────────────────────
-   The flasher's flash-all switch means every controller in the SYSTEM, not
-   every controller on this card. On a box with a 9300-16i and a 9300-8i it
-   would write the 16i image to the 8i. The loop in flash_hba.sh replaces it and
-   must stay replaced; the same reasoning bars the list-everything flag from the
-   verify path. Pinned as absences so a grep, not a re-read of a diff, catches a
-   regression on the one file in this plugin that writes to hardware.
-   $shSrc is already loaded above, by the missing-tool-message block. */
-check('the flasher never uses -fwall',        !str_contains($shSrc, 'fwall'));
-check('verification never uses -listall',     !str_contains($shSrc, '-listall'));
+   -fwall means every controller in the SYSTEM, not every controller on this
+   card. On a box with a 9300-16i and a 9300-8i it would write the 16i image to
+   the 8i. The loop in flash_hba.sh replaces it and must stay replaced; -listall
+   is barred from the verify path for the same reason.
+
+   Matched against the CODE, with comments stripped. Asserting over the whole
+   file made flash_hba.sh the one file forbidden from naming the flags it must
+   never use, which is a poor trade on a script whose comments are most of its
+   safety argument. $shSrc is loaded above, by the missing-tool-message block. */
+$shCode = (string) preg_replace('/^\s*#.*$/m', '', $shSrc);
+check('the flasher never uses -fwall',        !str_contains($shCode, 'fwall'));
+check('verification never uses -listall',     !str_contains($shCode, '-listall'));
+// ...and the prose is still expected to explain why, or the next person deletes
+// the loop as pointless complexity.
+check('the comments still say why not',       str_contains($shSrc, '-fwall') && str_contains($shSrc, '-listall'));
+
 /* The partial flash is the one genuinely new failure the loop introduces: a
    board left with its two IOCs on different firmware. It must never be reported
    as a generic failure -- rebooting on a half-flashed board is what turns a
    failed update into a dead card. */
 check('a partial flash says so explicitly',   str_contains($shSrc, 'PARTIAL FLASH'));
 check('and tells the operator not to reboot', str_contains($shSrc, 'Do NOT reboot'));
+/* Its OWN exit code. Sharing 6 with "nothing was written" made the dangerous
+   state and the safe one record the same value in flash.status, leaving only
+   free text between a safe retry and a dead card. 7 is the partial; flash.php
+   turns it into done=partial and the page into its own banner. */
+check('a partial flash has its own exit code', str_contains($shSrc, 'before doing anything else." 7'));
+check('a clean failure keeps the old one',     str_contains($shSrc, 'nothing was written" 6'));
+check('flash.php maps 7 to its own state',     str_contains($flashSrc, "\$exit === 7)      \$res['done'] = 'partial'"));
+check('and the page renders that state',       str_contains($jsSrc, "d.done === 'partial'"));
+/* flash_rc is assigned only on FAILURE and read to decide whether the write
+   failed, so an uninitialised one inherited from the environment made the first
+   iteration report a SUCCESSFUL write as "nothing was written" -- the most
+   dangerous lie this loop can tell, since the operator then re-runs from a
+   state the script has misdescribed. flash_test.sh proves the behaviour; this
+   pins the line, because the behaviour is only observable with a poisoned env. */
+check('the failure flag is reset every iteration', str_contains($shCode, 'flash_rc=""'));
 
-/* The controller argument reaches a script that writes firmware. One spelling
-   of the pattern, in both validating call sites, so a grep finds all of it. */
+/* ── The controller argument reaches a script that writes firmware ───────────
+   ONE validator, called from both sites, so they cannot drift -- the pattern is
+   spelled once and a grep for it finds the single home rather than two copies
+   that have to be compared by eye. */
 check('the controller list is validated as digits and commas only',
       str_contains($flashSrc, "preg_match('/^\\d+(,\\d+)*\\z/'"));
-check('both call sites validate it the same way',
-      substr_count($flashSrc, "'/^\\d+(,\\d+)*\\z/'") === 2);
+check('the pattern has exactly one home',
+      substr_count($flashSrc, "'/^\\d+(,\\d+)*\\z/'") === 1);
+check('the preflight goes through it',  str_contains($flashSrc, "flash_ctl_list((string) (\$in['ctl'] ?? '')) === null"));
+check('and so does the listall action', str_contains($flashSrc, "flash_ctl_list(\$ctl) === null"));
+
+check('a controller list passes',  flash_ctl_list('0,1') === ['0', '1']);
+check('a bare index still passes', flash_ctl_list('3')   === ['3']);
 // \z, not $: '0,1\n' matches /^\d+(,\d+)*$/ and must not reach the flasher.
-check('a trailing newline does not pass the controller check',
-      preg_match('/^\d+(,\d+)*\z/', "0,1\n") === 0);
-check('a controller list passes it',  preg_match('/^\d+(,\d+)*\z/', '0,1') === 1);
-check('a bare index still passes it', preg_match('/^\d+(,\d+)*\z/', '3') === 1);
-foreach ([',', '0,', ',1', '0,,1', '0;1', '0 1', '-1', ''] as $mal) {
-    check("the controller check refuses '" . $mal . "'",
-          preg_match('/^\d+(,\d+)*\z/', $mal) === 0);
+check('a trailing newline is refused', flash_ctl_list("0,1\n") === null);
+foreach ([',', '0,', ',1', '0,,1', '0;1', '0 1', '-1', '', 'x', '0,x'] as $mal) {
+    check("the controller check refuses '" . $mal . "'", flash_ctl_list($mal) === null);
 }
+/* Shape is not size. '0,1,2,3,4,5,6,7' is a perfectly well-formed list and
+   writes one image to eight controllers -- precisely the -fwall blast radius
+   the loop exists to avoid, reachable from a crafted POST or a stale page.
+   The largest ioc_count in the index is 2, so the cap closes the fan-out
+   without ever refusing a real card. */
+check('a list longer than any real card is refused', flash_ctl_list('0,1,2,3,4,5,6,7') === null);
+check('and one just over the cap',                   flash_ctl_list('0,1,2,3,4') === null);
+check('a list at the cap is allowed',                flash_ctl_list('0,1,2,3') !== null);
+check('a controller repeated in one run is refused', flash_ctl_list('1,1') === null);
+check('the cap is named, not a magic number',        LSI_MAX_IOCS === 4);
+
+/* ── Shape is not membership either ──────────────────────────────────────────
+   The entire justification for looping instead of -fwall is "the card's OWN
+   controllers, nothing else", and only this enforces it. The groups are
+   re-derived server-side from the live hardware at flash time -- the client is
+   the one party that cannot be asked -- and the posted list must BE one of
+   them. Exact equality, not a subset: half a dual-IOC card is not a card, and
+   writing one of its two IOCs is the partial flash all the error handling
+   downstream exists to prevent.
+   Driven with the real pipeline golden through the real index, the same way
+   card_group_test.php does, rather than hand-built arrays. */
+$realIdx  = fw_load(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/data/known-firmware.json');
+$dualCtls = json_decode((string) file_get_contents(__DIR__ . '/expected/storcli_dual.json'), true)['controllers'];
+$dualGrp  = lsi_group_cards($dualCtls, lsi_ioc_counts($realIdx));
+check('the dual-IOC golden really is one card of two', $dualGrp === [[0, 1]]);
+check('that card\'s own list is accepted',     flash_ctl_is_card('0,1', $dualGrp) === true);
+check('half of it is refused',                 flash_ctl_is_card('0',   $dualGrp) === false);
+check('the other half is refused',             flash_ctl_is_card('1',   $dualGrp) === false);
+check('a superset is refused',                 flash_ctl_is_card('0,1,2', $dualGrp) === false);
+check('a reordered list is refused',           flash_ctl_is_card('1,0', $dualGrp) === false);
+check('a controller that is not there is refused', flash_ctl_is_card('9', $dualGrp) === false);
+// The non-adjacent case, which is the shape an index-derived check would fail:
+// [16i@X, 8i@Y, 16i@X] groups as [[0,2],[1]].
+$mixed = [
+    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0'],
+    ['board_name' => 'SAS9300-8i',  'card_id' => '0000:00:11.0'],
+    ['board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0'],
+];
+$mixedGrp = lsi_group_cards($mixed, lsi_ioc_counts($realIdx));
+check('a non-adjacent card is accepted by its own list', flash_ctl_is_card('0,2', $mixedGrp) === true);
+check('the lone card between its halves too',            flash_ctl_is_card('1',   $mixedGrp) === true);
+check('but not the adjacent pair that is two cards',     flash_ctl_is_card('0,1', $mixedGrp) === false);
+// No groups at all -- a backend error, or no controllers -- refuses everything.
+// The same read draws the card the operator pressed Flash on, so there is
+// nothing legitimate to lose by failing closed here.
+check('an unreadable backend refuses every flash', flash_ctl_is_card('0', []) === false);
+check('the flash action asks the live hardware',
+      str_contains($flashSrc, "'card'    => flash_ctl_is_card(\$ctl, flash_card_groups())"));
+check('and derives the groups the same way the page does',
+      str_contains($flashSrc, 'lsi_group_cards(lsi_controllers($data), lsi_ioc_counts(fw_load()))'));
 /* Where the list comes from: the firmware page is fed one entry per CARD by
    ajax_info.php's overview JSON, and each entry carries its own controller
    number(s). The page must never use the array index as a controller number --

@@ -111,12 +111,11 @@ if [ -z "$tool" ]; then
 fi
 
 if [ "$mode" = list ]; then
-    # Scope to THE CARD — every IOC on it and nothing else. Never the flasher's
-    # list-every-controller-in-the-system mode: on a box with a 9300-16i and a
-    # 9200-8i that would show the 9200 while the operator is verifying the 16i,
-    # which is the confusion this scoping has always existed to prevent. A
-    # dual-IOC board is one card, so both of its controllers belong in the same
-    # verification output.
+    # Scope to THE CARD — every IOC on it and nothing else. Not -listall: on a
+    # box with a 9300-16i and a 9200-8i that would show the 9200 while the
+    # operator is verifying the 16i, which is the confusion this scoping has
+    # always existed to prevent. A dual-IOC board is one card, so both of its
+    # controllers belong in the same verification output.
     rc=0
     for one in $(printf '%s' "$ctl" | tr ',' ' '); do
         echo "--- controller /c$one ---"
@@ -135,14 +134,23 @@ fi
 [ -z "$bios" ] || [ -f "$bios" ] || die "BIOS image not found: $bios" 5
 
 # Write EVERY IOC on this card, one at a time. Broadcom's advice for a
-# dual-controller board is the flasher's flash-all switch, which this
-# deliberately does not use: that switch means every controller in the SYSTEM,
-# not every controller on this card, so on a box holding a 9300-16i and a
-# 9300-8i it writes the 16i image to the 8i and bricks it. Looping the card's
-# own indices meets the same intent — never leave one IOC behind — with no
-# blast radius.
+# dual-controller board is -fwall, which this deliberately does not use: -fwall
+# means every controller in the SYSTEM, not every controller on this card, so on
+# a box holding a 9300-16i and a 9300-8i it writes the 16i image to the 8i and
+# bricks it. Looping the card's own indices meets the same intent — never leave
+# one IOC behind — with no blast radius.
+#
+# That the list IS this card's own indices is not decidable here; flash.php
+# checks the posted list against the groups lsi_group_cards() derives from the
+# live hardware, and refuses anything that is not exactly one card.
 done_ok=""
 for one in $(printf '%s' "$ctl" | tr ',' ' '); do
+    # Per iteration, and never inherited: flash_rc is only assigned on failure,
+    # so a value arriving from the environment made iteration 1 report a
+    # SUCCESSFUL write as "nothing was written" — the most dangerous lie this
+    # loop can tell, since the operator then re-runs from a state the script has
+    # misdescribed. done_ok and rc are initialised for the same reason.
+    flash_rc=""
     if [ "$gen" = storcli ]; then
         # SAS3.5 / 9400: firmware package flashed via storcli. The BIOS travels
         # INSIDE that package, so there is no separate BIOS file to flash and a
@@ -159,14 +167,21 @@ for one in $(printf '%s' "$ctl" | tr ',' ' '); do
         echo "+ $(basename "$tool") $*"
         "$tool" "$@" || flash_rc=$?
     fi
-    if [ -n "${flash_rc:-}" ]; then
+    if [ -n "$flash_rc" ]; then
         # A board left with one IOC updated and one not is the new hazard this
         # loop introduces, and it must never be reported as a generic failure:
         # the operator has to know the card is now mismatched and which half
         # succeeded, because rebooting on a half-flashed board is what turns a
         # failed update into a dead card.
+        #
+        # Its OWN exit code, 7. Sharing 6 with the safe case made "the card is
+        # mismatched, do not reboot" and "nothing was written, you are fine"
+        # record the same value in flash.status, so the page rendered both as
+        # the same generic error and only the free text told them apart. 7 is
+        # what flash.php turns into done=partial and the page into its own
+        # banner.
         if [ -n "$done_ok" ]; then
-            die "PARTIAL FLASH. Controller(s) /c$done_ok on this card were written successfully and /c$one FAILED. The two controllers on this board are now running different firmware. Do NOT reboot. Re-run the flash for /c$one before doing anything else." 6
+            die "PARTIAL FLASH. Controller(s) /c$done_ok on this card were written successfully and /c$one FAILED. The two controllers on this board are now running different firmware. Do NOT reboot. Re-run the flash for /c$one before doing anything else." 7
         fi
         die "flash of /c$one failed and nothing was written" 6
     fi

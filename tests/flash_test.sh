@@ -165,7 +165,11 @@ trap 'rm -f "$FW" "$BIOS"; rm -rf "$BOOTDIR" "$STAGEDIR" "$FAILDIR"' EXIT
 printf '#!/bin/sh\necho "FLASHER $*"\ncase " $* " in *" -c 1 "*|*" /c1 "*) exit 9 ;; esac\nexit 0\n' > "$FAILDIR/flasher"
 chmod +x "$FAILDIR/flasher"
 out=$(FLASHER="$FAILDIR/flasher" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
-code "a partial flash exits 6"            6 "$rc"
+# 7, not 6. Sharing an exit code with "nothing was written" made the state that
+# must not be rebooted and the state that is perfectly safe record the same
+# value in flash.status, so the page rendered both as the same generic error
+# and only the free text told them apart.
+code "a partial flash exits 7"            7 "$rc"
 has "a partial flash says PARTIAL FLASH"  "PARTIAL FLASH"
 has "it names the IOC that succeeded"     "/c0"
 has "it names the IOC that failed"        "/c1 FAILED"
@@ -183,6 +187,20 @@ case "$out" in *"PARTIAL FLASH"*) bad "cried partial on a clean failure" "$out" 
 n=$(printf '%s\n' "$out" | grep -c -- 'FLASHER -c 1')
 [ "$n" = 0 ] && ok "a failed first write does not go on to the second IOC" \
              || bad "kept flashing after a failure" "$out"
+case "$rc" in 6) ok "a clean failure keeps exit 6" ;;
+              *) bad "clean failure exit code" "want 6 got $rc" ;; esac
+
+# flash_rc is assigned only on failure, so an UNINITIALISED one inherited from
+# the environment makes iteration 1 take the failure branch after a SUCCESSFUL
+# write -- the script then tells the operator nothing was written when /c0 was,
+# and they re-run from a state it has misdescribed. Poison the environment on
+# purpose; nothing else in this file can see that bug.
+out=$(flash_rc=1 FLASHER="$STUB" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
+code "an inherited flash_rc does not fake a failure" 0 "$rc"
+case "$out" in *"nothing was written"*) bad "inherited flash_rc" "reported a successful write as a failure" ;;
+                                     *) ok "and does not claim nothing was written" ;; esac
+out=$(flash_rc=1 done_ok=9 FLASHER="$STUB" bash "$FH" flash SAS3008 0,1 "$FW" 2>&1); rc=$?
+code "nor does an inherited done_ok"                 0 "$rc"
 
 # The list shape is validated before anything runs -- this value becomes the
 # -c argument of a tool that writes firmware.

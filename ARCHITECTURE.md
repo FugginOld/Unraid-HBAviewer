@@ -161,26 +161,46 @@ unit-tested, and enforced **server-side**:
 - opt-in toggle (`ENABLE_FLASH`, default off)
 - array must be STOPPED, failing closed on a missing or unreadable `var.ini`
 - read-only verify scoped to the target **card** — every controller on it, and nothing else
-- controller argument validated as `/^\d+(,\d+)*\z/` at both call sites (`\z`, not `$`: a trailing newline must not reach the flasher)
+- controller argument validated by one `flash_ctl_list()` both call sites share — shape (`/^\d+(,\d+)*\z/`; `\z`, not `$`, or a trailing newline slips through), size (`LSI_MAX_IOCS`) and uniqueness
+- and, on the mutating action only, **membership**: `flash_ctl_is_card()` requires the posted list to *be* one of the groups `lsi_group_cards()` derives from the live hardware at flash time
 - typed `FLASH` confirmation plus an acknowledgement checkbox
 - single-flight lock, never auto-retried
-- upload filename sanitisation confined to one directory
+- image filenames confined to one directory (`flash_safe_name()`)
 
 **A dual-IOC board is one card and is flashed as one.** A SAS9300-16i carries
 two SAS3008 controllers, and leaving one of them behind would leave the board
 running two firmware versions. `flash_hba.sh` therefore takes a comma-separated
-controller list and **loops it** — deliberately *not* the flasher's flash-all
-switch, which Broadcom recommends for these boards: that switch means every
-controller in the *system*, so on a box holding a 9300-16i and a 9300-8i it
-would write the 16i image to the 8i and brick it. The same reasoning bars the
-list-everything flag from the verify path.
+controller list and **loops it** — deliberately *not* `-fwall`, which Broadcom
+recommends for these boards: `-fwall` means every controller in the *system*, so
+on a box holding a 9300-16i and a 9300-8i it would write the 16i image to the 8i
+and brick it. `-listall` is barred from the verify path for the same reason.
+Both absences are asserted in `flash_php_test.php`, against the script with its
+**comments stripped** — the prose has to be free to name the flags it is arguing
+against.
+
+That argument is only true if the list really is one card's own controllers, and
+shape validation cannot tell: `0,1,2,3,4,5,6,7` is a well-formed list and
+reproduces the exact `-fwall` blast radius. So the flash action re-derives the
+grouping from the live hardware and requires the posted list to **be** one of
+those groups, by exact string equality. Half a dual-IOC card is not a card. No
+groups (backend error) refuses everything — the same read is what drew the card
+the operator pressed Flash on, so failing closed costs nothing real. The
+read-only `listall` action skips this: it writes nothing, and a full hardware
+read before every Verify press would put a minute on the quick button. Its
+fan-out is bounded by the size and uniqueness checks instead.
 
 The loop's own hazard is a **partial flash**: the second write failing after the
-first succeeded. That never surfaces as a generic error. It exits 6 with a
-message naming which controller holds which half and telling the operator not to
-reboot, because rebooting on a half-flashed board is what turns a failed update
-into a dead card. A failure on the *first* write says nothing was written, which
-is a different and much safer answer, and the loop stops there.
+first succeeded. It has its **own exit code, 7**, which `flash.php` turns into
+`done: 'partial'` and the page into its own red banner. 6 — "nothing was
+written" — is the safe outcome, and sharing one code made the two
+machine-indistinguishable with only free text between a safe retry and a dead
+card. The partial message names which controller holds which half and tells the
+operator not to reboot. A failure on the *first* write stops there.
+
+`flash_rc` is reset **inside** the loop, not merely left unset. It is assigned
+only on failure, so a value inherited from the environment made iteration 1
+report a successful write as "nothing was written" — a lie about what is on the
+hardware, which is worse than any error this path can return.
 
 The greyed-out Step 3 in the UI is an **affordance**, not a control. Deleting
 all of that CSS must still leave flashing blocked. If a change ever makes the

@@ -349,6 +349,25 @@ echo "=== flash tests ==="
 bash flash_test.sh; flash_fail=$?
 
 echo
+echo "=== firmware page JS tests ==="
+# The only RUNTIME check of flash_view.js. Every other pin on that file is a
+# str_contains() over its source, and the mutant that labels a dual-IOC card
+# with both controllers while POSTing one of them survives all of them -- which
+# is the whole subject of the feature. Same local-then-docker fallback as
+# php_run: Unraid has no node, so this is a docker run there and a bare node on
+# a dev box. Neither available means SKIP, not FAIL -- an absent runtime is not
+# a defect in the code under test.
+if command -v node >/dev/null 2>&1; then
+    node flash_js_test.js; flash_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests \
+        node:20-alpine node flash_js_test.js; flash_js_fail=$?
+else
+    echo "SKIP  flash_view.js runtime tests (no node, no docker)"; flash_js_fail=0
+fi
+
+echo
 echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
@@ -389,7 +408,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

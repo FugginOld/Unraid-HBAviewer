@@ -338,16 +338,19 @@ Per card:
 
 1. **Verify** — a read-only listing **scoped to that one card**, so you
    confirm the tool sees the exact card you are about to write to.
-2. **Upload** — the model-correct image for *your* card (optionally a BIOS
-   `.rom`, and the flash tool itself if it is not in `PATH`). This step stays
-   available while the array is running, deliberately, so you can stage the
-   image before taking the array down.
+2. **Choose the image** — the model-correct one for *your* card (optionally a
+   BIOS `.rom` too). There is no upload button: you copy the files into
+   `/boot/config/plugins/hbaviewer/flash` yourself and the page offers what it
+   finds there, so a filename cannot be mistyped. The flash tool goes in the
+   same folder if it is not already installed. This step works while the array
+   is running, deliberately, so you can stage everything before taking it down.
 3. **Confirm & flash** — only with the **array stopped**. Step 3 is greyed out
    until then. Tick the acknowledgement, type `FLASH`, and go. A live log
    streams; reboot when it finishes.
 
-The array-stopped rule, the typed confirmation, the single-flight lock and the
-upload confinement are all enforced **server-side** — the greyed-out UI is an
+The array-stopped rule, the typed confirmation, the single-flight lock, the
+filename confinement and the check that the controllers you named really are one
+of this server's cards are all enforced **server-side** — the greyed-out UI is an
 affordance, not the control.
 
 **A dual-controller board is one card, and is flashed as one.** A SAS9300-16i
@@ -358,11 +361,12 @@ image you selected. Nothing else on the machine is touched: the controllers
 written are that card's own, never every controller in the system.
 
 If the second write fails after the first has succeeded, the board is left with
-its two controllers on **different firmware**. The log says so explicitly —
-which controller holds which half, and that you must **not reboot**. Re-run the
-flash for the controller that failed before doing anything else; rebooting a
-half-flashed board is what turns a failed update into a dead card. A failure on
-the first write stops there and reports that nothing was written.
+its two controllers on **different firmware**. That gets its own red banner, not
+the generic failure line: it names which controller holds which half and tells
+you **not to reboot**. Re-run the flash for the controller that failed before
+doing anything else; rebooting a half-flashed board is what turns a failed
+update into a dead card. A failure on the *first* write stops there and reports
+that nothing was written — that one is safe to retry.
 
 ## Troubleshooting
 
