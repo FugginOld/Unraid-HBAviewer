@@ -88,21 +88,24 @@ if ($enableFlash) {
   <div class="lu-bay-head">
     <span style="font-size:12px;color:var(--text);">Firmware and BIOS flashing for the LSI/Broadcom controllers in this server</span>
   </div>
+</div>
+
+<?php /* The Monitor's strip, exactly: a full-width .lu-tabs, navigation at the
+         left, Settings pushed to the right edge by lu-tab-right. Structure
+         copied rather than approximated -- the first attempt nested the pair
+         inside the heading toolbar, which sizes to its content, so Settings
+         landed wherever the buttons happened to end instead of on the frame.
+         Same container, same rule, same right edge on both pages. */ ?>
+<div class="lu-tabs">
   <?php /* HBAviewer_Monitor, NOT HBAviewer: HBAviewer.page is Type="menu", a
            menu container with no content of its own, so /Tools/HBAviewer is not
            a page and the link silently went nowhere. The monitor is the xmenu
            entry under it — the same URL dashboard.php and settings.php have
            always used. */ ?>
-  <?php /* Same two tabs the Monitor's strip ends with, so leaving this page
-           looks the same wherever you are in the plugin. lu-tab-right on the
-           first one pushes the pair away from the heading; the second follows
-           it. */ ?>
-  <div class="lu-tabs" style="border-bottom:none;margin-bottom:0">
-    <button class="lu-tab-btn lu-tab-right" type="button"
-            onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
-    <button class="lu-tab-btn" type="button"
-            onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
-  </div>
+  <button class="lu-tab-btn" type="button"
+          onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
+  <button class="lu-tab-btn lu-tab-right" type="button"
+          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
 </div>
 
 <?php if (LSI_FLASH_LOCKED): ?>
