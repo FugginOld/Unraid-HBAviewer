@@ -45,10 +45,22 @@
 # and jshint is the only thing that has ever opened them. remark-lint stays on
 # for the root docs.
 #
-# VERIFY AFTER THE NEXT SCAN. If the counts do not drop, the engines block is
-# not the lever: codacy.yml passes CODACY_PROJECT_TOKEN, and a token-backed run
-# can take its tool selection from the Codacy project settings instead of this
-# file. In that case turn the same three off in the Codacy UI.
+# VERIFIED 2026-08-11, AND THE ENGINES BLOCK BELOW DOES NOT WORK. The prediction
+# above was right. 6602b30 landed this file on main; eleven commits later the
+# 2026-08-09 scan still reported Phpcs 2470, Stylelint 404, Csslint 263 —
+# unchanged. A token-backed run takes its tool selection from the Codacy project
+# settings, not from here.
+#
+# The lever that DOES work lives in .github/workflows/codacy.yml, which empties
+# those three tools' results out of the SARIF before it is uploaded. It empties
+# them rather than deleting the runs, because GitHub only retires an existing
+# alert when a later analysis for the same category stops reporting it — drop
+# the run and the 3,137 already-open alerts would never close.
+#
+# The engines block is kept below, doing nothing, for two reasons: it documents
+# the intent next to the reasoning, and it starts working for free if Codacy
+# ever honours it. exclude_paths above is NOT known to be broken and may well be
+# applied; it is cheap either way.
 exclude_paths:
   - 'plans/**'
   - '**/chart.umd.min.js'

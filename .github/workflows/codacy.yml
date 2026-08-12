@@ -54,6 +54,43 @@ jobs:
           # This will handover control about PR rejection to the GitHub side
           max-allowed-issues: 2147483647
 
+      # Silence the three style tools, for real this time.
+      #
+      # .codacy.yml's `engines:` block does not work here and we have the proof:
+      # 6602b30 disabled phpcs, csslint and stylelint, and eleven commits later
+      # the scan still reported 2470 / 263 / 404 of them. A token-backed run
+      # takes its tool selection from the Codacy project settings, not from the
+      # file in the repo — which .codacy.yml itself predicted might be the case.
+      # This is the lever that is actually in this repository, so it is the one
+      # that gets used. See .codacy.yml for why these three and not others.
+      #
+      # EMPTY each run's results; do NOT drop the run. GitHub closes an existing
+      # alert when a later analysis FOR THE SAME CATEGORY no longer reports it.
+      # Delete the run object and the tool simply stops appearing, so the 3,137
+      # alerts already open would stay open forever with nothing to close them.
+      # Reporting zero results is what retires them.
+      - name: Drop style-only tool results from the SARIF
+        run: |
+          python3 - <<'PY'
+          import json
+
+          MUTE = ('phpcs', 'csslint', 'stylelint')
+
+          with open('results.sarif') as fh:
+              sarif = json.load(fh)
+
+          print(f"{'tool':32} {'before':>8} {'after':>8}")
+          for run in sarif.get('runs', []):
+              name = (run.get('tool', {}).get('driver', {}).get('name') or '?')
+              before = len(run.get('results', []))
+              if any(t in name.lower() for t in MUTE):
+                  run['results'] = []
+              print(f'{name:32} {before:8} {len(run.get("results", [])):8}')
+
+          with open('results.sarif', 'w') as fh:
+              json.dump(sarif, fh)
+          PY
+
       # Upload the SARIF file generated in the previous step
       - name: Upload SARIF results file
         uses: github/codeql-action/upload-sarif@v3
