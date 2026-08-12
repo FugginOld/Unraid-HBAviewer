@@ -142,3 +142,50 @@ user-supplied image. Flash refuses on 2, 3, 5; allows 4 with no verdict.
   9400? If it needs StorCLI2, the fix is a dependency rather than a prefix.
 - `min_recommended` exists on the 9300-8i but nothing appears to read it. Intended for a
   future gate, or dead?
+
+---
+
+## Outcome, 2026-08-11
+
+Reviewed against the code. Filed here rather than at the repo root, where it
+was swept into a commit by mistake.
+
+**§2, the primary finding — already fixed.** `flasher_for_chip()` gained
+`SAS32*`, `SAS36*` and `SAS38*` in `894666d`, whose commit title is *"Five of
+thirteen indexed chips could not reach a flasher at all"* — the same five
+boards, the same diagnosis. This document was read from
+`advisor/firmware-verdict @ 8732111`, which predates it. An independent
+rediscovery of a closed bug.
+
+**§3 is therefore inverted.** The reference doc's prefix list matches
+`flash_hba.sh` on every live branch; the drift was between the stale branch and
+everything else. But its kernel was right and was acted on: the invariant in
+`tests/firmware_index_test.php` now PARSES the case arms out of the shell
+instead of carrying a copy, because a copy is what let the original bug hide.
+Reverting the shell to the two-arm map now fails and names all five boards.
+
+**§4 — right instinct, wrong gates.** Refusing on `fw_evaluate()` gates 2, 3
+and 5 does not catch its own example. A MegaRAID 9440-8i is retail Broadcom, so
+gate 2 passes it; `SAS3408` is not among the five RoC chips, so gate 3 passes
+it; gate 5 only runs for indexed boards. It lands on **gate 4** — "not in the
+index" — which §4 explicitly excludes so unindexed HBAs stay flashable. Verified
+by running it: a 9440-8i and a 9200-8e return the identical status, so no gate
+combination separates them.
+
+Both guards shipped instead, as complements: a board-name match for retail
+MegaRAID (`6258c0b`), and a subvendor check for OEM rebrands, which covers the
+rebranded RAID card the name match cannot (`c7e715e`). The subvendor gate
+refuses present-and-wrong but allows absent — refusing a flash on an unreadable
+attribute would make every card unflashable on a backend that does not publish
+it.
+
+**§5 — both agreements taken.** `SAS33*` recorded as "no such part" in
+`schema-2-proposal.md`; the 9305-24i downgraded to `observed-floor` with the
+reason in the data and the tier pinned in the test. The 9305-16i stays
+`confirmed`.
+
+**§7 — two answered.** `min_recommended` has zero readers in `source/` or
+`tests/`; it is dead today. `sas3flash` is correct for `SAS32*` — `backend` is
+the telemetry tool, a different concept, as §3 itself notes. Whether the 9500
+generation flashes through `storcli /cx download` or needs StorCLI2 remains
+open and needs a card.
