@@ -1,3 +1,0 @@
-Reading board manufacturing information...
-
- ioc1   0   04   00   SAS9207-8i   H3-25412-01G

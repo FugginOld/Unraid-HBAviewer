@@ -113,10 +113,25 @@ MODE=$(printf '%s\n' "$IDENT" \
     | grep -oE '(IT|IR)$')
 
 # ── 3. Board: product name, PCI location ────────────────────────────────────
-BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
+# `lsiutil -b` lists EVERY port in one call, in the same order as the banner
+# (issue #18's bundles show ioc0/ioc1/ioc2 in both), so this card's row is the
+# PORTSEL'th one — no per-port -b capture needed.
+if [ -n "$PORTSEL" ]; then
+    BOARD_LINE=$(echo "$BOARD" | grep "ioc" | sed -n "${PORTSEL}p")
+else
+    BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
+fi
 BOARD_NAME=$(echo "$BOARD_LINE" | awk '{print $5}')
-PCI_BUS=$(echo "$BOARD_LINE"    | awk '{print $3}')
-PCI_DEV=$(echo "$BOARD_LINE"    | awk '{print $4}')
+# The Seg/Bus/Dev columns are DECIMAL, and every other place a PCI address
+# appears — sysfs, lspci, the Overview's own storcli path — is hex. Issue #18's
+# 3-card box read "129:0" here where lspci says 81:00.0. Converted, not merely
+# padded; left verbatim if the column is not a plain number, so an lsiutil that
+# prints something else entirely still shows what it printed.
+_pcihex() {   # $1 = decimal column
+    case "$1" in ''|*[!0-9]*) printf '%s' "$1" ;; *) printf '%02x' "$((10#$1))" ;; esac
+}
+PCI_BUS=$(_pcihex "$(echo "$BOARD_LINE" | awk '{print $3}')")
+PCI_DEV=$(_pcihex "$(echo "$BOARD_LINE" | awk '{print $4}')")
 
 # Not responding at all (no temp, no model, no board) — likely the wrong port.
 if [ -z "$TEMP_HEX" ] && [ -z "$MODEL" ] && [ -z "$BOARD_NAME" ]; then

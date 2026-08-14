@@ -221,14 +221,20 @@ _pci_dir_of_host() {   # $1 = scsi host number
 # what that means, and on a multi-port box it must NOT mean card 1 (see the
 # gate in ov_lsiutil — two cards sharing one card_id would be grouped into one
 # display card, the exact inverse of the dual-IOC feature).
-# Bus/device are normalised to the two-digit hex sysfs uses, so a lsiutil that
-# prints "3" and one that prints "03" both match 0000:03:00.0.
-_host_for_pci() {   # $1 = bus (hex)   $2 = device (hex)
-    local h hn d bus="${1,,}" dev="${2,,}"
-    # String-normalised, not arithmetic: a garbled column must return 1, never
-    # abort the composer with a bash arithmetic error mid-JSON.
-    case "$bus" in [0-9a-f]) bus="0$bus" ;; [0-9a-f][0-9a-f]) ;; *) return 1 ;; esac
-    case "$dev" in [0-9a-f]) dev="0$dev" ;; [0-9a-f][0-9a-f]) ;; *) return 1 ;; esac
+# **lsiutil prints Seg/Bus/Dev in DECIMAL; sysfs is hex.** Confirmed on the
+# 3-card box in issue #18: `-b` says bus 129, 130, 131 and sysfs says
+# 0000:81:00.0, 0000:82:00.0, 0000:83:00.0. The 2-card bundle could not have
+# shown this — its buses are 1 and 6, identical in either base — which is
+# exactly the kind of agreement that makes a wrong assumption look verified.
+_host_for_pci() {   # $1 = bus (decimal)   $2 = device (decimal)
+    local h hn d bus dev
+    # Digits-only first, then 10# on the arithmetic: a garbled column must
+    # return 1, never abort the composer with a bash error mid-JSON, and a
+    # zero-padded "08" must not be read as invalid octal.
+    case "$1" in ''|*[!0-9]*) return 1 ;; esac
+    case "$2" in ''|*[!0-9]*) return 1 ;; esac
+    bus=$(printf '%02x' "$((10#$1))")
+    dev=$(printf '%02x' "$((10#$2))")
     for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
         case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
         hn=${h%/}; hn=${hn##*host}
