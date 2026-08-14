@@ -388,6 +388,10 @@ echo "=== topology / subvendor / card_id tests ==="
 bash topology_test.sh; topology_fail=$?
 
 echo
+echo "=== multi-card lsiutil tests ==="
+bash multiport_test.sh; multiport_fail=$?
+
+echo
 echo "=== drive locate tests ==="
 bash locate_sh_test.sh; locate_sh_fail=$?
 
@@ -408,7 +412,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

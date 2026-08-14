@@ -172,6 +172,29 @@ hba_each() {
     fi
 }
 
+# Every port the bundled lsiutil can address, one per line. lsiutil's own port
+# table — the banner it prints before the device menu — is the authority on the
+# numbering that -p takes:
+#
+#    1.  ioc0   LSI Logic SAS2308    14000700     b0
+#    2.  ioc1   LSI Logic SAS2308    14000700     b0
+#
+# Every composer already captures that banner, so enumeration costs no extra
+# hardware call. Issue #18: three 2308s in one box, and the plugin read only the
+# port Settings named, while Detected Hardware (sysfs, not lsiutil) listed all
+# three — a display that looks complete and monitors one card.
+# Falls back to $PORT so a box whose banner cannot be parsed behaves exactly as
+# it did before this existed.
+lsi_ports() {   # $1 = banner file
+    local rows
+    rows=$(grep -E "^[[:space:]]+[0-9]+\.[[:space:]]+ioc" "$1" 2>/dev/null)
+    if [ -n "$rows" ]; then
+        printf '%s\n' "$rows" | sed -E 's/^[[:space:]]*([0-9]+)\..*/\1/'
+    else
+        printf '%s\n' "${PORT:-1}"
+    fi
+}
+
 # The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
 # unlike storcli there is no line to parse), but the kernel already knows it:
 # /sys/class/scsi_host/hostN resolves into the device tree under the card, so
@@ -189,9 +212,38 @@ _pci_dir_of_host() {   # $1 = scsi host number
     done
 }
 
+# The scsi host number of the card at a given PCI bus/device. lsiutil prints no
+# PCI address in its own telemetry, but `-b` does — the Bus and Device columns
+# parse/hba.sh already reads — and every scsi_host resolves to a PCI dir through
+# _pci_dir_of_host. That is the join, and it is what lets a per-port loop reach
+# the RIGHT card's sysfs: port -> bus/dev -> host -> topology/subvendor/card_id.
+# Prints nothing and returns non-zero when no host matches; the caller decides
+# what that means, and on a multi-port box it must NOT mean card 1 (see the
+# gate in ov_lsiutil — two cards sharing one card_id would be grouped into one
+# display card, the exact inverse of the dual-IOC feature).
+# Bus/device are normalised to the two-digit hex sysfs uses, so a lsiutil that
+# prints "3" and one that prints "03" both match 0000:03:00.0.
+_host_for_pci() {   # $1 = bus (hex)   $2 = device (hex)
+    local h hn d bus="${1,,}" dev="${2,,}"
+    # String-normalised, not arithmetic: a garbled column must return 1, never
+    # abort the composer with a bash arithmetic error mid-JSON.
+    case "$bus" in [0-9a-f]) bus="0$bus" ;; [0-9a-f][0-9a-f]) ;; *) return 1 ;; esac
+    case "$dev" in [0-9a-f]) dev="0$dev" ;; [0-9a-f][0-9a-f]) ;; *) return 1 ;; esac
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
+        hn=${h%/}; hn=${hn##*host}
+        d=$(_pci_dir_of_host "$hn")
+        [ -n "$d" ] || continue
+        case "$(basename "$d")" in *:"$bus":"$dev".*) printf '%s' "$hn"; return 0 ;; esac
+    done
+    return 1
+}
+
 # First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
 # hba_personalities above, but keeping the host NUMBER, needed to key
-# _phys_json. The bundled lsiutil binary only ever addresses one controller.
+# _phys_json. The fallback route, for the single-port case and for a card whose
+# board line gives no PCI address to join on; _host_for_pci above is the one
+# that can tell two cards apart.
 # Lives here rather than in get_hba_health.sh because the overview composer now
 # needs the same lookup to reach this card's topology and subsystem_vendor.
 _first_sas_host() {

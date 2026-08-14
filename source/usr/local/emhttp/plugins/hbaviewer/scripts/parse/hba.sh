@@ -6,6 +6,8 @@
 #   $3  board   = lsiutil -b                 (product name, PCI location)
 #   $4  alert   = alert threshold (int, for status classification)
 #   $5  ident   = lsiutil -pN -a 1,0        (firmware image name -> IT/IR)
+#   $6  port    = N, to pick this card's row out of a multi-port banner
+#                 (optional; empty takes the first row, as it always did)
 #
 # No hardware here — feed captured fixtures to test the whole shape.
 
@@ -14,6 +16,7 @@ BANNER=$(cat "$2" 2>/dev/null)
 BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
 IDENT=$(cat "$5" 2>/dev/null)
+PORTSEL="${6:-}"   # which banner row is this card's; empty = the first one
 
 # Injected by the composer, which reads them from sysfs — this file stays a pure
 # filter with no hardware access. Defaults are the suppressing values: an
@@ -67,7 +70,15 @@ case "${POWER_HEX,,}" in
 esac
 
 # ── 2. Banner: chip model, firmware, port name ──────────────────────────────
-CARD_LINE=$(echo "$BANNER" | grep -E "^\s+[0-9]+\.\s+ioc" | head -1)
+# The banner lists EVERY port lsiutil found, one row each, so on a multi-card
+# box the row must be picked by port number rather than taken first (issue #18).
+# $6 is optional and defaults to the historic first-row behaviour, which is what
+# keeps every single-card fixture byte-identical.
+if [ -n "$PORTSEL" ]; then
+    CARD_LINE=$(echo "$BANNER" | grep -E "^[[:space:]]+${PORTSEL}\.[[:space:]]+ioc" | head -1)
+else
+    CARD_LINE=$(echo "$BANNER" | grep -E "^\s+[0-9]+\.\s+ioc" | head -1)
+fi
 MODEL=$(echo "$CARD_LINE"     | grep -oE 'SAS[0-9]+[A-Za-z0-9]*' | head -1)
 PORT_NAME=$(echo "$CARD_LINE" | awk '{print $2}')
 

@@ -1,0 +1,6 @@
+LSI Logic MPT Configuration Utility, Version 1.70
+
+ 1.  ioc0   LSI Logic SAS2308    14000700     b0
+ 2.  ioc1   LSI Logic SAS2308    10000700     b0
+
+Select a device:  [1-2 or 0 to quit]
