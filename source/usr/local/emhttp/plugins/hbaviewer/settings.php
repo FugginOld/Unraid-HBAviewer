@@ -18,16 +18,22 @@ $saved = false;
 $hw = [];          // one entry per SAS host, for the read-only diagnostic row
 $has_sas2 = false; // any host on the mpt2sas/mptsas personality -> bundled lsiutil
 $has_sas3 = false; // any host on the mpt3sas personality        -> needs storcli
+$has_sas4 = false; // any host on mpi3mr — 24G/SAS4, 9600 series -> needs StorCLI2
 foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
     $drv = trim((string) @file_get_contents($h . 'proc_name'));
-    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas'], true)) continue;
-    if ($drv === 'mpt3sas') { $has_sas3 = true; } else { $has_sas2 = true; }
+    // mpi3mr is listed so the card can be NAMED here, not so it can be read:
+    // nothing this plugin bundles or calls speaks 24G (issue #19). A card the
+    // diagnostic row cannot see is a card nobody can report properly.
+    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas', 'mpi3mr'], true)) continue;
+    if      ($drv === 'mpt3sas') { $has_sas3 = true; }
+    elseif  ($drv === 'mpi3mr')  { $has_sas4 = true; }
+    else                         { $has_sas2 = true; }
     $board = trim((string) @file_get_contents($h . 'board_name'));
     $fw    = trim((string) @file_get_contents($h . 'version_fw'));
     $hw[]  = ($board !== '' ? $board : 'unknown board') . " ($drv"
            . ($fw !== '' ? ", fw $fw" : '') . ')';
 }
-$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas hosts found';
+$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found';
 $storcli  = '';
 foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
     if (is_executable($c)) { $storcli = $c; break; }
@@ -49,6 +55,9 @@ if ($storcli !== '') {
 } elseif ($has_sas3) {
     $backend_label = 'storcli — NOT INSTALLED';
     $backend_note  = 'A controller was found on the mpt3sas driver, which the bundled lsiutil cannot read through. Install storcli via the dkaser/unraid-storcli plugin (Community Applications).';
+} elseif ($has_sas4) {
+    $backend_label = '24G / SAS4 — NOT SUPPORTED YET';
+    $backend_note  = 'A 9600-series controller was found on the mpi3mr driver. This generation needs Broadcom StorCLI2; the bundled lsiutil and storcli cannot read it, so no monitoring is available for this card yet. Tracked as issue #19.';
 } else {
     $backend_label = 'none detected';
     $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas) was found.';

@@ -308,6 +308,16 @@ printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
 printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
 check route-sas3-no-storcli route_sas3_no_storcli.json bash "$P/../get_hba_info.sh"
+# 24G/SAS4 on mpi3mr (issue #19): named and refused, never routed into lsiutil.
+# Without the gate this lands on "check the lsiutil port in Settings" — advice
+# that cannot work on any port, since lsiutil 1.70 predates the generation.
+# LSIUTIL points at the working stub here on purpose: if the SAS4 branch were
+# dropped, the run would reach the stub and produce a card's worth of JSON, so
+# this check fails loudly rather than by coincidence of a missing binary.
+printf 'mpi3mr\n'     > "$SYSHOST/host0/proc_name"
+printf 'HBA 9600-24i\n' > "$SYSHOST/host0/board_name"
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-mpi3mr route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"

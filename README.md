@@ -19,6 +19,7 @@ The plugin detects the controller generation and uses the right tool automatical
 | **SAS2** (6 Gb/s) | SAS2004 / 2008 / 2108 / 2116 / 2208 / 2308 | 9207-8i, 9211-8i, IBM M1015, Dell H200/H310 | `lsiutil` (bundled) |
 | **SAS3** (12 Gb/s) | SAS3004 / 3008 / 3108 / 3216 / 3224 / 3316 | 9300-8i, 9305-16i, 9361-8i | `storcli` (system-installed) |
 | **SAS3.5 / tri-mode** | SAS3408 / 3416 / 3508 / 3516 / 3616 / 3808 / 3816 | 9400-16i, 9400-8i, 9500 series | `storcli` (system-installed) |
+| **24G / SAS4** — *not supported yet* | SAS4116 / 4024 (`mpi3mr` driver) | 9600 series, 9670W | needs Broadcom **StorCLI2** |
 
 Multiple controllers are shown side by side. Both SAS and SATA drives are supported.
 
@@ -27,6 +28,12 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
 > Unraid is the **[storcli plugin by dkaser](https://github.com/dkaser/unraid-storcli)**
 > — search **"storcli"** in *Community Applications*. SAS2 cards use the bundled
 > `lsiutil` and need nothing extra.
+>
+> **24G / 9600-series cards are detected but not readable.** That generation
+> answers to StorCLI2, which neither the bundled `lsiutil` nor `storcli` can
+> stand in for, so HBAviewer names the card in Settings and says so rather than
+> pretending it found nothing. Tracked as
+> [issue #19](https://github.com/FugginOld/Unraid-HBAviewer/issues/19).
 
 ## Features
 

@@ -135,7 +135,7 @@ hba_personalities() {
     local h p
     for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
         p=$(cat "${h}proc_name" 2>/dev/null)
-        case "$p" in mpt3sas|mpt2sas|mptsas) echo "$p" ;; esac
+        case "$p" in mpt3sas|mpt2sas|mptsas|mpi3mr) echo "$p" ;; esac
     done
 }
 
@@ -147,6 +147,14 @@ hba_has_sas2() { case "$(hba_personalities)" in *mpt2sas*|*mptsas*) return 0 ;; 
 # True iff any controller is on the mpt3sas personality — genuine SAS3/3.5, needs
 # storcli. Both can be true on a box with one card of each generation.
 hba_has_sas3() { case "$(hba_personalities)" in *mpt3sas*) return 0 ;; esac; return 1; }
+
+# True iff any controller is on the mpi3mr personality — Broadcom's 24G/SAS4
+# generation, the 9600 series on SAS4116/SAS4024 (issue #19). Listed so the card
+# can be NAMED, never so it can be read: lsiutil 1.70 predates it by a decade and
+# storcli enumerates zero controllers on it — 24G needs StorCLI2, which this
+# plugin does not speak. Deliberately NOT folded into hba_has_sas3: everything
+# downstream of that predicate assumes storcli can read the card.
+hba_has_sas4() { case "$(hba_personalities)" in *mpi3mr*) return 0 ;; esac; return 1; }
 
 # The backend seam. Chooses storcli-vs-lsiutil ONCE, owns controller
 # enumeration and the {"backend","driver","controllers":[...]} wrapper, so a

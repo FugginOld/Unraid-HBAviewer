@@ -113,6 +113,25 @@ ov_storcli() {   # $1 = controller index
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
 }
 
+# The board name of the first host on one of $1's personalities, for the refusal
+# messages below — naming the card is what turns "unsupported" into something a
+# reporter can act on. Membership is tested against a space-separated list, NOT
+# a case pattern: `case $p in $1)` never treats an expanded "a|b" as alternation,
+# because case parses its alternation before the expansion happens, so every
+# card came back as the fallback. Falls back to "This controller" when sysfs
+# publishes no board_name.
+_board_on() {   # $1 = space-separated proc_names
+    local h p board=""
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        p=$(cat "${h}proc_name" 2>/dev/null)
+        [ -n "$p" ] || continue          # an empty proc_name would match any list
+        case " $1 " in *" $p "*) ;; *) continue ;; esac
+        board=$(tr -d '\n' < "${h}board_name" 2>/dev/null)
+        [ -n "$board" ] && break
+    done
+    printf '%s' "${board:-This controller}"
+}
+
 ov_lsiutil() {
     # No storcli, and EVERY controller is on the mpt3sas personality: genuine
     # SAS3/3.5 hardware that the bundled lsiutil 1.70 cannot read. Keyed off
@@ -122,14 +141,20 @@ ov_lsiutil() {
     # old /sys/module test refused those cards outright. hba_has_sas3 also keeps a
     # box with no HBA at all falling through to require_binary's clearer error.
     if [ -z "$(find_storcli)" ] && hba_has_sas3 && ! hba_has_sas2; then
-        local h board=""
-        for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
-            case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
-            board=$(tr -d '\n' < "${h}board_name" 2>/dev/null)
-            [ -n "$board" ] && break
-        done
         printf '{"error":"%s is on the mpt3sas driver and the bundled lsiutil cannot read through it. Install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}' \
-            "${board:-This controller}"
+            "$(_board_on 'mpt3sas mpt2sas mptsas')"
+        return 1
+    fi
+    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. Neither tool here can read
+    # it: lsiutil 1.70 predates the generation, and storcli enumerates zero
+    # controllers on it, which would otherwise route the card into the lsiutil
+    # branch below and end in "check the lsiutil port in Settings" — advice that
+    # cannot work on any port. Say what the card is and what it needs instead.
+    # Gated on there being no SAS2 or SAS3 card as well, so a mixed box still
+    # gets the backend that serves the cards this plugin CAN read.
+    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3; then
+        printf '{"error":"%s is a 24G/SAS4 controller on the mpi3mr driver. The bundled lsiutil and storcli cannot read this generation — it needs Broadcom StorCLI2, which HBAviewer does not support yet (issue #19)."}' \
+            "$(_board_on 'mpi3mr')"
         return 1
     fi
     require_binary || return 1
