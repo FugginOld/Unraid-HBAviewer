@@ -23,12 +23,24 @@ require_binary() {
 
 hba_query() { "$LSIUTIL" "$@"; }
 
-# Locate storcli (SAS3/3.5 tool) — same candidates as scripts/capture_storcli.sh.
-# Honors a preset $STORCLI. Prints the resolved path, or nothing if not found.
+# Locate storcli (SAS3/3.5 tool). Honors a preset $STORCLI. Prints the resolved
+# path, or nothing if not found.
+#
+# **storcli2 is deliberately NOT a candidate** (it was, until issue #19).
+# StorCLI2 is a separate CLI for the 24G/SAS4 generation, not a newer storcli:
+# it enumerates ONLY 9600-series controllers — measured as "Number of
+# Controllers = 0" on the maintainer's SAS3/3.5 box — and its output layout is
+# its own. Nothing here parses it. Left in the list it would do exactly one
+# thing: on a 9600 box with the dkaser storcli plugin installed (which ships
+# both binaries) it would enumerate a controller, satisfy use_storcli, and feed
+# StorCLI2 text to the storcli parsers — displacing the honest "not supported
+# yet" refusal with a card's worth of wrong or empty fields.
+# scripts/capture_storcli.sh keeps probing it on purpose: capturing raw output
+# for a future backend is the one thing storcli2 is useful for today.
 find_storcli() {
     if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
     local c
-    for c in storcli storcli64 storcli2 \
+    for c in storcli storcli64 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
              /usr/local/bin/storcli /usr/local/bin/storcli64 \
              /usr/sbin/storcli /usr/sbin/storcli64; do

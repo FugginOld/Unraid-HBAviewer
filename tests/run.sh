@@ -318,6 +318,16 @@ printf 'mpi3mr\n'     > "$SYSHOST/host0/proc_name"
 printf 'HBA 9600-24i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
 check route-sas4-mpi3mr route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+# ...and the same box with StorCLI2 on PATH, which is the realistic one: the
+# dkaser storcli plugin ships both binaries, and StorCLI2 DOES enumerate a 9600.
+# find_storcli must not pick it up — routed through the storcli parsers it would
+# replace the refusal above with a card's worth of misparsed fields.
+SC2DIR=$(mktemp -d)
+printf '#!/bin/bash\necho "Number of Controllers = 1"\n' > "$SC2DIR/storcli2"
+chmod +x "$SC2DIR/storcli2"
+PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-storcli2-ignored route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+rm -rf "$SC2DIR"
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"

@@ -337,6 +337,15 @@ else
         > "$B/01-environment/storcli.txt"
     note "storcli was not installed on this machine. The storcli half of section 02-raw is absent; the lsiutil half and sections 01/03/04 are complete."
 fi
+# StorCLI2, captured but never routed through (see find_storcli). It is the 24G
+# CLI: it enumerates only 9600-series controllers and reports zero on anything
+# older. `show` therefore answers the one question a 24G report turns on — can
+# any installed tool see this card at all — for the cost of one call, so the
+# next 9600 bundle carries the answer instead of needing a round trip (#19).
+SC2=$(command -v storcli2 2>/dev/null)
+if [ -n "$SC2" ]; then
+    { printf 'storcli2: %s\n' "$SC2"; "$SC2" show 2>&1; } > "$B/01-environment/storcli2.txt"
+fi
 if [ -x "$LSIUTIL" ]; then
     printf 'lsiutil: %s (bundled)\n' "$LSIUTIL" > "$B/01-environment/lsiutil.txt"
 else
