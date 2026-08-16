@@ -19,6 +19,7 @@ The plugin detects the controller generation and uses the right tool automatical
 | **SAS2** (6 Gb/s) | SAS2004 / 2008 / 2108 / 2116 / 2208 / 2308 | 9207-8i, 9211-8i, IBM M1015, Dell H200/H310 | `lsiutil` (bundled) |
 | **SAS3** (12 Gb/s) | SAS3004 / 3008 / 3108 / 3216 / 3224 / 3316 | 9300-8i, 9305-16i, 9361-8i | `storcli` (system-installed) |
 | **SAS3.5 / tri-mode** | SAS3408 / 3416 / 3508 / 3516 / 3616 / 3808 / 3816 | 9400-16i, 9400-8i, 9500 series | `storcli` (system-installed) |
+| **24G / SAS4** — *not supported yet* | SAS4116 / 4024 (`mpi3mr` driver) | 9600 series, 9670W | needs Broadcom **StorCLI2** |
 
 Multiple controllers are shown side by side. Both SAS and SATA drives are supported.
 
@@ -27,6 +28,12 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
 > Unraid is the **[storcli plugin by dkaser](https://github.com/dkaser/unraid-storcli)**
 > — search **"storcli"** in *Community Applications*. SAS2 cards use the bundled
 > `lsiutil` and need nothing extra.
+>
+> **24G / 9600-series cards are detected but not readable.** That generation
+> answers to StorCLI2, which neither the bundled `lsiutil` nor `storcli` can
+> stand in for, so HBAviewer names the card in Settings and says so rather than
+> pretending it found nothing. Tracked as
+> [issue #19](https://github.com/FugginOld/Unraid-HBAviewer/issues/19).
 
 ## Features
 
@@ -110,8 +117,8 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   no flash writes; history lives in the browser and resets on reload).
 - **Firmware / BIOS Update** *(advanced, opt-in, off by default)* — an assisted
   flash page that detects the card + running firmware, runs a read-only
-  per-controller sanity check, takes your model-correct image, and flashes one
-  controller behind hard guardrails with a live log. See the safety section below.
+  per-card sanity check, takes your model-correct image, and flashes that one
+  card behind hard guardrails with a live log. See the safety section below.
 
 All *monitoring* data is read directly from the HBA (`storcli` / `lsiutil`),
 Linux `sysfs`, and `smartctl` — no agents, no polling daemons, no external calls.
@@ -133,16 +140,29 @@ then appears at the bottom of that same Settings page, and is the only way in �
 the Monitor does not link to it. Reaching the one screen that writes to hardware
 means coming back past the warning that explains what it costs to get wrong.
 
-**How a flash works, per controller:**
+**How a flash works, per card:**
 
-1. **Verify** — a read-only listing **scoped to that one controller** (`storcli /cN show`
+1. **Verify** — a read-only listing **scoped to that one card** (`storcli /cN show`
    or `sasNflash -c N -list`) confirms the tool sees the exact card you're about to flash.
-2. **Upload** — the exact firmware `.bin`/`.rom` for *your* model (optionally a
-   BIOS `.rom`, and the `sas2flash`/`sas3flash` binary if it isn't in `PATH`).
+2. **Choose the image** — the exact firmware `.bin`/`.rom` for *your* model
+   (optionally a BIOS `.rom`). There is no upload button: you copy the files into
+   `/boot/config/plugins/hbaviewer/flash` yourself and the page offers what it
+   finds there. The `sas2flash`/`sas3flash` binary goes in the same folder if it
+   isn't already in `PATH`.
 3. **Confirm & flash** — tick the acknowledgement, type `FLASH`, and flash. A
    live log streams; on success it prompts you to **reboot**.
 
-**Tools used** (auto-detected in `PATH`, or upload them — none are bundled):
+**A dual-controller board is one card, and is flashed as one.** A SAS9300-16i is
+a single board carrying two SAS3008 controllers, so the page shows it as one
+entry — `Controller /c0, /c1` — and the flash writes both **in sequence** from
+the one image you selected. Only that card's own controllers are written, never
+every controller in the box. If the second write fails after the first
+succeeded, the page raises a distinct **partial flash** banner telling you not to
+reboot and to re-run the flash for the whole card; see
+[HOWTO.md](HOWTO.md#flash-firmware-or-bios).
+
+**Tools used** (auto-detected in `PATH`, or drop them in the flash folder — none
+are bundled):
 
 | Generation | Chip | Flash tool |
 | --- | --- | --- |
@@ -154,18 +174,22 @@ means coming back past the warning that explains what it costs to get wrong.
 
 - Opt-in toggle gates the whole feature (default off).
 - The Unraid **array must be STOPPED** — the flash is refused otherwise.
-- Read-only verify first, **scoped to the single target controller**, so you flash
-  the card you actually confirmed — not another HBA in the box.
+- Read-only verify first, **scoped to the target card**, so you flash the card
+  you actually confirmed — not another HBA in the box.
+- The controllers you name must **be one of this server's cards**, re-derived
+  from the live hardware at flash time — half of a dual-IOC board is refused,
+  and so is any list that is not a card.
 - Explicit acknowledgement checkbox **and** a typed `FLASH` confirmation.
 - Single-flight lock — one flash at a time, never auto-retried.
-- Uploaded filenames are sanitised and confined to a fixed working directory.
+- Filenames are sanitised and confined to the fixed flash folder.
 
 **Caveats — read these:**
 
 - **Bricking is a real, unavoidable risk** if the image doesn't match the card.
   Double-check the model/chip against the image before you flash.
 - The flash tools are **proprietary** and per-generation — not shipped with the
-  plugin. Install them (e.g. via a storcli/flash plugin) or upload them.
+  plugin. Install them (e.g. via a storcli/flash plugin) or copy them into
+  `/boot/config/plugins/hbaviewer/flash` yourself.
 - Some SAS2 cards need a specific `sas2flash` build (e.g. a 9207-8i wants the P14
   tool). Use the right one; the plugin won't second-guess it.
 - storcli 94xx flashing semantics vary by firmware package (a downrev may need
@@ -232,7 +256,7 @@ right backend is in use before opening the Monitor.
 | Setting | Default | Description |
 | --- | --- | --- |
 | Access Method | (auto) | Read-only. Shows whether `storcli` (SAS3/3.5) or `lsiutil` (SAS2) is used, and warns if a SAS3 card is found but `storcli` isn't installed. |
-| lsiutil Port | 1 | *SAS2 only* — lsiutil port number. Only shown if SAS2 cards are detected. SAS3/storcli cards are enumerated automatically. |
+| lsiutil Port (fallback) | 1 | *SAS2 only* — every card lsiutil lists is read automatically, so this normally does nothing. It names the one port to fall back to if that list cannot be read. Only shown if SAS2 cards are detected. |
 | Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
 | Show PCIe Info | On | PCIe width/speed row in the Overview. |
 | Show PHY Health | On | PHY tab. |

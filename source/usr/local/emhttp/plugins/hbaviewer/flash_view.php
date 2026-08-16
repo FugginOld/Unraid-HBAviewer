@@ -43,11 +43,11 @@ if ($enableFlash) {
 .lu-flash-array.ok  { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 32%, transparent); color: var(--good-text); }
 .lu-flash-array.bad { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); color: var(--warn-text); }
 /* One column per controller instead of a stack. Nothing in a flash card is
-   wider than its Step 2 file rows, so on a two-HBA box the whole right half of
+   wider than its Step 3 file rows, so on a two-HBA box the whole right half of
    the frame was dead space with the second card pushed below the fold.
    auto-fit, not a literal 2: the controller count is whatever the box has — one
    card still fills the frame, three wrap to a second row. 420px is the floor at
-   which Step 2 stops wrapping badly; under that (narrow window, phone) it
+   which Step 3 stops wrapping badly; under that (narrow window, phone) it
    collapses to a single column by itself, so this needs no media query.
    align-items:start because a controller that errored renders a two-line card,
    and stretching it to match a full one just makes a tall empty box. */
@@ -60,7 +60,7 @@ if ($enableFlash) {
 .lu-fc .sub { color: var(--faint); font-size: 12px; margin: 0 0 14px; font-family: var(--mono); }
 .lu-fstep { margin: 14px 0; }
 .lu-fstep label.step { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-/* Locked state (plan 037): while the array runs, Step 3 is dimmed and inert.
+/* Locked state (plan 037): while the array runs, Step 4 is dimmed and inert.
    COSMETIC ONLY — flash.php's flash_array_stopped() and luFlashGo's
    !flashArrayStopped alert are the actual gate. Deleting this CSS must still
    leave flashing blocked; if it ever doesn't, the safety model has inverted.
@@ -88,12 +88,24 @@ if ($enableFlash) {
   <div class="lu-bay-head">
     <span style="font-size:12px;color:var(--text);">Firmware and BIOS flashing for the LSI/Broadcom controllers in this server</span>
   </div>
+</div>
+
+<?php /* The Monitor's strip, exactly: a full-width .lu-tabs, navigation at the
+         left, Settings pushed to the right edge by lu-tab-right. Structure
+         copied rather than approximated -- the first attempt nested the pair
+         inside the heading toolbar, which sizes to its content, so Settings
+         landed wherever the buttons happened to end instead of on the frame.
+         Same container, same rule, same right edge on both pages. */ ?>
+<div class="lu-tabs">
   <?php /* HBAviewer_Monitor, NOT HBAviewer: HBAviewer.page is Type="menu", a
            menu container with no content of its own, so /Tools/HBAviewer is not
            a page and the link silently went nowhere. The monitor is the xmenu
            entry under it — the same URL dashboard.php and settings.php have
            always used. */ ?>
-  <a class="lu-settings-link" href="/Tools/HBAviewer_Monitor">&#8592; Back to HBAviewer</a>
+  <button class="lu-tab-btn" type="button"
+          onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
+  <button class="lu-tab-btn lu-tab-right" type="button"
+          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
 </div>
 
 <?php if (LSI_FLASH_LOCKED): ?>
@@ -150,10 +162,12 @@ if ($enableFlash) {
        `loaded['flash'] = true` — tab-loader bookkeeping with nothing to book on
        a page that is not a tab, and `loaded` does not exist here. */
     var flashArrayStopped = <?= $arrayStopped ? 'true' : 'false' ?>;
-    /* Step 3 writes hardware, so it is greyed out and disabled while the array
-       runs. Steps 1 (read-only listing) and 2 (uploads to the plugin's own tools
-       dir) stay live on purpose — staging the image before the array goes down
-       is what keeps the outage short. `disabled` as well as pointer-events
+    /* Step 4 writes hardware, so it is greyed out and disabled while the array
+       runs. Steps 1-3 (which tool this chip needs, the read-only listing, and
+       picking an image out of the drop directory) stay live on purpose —
+       staging before the array goes down is what keeps the outage short. There
+       is no upload anywhere on this page; the user copies files into the drop
+       directory and Step 3 lists them. `disabled` as well as pointer-events
        because a pointer-only lock is still keyboard-reachable, which is a worse
        trap than an enabled button. Read once at render: stopping the array needs
        a page reload, same as the banner already says. */

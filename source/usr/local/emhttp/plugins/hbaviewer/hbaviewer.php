@@ -113,12 +113,28 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
-  <?php /* No firmware entry here at all (plan 055). Flashing is reached only
-           from the Settings page, below the danger notice and the toggle that
-           enables it — so getting there means passing what it costs to get it
-           wrong, rather than finding it beside the monitoring tabs on a page
-           left open. */ ?>
-  <a class="lu-settings-link" href="/Settings/HBAviewer_Settings">&#9881; Settings</a>
+  <?php /* Firmware sits at the end of the strip, red, and only once the user
+           has ticked the box in Settings and the maintainer lock is off — so it
+           cannot appear on a stock install and cannot appear on a locked one.
+
+           Plan 055 kept it off this strip entirely, reasoning that reaching the
+           flasher should mean passing the danger notice on the Settings page.
+           That held while the alternative was a Utilities icon that skipped the
+           notice; it does not hold against a tab that is invisible until you
+           have already read the notice and opted in. It is a link, not a pane:
+           the flash page owns its own CSS, JS and array-state read, and
+           inlining it here would load all three on every Monitor visit. */ ?>
+  <?php /* A <button> and not an <a>, even though it navigates: Unraid's theme
+           styles the tab strip by element, so an anchor here rendered as bare
+           text beside the filled pills of every real tab. No colour of its own
+           -- the warning sign carries the meaning, and fighting whichever theme
+           the user picked is not worth the CSS. */ ?>
+  <?php if (!LSI_FLASH_LOCKED && (int) $cfg['ENABLE_FLASH'] === 1): ?>
+  <button class="lu-tab-btn" type="button"
+          onclick="location.href='/Tools/HBAviewer_Flash'">&#9888; Firmware</button>
+  <?php endif; ?>
+  <button class="lu-tab-btn lu-tab-right" type="button"
+          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->

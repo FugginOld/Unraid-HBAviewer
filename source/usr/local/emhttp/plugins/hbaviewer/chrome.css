@@ -56,6 +56,17 @@
 .lu-tab-btn:hover  { color: var(--muted); }
 .lu-tab-btn.active { color: var(--accent); }
 .lu-tab-btn.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px 2px 0 0; box-shadow: 0 0 12px -1px var(--accent); }
+/* Pushes a tab to the right-hand end of the strip. Used by Settings, which is
+   a destination rather than a view and should not sit in the run of tabs that
+   switch panes in place.
+
+   !important, and scoped to the strip: Unraid's theme styles these buttons
+   with a `margin` SHORTHAND, which resets margin-left after ours and left
+   Settings sitting against the previous tab instead of the frame. A shorthand
+   always beats a longhand written before it, whatever the specificity, so the
+   only fixes are to win on cascade order -- which a theme sheet we do not own
+   makes unreliable -- or to say important once, here. */
+.lu-tabs > .lu-tab-right { margin-left: auto !important; }
 .lu-settings-link {
     margin-left: auto; padding: 11px 14px; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
     color: var(--text); text-decoration: none; transition: color 0.15s;
@@ -95,6 +106,18 @@
    query, exactly as the other two tabs do. */
 .lu-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
 .lu-ov-grid .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
+/* A dual-IOC board: one card, one sub-card per controller. Separated by a rule
+   and an indent rather than boxed again -- nesting a full card inside a card
+   reads as two cards, which is the thing this feature exists to stop. */
+.lu-card-parent .lu-card-ioc {
+    border-top: 1px solid var(--border);
+    padding: 10px 0 0 14px;
+    margin-top: 10px;
+}
+.lu-card-parent .lu-ioc-label {
+    color: var(--faint); font-size: 11.5px; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase;
+}
 .lu-overview-row { display: flex; align-items: center; justify-content: flex-start; gap: 22px; }
 /* Gauge and its band label read as one unit — the band describes the number
    above it, which is not what a row buried in the field list conveyed. */

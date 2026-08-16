@@ -83,6 +83,11 @@ check('no temp_stroke', !array_key_exists('temp_stroke', $v));
 $bare = lsi_hba_view(['temp' => 30, 'status' => 'alert'], 2);
 check('model fallback', $bare['model'] === 'Unknown');
 check('port name def',  $bare['port_label'] === 'ioc0 (lsiutil -p2)');
+// A card that reports its own port labels itself with it, not with the one
+// Settings names -- otherwise cards 2 and 3 of a multi-card box both tell you
+// to run -p1, which reads card 1 (issue #18).
+$own = lsi_hba_view(['port_name' => 'ioc2', 'port' => 3], 1);
+check('own port wins',  $own['port_label'] === 'ioc2 (lsiutil -p3)');
 check('pcie empty',     $bare['pcie'] === []);
 check('alert color',    $bare['color'] === '#e74c3c');
 
@@ -172,6 +177,59 @@ check('the firmware page is menu-gated on ENABLE_FLASH',
       && preg_match('~^Cond="[^"]*ENABLE_FLASH~m', $pages['HBAviewer_Flash']));
 check('the firmware view still guards itself for a direct URL',
       str_contains((string) file_get_contents("$dir/flash_view.php"), "ENABLE_FLASH"));
+
+/* The firmware verdict rides on the view model so both surfaces read one
+   answer. The Overview card and the firmware page must never disagree about
+   whether a card is behind. */
+$vm = lsi_hba_view([
+    'board_name' => 'SAS9305-24i', 'model' => 'SAS3224', 'firmware' => '15.00.00.00',
+    'subvendor_id' => '0x1000', 'topology' => 'internal', 'status' => 'ok',
+], 1, 0);
+check('view model carries a firmware verdict', isset($vm['firmware_verdict']['status']));
+check('view model verdict is behind', ($vm['firmware_verdict']['status'] ?? '') === 'behind');
+
+/* The clause is suppressed on every state that has no verdict to give: a bare
+   colourless marker next to a version reads as a fault the user cannot act on. */
+check('behind renders a clause',   fw_overview_clause(['status' => 'behind', 'latest' => '16.00.12.00', 'terminal' => true]) !== '');
+check('suppressed renders nothing', fw_overview_clause(['status' => 'suppressed', 'detected' => '15.00.00.00']) === '');
+check('unknown renders nothing',    fw_overview_clause(['status' => 'unknown']) === '');
+check('oem renders nothing',        fw_overview_clause(['status' => 'oem_out_of_scope']) === '');
+/* Round-1 review (Important, minor): the other two states that DO render were
+   never asserted at all — only 'behind' had a positive check, so blanking the
+   'current' or 'ahead' branch entirely was invisible to this suite. */
+check('current renders a clause', fw_overview_clause(['status' => 'current']) !== '');
+check('ahead renders a clause',   fw_overview_clause(['status' => 'ahead']) !== '');
+
+/* The colour rule has ONE home, fw_verdict_color(). This clause used to hardcode
+   the green, so making green conditional on a terminal branch reached the JSON
+   endpoint and the flash page and left this server-rendered Overview green. Both
+   directions, and the tick itself renders either way — it is the colour that is
+   withheld, not the clause. */
+check('current on a terminal branch is green here too',
+    str_contains(fw_overview_clause(['status' => 'current', 'terminal' => true]), 'color:#3fb950'));
+check('current on a non-terminal branch is not green here either',
+    !str_contains(fw_overview_clause(['status' => 'current', 'terminal' => false]), '#3fb950'));
+check('behind on a non-terminal branch is not amber here either',
+    !str_contains(fw_overview_clause(['status' => 'behind', 'latest' => '16.00.12.00']), '#d29922'));
+
+/* Round-1 review (Important, minor): 'latest' is the one field this clause
+   prints, and it is board-derived, untrusted content per firmware_index.php's
+   own docblock. Dropping the htmlspecialchars() call survives every other
+   assertion here — none of them put HTML-special characters in 'latest'. */
+$xssClause = fw_overview_clause(['status' => 'behind', 'latest' => '<script>x</script>', 'terminal' => true]);
+check('the clause escapes an untrusted latest version',
+    str_contains($xssClause, '&lt;script&gt;') && !str_contains($xssClause, '<script>'));
+
+/* Round-1 review (Important, minor): view.php's own verdict call maps
+   $data['model'] to fw_evaluate()'s 'chip' key — the field Gate 3 (RAID-on-Chip)
+   matches on. Blanking that mapping is invisible to every check above, which
+   all name a board directly; this one only resolves through the chip. */
+$roc = lsi_hba_view([
+    'board_name' => 'MegaRAID 9361-8i', 'model' => 'SAS3108', 'firmware' => '4.30.00.00',
+    'subvendor_id' => '0x1000', 'topology' => 'internal', 'status' => 'ok',
+], 1, 0);
+check('the chip mapping reaches the verdict (RAID-on-Chip detected via chip, not board)',
+    ($roc['firmware_verdict']['status'] ?? '') === 'no_it_firmware');
 
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

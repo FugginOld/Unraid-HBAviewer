@@ -11,6 +11,17 @@ cd "$(dirname "$0")" || exit 2
 P="../source/usr/local/emhttp/plugins/hbaviewer/scripts/parse"
 fail=0
 
+# Run a PHP script through the SAME fallback tests/run_php.sh uses: the local
+# interpreter when the box has one (Unraid does), otherwise a throwaway
+# php:8.2-cli container. A bare `php` here reported FAIL rather than "no
+# interpreter" on a host without one — and this file's own header promises the
+# fallback. Paths are relative to tests/, which is where run.sh already stands.
+php_run() {
+    if command -v php >/dev/null 2>&1; then php "$@"; return; fi
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests php:8.2-cli php "$@"
+}
+
 check() {  # name  expected_file  command...
     local name=$1 exp=$2; shift 2
     local got; got=$("$@")
@@ -29,6 +40,12 @@ check phy-healthy      phy_healthy.json      bash "$P/phy.sh"          < fixture
 check phy-unsupported  phy_unsupported.json  bash "$P/phy.sh"          < fixtures/phy_unsupported.txt
 check events-entries   events_entries.json   bash "$P/events.sh"       < fixtures/events_entries.txt
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
+# The form lsiutil 1.70 actually prints on a SAS2308 — a "SeqN Type Time Data"
+# table, not the Entry/Qualifier lines the parser was written for. Real capture
+# from brianara3's bundle (issue #18), whose 85 entries rendered as an empty
+# Events tab on every SAS2 box until this was matched. 85 in, 85 out.
+check events-table     events_table.json     bash "$P/events.sh"       < fixtures/hba_eventlog_table.txt
+check events-table-empty events_empty.json   bash "$P/events.sh"       < fixtures/events_table_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_hbaviewer.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
@@ -62,6 +79,30 @@ done
 # PHY floor: 8 errors (the real-world case from issue #8) must NOT warn; 100 must.
 check phy-under-floor phy_under_floor.json bash -c "bash '$P/storcli_overview.sh' 76 8   < fixtures/storcli/rollup_healthy.txt"
 check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh' 76 100 < fixtures/storcli/rollup_healthy.txt"
+
+# The rendered Overview itself, not just the JSON behind it. A single-IOC card
+# must keep emitting the same bytes it always has: dual-IOC grouping composes
+# the grouped card from the same pieces, and the whole safety argument for that
+# rests on the ungrouped path being untouched. Nothing else in the suite reads
+# the HTML, so a refactor could rewrite every card and stay green.
+#
+# NEVER regenerate these two with UPDATE=1. Every other golden here records what
+# a parser currently emits, and regenerating it after an intentional change is
+# the workflow. These two record what the Overview emitted BEFORE the dual-IOC
+# branch (rendered at acb52d68), and that provenance cannot be recovered from
+# the repo once overwritten — a golden rebuilt by the code it exists to police
+# proves nothing. If one legitimately has to change, render it from acb52d68
+# again, or delete it and say why.
+#
+# Two fixtures, because the PCIe row is gated on pcie_width/pcie_speed and
+# storcli_overview.json has neither: that golden contains no `lu-pcie` at all,
+# so the row went unpinned until _pcie was added beside it.
+if command -v php >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+    check overview-single-html      overview_single.html      php_run render_overview.php expected/storcli_overview.json
+    check overview-single-pcie-html overview_single_pcie.html php_run render_overview.php expected/storcli_overview_pcie.json
+else
+    echo "SKIP  overview-single-html / overview-single-pcie-html (no php and no docker)"
+fi
 
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
 check storcli-drives   storcli_drives.json  bash "$P/storcli_drives.sh" < fixtures/storcli/drives_c0.txt
@@ -102,26 +143,146 @@ check cache-temps-mixed   cache_temps_mixed.txt   bash "$P/cache_temps.sh" < fix
 # the directory names contain colons, which Windows cannot store — git would
 # receive a U+F03A lookalike and the lookup would silently miss on Linux.
 # c0 is x8 and c1 is x4 on purpose: the asymmetry catches one card's link state
-# being applied to every tile.
-SYSPCI=$(mktemp -d)
+# being applied to every tile. Same reasoning for subsystem_vendor: c0 has one
+# (a generic Broadcom 0x1000) and c1 has none, so BOTH directions of
+# hba_subvendor are pinned through the composer. Without a file there at all,
+# deleting the LSI_SUBVENDOR wiring outright left this suite green while gate 2
+# turned every controller oem_out_of_scope and the feature rendered nothing.
+#
+# The device dirs sit under a fake host bridge, because that is what
+# hba_card_id walks. A flat tree with no bridge at all resolves to an empty
+# card_id, which would pin the "cannot tell" case in every golden and let a
+# deleted sysfs walk pass.
+#
+# c0 and c1 sit directly ON the bridge, not behind a shared root port: two
+# distinct boards (a 9400-16i and a 9400-8i) cannot physically share a slot,
+# so each must resolve to ITS OWN address ("a device on the host bridge is
+# its own slot" — the same case topology_test.sh already pins directly).
+# Modelling this as two separate root ports instead (each card behind its
+# own 0000:80:0N.0) would need get_hba_info.sh's composer to see each device
+# through a distinct symlinked path, the way real /sys/bus/pci/devices does
+# it — but `ln -s` is a silent no-op in this repo's Windows/MSYS test shell
+# (exit 0, no actual link produced; same reason topology_test.sh's own
+# symlink case is SKIP here), so this uses the symlink-free case instead.
+SYSPCI_ROOT=$(mktemp -d)
+SYSPCI="$SYSPCI_ROOT/pci0000:80"
+mkdir -p "$SYSPCI"
 SYSHOST=$(mktemp -d)
-trap 'rm -rf "$SYSPCI" "$SYSHOST"' EXIT
-for spec in "0000:c1:00.0 8" "0000:65:00.0 4"; do
+SYSDEV=$(mktemp -d)
+SYSEXP=$(mktemp -d)
+SYSPHY=$(mktemp -d)
+trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY"' EXIT
+for spec in "0000:c1:00.0 8 0x1000" "0000:65:00.0 4 -"; do
     set -- $spec
     mkdir -p "$SYSPCI/$1"
     printf '%s\n' "$2"          > "$SYSPCI/$1/current_link_width"
     printf '8.0 GT/s PCIe\n'    > "$SYSPCI/$1/current_link_speed"
     printf 'D0\n'               > "$SYSPCI/$1/power_state"
+    [ "$3" = - ] || printf '%s\n' "$3" > "$SYSPCI/$1/subsystem_vendor"
+done
+
+# Topology, unpinned, would glob the REAL machine's /sys/class/sas_device and
+# /sys/class/sas_expander, so this golden would read "unknown" on a dev box and
+# silently start reading "internal" on the very 9305-24i box that motivated the
+# feature, the day someone runs this suite there.
+#
+# c0 is host7 on purpose, NOT host0: ov_storcli derives the host from the card's
+# own PCI device dir, and a fixture where the host number happened to equal the
+# controller index could not tell that derivation apart from the old
+# host-N-equals-controller-N guess. host7 has two direct-attached end_devices
+# and no expander -> "internal". c1 has no host under its PCI dir at all ->
+# "unknown", the fail-safe. Different verdicts on purpose: every other golden in
+# this file records the suppressing default, so without this pair nothing
+# anywhere exercises hba_topology's positive ("internal") path end to end
+# through the composer.
+mkdir -p "$SYSPCI/0000:c1:00.0/host7" "$SYSDEV/end_device-7:0" "$SYSDEV/end_device-7:1"
+
+# ── A whole card for the lsiutil composer ────────────────────────────────────
+# The storcli fixture above cannot serve this: ov_lsiutil never sees a storcli
+# PCI Address, it walks UP from the scsi_host to find the card, so the host has
+# to sit physically inside the PCI dir the way the kernel arranges it —
+#   <pci dev>/hostN/scsi_host/hostN
+# with SYS_SCSI_HOST pointing at that scsi_host dir, which is what readlink -f
+# resolves to on hardware. Same shape health_sh_test.sh already uses.
+#
+# Why it exists at all: every lsiutil route check below stops at require_binary,
+# so nothing ever reached ov_lsiutil's tail, where LSI_TOPOLOGY and
+# LSI_SUBVENDOR are derived. Deleting BOTH derivations left this entire suite
+# green — while gate 2, reading an empty subvendor, turned every controller
+# oem_out_of_scope and the firmware verdict rendered nothing at all, with no
+# error anywhere. That is the SAS2 population: 9211-8i, IBM M1015, Dell
+# H200/H310 — exactly the OEM-rebrand cohort the gate exists to protect.
+#
+# host3, not host0: the number must not coincide with the controller index, or
+# the golden cannot tell the derivation apart from a hardcoded 0.
+# Nested one level deeper than $SYSPCI: a device behind a root port, so this
+# golden also pins the case where the slot is an ancestor rather than the
+# device itself.
+SYSL_ROOT=$(mktemp -d)
+SYSL="$SYSL_ROOT/pci0000:00/0000:00:02.0"
+mkdir -p "$SYSL"
+trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL_ROOT"' EXIT
+LCARD="$SYSL/0000:03:00.0"
+mkdir -p "$LCARD/host3/scsi_host/host3"
+printf '8\n'             > "$LCARD/current_link_width"
+printf '8.0 GT/s PCIe\n' > "$LCARD/current_link_speed"
+printf 'D0\n'            > "$LCARD/power_state"
+printf '0x1000\n'        > "$LCARD/subsystem_vendor"
+printf 'mpt2sas\n'       > "$LCARD/host3/scsi_host/host3/proc_name"
+# Matches hba_board.txt, which is where the JSON's board_name actually comes
+# from — sysfs board_name is only read on the SAS3-refusal path. One card, one
+# name, so a reader is not left wondering which is authoritative.
+printf 'SAS9207-8i\n'    > "$LCARD/host3/scsi_host/host3/board_name"
+# Two direct-attached drives and no expander -> "internal", so this golden pins
+# hba_topology's positive answer on the lsiutil path too.
+mkdir -p "$SYSDEV/end_device-3:0" "$SYSDEV/end_device-3:1"
+
+# ── A dual-IOC card for the storcli composer (route-storcli-dual, below) ────
+# Every storcli fixture elsewhere in this file produces controllers with
+# DISTINCT card_ids (c0 and c1 each sit directly on the host bridge, i.e. on
+# their own slot) -- so the feature's own precondition, two controllers
+# sharing ONE slot, was otherwise only ever produced by hand-written PHP
+# arrays in card_group_test.php, never by the real shell pipeline. This gives
+# hba_card_id a tree where both IOCs of one SAS9300-16i sit behind a shared
+# root port (0000:80:01.0) via an intermediate switch hop (0000:82:00.0) --
+# one extra segment beyond the root port, so this also pins that
+# hba_card_id's "${rest%%/*}" resolves the SLOT regardless of how many more
+# levels sit below it, the same depth-independence its own doc comment's
+# real-hardware example (root port / upstream switch port / downstream switch
+# port / IOC function) relies on.
+SYSDUAL_ROOT=$(mktemp -d)
+SYSDUAL="$SYSDUAL_ROOT/pci0000:80/0000:80:01.0/0000:82:00.0"
+mkdir -p "$SYSDUAL/0000:84:00.0" "$SYSDUAL/0000:86:00.0"
+trap 'rm -rf "$SYSPCI_ROOT" "$SYSHOST" "$SYSDEV" "$SYSEXP" "$SYSPHY" "$SYSL_ROOT" "$SYSDUAL_ROOT"' EXIT
+for d in 0000:84:00.0 0000:86:00.0; do
+    printf '8\n'             > "$SYSDUAL/$d/current_link_width"
+    printf '8.0 GT/s PCIe\n' > "$SYSDUAL/$d/current_link_speed"
+    printf 'D0\n'            > "$SYSDUAL/$d/power_state"
 done
 
 # storcli multi-controller backend, driven by a stubbed storcli replaying fixtures
 chmod +x stub/storcli stub/lsiutil 2>/dev/null
-export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null SYS_PCI_ROOT="$SYSPCI"
+export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/dev/null \
+       SYS_PCI_ROOT="$SYSPCI" SYS_SAS_DEVICE="$SYSDEV" SYS_SAS_EXPANDER="$SYSEXP" SYS_SAS_PHY="$SYSPHY"
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
+# Two SAS3008 IOCs both reporting board name SAS9300-16i, both resolving (via
+# SYSDUAL above) to the same root port -> the same card_id. The only check in
+# this suite that would catch the composer emitting DIFFERENT card_ids for a
+# genuine dual-IOC board -- everything else pins the split (distinct-slot) case.
+STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" \
+check route-storcli-dual storcli_dual.json bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
+# The lsiutil composer, all the way through — the only check that reaches
+# ov_lsiutil's tail. STORCLI= (empty, not /nonexistent) so find_storcli falls
+# through to probing PATH; like the personality checks below, this assumes no
+# real storcli is installed on the machine running the suite.
+# STUB_FIX is overridden: the exported value points at fixtures/storcli for the
+# checks above, and the lsiutil captures live one level up in fixtures/.
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
+check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
 # Controller generation comes from proc_name, never from /sys/module — the merged
 # mpt3sas driver reports proc_name=mpt2sas for SAS2 cards (issue #3). host9 is a
 # non-SAS host that must be ignored by the filter.
@@ -153,6 +314,26 @@ printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
 printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
 check route-sas3-no-storcli route_sas3_no_storcli.json bash "$P/../get_hba_info.sh"
+# 24G/SAS4 on mpi3mr (issue #19): named and refused, never routed into lsiutil.
+# Without the gate this lands on "check the lsiutil port in Settings" — advice
+# that cannot work on any port, since lsiutil 1.70 predates the generation.
+# LSIUTIL points at the working stub here on purpose: if the SAS4 branch were
+# dropped, the run would reach the stub and produce a card's worth of JSON, so
+# this check fails loudly rather than by coincidence of a missing binary.
+printf 'mpi3mr\n'     > "$SYSHOST/host0/proc_name"
+printf 'HBA 9600-24i\n' > "$SYSHOST/host0/board_name"
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-mpi3mr route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+# ...and the same box with StorCLI2 on PATH, which is the realistic one: the
+# dkaser storcli plugin ships both binaries, and StorCLI2 DOES enumerate a 9600.
+# find_storcli must not pick it up — routed through the storcli parsers it would
+# replace the refusal above with a card's worth of misparsed fields.
+SC2DIR=$(mktemp -d)
+printf '#!/bin/bash\necho "Number of Controllers = 1"\n' > "$SC2DIR/storcli2"
+chmod +x "$SC2DIR/storcli2"
+PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-storcli2-ignored route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+rm -rf "$SC2DIR"
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"
@@ -194,6 +375,25 @@ echo "=== flash tests ==="
 bash flash_test.sh; flash_fail=$?
 
 echo
+echo "=== firmware page JS tests ==="
+# The only RUNTIME check of flash_view.js. Every other pin on that file is a
+# str_contains() over its source, and the mutant that labels a dual-IOC card
+# with both controllers while POSTing one of them survives all of them -- which
+# is the whole subject of the feature. Same local-then-docker fallback as
+# php_run: Unraid has no node, so this is a docker run there and a bare node on
+# a dev box. Neither available means SKIP, not FAIL -- an absent runtime is not
+# a defect in the code under test.
+if command -v node >/dev/null 2>&1; then
+    node flash_js_test.js; flash_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests \
+        node:20-alpine node flash_js_test.js; flash_js_fail=$?
+else
+    echo "SKIP  flash_view.js runtime tests (no node, no docker)"; flash_js_fail=0
+fi
+
+echo
 echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
@@ -208,6 +408,14 @@ bash health_sh_test.sh; health_sh_fail=$?
 echo
 echo "=== drives sysfs (SAS transport) tests ==="
 bash drives_sysfs_test.sh; drives_sysfs_fail=$?
+
+echo
+echo "=== topology / subvendor / card_id tests ==="
+bash topology_test.sh; topology_fail=$?
+
+echo
+echo "=== multi-card lsiutil tests ==="
+bash multiport_test.sh; multiport_fail=$?
 
 echo
 echo "=== drive locate tests ==="
@@ -230,7 +438,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

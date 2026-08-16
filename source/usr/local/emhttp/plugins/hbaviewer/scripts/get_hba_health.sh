@@ -112,21 +112,6 @@ _link_from_sysfs() {   # $1 = /sys/bus/pci/devices/0000:xx:yy.z
 # sysfs prints "8.0 GT/s PCIe"; every consumer here wants the rate alone.
 _link_speed() { cat "$1" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//'; }
 
-# The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
-# unlike storcli there is no line to parse), but the kernel already knows it:
-# /sys/class/scsi_host/hostN resolves into the device tree under the card, so
-# walk up until a dir that publishes link state appears. Issue #14 — a SAS2308
-# negotiated at x4 in a chipset slot, with the card's x8 maximum sitting in
-# sysfs the whole time while the plugin reported no maximum at all.
-_pci_dir_of_host() {   # $1 = scsi host number
-    local d
-    d=$(readlink -f "${SYS_SCSI_HOST:-/sys/class/scsi_host}/host$1" 2>/dev/null)
-    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
-        [ -r "$d/current_link_width" ] && { printf '%s' "$d"; return 0; }
-        d=$(dirname "$d")
-    done
-}
-
 health_storcli() {   # $1 = controller index
     local out pci dom bus dev fn dir
     local temp fw drives band readok=true
@@ -160,27 +145,31 @@ health_storcli() {   # $1 = controller index
         "$(_phys_json "$1")"
 }
 
-# First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
-# lib.sh's hba_personalities, but keeping the host NUMBER, needed to key
-# _phys_json. The bundled lsiutil binary only ever addresses one controller.
-_first_sas_host() {
-    local h
-    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
-        case "$(cat "${h}proc_name" 2>/dev/null)" in
-            mpt3sas|mpt2sas|mptsas) basename "$h" | sed 's/^host//'; return ;;
-        esac
-    done
-}
-
 health_lsiutil() {
     require_binary || return 1
+    # The dashboard tile reads this, and on a multi-card box it read card 1's
+    # temperature for every card — the symptom issue #18 was filed about. One
+    # entry per port now, in lsi_ports order, so the index join in ajax_info.php
+    # lines up with the Overview's controllers[].
+    local MAP BANNER p bus dev nports first=1
+    MAP=$(lsi_port_map)
+    nports=$(echo "$MAP" | wc -l | tr -d ' ')
+    BANNER=$(mktemp)                        # lists every port; captured once
+    trap 'rm -f "$BANNER"' EXIT
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    while read -r p bus dev; do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        _health_lsiutil_one "$p" "$bus" "$dev" "$nports" "$BANNER"
+    done <<< "$MAP"
+}
+
+_health_lsiutil_one() {   # $1 = port  $2 = bus  $3 = device  $4 = port count  $5 = banner file
     local IOC BANNER temp_hex temp fw_raw fw band readok=true
     local width_hex speed_hex hnum
     local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
-    IOC=$(mktemp); BANNER=$(mktemp)
-    trap 'rm -f "$IOC" "$BANNER"' EXIT
-    hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
-    printf '0\n' | hba_query        2>/dev/null > "$BANNER"
+    IOC=$(mktemp); BANNER="$5"
+    hba_query -p"$1" -a 25,2,0,0 2>/dev/null > "$IOC"
 
     temp_hex=$(grep "IOCTemperature:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
     if [ -n "$temp_hex" ]; then temp=$((16#${temp_hex#0x})); else temp=""; readok=false; fi
@@ -190,7 +179,9 @@ health_lsiutil() {
     band=""
     [ -n "$temp" ] && band=$(band_of "$temp")
 
-    fw_raw=$(grep -E "^\s+[0-9]+\.\s+ioc" "$BANNER" | head -1 | grep -oE '[0-9a-f]{8}' | head -1)
+    # This card's banner row, not the first one — every card on a multi-card box
+    # reported card 1's firmware otherwise, and the firmware verdict hangs off it.
+    fw_raw=$(grep -E "^[[:space:]]+$1\.[[:space:]]+ioc" "$BANNER" | head -1 | grep -oE '[0-9a-f]{8}' | head -1)
     if [ -n "$fw_raw" ]; then
         fw=$(printf '%02d.%02d.%02d.%02d' "$((16#${fw_raw:0:2}))" "$((16#${fw_raw:2:2}))" "$((16#${fw_raw:4:2}))" "$((16#${fw_raw:6:2}))")
     else
@@ -216,7 +207,14 @@ health_lsiutil() {
         esac
     fi
 
-    hnum=$(_first_sas_host)
+    # This port's own card, joined through its PCI bus/device — the drive count
+    # and the PHY counters below are per-card, and handing every card host 1's
+    # would be the same bug in a different field.
+    hnum=$(lsi_host_for "$2" "$3" "$4")
+    # One card and no join: keep the historic host-0 default, so single-card
+    # output stays byte-identical. More than one card, and empty means empty —
+    # zero drives and no PHYs beats another card's.
+    [ -z "$hnum" ] && [ "$4" = "1" ] && hnum=0
 
     # Same six link fields as the storcli path, from the same sysfs files —
     # only the route to the device dir differs, since there is no storcli line
@@ -226,9 +224,10 @@ health_lsiutil() {
 
     printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
         "$NOW" "$UPTIME" \
-        "${temp:-null}" "$band" "$fw" "$(_drive_count "${hnum:-0}")" "$readok" \
+        "${temp:-null}" "$band" "$fw" "$(_drive_count "$hnum")" "$readok" \
         "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
-        "$(_phys_json "${hnum:-0}")"
+        "$(_phys_json "$hnum")"
+    rm -f "$IOC"
 }
 
 hba_each health_storcli health_lsiutil

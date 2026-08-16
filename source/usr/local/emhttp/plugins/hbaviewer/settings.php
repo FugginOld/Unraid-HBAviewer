@@ -18,16 +18,22 @@ $saved = false;
 $hw = [];          // one entry per SAS host, for the read-only diagnostic row
 $has_sas2 = false; // any host on the mpt2sas/mptsas personality -> bundled lsiutil
 $has_sas3 = false; // any host on the mpt3sas personality        -> needs storcli
+$has_sas4 = false; // any host on mpi3mr — 24G/SAS4, 9600 series -> needs StorCLI2
 foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
     $drv = trim((string) @file_get_contents($h . 'proc_name'));
-    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas'], true)) continue;
-    if ($drv === 'mpt3sas') { $has_sas3 = true; } else { $has_sas2 = true; }
+    // mpi3mr is listed so the card can be NAMED here, not so it can be read:
+    // nothing this plugin bundles or calls speaks 24G (issue #19). A card the
+    // diagnostic row cannot see is a card nobody can report properly.
+    if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas', 'mpi3mr'], true)) continue;
+    if      ($drv === 'mpt3sas') { $has_sas3 = true; }
+    elseif  ($drv === 'mpi3mr')  { $has_sas4 = true; }
+    else                         { $has_sas2 = true; }
     $board = trim((string) @file_get_contents($h . 'board_name'));
     $fw    = trim((string) @file_get_contents($h . 'version_fw'));
     $hw[]  = ($board !== '' ? $board : 'unknown board') . " ($drv"
            . ($fw !== '' ? ", fw $fw" : '') . ')';
 }
-$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas hosts found';
+$hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found';
 $storcli  = '';
 foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
     if (is_executable($c)) { $storcli = $c; break; }
@@ -49,6 +55,9 @@ if ($storcli !== '') {
 } elseif ($has_sas3) {
     $backend_label = 'storcli — NOT INSTALLED';
     $backend_note  = 'A controller was found on the mpt3sas driver, which the bundled lsiutil cannot read through. Install storcli via the dkaser/unraid-storcli plugin (Community Applications).';
+} elseif ($has_sas4) {
+    $backend_label = '24G / SAS4 — NOT SUPPORTED YET';
+    $backend_note  = 'A 9600-series controller was found on the mpi3mr driver. This generation needs Broadcom StorCLI2; the bundled lsiutil and storcli cannot read it, so no monitoring is available for this card yet. Tracked as issue #19.';
 } else {
     $backend_label = 'none detected';
     $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas) was found.';
@@ -235,8 +244,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       <?php if ($has_sas2): ?>
       <div class="lu-s-row">
         <div class="lu-s-label">
-          lsiutil Port
-          <small>Run lsiutil without arguments to list ports. Usually 1.</small>
+          lsiutil Port (fallback)
+          <small>Every SAS2 card lsiutil lists is read automatically, so this normally does nothing. It is used only if that list cannot be read, and then it names the single port to fall back to. Leave it at 1 unless support asks.</small>
         </div>
         <div class="lu-s-control">
           <input type="number" name="port" value="<?= (int)$cfg['HBA_PORT'] ?>" min="1" max="8">
@@ -395,14 +404,17 @@ foreach ($bands as $floor => $label) {
       <a class="lu-btn" href="/Tools/HBAviewer_Monitor" style="text-decoration:none;display:inline-block"
          onclick="return confirm('The HBA Monitor reads live information from your controller(s).\n\nThe first load can take up to 60 seconds while it queries the hardware. After you press OK, the Monitor opens and shows a \'Loading HBA information\' banner until it is ready.\n\nPress OK to continue.')">Open HBAviewer Monitor</a>
       <?php endif; ?>
-      <?php /* The way in to firmware flashing, and the only one — it is
-               deliberately NOT a link on the Monitor. Reaching it means coming
-               through the page where you turned it on and read the danger
-               notice, rather than finding it beside the monitoring tabs on a
-               page left open. $cfg is re-read after a save, so this appears the
-               moment the box is ticked and saved. */ ?>
+      <?php /* One of two ways in; the Monitor's tab strip carries the other,
+               and both are gated on this same pair of conditions so neither can
+               appear until the box below is ticked and the maintainer lock is
+               off. $cfg is re-read after a save, so this appears the moment the
+               box is ticked and saved.
+
+               The href must track HBAviewer_Flash.page's Menu, which decides
+               the URL root: Menu="HBAviewer" hangs the page off HBAviewer.page,
+               and that is a Tools page. Pinned in flash_php_test.php. */ ?>
       <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Settings/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 

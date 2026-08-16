@@ -324,30 +324,52 @@ Attach the archive to a GitHub issue.
 > **Flashing can permanently brick a controller.** Off by default, and for
 > people who already know how to flash an LSI/Broadcom HBA from a console.
 
-**Settings → Advanced — Firmware Flashing → Enable → Save.** A red
-**⚠ Firmware/BIOS Update** button then appears at the bottom right of that same
-Settings page, and opens the firmware page under **Settings → User Utilities**.
+**Settings → Advanced — Firmware Flashing → Enable → Save.** Two ways in then
+appear, and not before: a red **⚠ Firmware/BIOS Update** button at the bottom
+right of that same Settings page, and a red **⚠ Firmware** tab at the end of
+the HBA Monitor's tab strip, after Performance.
 
-That button is the only way in, and the Monitor has no link to it. Flashing is
-the one thing in this plugin that writes to hardware, so reaching it means
-coming back through the page where you enabled it and read the warning — not
-finding it beside the monitoring tabs on a page you left open.
+Enabling flashing adds **no new icon** to User Utilities. Both entrances are
+invisible until you have ticked the box on the page that carries the warning,
+so nobody arrives at the flasher without having read what it costs to get
+wrong — and both disappear again the moment flashing is turned off.
 
-Per controller:
+Per card:
 
-1. **Verify** — a read-only listing **scoped to that one controller**, so you
+1. **Verify** — a read-only listing **scoped to that one card**, so you
    confirm the tool sees the exact card you are about to write to.
-2. **Upload** — the model-correct image for *your* card (optionally a BIOS
-   `.rom`, and the flash tool itself if it is not in `PATH`). This step stays
-   available while the array is running, deliberately, so you can stage the
-   image before taking the array down.
+2. **Choose the image** — the model-correct one for *your* card (optionally a
+   BIOS `.rom` too). There is no upload button: you copy the files into
+   `/boot/config/plugins/hbaviewer/flash` yourself and the page offers what it
+   finds there, so a filename cannot be mistyped. The flash tool goes in the
+   same folder if it is not already installed. This step works while the array
+   is running, deliberately, so you can stage everything before taking it down.
 3. **Confirm & flash** — only with the **array stopped**. Step 3 is greyed out
    until then. Tick the acknowledgement, type `FLASH`, and go. A live log
    streams; reboot when it finishes.
 
-The array-stopped rule, the typed confirmation, the single-flight lock and the
-upload confinement are all enforced **server-side** — the greyed-out UI is an
+The array-stopped rule, the typed confirmation, the single-flight lock, the
+filename confinement and the check that the controllers you named really are one
+of this server's cards are all enforced **server-side** — the greyed-out UI is an
 affordance, not the control.
+
+**A dual-controller board is one card, and is flashed as one.** A SAS9300-16i
+is a single board carrying two SAS3008 controllers, so the page shows it as one
+entry labelled with both — `Controller /c0, /c1`. Verify lists both, and the
+flash writes both **in sequence**, one controller after the other, from the one
+image you selected. Nothing else on the machine is touched: the controllers
+written are that card's own, never every controller in the system.
+
+If the second write fails after the first has succeeded, the board is left with
+its two controllers on **different firmware**. That gets its own red banner, not
+the generic failure line: it names which controller holds which half and tells
+you **not to reboot**. Re-run the flash for the **whole card** — the same Flash
+button with the same image — before doing anything else. That rewrites *both*
+controllers and is the safe action; flashing only the controller that failed is
+refused, because the server accepts a card's complete controller list and
+nothing less. Rebooting a half-flashed board is what turns a failed update into
+a dead card. A failure on the *first* write stops there and reports that nothing
+was written — that one is safe to retry.
 
 ## Troubleshooting
 

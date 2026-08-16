@@ -5,6 +5,8 @@
    endpoint all consume this — each keeps its own markup/CSS, none re-derives.
    Values are returned RAW; each consumer escapes for its own medium. */
 
+require_once __DIR__ . '/firmware_index.php';
+
 function lsi_status_color(string $s): string {
     return match ($s) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
 }
@@ -199,6 +201,31 @@ function lsi_controllers(array $data): array {
     return $data['controllers'] ?? [$data];
 }
 
+/* The Overview's one-line firmware clause. Rendered only for the three states
+   that carry an actual comparison — a suppressed or unknown verdict has a
+   reason worth reading, and a one-line summary cannot carry it, so the row
+   shows the version alone and the firmware page explains. A colourless marker
+   with no explanation next to a version reads as a fault nobody can act on. */
+function fw_overview_clause(array $verdict): string {
+    $s = $verdict['status'] ?? '';
+    if ($s === 'ahead') {
+        return ' <span class="lu-muted" title="Newer than the plugin&#39;s index — the index is stale, not this card">newer than index</span>';
+    }
+    if ($s !== 'current' && $s !== 'behind') return '';
+    // One rule, one home: fw_verdict_color() decides both colours, including the
+    // green. A hardcoded hex here meant a change to that rule reached the JSON
+    // endpoint and the flash page but left this server-rendered Overview green
+    // on a board the index only calls a floor. flash_php_test.php greps for the
+    // literals, so do not name one even in a comment.
+    $colour = fw_verdict_color($verdict);
+    $span   = ' <span' . ($colour !== '' ? ' style="color:' . $colour . '"' : ' class="lu-muted"');
+    if ($s === 'current') {
+        return $span . ' title="Matches the newest IT firmware in the plugin&#39;s index">&#10003; current</span>';
+    }
+    return $span . ' title="Newest IT firmware known for this board">&#9650; '
+         . htmlspecialchars((string) ($verdict['latest'] ?? '')) . ' known</span>';
+}
+
 /* $data = one controller's JSON; $port = configured lsiutil port; $idx = its
    position in the controllers list (for the storcli /cN label). */
 function lsi_hba_view(array $data, int $port, int $idx = 0): array {
@@ -206,7 +233,11 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
     $portName = $data['port_name'] ?? 'ioc0';
     // lsiutil cards name a port ("ioc0 (lsiutil -p1)"); storcli cards name the
     // controller index ("Controller /c0") since port_name is empty there.
-    $portLabel = $portName !== '' ? "$portName (lsiutil -p$port)" : "Controller /c$idx";
+    // The card's OWN port when the collector reported one — a multi-card box
+    // otherwise labels every card with the single port Settings names, so cards
+    // 2 and 3 tell you to run a command that reads card 1 (issue #18).
+    $cardPort  = (int)($data['port'] ?? $port);
+    $portLabel = $portName !== '' ? "$portName (lsiutil -p$cardPort)" : "Controller /c$idx";
 
     $pcie = [];
     foreach ([
@@ -217,6 +248,17 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
     ] as $key => $label) {
         if (!empty($data[$key])) $pcie[] = ['label' => $label, 'value' => $data[$key]];
     }
+
+    // One verdict, two surfaces. Computed here rather than in either renderer so
+    // the Overview card and the firmware page cannot drift apart about whether
+    // this card is behind.
+    $verdict = fw_evaluate([
+        'board'        => $data['board_name']   ?? '',
+        'chip'         => $data['model']        ?? '',
+        'firmware'     => $data['firmware']     ?? '',
+        'subvendor_id' => $data['subvendor_id'] ?? '',
+        'topology'     => $data['topology']     ?? 'unknown',
+    ], fw_load());
 
     return [
         'temp'       => $data['temp'] ?? '',
@@ -233,6 +275,7 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
         'chip'       => $data['model']     ?? 'Unknown',
         'firmware'   => $data['firmware']  ?? 'Unknown',
         'fw_old'     => !empty($data['fw_old']),      // SAS2 pre-P20 flag
+        'firmware_verdict' => $verdict,
         'bios'       => $data['bios']        ?? '',   // storcli only
         'mode'       => $data['mode']        ?? '',   // IT/IR — storcli, and lsiutil via MPTFW suffix
         'drives'     => $data['drive_count'] ?? '',   // connected drive count (storcli)

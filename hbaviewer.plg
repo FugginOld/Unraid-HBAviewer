@@ -456,7 +456,14 @@ if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
   printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
-# Persisted dir for user-uploaded flash tools (sas2flash/sas3flash) — survives updates.
+# The one directory the user drops flash files into: the sas2flash/sas3flash
+# tool, the firmware image, the optional BIOS. Survives updates and reboots, and
+# stays mounted when the array is stopped — which flashing requires, and which
+# is why this cannot live under appdata. There is no upload form: a multipart
+# POST to any .php behind Unraid's nginx never completes.
+# tools/ is the pre-2026.08.09 name, still created and still read so nobody who
+# already put a flasher there is stranded.
+mkdir -p /boot/config/plugins/hbaviewer/flash
 mkdir -p /boot/config/plugins/hbaviewer/tools
 # Health-status notifications (Settings > HBAviewer > Notifications, OFF by
 # default). The entry is installed unconditionally and the script exits

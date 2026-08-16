@@ -1,0 +1,135 @@
+#!/bin/bash
+# Self-asserting checks for hba_topology, hba_subvendor and hba_card_id in lib.sh.
+#
+# Topology decides whether a firmware verdict is shown at all. Broadcom ships a
+# separate multi-path firmware track for the 9300/9305/9400/9405W with its own
+# version numbering, so comparing a multipath card against the standard track
+# reports a correctly configured card as six major versions behind. The index
+# suppresses those boards unless topology is known to be internal -- which,
+# without this function, is never, and the feature renders nothing on the most
+# common cards.
+#
+# The trees are built at runtime under mktemp -d, never committed: every path
+# here contains a colon, which Windows/NTFS forbids and MSYS silently mangles.
+#
+#   bash tests/topology_test.sh   ->  "topology: all pass" (exit 0)
+cd "$(dirname "$0")" || exit 2
+SRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh"
+fail=0
+eq() {  # name  want  got
+    if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 -- want '$2', got '$3'"; fail=1; fi
+}
+
+FN=$(sed -n '/^hba_topology()/,/^}/p' "$SRC"; sed -n '/^hba_subvendor()/,/^}/p' "$SRC"
+     sed -n '/^hba_card_id()/,/^}/p' "$SRC")
+[ -n "$FN" ] || { echo "FAIL  hba_topology/hba_subvendor/hba_card_id not found in $SRC"; exit 1; }
+eval "$FN"   # defines hba_card_id for direct calls below; hba_topology/hba_subvendor
+             # keep using the bash -c wrappers (top()/sub(), defined further down),
+             # which need env var overrides that a top-level eval can't provide per-call.
+
+ROOT=$(mktemp -d)
+trap 'rm -rf "$ROOT"' EXIT
+
+# host9: the maintainer's reporter shape -- a 9305-24i with 15 SATA drives all
+# direct-attached, no expander anywhere. This is the case that must produce a
+# verdict; if it does not, the feature is invisible on the card that motivated it.
+mkdir -p "$ROOT/dev" "$ROOT/exp"
+for n in $(seq 0 14); do mkdir -p "$ROOT/dev/end_device-9:$n"; done
+
+# host3 and host4 each carry exactly ONE of the two disqualifying signals, never
+# both -- so a mutant that deletes either check independently still fails one of
+# these two, instead of both silently passing because the other signal covers it.
+#
+# host3: an expander-H:N entry ALONE (its end_devices are ordinary two-component
+# children, same shape as host9's). Kills a mutant that deletes/neuters the
+# SYS_SAS_EXPANDER loop -- without that loop this reads "internal".
+mkdir -p "$ROOT/exp/expander-3:0"
+mkdir -p "$ROOT/dev/end_device-3:0" "$ROOT/dev/end_device-3:1"
+
+# host4: a three-component end_device-H:N:M child ALONE, no expander entry at
+# all. Kills a mutant that neuters the "*:*:*" case check -- without it this
+# reads "internal" too, since found=1 and no expander disqualifies it.
+mkdir -p "$ROOT/dev/end_device-4:0:0"
+
+# host7: no matching sysfs entries at all. This function has no way to tell
+# "host present, nothing attached" from "host absent" -- both are a glob that
+# matches nothing -- so one assertion honestly covers both, rather than two
+# identical inputs dressed up as different cases.
+
+top() { SYS_SAS_DEVICE="$ROOT/dev" SYS_SAS_EXPANDER="$ROOT/exp" \
+        bash -c "$FN"$'\n''hba_topology "$1"' _ "$1"; }
+
+eq "direct-attached card is internal"                  "internal" "$(top 9)"
+eq "expander alone (no 3-component child) is unknown"  "unknown"  "$(top 3)"
+eq "3-component child alone (no expander) is unknown"  "unknown"  "$(top 4)"
+eq "no sysfs entries (present-empty or absent) is unknown" "unknown" "$(top 7)"
+
+# Another host's expander must not suppress this card. A two-HBA box where one
+# card sits behind an expander would otherwise silence both.
+eq "host9 stays internal despite host3's expander" "internal" "$(top 9)"
+
+# subvendor: a plain sysfs attribute read, with the failure case being the one
+# that matters -- an unreadable file must yield empty, never a bare 0x0.
+PCI=$(mktemp -d); trap 'rm -rf "$ROOT" "$PCI"' EXIT
+mkdir -p "$PCI/card" "$PCI/bare" "$PCI/spaced"
+printf '0x1000\n' > "$PCI/card/subsystem_vendor"
+printf '0x 1000\n' > "$PCI/spaced/subsystem_vendor"
+sub() { bash -c "$FN"$'\n''hba_subvendor "$1"' _ "$1"; }
+eq "subvendor read from sysfs"        "0x1000" "$(sub "$PCI/card")"
+eq "missing attribute yields empty"   ""       "$(sub "$PCI/bare")"
+eq "absent directory yields empty"    ""       "$(sub "$PCI/nope")"
+# A mutant replacing the whitespace strip with a bare "$v" survives on the
+# happy-path fixture above only because $(cat ...) already eats the trailing
+# newline -- this is the case that actually needs the strip.
+eq "internal whitespace is stripped" "0x1000" "$(sub "$PCI/spaced")"
+
+# ── hba_card_id ──────────────────────────────────────────────────────────────
+# The maintainer's SAS9300-16i: two SAS3008 IOCs behind a switch of the card's
+# own, both in slot 0000:80:01.0. Captured from Raven, where the two hosts
+# resolve through 0000:80:01.0 -> 0000:82:00.0 -> {0000:83:00.0, 0000:83:09.0}.
+CARD=$ROOT/devices
+DUAL=$CARD/pci0000:80/0000:80:01.0/0000:82:00.0
+mkdir -p "$DUAL/0000:83:00.0/0000:84:00.0" "$DUAL/0000:83:09.0/0000:86:00.0"
+# An unrelated single-IOC card in a different slot.
+mkdir -p "$CARD/pci0000:00/0000:00:11.0/0000:06:00.0"
+# A device sitting directly on the host bridge, no bridge in between.
+mkdir -p "$CARD/pci0000:00/0000:00:1f.2"
+
+eq "both IOCs of one card share a slot" \
+   "0000:80:01.0" "$(hba_card_id "$DUAL/0000:83:00.0/0000:84:00.0")"
+eq "and the second IOC agrees" \
+   "0000:80:01.0" "$(hba_card_id "$DUAL/0000:83:09.0/0000:86:00.0")"
+eq "a card in another slot does not" \
+   "0000:00:11.0" "$(hba_card_id "$CARD/pci0000:00/0000:00:11.0/0000:06:00.0")"
+eq "a device on the host bridge is its own slot" \
+   "0000:00:1f.2" "$(hba_card_id "$CARD/pci0000:00/0000:00:1f.2")"
+eq "a path with no host bridge yields empty" \
+   "" "$(hba_card_id "$ROOT")"
+eq "a missing path yields empty" \
+   "" "$(hba_card_id "$ROOT/nope/0000:99:00.0")"
+
+# Production hands us /sys/bus/pci/devices/0000:83:00.0, a symlink into
+# /sys/devices. Without readlink -f every real card resolves to empty and the
+# feature silently never groups. Skipped where symlinks are unavailable
+# (Windows without Developer Mode); CI runs ubuntu-latest, where it executes.
+LNK=$CARD/bus; mkdir -p "$LNK"
+if ln -s "$DUAL/0000:83:00.0/0000:84:00.0" "$LNK/0000:84:00.0" 2>/dev/null && [ -L "$LNK/0000:84:00.0" ]; then
+    eq "a symlinked device resolves to its real slot" \
+       "0000:80:01.0" "$(hba_card_id "$LNK/0000:84:00.0")"
+else
+    echo "SKIP  symlink fixture (ln -s unavailable)"
+fi
+
+# Kills the trailing validation: a non-address directory under the host bridge.
+mkdir -p "$CARD/pci0000:00/not-a-device/0000:07:00.0"
+eq "a non-address child of the host bridge yields empty" \
+   "" "$(hba_card_id "$CARD/pci0000:00/not-a-device/0000:07:00.0")"
+
+# A relative input: readlink -f absolutises it, so this exercises the no-pci
+# path, not the guard. The guard itself cannot be killed by any fixture --
+# see task-1-report.md, "Mutant C".
+eq "a relative path with no host bridge yields empty" \
+   "" "$(cd "$CARD" && hba_card_id "0000:06:00.0")"
+
+[ $fail -eq 0 ] && echo "topology: all pass"
+exit $fail

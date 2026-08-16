@@ -1,0 +1,10 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+2 MPT Ports found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 1.  ioc0              LSI Logic SAS2308 D1      200      14000700     0
+ 2.  ioc1              LSI Logic SAS2308 D1      200      14000700     0
+
+Select a device:  [1-2 or 0 to quit] 

@@ -1,0 +1,8 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+2 MPT Ports found
+
+Port Name        Seg/Bus/Dev  Board Name       Board Assembly   Board Tracer
+ioc0              0  193   0   HBA 9400-16i     03-50008-15006   SP00000000      
+ioc1              0  101   0   HBA 9400-8i      03-50008-16003   SP00000000      

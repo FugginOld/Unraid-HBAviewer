@@ -38,6 +38,29 @@ while IFS= read -r tok; do
     fi
 done <<<"$composer_tokens"
 
+# Every per-port lsiutil capture must be inside the lsi_ports loop and named
+# with the port it came from. A capture hard-coded to $PORT collects one card on
+# a multi-card box, which is what made issue #18 take three rounds of hand-written
+# command blocks: the bundle looked complete and held one card's telemetry.
+if grep -qE 'for p in \$\(lsi_ports ' "$BUNDLE"; then
+    ok "lsiutil captures loop over lsi_ports"
+else
+    bad "lsiutil captures do not loop" "a multi-card box would report one card and the bundle would not show the others exist"
+fi
+stray=$(grep -nE 'hba_query .*-p"\$PORT"' "$BUNDLE")
+if [ -z "$stray" ]; then
+    ok "no capture is pinned to the configured port"
+else
+    bad "capture pinned to \$PORT" "$stray"
+fi
+while IFS= read -r f; do
+    case "$f" in
+        02-raw/lsiutil_p\$\{p\}_*) ok "per-port capture named by port: $f" ;;
+        *) bad "per-port capture not named by port: $f" "every port would overwrite the last one's file" ;;
+    esac
+done < <(grep -oE '"?02-raw/lsiutil_[a-z${}_]*\.txt"?' "$BUNDLE" | tr -d '"' \
+         | grep -vE 'lsiutil_(banner|b)\.txt')
+
 # TRAN is the SAS-vs-SATA signal (read_smart.sh already branches on it) and has
 # no -a token to be caught by the loop above, so it needs its own assertion.
 if grep -E '^run 02-raw/lsblk\.txt lsblk .*-o [A-Za-z,]*TRAN' "$BUNDLE" >/dev/null; then
@@ -54,6 +77,30 @@ if grep -E 'dump_attrs 03-sysfs/sas_device\.txt +/sys/class/sas_device/end_devic
     ok "sas_device class is dumped"
 else
     bad "sas_device class not dumped" "lsblk's TRAN is the bus; target_port_protocols in sas_device is the per-drive SAS-vs-SATA truth, and sas_end_device does not carry it"
+fi
+
+
+# subsystem_vendor decides whether a firmware verdict is given at all: 0x1000 is
+# a generic Broadcom board and anything else is an OEM rebrand, where reaching a
+# generic image is a crossflash rather than an upgrade. A bundle that omits it
+# cannot answer why a reporter's card shows no verdict -- which is exactly the
+# class of question this guard exists to keep answerable.
+if grep -E 'for a in .*subsystem_vendor' "$BUNDLE" >/dev/null; then
+    ok "bundle captures subsystem_vendor"
+else
+    bad "bundle missing subsystem_vendor" "get_hba_info.sh reads it to gate the firmware verdict, but pci.txt does not capture it"
+fi
+
+# hba_topology() in lib.sh checks /sys/class/sas_expander/expander-* FIRST --
+# a DIFFERENT sysfs class from /sys/class/sas_device/expander-* (already
+# captured above as sas_expander.txt, despite the confusingly similar name).
+# An expander on this class is one of the two signals that decide "internal"
+# vs "unknown", which in turn decides whether a firmware verdict is given at
+# all. A bundle that omits this class cannot show why a card got that verdict.
+if grep -E 'dump_attrs 03-sysfs/[A-Za-z_]+\.txt +/sys/class/sas_expander/expander-\*' "$BUNDLE" >/dev/null; then
+    ok "sas_expander class (the topology gate) is dumped"
+else
+    bad "sas_expander class not dumped" "hba_topology() reads /sys/class/sas_expander/expander-* first; the bundle only captured /sys/class/sas_device/expander-*, a different class"
 fi
 
 echo

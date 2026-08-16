@@ -1,0 +1,9 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+3 MPT Ports found
+
+Port Name        Seg/Bus/Dev  Board Name       Board Assembly   Board Tracer
+ioc0              0  129   0   SAS9207-8i       H3-25584-00A     SV00000000      
+ioc1              0  130   0   SAS9207-8i       H3-25584-00A     SV00000000      
+ioc2              0  131   0   SAS9207-8i       H3-25584-00A     SV00000000      

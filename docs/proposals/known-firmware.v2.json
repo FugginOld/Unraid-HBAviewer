@@ -1,0 +1,363 @@
+{
+  "schema": 2,
+  "updated": "2026-08-11",
+  "notes": [
+    "Every version-bearing field is an envelope: {value, state, basis, source, verified, note}.",
+    "state answers 'what do we claim'. basis answers 'how do we know'. They are independent.",
+    "value MUST be null when state is unconfirmed or not-applicable.",
+    "value MAY be null when inherit is set; the loader resolves it from the named branch."
+  ],
+
+  "states": {
+    "confirmed": "Verified, and the branch is terminal. Equality is meaningful both ways.",
+    "observed-floor": "Below it is stale. At it is NOT proof of current.",
+    "weak": "Single source, provenance questionable. Display only; must not drive a flash.",
+    "unconfirmed": "We do not know. value is null.",
+    "not-applicable": "Correctly nothing. This field does not exist for this board or branch. value is null."
+  },
+
+  "bases": {
+    "observed": "Read off a live card.",
+    "documented": "Stated in a Broadcom release note, README, or package manifest.",
+    "inferred": "Derived from a sibling board or the branch. Not independently checked.",
+    "assumed": "Believed on general grounds, no artifact behind it.",
+    "none": "No basis; applies only to unconfirmed."
+  },
+
+  "branches": {
+    "P20": {
+      "generation": "sas2",
+      "terminal": true,
+      "firmware": { "value": "20.00.07.00", "state": "confirmed", "basis": "documented", "source": null, "verified": null, "note": "Final branch for SAS2." },
+      "nvdata": { "value": null, "state": "not-applicable", "basis": "documented", "source": null, "verified": null, "note": "NVDATA is board-specific; never a branch property." },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": "Recoverable: mptsas2.rom ships inside the P20 IT package. Commonly cited as 07.39.02.00 - verify against the package before use." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": "Recoverable: x64sas2.rom ships inside the P20 IT package. Commonly cited as 07.27.01.01 - verify before use." },
+      "fw_package_build_reported": false,
+      "note": "sas2flash -list reports no FW Package Build field on this generation. Structurally absent, not missing."
+    },
+    "P16": {
+      "generation": "sas3",
+      "terminal": true,
+      "firmware": { "value": "16.00.12.00", "state": "confirmed", "basis": "observed", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "not-applicable", "basis": "documented", "source": null, "verified": null, "note": "Board-specific." },
+      "bios": { "value": "08.37.00.00", "state": "confirmed", "basis": "observed", "source": null, "verified": null, "note": "Observed on SAS9300-4i and SAS9300-8i only." },
+      "uefi_bsd": { "value": "18.00.00.00", "state": "confirmed", "basis": "observed", "source": null, "verified": null, "note": "Observed on SAS9300-4i and SAS9300-8i only." },
+      "fw_package_build_reported": true,
+      "note": "Every indexed board on this branch carries the multipath flag."
+    },
+    "P21": {
+      "generation": "sas3.5",
+      "terminal": false,
+      "firmware": { "value": "21.00.00.00", "state": "weak", "basis": "documented", "source": "Broadcom download-search link whose filter names the 9400-8i, not the 9405W-16i", "verified": null, "note": "Provenance does not match the board it is used for." },
+      "nvdata": { "value": null, "state": "not-applicable", "basis": "documented", "source": null, "verified": null, "note": "Board-specific." },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": "BIOS travels inside the firmware package on this generation." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "fw_package_build_reported": true,
+      "note": "Standard track only. Multipath runs an independent 15.x track."
+    },
+    "P24": {
+      "generation": "sas3.5",
+      "terminal": false,
+      "firmware": { "value": "24.00.00.00", "state": "observed-floor", "basis": "observed", "source": null, "verified": null, "note": "Treat as a floor. Not confirmed as the newest Broadcom release." },
+      "nvdata": { "value": null, "state": "not-applicable", "basis": "documented", "source": null, "verified": null, "note": "Board-specific." },
+      "bios": { "value": "09.47.00.00", "state": "observed-floor", "basis": "observed", "source": null, "verified": null, "note": "Observed on the 9400-16i." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "fw_package_build_reported": true,
+      "note": "Profile-aware branch."
+    },
+    "P28": {
+      "generation": "sas3.5",
+      "terminal": false,
+      "firmware": { "value": "28.00.00.00", "state": "observed-floor", "basis": "documented", "source": "Broadcom retail package for SAS3808/3816", "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "not-applicable", "basis": "documented", "source": null, "verified": null, "note": "Board-specific." },
+      "bios": { "value": null, "state": "not-applicable", "basis": "assumed", "source": null, "verified": null, "note": "Believed to have no legacy option ROM. Assumed, not documented - downgrade to unconfirmed if a live card shows otherwise." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "fw_package_build_reported": true,
+      "note": "Profile split unconfirmed for this generation."
+    }
+  },
+
+  "boards": [
+    {
+      "board": "SAS9211-8i",
+      "aliases": ["9211-8i"],
+      "generation": "sas2",
+      "branch": "P20",
+      "chips": ["SAS2008"],
+      "tool": "sas2flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "20.00.04.00 had known defects; 20.00.07.00 is the recommended terminal version." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": [],
+      "images": [],
+      "note": "OEM variants (Dell, IBM, Fujitsu) require a crossflash to the generic LSI IT image, which is riskier than an upgrade."
+    },
+    {
+      "board": "SAS9201-16i",
+      "aliases": ["9201-16i"],
+      "generation": "sas2",
+      "branch": "P20",
+      "chips": ["SAS2116"],
+      "tool": "sas2flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": [],
+      "images": [],
+      "note": null
+    },
+    {
+      "board": "SAS9207-8i",
+      "aliases": ["9207-8i"],
+      "generation": "sas2",
+      "branch": "P20",
+      "chips": ["SAS2308"],
+      "tool": "sas2flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": [],
+      "images": [],
+      "note": null
+    },
+    {
+      "board": "SAS9300-4i",
+      "aliases": ["9300-4i"],
+      "generation": "sas3",
+      "branch": "P16",
+      "chips": ["SAS3004"],
+      "tool": "sas3flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": "Confirmed on this board; the branch value originates here." },
+      "uefi_bsd": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "flags": ["multipath"],
+      "images": [],
+      "note": null
+    },
+    {
+      "board": "SAS9300-8i",
+      "aliases": ["9300-8i"],
+      "generation": "sas3",
+      "branch": "P16",
+      "chips": ["SAS3008"],
+      "tool": "sas3flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": "Distributed via iXsystems, not Broadcom's public download page", "verified": null, "note": "Below 16.00.12.00 there is a controller-reset bug affecting SATA drives." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": "Confirmed on this board; the branch value originates here." },
+      "uefi_bsd": { "value": null, "state": "confirmed", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "flags": ["multipath"],
+      "images": [],
+      "note": null
+    },
+    {
+      "board": "SAS9300-16i",
+      "aliases": ["9300-16i"],
+      "generation": "sas3",
+      "branch": "P16",
+      "chips": ["SAS3008", "SAS3008"],
+      "tool": "sas3flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred. Verify before treating as stale." },
+      "uefi_bsd": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred." },
+      "flags": ["multipath", "dual-ioc"],
+      "images": [],
+      "note": "One board carrying two SAS3008 controllers. Shown and flashed as a single card; both controllers written in sequence from the one selected image."
+    },
+    {
+      "board": "SAS9305-16i",
+      "aliases": ["9305-16i"],
+      "generation": "sas3",
+      "branch": "P16",
+      "chips": ["SAS3216"],
+      "tool": "sas3flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "weak", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "DOWNGRADED FROM confirmed IN SCHEMA 1. IT-capability inferred by symmetry with the SAS3224, not from a live card. Restore to confirmed once a 9305-16i is observed." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": "Not interchangeable with the 24i. Board-specific." },
+      "bios": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred." },
+      "uefi_bsd": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred." },
+      "flags": ["multipath"],
+      "images": [],
+      "note": "Takes a different image from the 9305-24i despite the shared P16.12 label."
+    },
+    {
+      "board": "SAS9305-24i",
+      "aliases": ["9305-24i"],
+      "generation": "sas3",
+      "branch": "P16",
+      "chips": ["SAS3224"],
+      "tool": "sas3flash",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "observed-floor", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "DOWNGRADED FROM confirmed IN SCHEMA 1. The live card observation (MPTFW-15.00.00.00-IT, 15 JBOD drives) confirms IT-capability only; it does not confirm 16.00.12.00 on this board." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": "Not interchangeable with the 16i. Flashing the wrong board image bricks the card." },
+      "bios": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred." },
+      "uefi_bsd": { "value": null, "state": "confirmed", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Branch-inferred." },
+      "flags": ["multipath"],
+      "images": [],
+      "note": "IT-capability confirmed from a live card via lsiutil."
+    },
+    {
+      "board": "HBA 9400-8i",
+      "aliases": ["9400-8i"],
+      "generation": "sas3.5",
+      "branch": "P24",
+      "chips": ["SAS3408"],
+      "tool": "storcli",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "observed-floor", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "Inferred from the sibling 9400-16i, not observed on an 8i. Confirm separately." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "observed-floor", "basis": "inferred", "inherit": "branch", "source": null, "verified": null, "note": "ADDED IN SCHEMA 2. Was 'unknown' in schema 1 despite the branch carrying 09.47.00.00." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": ["multipath", "rom-profiles"],
+      "images": [
+        { "profile": "SAS_SATA", "filename": null, "url": null, "sha256": null },
+        { "profile": "Mixed_NVMe", "filename": null, "url": null, "sha256": null }
+      ],
+      "note": "rom-profiles flag ADDED IN SCHEMA 2: the profile split applies to the whole 9400 family, not just the 16i."
+    },
+    {
+      "board": "HBA 9400-16i",
+      "aliases": ["9400-16i"],
+      "generation": "sas3.5",
+      "branch": "P24",
+      "chips": ["SAS3416"],
+      "tool": "storcli",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "observed-floor", "basis": "observed", "inherit": "branch", "source": null, "verified": null, "note": "Confirmed to exist on a live card; NOT confirmed as the newest Broadcom release." },
+      "nvdata": { "value": "24.00.00.22", "state": "observed-floor", "basis": "observed", "source": null, "verified": null, "note": "First NVDATA value in the index. Board-specific - do not propagate to the 8i." },
+      "bios": { "value": "09.47.00.00", "state": "observed-floor", "basis": "observed", "source": null, "verified": null, "note": null },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": ["multipath", "rom-profiles"],
+      "images": [
+        { "profile": "SAS_SATA", "filename": null, "url": null, "sha256": null },
+        { "profile": "Mixed_NVMe", "filename": null, "url": null, "sha256": null }
+      ],
+      "note": null
+    },
+    {
+      "board": "HBA 9405W-16i",
+      "aliases": ["9405W-16i"],
+      "generation": "sas3.5",
+      "branch": "P21",
+      "chips": ["SAS3616"],
+      "tool": "storcli",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "weak", "basis": "documented", "inherit": "branch", "source": "Broadcom download-search link whose filter names the 9400-8i, not this board", "verified": null, "note": "Display only. Must not drive a flash decision." },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": ["multipath", "rom-profiles"],
+      "alt_tracks": [
+        { "name": "multipath", "firmware": { "value": "15.00.01.00", "state": "weak", "basis": "documented", "source": null, "verified": null, "note": "Independent numbering. Not comparable to the standard track." }, "profiles": ["IT Nexus", "Abort Task Set"] }
+      ],
+      "images": [
+        { "profile": "SAS_SATA", "filename": null, "url": null, "sha256": null },
+        { "profile": "Mixed_NVMe", "filename": null, "url": null, "sha256": null }
+      ],
+      "note": null
+    },
+    {
+      "board": "HBA 9500-8i",
+      "aliases": ["9500-8i"],
+      "generation": "sas3.5",
+      "branch": "P28",
+      "chips": ["SAS3808"],
+      "tool": "storcli",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "observed-floor", "basis": "documented", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "not-applicable", "basis": "assumed", "inherit": "branch", "source": null, "verified": null, "note": "Assumed no legacy option ROM." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": [],
+      "images": [],
+      "note": "Profile split unconfirmed for this generation."
+    },
+    {
+      "board": "HBA 9500-16i",
+      "aliases": ["9500-16i"],
+      "generation": "sas3.5",
+      "branch": "P28",
+      "chips": ["SAS3816"],
+      "tool": "storcli",
+      "identity": { "vendor": "0x1000", "device": null, "subvendor": "0x1000", "subdevice": null },
+      "class": "hba",
+      "firmware": { "value": null, "state": "observed-floor", "basis": "documented", "inherit": "branch", "source": null, "verified": null, "note": null },
+      "nvdata": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "bios": { "value": null, "state": "not-applicable", "basis": "assumed", "inherit": "branch", "source": null, "verified": null, "note": "Assumed no legacy option ROM." },
+      "uefi_bsd": { "value": null, "state": "unconfirmed", "basis": "none", "source": null, "verified": null, "note": null },
+      "flags": [],
+      "images": [],
+      "note": "Profile split unconfirmed for this generation."
+    }
+  ],
+
+  "refuse": {
+    "note": "Checked BEFORE the tool map. Chip prefix alone is not sufficient: entry-level MegaRAID boards share silicon with indexed HBAs, so a chip-only list cannot separate them. by_board is the authoritative list; by_chip is a coarse net for parts that only ever ship as RAID-on-Chip.",
+    "by_chip": [
+      { "chip": "SAS2108", "sold_as": "MegaRAID 9260-8i" },
+      { "chip": "SAS2208", "sold_as": "MegaRAID 9271-8i" },
+      { "chip": "SAS3108", "sold_as": "MegaRAID 9361-8i" },
+      { "chip": "SAS3508", "sold_as": "MegaRAID 9460-8i" },
+      { "chip": "SAS3516", "sold_as": "MegaRAID 9460-16i", "note": "Broadcom materials read both ways on this part. Treated as RAID-on-Chip and refused. The cost of being wrong this way is a card we decline to touch; the cost of the other reading being wrong is a bricked controller." }
+    ],
+    "by_board": [
+      { "board": "MegaRAID 9440-8i", "chips": ["SAS3408"], "subdevice": null, "reason": "Shares SAS3408 with the HBA 9400-8i. Chip prefix matches SAS34* and would be handed to storcli with a 9400-8i package. VERIFY chip and subdevice before shipping.", "status": "needs-identity" },
+      { "board": "MegaRAID 9341-8i", "chips": ["SAS3008"], "subdevice": null, "reason": "Shares SAS3008 with the HBA 9300-8i. Community crossflash to IT exists but is out of scope; the index must not offer 16.00.12.00 as an update.", "status": "needs-identity" }
+    ]
+  },
+
+  "tool_map": [
+    { "match": ["SAS2*"], "tool": "sas2flash", "boards": ["9200", "9201", "9207", "9211"], "provisioning": "user-supplied, not bundled" },
+    { "match": ["SAS30*", "SAS31*", "SAS32*"], "tool": "sas3flash", "boards": ["9300", "9305"], "provisioning": "user-supplied, not bundled" },
+    { "match": ["SAS34*", "SAS35*", "SAS36*", "SAS38*"], "tool": "storcli", "boards": ["9400", "9405W", "9500"], "provisioning": "storcli plugin (dkaser) from CA" }
+  ],
+
+  "unsupported": [
+    { "match": ["SAS33*"], "reason": "SAS3316 falls between the sas3flash and storcli prefix ranges and matches nothing. Claimed in chipset coverage but unreachable. Decide: add to sas3flash, or declare unsupported.", "status": "open" },
+    { "match": ["SAS40*", "SAS41*"], "boards": ["9600-8i", "9600-16i", "9600-24i", "9600-8e", "9600-16e"], "chips": ["SAS4116", "SAS4024"], "reason": "Requires StorCLI2, a different binary from storcli. Adding the prefix alone would produce a card the plugin claims to support and then fails on.", "status": "blocked-on-dependency" }
+  ],
+
+  "known_unindexed": {
+    "note": "Recognised hardware with no version data. Most are flashable by chip prefix; the plugin reports installed firmware and gives no verdict.",
+    "external_and_combo": ["9200-8e", "9201-16e", "9205-8i", "9205-8e", "9207-8e", "9207-4i4e", "9212-4i", "9211-4i", "9300-8e", "9300-16e", "9311-8i", "9311-4i4e", "9400-8e", "9400-16e", "9400-8i8e", "9500-8e", "9500-16e"],
+    "gaps": [
+      { "item": "9206-16e", "chips": ["SAS2308", "SAS2308"], "reason": "The only other genuinely dual-controller LSI HBA. No entry at all, so it can never be grouped as one card the way the 9300-16i is." },
+      { "item": "9302 family", "reason": "Named in the multipath advisory but absent from every list, indexed and unindexed. Broadcom publishes multipath firmware for it." },
+      { "item": "SAS2004 boards", "reason": "Chip is in scope. 9211-4i and 9212-4i sit in external_and_combo with no statement on whether P20 20.00.07.00 applies." },
+      { "item": "9200-8i", "reason": "tool_map claims the 9200 family but no 9200 board is indexed and only 9200-8e is listed here." }
+    ]
+  },
+
+  "oem_policy": {
+    "in_scope_subvendor": "0x1000",
+    "note": "Anything else is an OEM rebrand (Dell, IBM, Fujitsu, Supermicro, Lenovo) with different NVDATA and BIOS. Comparing one against a generic row reports a mismatch on a healthy card, and acting on it is a crossflash."
+  },
+
+  "multipath_advisory": {
+    "kb": "1211211122774",
+    "families": ["9300", "9302", "9305", "9400", "9405W"],
+    "note": "Independent version numbering. A board in an external multipath config may correctly run far below the indexed version. Verdict suppressed unless internal topology can be proven."
+  }
+}

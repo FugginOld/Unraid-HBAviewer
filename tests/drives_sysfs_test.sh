@@ -18,12 +18,16 @@ eq() {  # name  want  got
     if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 -- want '$2', got '$3'"; fail=1; fi
 }
 
-FN=$(sed -n '/^drv_lsiutil()/,/^}/p' "$SRC")
+FN=$(sed -n '/^drv_lsiutil()/,/^}/p' "$SRC"; sed -n '/^_drv_lsiutil_one()/,/^}/p' "$SRC")
 [ -n "$FN" ] || { echo "FAIL  drv_lsiutil not found in $SRC"; exit 1; }
 eval "$FN"
 
 require_binary() { :; }
-PORT=0
+# One port, unjoined — the single-card shape these fixtures were built as, and
+# the one where the sysfs sweep stays unfiltered (plan 059). The per-card filter
+# has its own cases in multiport_test.sh.
+lsi_port_map() { printf '0 1 0\n'; }
+lsi_host_for() { :; }
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT

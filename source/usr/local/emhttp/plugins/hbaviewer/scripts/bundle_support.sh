@@ -337,6 +337,15 @@ else
         > "$B/01-environment/storcli.txt"
     note "storcli was not installed on this machine. The storcli half of section 02-raw is absent; the lsiutil half and sections 01/03/04 are complete."
 fi
+# StorCLI2, captured but never routed through (see find_storcli). It is the 24G
+# CLI: it enumerates only 9600-series controllers and reports zero on anything
+# older. `show` therefore answers the one question a 24G report turns on — can
+# any installed tool see this card at all — for the cost of one call, so the
+# next 9600 bundle carries the answer instead of needing a round trip (#19).
+SC2=$(command -v storcli2 2>/dev/null)
+if [ -n "$SC2" ]; then
+    { printf 'storcli2: %s\n' "$SC2"; "$SC2" show 2>&1; } > "$B/01-environment/storcli2.txt"
+fi
 if [ -x "$LSIUTIL" ]; then
     printf 'lsiutil: %s (bundled)\n' "$LSIUTIL" > "$B/01-environment/lsiutil.txt"
 else
@@ -369,17 +378,26 @@ if [ -n "$SC" ]; then
 fi
 
 if [ -x "$LSIUTIL" ]; then
+    # The banner and the board table list every port in one call; everything
+    # else is per-port, so capture it per port — ONE file per port, named the
+    # way the storcli half names its per-controller files.
+    # This is why issue #18 took three round trips: the bundle captured the one
+    # port Settings named, so a three-card box produced one card's telemetry and
+    # the other two had to be collected by hand, twice.
     printf '0\n' | hba_query > "$B/02-raw/lsiutil_banner.txt" 2>&1
     run 02-raw/lsiutil_b.txt          hba_query -b
-    run 02-raw/lsiutil_ioc.txt        hba_query -p"$PORT" -a 25,2,0,0
-    # Main-menu option 1, "Identify firmware, BIOS, and/or FCode". Plain menu
-    # item, NOT expert mode, so no -e. Carries the flashed firmware image name
-    # whose suffix IS the IT/IR personality ("MPTFW-20.00.07.00-IT") — issue #10
-    # needed this collected by hand because the bundle did not have it.
-    run 02-raw/lsiutil_ident.txt      hba_query -p"$PORT" -a 1,0
-    run 02-raw/lsiutil_phy.txt        hba_query -p"$PORT" -a 20,12,0,0
-    run 02-raw/lsiutil_osmap.txt      hba_query -p"$PORT" -a 42,0
-    run 02-raw/lsiutil_eventlog.txt   hba_query -e -p"$PORT" -a 35,0
+    for p in $(lsi_ports "$B/02-raw/lsiutil_banner.txt"); do
+        run "02-raw/lsiutil_p${p}_ioc.txt"   hba_query -p"$p" -a 25,2,0,0
+        # Main-menu option 1, "Identify firmware, BIOS, and/or FCode". Plain
+        # menu item, NOT expert mode, so no -e. Carries the flashed firmware
+        # image name whose suffix IS the IT/IR personality
+        # ("MPTFW-20.00.07.00-IT") — issue #10 needed this collected by hand
+        # because the bundle did not have it.
+        run "02-raw/lsiutil_p${p}_ident.txt"    hba_query -p"$p" -a 1,0
+        run "02-raw/lsiutil_p${p}_phy.txt"      hba_query -p"$p" -a 20,12,0,0
+        run "02-raw/lsiutil_p${p}_osmap.txt"    hba_query -p"$p" -a 42,0
+        run "02-raw/lsiutil_p${p}_eventlog.txt" hba_query -e -p"$p" -a 35,0
+    done
 fi
 # TRAN is the SAS-vs-SATA signal. read_smart.sh already branches on it (a SAS
 # log-page read does not spin a drive up; an ATA one can), but nothing recorded
@@ -402,6 +420,14 @@ dump_attrs 03-sysfs/sas_end_device.txt /sys/class/sas_end_device/end_device-*
 # itself was never captured, so no bundle could confirm the address is even
 # readable without asking.
 dump_attrs 03-sysfs/sas_expander.txt /sys/class/sas_device/expander-*
+# A DIFFERENT sysfs class from the dump above, despite the similar name: this
+# is /sys/class/sas_expander/, not /sys/class/sas_device/. hba_topology() in
+# lib.sh checks this class FIRST -- an expander entry for this host is one of
+# the two signals that decide "internal" vs "unknown", which in turn decides
+# whether a firmware verdict is given at all. Without this capture a bundle
+# cannot show why a reporter's card was judged internal, unknown, or had its
+# verdict suppressed.
+dump_attrs 03-sysfs/sas_expander_class.txt /sys/class/sas_expander/expander-*
 # PCIe link state for the controllers only — resolved from each SAS host's own
 # device path, so this never walks the whole PCI tree.
 {
@@ -410,7 +436,7 @@ dump_attrs 03-sysfs/sas_expander.txt /sys/class/sas_device/expander-*
         p=$(readlink -f "$h" 2>/dev/null); p="${p%%/host*}"
         [ -d "$p" ] || continue
         printf '===== %s =====\n' "$p"
-        for a in current_link_width current_link_speed max_link_width max_link_speed power_state vendor device; do
+        for a in current_link_width current_link_speed max_link_width max_link_speed power_state vendor device subsystem_vendor; do
             attr "$p/$a" "$a"
         done
         printf '\n'
@@ -455,7 +481,7 @@ SMART included: $([ "$SMART" = 1 ] && echo yes || echo no)
 
 01-environment  kernel, Unraid + plugin version, tool presence, driver, proc_name
 02-raw          raw storcli / lsiutil / lsblk output, one file per command
-03-sysfs        scsi_host, sas_phy, sas_device, sas_expander, sas_end_device and controller PCIe state
+03-sysfs        scsi_host, sas_phy, sas_device, sas_expander (both classes), sas_end_device and controller PCIe state
 04-parsed       what each composer made of the above, plus hbaviewer.cfg
 05-smart        smartctl -n standby -a per drive (only if requested)
 

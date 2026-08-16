@@ -23,12 +23,24 @@ require_binary() {
 
 hba_query() { "$LSIUTIL" "$@"; }
 
-# Locate storcli (SAS3/3.5 tool) — same candidates as scripts/capture_storcli.sh.
-# Honors a preset $STORCLI. Prints the resolved path, or nothing if not found.
+# Locate storcli (SAS3/3.5 tool). Honors a preset $STORCLI. Prints the resolved
+# path, or nothing if not found.
+#
+# **storcli2 is deliberately NOT a candidate** (it was, until issue #19).
+# StorCLI2 is a separate CLI for the 24G/SAS4 generation, not a newer storcli:
+# it enumerates ONLY 9600-series controllers — measured as "Number of
+# Controllers = 0" on the maintainer's SAS3/3.5 box — and its output layout is
+# its own. Nothing here parses it. Left in the list it would do exactly one
+# thing: on a 9600 box with the dkaser storcli plugin installed (which ships
+# both binaries) it would enumerate a controller, satisfy use_storcli, and feed
+# StorCLI2 text to the storcli parsers — displacing the honest "not supported
+# yet" refusal with a card's worth of wrong or empty fields.
+# scripts/capture_storcli.sh keeps probing it on purpose: capturing raw output
+# for a future backend is the one thing storcli2 is useful for today.
 find_storcli() {
     if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
     local c
-    for c in storcli storcli64 storcli2 \
+    for c in storcli storcli64 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
              /usr/local/bin/storcli /usr/local/bin/storcli64 \
              /usr/sbin/storcli /usr/sbin/storcli64; do
@@ -38,8 +50,9 @@ find_storcli() {
 }
 
 # Locate the per-generation flash tool — sibling of find_storcli, same posture
-# (proprietary, never bundled: probe PATH + common sbin dirs + the plugin's
-# persisted upload dir). $1 = "sas2" | "sas3". Honors a preset $FLASHER (tests).
+# (proprietary, never bundled: probe PATH + common sbin dirs + the drop
+# directory the user places it in). $1 = "sas2" | "sas3". Honors a preset
+# $FLASHER (tests).
 # Prints the resolved path, or nothing if not found.
 find_flasher() {
     local gen="$1" tool c
@@ -50,11 +63,53 @@ find_flasher() {
         *)    return 1 ;;
     esac
     for c in "$tool" \
-             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool" \
-             "/boot/config/plugins/hbaviewer/tools/$tool"; do
+             "/usr/local/sbin/$tool" "/usr/local/bin/$tool" "/usr/sbin/$tool"; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }
     done
+
+    # The user-supplied copy on /boot, staged into tmpfs before it is returned.
+    #
+    # /boot is the Unraid flash drive: vfat, mounted fmask=0177. That masks off
+    # every execute bit, so a file there can NEVER be executable and chmod on it
+    # is a silent no-op. The file therefore lands correctly and is then invisible
+    # to this function, which resolves on [ -x ] -- it sat in the drop directory
+    # reading -rw------- while the page said no tool was installed.
+    # Measured on a live box: fmask=0177,dmask=0077.
+    #
+    # /boot is still the right place to PERSIST it -- it survives a reboot, and
+    # it stays mounted when the array is stopped, which flashing requires -- and
+    # the wrong place to RUN it from. So copy it where the bit sticks and hand
+    # back that path.
+    #
+    # NOT appdata, which is the obvious answer and the wrong one: flashing
+    # requires the array to be STOPPED, and /mnt/user and /mnt/cache are
+    # unmounted when it is. A tool under appdata would be present through every
+    # test where somebody forgot to stop the array and absent for every real
+    # flash. /boot and tmpfs are the only two locations guaranteed to exist in
+    # the exact condition this feature runs in, which is why it takes both.
+    #
+    # Yes, a lookup that writes. The alternative is find_flasher and the flash
+    # itself disagreeing about whether a tool exists, which is worse: the page
+    # would say "not installed" about a tool the flash would go on to use.
+    # Re-staged whenever the /boot copy is newer, so replacing the tool takes
+    # effect without a reboot.
+    # The single drop directory the firmware page tells users to scp into, then
+    # the pre-2026.08.09 tools/ location so anyone who already placed a tool
+    # there is not stranded by the rename.
+    local d src=""
+    for d in "${LSI_TOOLS:-/boot/config/plugins/hbaviewer/flash}" \
+             /boot/config/plugins/hbaviewer/tools; do
+        [ -r "$d/$tool" ] && { src="$d/$tool"; break; }
+    done
+    [ -n "$src" ] || return 1
+    local staged="${LSI_TOOL_STAGE:-/tmp/hbaviewer-tools}/$tool"
+    if [ ! -x "$staged" ] || [ "$src" -nt "$staged" ]; then
+        mkdir -p "${staged%/*}" 2>/dev/null || return 1
+        cp -f "$src" "$staged" 2>/dev/null || return 1
+        chmod 0755 "$staged" 2>/dev/null || return 1
+    fi
+    [ -x "$staged" ] && echo "$staged"
 }
 
 # True (and export a resolved $STORCLI) iff storcli is present and enumerates a
@@ -92,7 +147,7 @@ hba_personalities() {
     local h p
     for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
         p=$(cat "${h}proc_name" 2>/dev/null)
-        case "$p" in mpt3sas|mpt2sas|mptsas) echo "$p" ;; esac
+        case "$p" in mpt3sas|mpt2sas|mptsas|mpi3mr) echo "$p" ;; esac
     done
 }
 
@@ -104,6 +159,14 @@ hba_has_sas2() { case "$(hba_personalities)" in *mpt2sas*|*mptsas*) return 0 ;; 
 # True iff any controller is on the mpt3sas personality — genuine SAS3/3.5, needs
 # storcli. Both can be true on a box with one card of each generation.
 hba_has_sas3() { case "$(hba_personalities)" in *mpt3sas*) return 0 ;; esac; return 1; }
+
+# True iff any controller is on the mpi3mr personality — Broadcom's 24G/SAS4
+# generation, the 9600 series on SAS4116/SAS4024 (issue #19). Listed so the card
+# can be NAMED, never so it can be read: lsiutil 1.70 predates it by a decade and
+# storcli enumerates zero controllers on it — 24G needs StorCLI2, which this
+# plugin does not speak. Deliberately NOT folded into hba_has_sas3: everything
+# downstream of that predicate assumes storcli can read the card.
+hba_has_sas4() { case "$(hba_personalities)" in *mpi3mr*) return 0 ;; esac; return 1; }
 
 # The backend seam. Chooses storcli-vs-lsiutil ONCE, owns controller
 # enumeration and the {"backend","driver","controllers":[...]} wrapper, so a
@@ -127,4 +190,206 @@ hba_each() {
         if [ "$rc" -ne 0 ]; then printf '%s' "$body"; return; fi
         printf '{"backend":"lsiutil","driver":"%s","controllers":[%s]}' "$(hba_driver)" "$body"
     fi
+}
+
+# Every port the bundled lsiutil can address, one per line. lsiutil's own port
+# table — the banner it prints before the device menu — is the authority on the
+# numbering that -p takes:
+#
+#    1.  ioc0   LSI Logic SAS2308    14000700     b0
+#    2.  ioc1   LSI Logic SAS2308    14000700     b0
+#
+# Every composer already captures that banner, so enumeration costs no extra
+# hardware call. Issue #18: three 2308s in one box, and the plugin read only the
+# port Settings named, while Detected Hardware (sysfs, not lsiutil) listed all
+# three — a display that looks complete and monitors one card.
+# Falls back to $PORT so a box whose banner cannot be parsed behaves exactly as
+# it did before this existed.
+lsi_ports() {   # $1 = banner file
+    local rows
+    rows=$(grep -E "^[[:space:]]+[0-9]+\.[[:space:]]+ioc" "$1" 2>/dev/null)
+    if [ -n "$rows" ]; then
+        printf '%s\n' "$rows" | sed -E 's/^[[:space:]]*([0-9]+)\..*/\1/'
+    else
+        printf '%s\n' "${PORT:-1}"
+    fi
+}
+
+# Every port with the PCI bus and device lsiutil's own `-b` table gives it, one
+# "port bus dev" line each. Both reads list EVERY port in a single call, so a
+# composer that loops cards pays for them once here rather than once per card.
+# The bus/dev columns are what _host_for_pci joins on; a composer that only
+# needs the port numbers can read the first field and ignore the rest.
+# Empty bus/dev when the board table has no row for a port — _host_for_pci
+# rejects that, which is the intended "no join" answer, not an error.
+lsi_port_map() {
+    local BANNER BOARD p row
+    BANNER=$(mktemp); BOARD=$(mktemp)
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    hba_query -b             2>/dev/null > "$BOARD"
+    for p in $(lsi_ports "$BANNER"); do
+        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
+        printf '%s %s %s\n' "$p" "$(echo "$row" | awk '{print $3}')" "$(echo "$row" | awk '{print $4}')"
+    done
+    rm -f "$BANNER" "$BOARD"
+}
+
+# The scsi host a looping composer should attribute to one port, with the ONE
+# rule every one of them has to apply the same way: a failed join must not fall
+# back to card 1 when the box has more than one card. Two cards sharing a host
+# share their topology, card_id, drive count and PHY counters — and identical
+# card_ids make card_group.php fuse physically separate cards into one display
+# card, the exact inverse of the dual-IOC feature. With a single port there is
+# nothing to confuse, so the historic _first_sas_host fallback stands and
+# single-card output is unchanged.
+lsi_host_for() {   # $1 = bus   $2 = device   $3 = how many ports the box has
+    local h
+    if h=$(_host_for_pci "$1" "$2"); then printf '%s' "$h"; return 0; fi
+    [ "$3" = "1" ] && _first_sas_host
+}
+
+# The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
+# unlike storcli there is no line to parse), but the kernel already knows it:
+# /sys/class/scsi_host/hostN resolves into the device tree under the card, so
+# walk up until a dir that publishes link state appears. Issue #14 — a SAS2308
+# negotiated at x4 in a chipset slot, with the card's x8 maximum sitting in
+# sysfs the whole time while the plugin reported no maximum at all.
+# Lives here rather than in get_hba_health.sh because the overview composer now
+# needs the same walk to reach subsystem_vendor.
+_pci_dir_of_host() {   # $1 = scsi host number
+    local d
+    d=$(readlink -f "${SYS_SCSI_HOST:-/sys/class/scsi_host}/host$1" 2>/dev/null)
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        [ -r "$d/current_link_width" ] && { printf '%s' "$d"; return 0; }
+        d=$(dirname "$d")
+    done
+}
+
+# The scsi host number of the card at a given PCI bus/device. lsiutil prints no
+# PCI address in its own telemetry, but `-b` does — the Bus and Device columns
+# parse/hba.sh already reads — and every scsi_host resolves to a PCI dir through
+# _pci_dir_of_host. That is the join, and it is what lets a per-port loop reach
+# the RIGHT card's sysfs: port -> bus/dev -> host -> topology/subvendor/card_id.
+# Prints nothing and returns non-zero when no host matches; the caller decides
+# what that means, and on a multi-port box it must NOT mean card 1 (see the
+# gate in ov_lsiutil — two cards sharing one card_id would be grouped into one
+# display card, the exact inverse of the dual-IOC feature).
+# **lsiutil prints Seg/Bus/Dev in DECIMAL; sysfs is hex.** Confirmed on the
+# 3-card box in issue #18: `-b` says bus 129, 130, 131 and sysfs says
+# 0000:81:00.0, 0000:82:00.0, 0000:83:00.0. The 2-card bundle could not have
+# shown this — its buses are 1 and 6, identical in either base — which is
+# exactly the kind of agreement that makes a wrong assumption look verified.
+_host_for_pci() {   # $1 = bus (decimal)   $2 = device (decimal)
+    local h hn d bus dev
+    # Digits-only first, then 10# on the arithmetic: a garbled column must
+    # return 1, never abort the composer with a bash error mid-JSON, and a
+    # zero-padded "08" must not be read as invalid octal.
+    case "$1" in ''|*[!0-9]*) return 1 ;; esac
+    case "$2" in ''|*[!0-9]*) return 1 ;; esac
+    bus=$(printf '%02x' "$((10#$1))")
+    dev=$(printf '%02x' "$((10#$2))")
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
+        hn=${h%/}; hn=${hn##*host}
+        d=$(_pci_dir_of_host "$hn")
+        [ -n "$d" ] || continue
+        case "$(basename "$d")" in *:"$bus":"$dev".*) printf '%s' "$hn"; return 0 ;; esac
+    done
+    return 1
+}
+
+# First SAS host (mpt2sas/mpt3sas/mptsas) — same personality filter as
+# hba_personalities above, but keeping the host NUMBER, needed to key
+# _phys_json. The fallback route, for the single-port case and for a card whose
+# board line gives no PCI address to join on; _host_for_pci above is the one
+# that can tell two cards apart.
+# Lives here rather than in get_hba_health.sh because the overview composer now
+# needs the same lookup to reach this card's topology and subsystem_vendor.
+_first_sas_host() {
+    local h
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        case "$(cat "${h}proc_name" 2>/dev/null)" in
+            mpt3sas|mpt2sas|mptsas) basename "$h" | sed 's/^host//'; return ;;
+        esac
+    done
+}
+
+# Is this controller directly attached, or is there an expander in the path?
+#
+# Broadcom publishes a SEPARATE multi-path firmware track for the 9300, 9302,
+# 9305, 9400 and 9405W, with its own version numbering — a card on that track
+# correctly runs a version far below the standard branch. Comparing the two
+# tracks reports a working multipath card as badly out of date, and acting on
+# that destroys the configuration. So the firmware verdict is suppressed unless
+# the card can be shown to be internal, and this is that proof.
+#
+# Two independent signals, either sufficient to disqualify: an expander device
+# for this host, or any three-component end_device-H:N:M child (a device behind
+# something that numbers its own PHYs). The two-vs-three component rule is the
+# same one get_hba_health.sh's _phys_json uses to keep an expander's PHYs out of
+# a controller's own error counts (issue #12).
+#
+# Scoped to ONE host: a box with two HBAs, one behind an expander, must not have
+# that expander silence the other card. An empty tree is "unknown", not
+# "internal" — a card with nothing attached proves nothing about topology.
+hba_topology() {   # $1 = scsi host number -> "internal" | "unknown"
+    local d n found=0
+    for d in "${SYS_SAS_EXPANDER:-/sys/class/sas_expander}"/expander-"${1}":*; do
+        [ -e "$d" ] && { printf 'unknown'; return; }
+    done
+    for d in "${SYS_SAS_DEVICE:-/sys/class/sas_device}"/end_device-"${1}":*; do
+        [ -e "$d" ] || continue
+        found=1
+        n=$(basename "$d")
+        case "${n#end_device-}" in *:*:*) printf 'unknown'; return ;; esac
+    done
+    [ "$found" -eq 1 ] && printf 'internal' || printf 'unknown'
+}
+
+# PCI subsystem vendor for a card, from its sysfs device dir. 0x1000 is a
+# generic Broadcom board; anything else is an OEM rebrand (IBM M1015, Dell
+# H200/H310 and friends) whose NVDATA and BIOS differ, where reaching a generic
+# firmware version is a CROSSFLASH rather than an upgrade. Getting this wrong
+# tells a user to perform a materially riskier operation than the one described,
+# so an unreadable attribute must yield empty and suppress the verdict — never a
+# default that happens to look generic.
+hba_subvendor() {   # $1 = sysfs PCI device dir
+    local v
+    v=$(cat "$1/subsystem_vendor" 2>/dev/null) || return 0
+    printf '%s' "${v//[[:space:]]/}"
+}
+
+# The physical slot a controller occupies, named by its PCI root port -- the
+# first device under the host bridge in the resolved sysfs path. Two
+# controllers sharing one are on the same board unless a switch sits between
+# them and the root port, which is why grouping also requires ioc_count to
+# match the group size exactly. pci_location cannot answer this and
+# board_name must not: two SEPARATE 9300-8i cards report the same name, so
+# grouping on it would merge unrelated hardware, which is worse than not
+# grouping at all.
+#
+# A SAS9300-16i carries a PCIe switch of its own, so its two SAS3008 IOCs
+# differ at every level below the root port:
+#   pci0000:80/0000:80:01.0/0000:82:00.0/0000:83:00.0/0000:84:00.0
+#   pci0000:80/0000:80:01.0/0000:82:00.0/0000:83:09.0/0000:86:00.0
+#
+# Empty when the ancestry is not visible -- an absent entry, a flat test tree,
+# or a backend that reports no PCI address. Callers MUST treat empty as "do not
+# group", including against other empties: two unknowns are not a match.
+hba_card_id() {   # $1 = sysfs PCI device dir -> "0000:80:01.0" | ""
+    local real rest
+    real=$(readlink -f "$1" 2>/dev/null) || return 0
+    # Redundant while readlink -f guarantees an absolute path (${rest%%/*} then
+    # blanks it), and load-bearing the moment it does not: a relative input would
+    # otherwise print a bogus slot ID -- the failure that merges unrelated cards.
+    case "$real" in
+        */pci[0-9][0-9][0-9][0-9]:[0-9a-f][0-9a-f]/*) ;;
+        *) return 0 ;;
+    esac
+    rest="${real#*/pci[0-9][0-9][0-9][0-9]:[0-9a-f][0-9a-f]/}"
+    rest="${rest%%/*}"
+    case "$rest" in
+        [0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-9])
+            printf '%s' "$rest" ;;
+    esac
 }

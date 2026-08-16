@@ -6,6 +6,8 @@
 #   $3  board   = lsiutil -b                 (product name, PCI location)
 #   $4  alert   = alert threshold (int, for status classification)
 #   $5  ident   = lsiutil -pN -a 1,0        (firmware image name -> IT/IR)
+#   $6  port    = N, to pick this card's row out of a multi-port banner
+#                 (optional; empty takes the first row, as it always did)
 #
 # No hardware here — feed captured fixtures to test the whole shape.
 
@@ -14,6 +16,21 @@ BANNER=$(cat "$2" 2>/dev/null)
 BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
 IDENT=$(cat "$5" 2>/dev/null)
+PORTSEL="${6:-}"   # which banner row is this card's; empty = the first one
+# The card's own -p number, so the UI can label it "ioc1 (lsiutil -p2)" instead
+# of pasting the one port Settings names onto every card (issue #18). Emitted
+# only when the caller said which port this is, which keeps the output of a
+# caller that does not — every single-card expectation in the suite — unchanged.
+PORT_FIELD=""
+[ -n "$PORTSEL" ] && PORT_FIELD=" \"port\": $PORTSEL,"
+
+# Injected by the composer, which reads them from sysfs — this file stays a pure
+# filter with no hardware access. Defaults are the suppressing values: an
+# unstated topology must never read as "internal", and an unstated subvendor
+# must never read as generic Broadcom.
+TOPOLOGY="${LSI_TOPOLOGY:-unknown}"
+SUBVENDOR="${LSI_SUBVENDOR:-}"
+CARD_ID="${LSI_CARD_ID:-}"
 
 # ── 1. Temperature (OPTIONAL — many SAS2008/9211 cards have no onboard sensor) ─
 TEMP_HEX=$(echo "$IOC" | grep "IOCTemperature:" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
@@ -59,7 +76,15 @@ case "${POWER_HEX,,}" in
 esac
 
 # ── 2. Banner: chip model, firmware, port name ──────────────────────────────
-CARD_LINE=$(echo "$BANNER" | grep -E "^\s+[0-9]+\.\s+ioc" | head -1)
+# The banner lists EVERY port lsiutil found, one row each, so on a multi-card
+# box the row must be picked by port number rather than taken first (issue #18).
+# $6 is optional and defaults to the historic first-row behaviour, which is what
+# keeps every single-card fixture byte-identical.
+if [ -n "$PORTSEL" ]; then
+    CARD_LINE=$(echo "$BANNER" | grep -E "^[[:space:]]+${PORTSEL}\.[[:space:]]+ioc" | head -1)
+else
+    CARD_LINE=$(echo "$BANNER" | grep -E "^\s+[0-9]+\.\s+ioc" | head -1)
+fi
 MODEL=$(echo "$CARD_LINE"     | grep -oE 'SAS[0-9]+[A-Za-z0-9]*' | head -1)
 PORT_NAME=$(echo "$CARD_LINE" | awk '{print $2}')
 
@@ -94,10 +119,33 @@ MODE=$(printf '%s\n' "$IDENT" \
     | grep -oE '(IT|IR)$')
 
 # ── 3. Board: product name, PCI location ────────────────────────────────────
-BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
-BOARD_NAME=$(echo "$BOARD_LINE" | awk '{print $5}')
-PCI_BUS=$(echo "$BOARD_LINE"    | awk '{print $3}')
-PCI_DEV=$(echo "$BOARD_LINE"    | awk '{print $4}')
+# `lsiutil -b` lists EVERY port in one call, in the same order as the banner
+# (issue #18's bundles show ioc0/ioc1/ioc2 in both), so this card's row is the
+# PORTSEL'th one — no per-port -b capture needed.
+if [ -n "$PORTSEL" ]; then
+    BOARD_LINE=$(echo "$BOARD" | grep "ioc" | sed -n "${PORTSEL}p")
+else
+    BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
+fi
+# The board name can contain SPACES: a 9400 reads "HBA 9400-16i", where a 9207
+# reads "SAS9207-8i". Taking field 5 kept "HBA" and dropped the model, which
+# also cost that card its firmware verdict — fw_evaluate cannot match a board
+# called "HBA". Column offsets are no help (the Seg/Bus/Dev columns shift by a
+# character between a 1-digit and a 3-digit bus), but the name is never
+# double-spaced while the gap to the Board Assembly column always is: so take
+# everything after the four leading columns, up to the first run of 2+ spaces.
+# A card with no assembly or tracer (the 2-card fixture) just runs to the end.
+BOARD_NAME=$(echo "$BOARD_LINE" | sed -E 's/^[[:space:]]*([^[:space:]]+[[:space:]]+){4}//; s/[[:space:]]{2,}.*$//; s/[[:space:]]+$//')
+# The Seg/Bus/Dev columns are DECIMAL, and every other place a PCI address
+# appears — sysfs, lspci, the Overview's own storcli path — is hex. Issue #18's
+# 3-card box read "129:0" here where lspci says 81:00.0. Converted, not merely
+# padded; left verbatim if the column is not a plain number, so an lsiutil that
+# prints something else entirely still shows what it printed.
+_pcihex() {   # $1 = decimal column
+    case "$1" in ''|*[!0-9]*) printf '%s' "$1" ;; *) printf '%02x' "$((10#$1))" ;; esac
+}
+PCI_BUS=$(_pcihex "$(echo "$BOARD_LINE" | awk '{print $3}')")
+PCI_DEV=$(_pcihex "$(echo "$BOARD_LINE" | awk '{print $4}')")
 
 # Not responding at all (no temp, no model, no board) — likely the wrong port.
 if [ -z "$TEMP_HEX" ] && [ -z "$MODEL" ] && [ -z "$BOARD_NAME" ]; then
@@ -148,9 +196,12 @@ cat <<EOF
   "firmware": "${FW_VER}",
   "mode": "${MODE}",
   "fw_old": $FW_OLD,
-  "port_name": "${PORT_NAME:-ioc0}",
+  "port_name": "${PORT_NAME:-ioc0}",${PORT_FIELD}
   "board_name": "${BOARD_NAME:-}",
   "pci_location": "${PCI_BUS:-0}:${PCI_DEV:-0}",
+  "card_id": "${CARD_ID}",
+  "topology": "${TOPOLOGY}",
+  "subvendor_id": "${SUBVENDOR}",
   "pcie_width": "${PCIE_WIDTH}",
   "pcie_speed": "${PCIE_SPEED}",
   "power_mode": "${POWER_MODE}",

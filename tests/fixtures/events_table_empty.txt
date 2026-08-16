@@ -1,0 +1,10 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+2 MPT Ports found
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 35
+
+0 Log entries found
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 0

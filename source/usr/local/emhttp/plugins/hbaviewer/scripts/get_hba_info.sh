@@ -33,11 +33,12 @@ fi
 # storcli overview: light `show` + `show temperature` (NOT `show all`, which does
 # a slow per-drive SMART scan). $2 to the parser is this controller's summed
 # sysfs PHY error count, for the glanceable health rollup.
-# ponytail: host N == controller N (holds for these HBAs); the PHY tab uses exact
-# SAS correlation, this cheaper host index is only for the rollup.
+# ponytail: host N == controller N (holds for these HBAs) is used for the PHY
+# error rollup only -- the PHY tab uses exact SAS correlation, and topology (which
+# gates the firmware verdict) resolves its host from the card's own PCI dir below.
 ov_storcli() {   # $1 = controller index
-    local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip
-    for p in /sys/class/sas_phy/phy-"${1}":*/; do
+    local perr=0 p idx f v out pci dom bus dev fn dir width speed power chip h hosts hnum
+    for p in "${SYS_SAS_PHY:-/sys/class/sas_phy}"/phy-"${1}":*/; do
         [ -d "$p" ] || continue
         idx=$(basename "$p")
         # phy-H:N is this controller's own PHY; phy-H:N:M is a PHY on an expander
@@ -92,7 +93,43 @@ ov_storcli() {   # $1 = controller index
         esac
     fi
 
+    # storcli's own output carries SubVendor Id, but read it from sysfs for both
+    # backends so there is one source of truth and one thing the diagnostic
+    # bundle has to capture. $dir is already resolved above from PCI Address.
+    #
+    # Topology gates the multipath suppression -- a wrong answer there is a false
+    # BEHIND on a correctly configured card -- so it resolves this card's scsi
+    # host from $dir too, where the kernel publishes it, rather than from the
+    # host-N-equals-controller-N guess the rollup above can afford. Anything but
+    # exactly one host under the device reads "unknown", which suppresses.
+    hosts=(); [ -n "$dir" ] && for h in "$dir"/host*/; do [ -d "$h" ] && hosts+=("$h"); done
+    hnum=""; if [ "${#hosts[@]}" -eq 1 ]; then hnum=$(basename "${hosts[0]}"); hnum="${hnum#host}"; fi
+    LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
+    LSI_SUBVENDOR=$([ -n "$dir" ] && hba_subvendor "$dir")
+    # The slot, for grouping the two IOCs of a dual-controller board. Same
+    # $dir the subvendor read uses, so it costs one more sysfs resolve.
+    LSI_CARD_ID=$([ -n "$dir" ] && hba_card_id "$dir")
+    export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
+}
+
+# The board name of the first host on one of $1's personalities, for the refusal
+# messages below — naming the card is what turns "unsupported" into something a
+# reporter can act on. Membership is tested against a space-separated list, NOT
+# a case pattern: `case $p in $1)` never treats an expanded "a|b" as alternation,
+# because case parses its alternation before the expansion happens, so every
+# card came back as the fallback. Falls back to "This controller" when sysfs
+# publishes no board_name.
+_board_on() {   # $1 = space-separated proc_names
+    local h p board=""
+    for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
+        p=$(cat "${h}proc_name" 2>/dev/null)
+        [ -n "$p" ] || continue          # an empty proc_name would match any list
+        case " $1 " in *" $p "*) ;; *) continue ;; esac
+        board=$(tr -d '\n' < "${h}board_name" 2>/dev/null)
+        [ -n "$board" ] && break
+    done
+    printf '%s' "${board:-This controller}"
 }
 
 ov_lsiutil() {
@@ -104,27 +141,58 @@ ov_lsiutil() {
     # old /sys/module test refused those cards outright. hba_has_sas3 also keeps a
     # box with no HBA at all falling through to require_binary's clearer error.
     if [ -z "$(find_storcli)" ] && hba_has_sas3 && ! hba_has_sas2; then
-        local h board=""
-        for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
-            case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
-            board=$(tr -d '\n' < "${h}board_name" 2>/dev/null)
-            [ -n "$board" ] && break
-        done
         printf '{"error":"%s is on the mpt3sas driver and the bundled lsiutil cannot read through it. Install storcli via the dkaser/unraid-storcli plugin (Community Applications), then reload."}' \
-            "${board:-This controller}"
+            "$(_board_on 'mpt3sas mpt2sas mptsas')"
+        return 1
+    fi
+    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. Neither tool here can read
+    # it: lsiutil 1.70 predates the generation, and storcli enumerates zero
+    # controllers on it, which would otherwise route the card into the lsiutil
+    # branch below and end in "check the lsiutil port in Settings" — advice that
+    # cannot work on any port. Say what the card is and what it needs instead.
+    # Gated on there being no SAS2 or SAS3 card as well, so a mixed box still
+    # gets the backend that serves the cards this plugin CAN read.
+    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3; then
+        printf '{"error":"%s is a 24G/SAS4 controller on the mpi3mr driver. The bundled lsiutil and storcli cannot read this generation — it needs Broadcom StorCLI2, which HBAviewer does not support yet (issue #19)."}' \
+            "$(_board_on 'mpi3mr')"
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD IDENT
+    local IOC BANNER BOARD IDENT p ports nports first=1
     IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
     trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
-    hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
-    printf '0\n' | hba_query        2>/dev/null > "$BANNER"
-    hba_query -b                    2>/dev/null > "$BOARD"
-    # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
-    # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
-    hba_query -p"$PORT" -a 1,0      2>/dev/null > "$IDENT"
-    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
+    # Both of these list EVERY port in one call, so they are captured once and
+    # the per-card row is picked out by port number below and in parse/hba.sh.
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    hba_query -b             2>/dev/null > "$BOARD"
+    ports=$(lsi_ports "$BANNER")
+    nports=$(echo $ports | wc -w | tr -d ' ')   # unquoted: count the tokens
+    for p in $ports; do
+        hba_query -p"$p" -a 25,2,0,0 2>/dev/null > "$IOC"
+        # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain
+        # menu item, NOT expert mode, so no -e. Read-only: it reports what is
+        # flashed.
+        hba_query -p"$p" -a 1,0      2>/dev/null > "$IDENT"
+        # lsiutil reports no PCI address in its telemetry, so the card is
+        # reached through its scsi_host — the same walk issue #14 added for the
+        # PCIe link maximum, but joined on THIS port's bus/device (issue #18)
+        # rather than on whichever SAS host happens to be first.
+        local hnum pdir bus dev row
+        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
+        bus=$(echo "$row" | awk '{print $3}')
+        dev=$(echo "$row" | awk '{print $4}')
+        hnum=$(lsi_host_for "$bus" "$dev" "$nports")
+        pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
+        LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
+        LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
+        # The slot, for grouping the two IOCs of a dual-controller board —
+        # per-card now, which is what keeps N separate cards separate.
+        LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
+        export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
+        [ "$first" = 1 ] || printf ','
+        first=0
+        bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT" "$p"
+    done
 }
 
 out=$(hba_each ov_storcli ov_lsiutil)

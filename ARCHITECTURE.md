@@ -74,6 +74,7 @@ installs it; Unraid's Slackware base ships it.
 | `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
 | `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
+| `card_group.php` | Which controllers are one physical CARD. A SAS9300-16i is one board carrying two SAS3008 IOCs — two PCI functions, two indices, two temperature sensors — and only the display should say "one card". `lsi_group_cards()` buckets by PCI root port **and** board name and merges only when the count matches the index's `ioc_count` exactly, because a riser can put two genuinely separate cards behind one root port. Everything unrecognised stays split. Consumed by the Overview (`renderOverviewCards`) and by the firmware page's JSON, which is what makes a dual-IOC board verify and flash as one card. |
 | `health.php` | The five indicators, the rolling sample ring, the rollup. |
 | `phy_baseline.php` | The `/boot` baseline store, delta and rate maths, reset detection. |
 | `bay_map.php` | The `/boot` drive-bay assignment store, the identity key, the grid size and the lock. Second mutating path after `flash.php` — see below. |
@@ -85,8 +86,8 @@ installs it; Unraid's Slackware base ships it.
 | `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
 | `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
-| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, and its menu entry is `Cond`-gated on `ENABLE_FLASH` so it does not exist when flashing is off. |
-| `flash_view.js` | The firmware page's behaviour — the four-step wizard, the upload and the flash poll. |
+| `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, `Cond`-gated on `ENABLE_FLASH` so the route does not exist when flashing is off. Declares `Menu="HBAviewer"`, so it is a standalone page under Tools alongside the Monitor — the same shape `HBAviewer_Monitor.page` uses. **Not** `Menu="Utilities"` (planted a second icon in Settings → Utilities that bypassed the danger notice) and **not** `Menu="HBAviewer_Settings"` (Unraid stacks the children of an `xmenu` parent onto one page, so the whole flash page rendered inline below the settings form). `Menu=` also decides the URL root, so `/Tools/HBAviewer_Flash` is hardcoded in two places — the Monitor's tab and the Settings button. All three are pinned together in `flash_php_test.php`. |
+| `flash_view.js` | The firmware page's behaviour — the four-step wizard and the flash poll. Everything here is keyed by `c.ctl`, the controller number(s) the card covers (`"0,1"` on a dual-IOC board), never by the array index: `?type=overview` returns one entry per CARD, and a card's position in that array is not a controller number. |
 
 **The house pattern for an endpoint that both mutates and shares helpers**
 (`phy_baseline.php`, `bundle.php`, `flash.php`, `export.php`): pure functions at
@@ -159,10 +160,63 @@ unit-tested, and enforced **server-side**:
 
 - opt-in toggle (`ENABLE_FLASH`, default off)
 - array must be STOPPED, failing closed on a missing or unreadable `var.ini`
-- read-only verify scoped to the single target controller
+- read-only verify scoped to the target **card** — every controller on it, and nothing else
+- controller argument validated by one `flash_ctl_list()` both call sites share — shape (`/^\d+(,\d+)*\z/`; `\z`, not `$`, or a trailing newline slips through), size (`LSI_MAX_IOCS`) and uniqueness
+- and, on the mutating action only, **membership**: `flash_ctl_is_card()` requires the posted list to *be* one of the cards `flash_card_chips()` derives from the live hardware at flash time, **and** the posted chip to be the one that card actually reports — the chip picks the flash tool, and a stale page carries a stale `data-chip` as readily as a stale `data-ctl`
+- that derivation, `flash_cards_from()` (the pure half, unit-tested against the pipeline goldens), **drops any group smaller than the `ioc_count` its board declares**. A per-controller parser error carries no `card_id`, so a 9300-16i with one unreadable IOC groups as `[[0],[1]]` and the surviving half would otherwise be a perfectly valid single-controller "card" — flashing it writes one IOC of a two-IOC board and reports success. The board is unflashable until the read is clean; boards declaring no count default to 1 and are unaffected
+- every gate in `flash_preflight()` **fails closed on a missing input**, including `card`; the one that did not was the most dangerous one there
 - typed `FLASH` confirmation plus an acknowledgement checkbox
 - single-flight lock, never auto-retried
-- upload filename sanitisation confined to one directory
+- image filenames confined to one directory (`flash_safe_name()`)
+
+**A dual-IOC board is one card and is flashed as one.** A SAS9300-16i carries
+two SAS3008 controllers, and leaving one of them behind would leave the board
+running two firmware versions. `flash_hba.sh` therefore takes a comma-separated
+controller list and **loops it** — deliberately *not* `-fwall`, which Broadcom
+recommends for these boards: `-fwall` means every controller in the *system*, so
+on a box holding a 9300-16i and a 9300-8i it would write the 16i image to the 8i
+and brick it. `-listall` is barred from the verify path for the same reason.
+Both absences are asserted in `flash_php_test.php`, against the script with its
+**comments stripped** — the prose has to be free to name the flags it is arguing
+against.
+
+That argument is only true if the list really is one card's own controllers, and
+shape validation cannot tell: `0,1,2,3,4,5,6,7` is a well-formed list and
+reproduces the exact `-fwall` blast radius. So the flash action re-derives the
+grouping from the live hardware and requires the posted list to **be** one of
+those groups, by exact string equality. Half a dual-IOC card is not a card. No
+groups (backend error) refuses everything — the same read is what drew the card
+the operator pressed Flash on, so failing closed costs nothing real. The
+read-only `listall` action skips this: it writes nothing, and a full hardware
+read before every Verify press would put a minute on the quick button. Its
+fan-out is bounded by the size and uniqueness checks instead.
+
+The loop's own hazard is a **partial flash**: the second write failing after the
+first succeeded. It has its **own exit code, 7**, which `flash.php` turns into
+`done: 'partial'` and the page into its own red banner. 6 — "nothing was
+written" — is the safe outcome, and sharing one code made the two
+machine-indistinguishable with only free text between a safe retry and a dead
+card. The partial message names which controller holds which half, tells the
+operator not to reboot, and sends them at the **whole card** — the membership
+gate accepts a card's complete controller list and nothing less, so "re-flash
+just the one that failed" would be refused, and rewriting both is the safe
+action anyway. A failure on the *first* write stops there.
+
+**The membership read happens before the lock is claimed.** `flash_card_chips()`
+shells out to `get_hba_info.sh` and can take a minute on a slow controller, and
+`flash_claim_lock()` has no TTL recovery the way `cached_read()` does. A PHP
+death inside the claim→launch window (fpm timeout, fatal, worker recycle)
+therefore orphans the lock: every later flash is refused "already in progress"
+and `?action=status` reports a run that does not exist, until `/tmp` clears at
+reboot — on a box taken offline specifically to flash. The read is pure, so
+nothing about the ordering matters; a source assertion in `flash_php_test.php`
+pins the two positions because prose cannot. The page also names the wait, so
+nobody double-presses into the lock while the read is running.
+
+`flash_rc` is reset **inside** the loop, not merely left unset. It is assigned
+only on failure, so a value inherited from the environment made iteration 1
+report a successful write as "nothing was written" — a lie about what is on the
+hardware, which is worse than any error this path can return.
 
 The greyed-out Step 3 in the UI is an **affordance**, not a control. Deleting
 all of that CSS must still leave flashing blocked. If a change ever makes the

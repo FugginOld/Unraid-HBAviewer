@@ -15,6 +15,14 @@ PCIEW="${4:-}"      # PCIe link width  (e.g. "x8") — sysfs, read by the compos
 PCIES="${5:-}"      # PCIe link speed  (e.g. "Gen3 (8.0 GT/s)") — sysfs, read by the composer
 PWRM="${6:-}"       # power mode       (e.g. "Full") — sysfs PCI D-state, ditto
 
+# Injected by the composer, which reads them from sysfs — this file stays a pure
+# filter with no hardware access. Defaults are the suppressing values: an
+# unstated topology must never read as "internal", and an unstated subvendor
+# must never read as generic Broadcom.
+TOPOLOGY="${LSI_TOPOLOGY:-unknown}"
+SUBVENDOR="${LSI_SUBVENDOR:-}"
+CARD_ID="${LSI_CARD_ID:-}"
+
 # First "Key = Value" line for an exact key (anchored, so "Model" != "Model Number")
 val() { printf '%s\n' "$input" | grep -m1 -E "^$1[[:space:]]*=" | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//'; }
 
@@ -27,7 +35,16 @@ fi
 # Labels differ between `show` (brief) and `show all`; accept either.
 BOARD=$(val "Product Name"); [ -n "$BOARD" ] || BOARD=$(val "Model")
 FW=$(val "FW Version");      [ -n "$FW" ]    || FW=$(val "Firmware Version")
+# storcli prints "00:c1:00:00" — domain:bus:device:function, colon-separated.
+# The lsiutil path emits bus:dev ("c1:00"), so the same card read through the
+# two backends printed two different spellings of its own address. Normalise on
+# the shorter one, which is what lspci's own listing starts with: take bus and
+# device, drop the domain and the function rather than invent a function number
+# lsiutil never reports. The full sysfs address is still carried by card_id.
 PCI=$(val "PCI Address")
+case "$PCI" in
+    *:*:*:*) PCI=$(printf '%s' "$PCI" | cut -d: -f2,3) ;;
+esac
 BIOS=$(val "BIOS Version")
 DRIVES=$(val "Physical Drives")
 # Chip: prefer storcli's AdapterType (works for any SAS2/SAS3/SAS3.5 chipset);
@@ -113,5 +130,5 @@ if [ "${PHYERR:-0}" -ge "$PHYERR_FLOOR" ] && [ "$RANK" -lt 1 ]; then RANK=1; fi
 case "$RANK" in 2) STATUS="alert" ;; 1) STATUS="warn" ;; *) STATUS="ok" ;; esac
 
 cat <<EOF
-{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"temp_band":"$TEMP_BAND","cfg_band":"$CFG_BAND","status":"$STATUS"}
+{"temp":$TEMP,"model":"${CHIP}","firmware":"${FW}","bios":"${BIOS}","mode":"${MODE}","drive_count":"${DRIVES}","port_name":"","board_name":"${BOARD}","pci_location":"${PCI}","card_id":"${CARD_ID}","topology":"${TOPOLOGY}","subvendor_id":"${SUBVENDOR}","pcie_width":"${PCIEW}","pcie_speed":"${PCIES}","power_mode":"${PWRM}","alert_threshold":$ALERT,"temp_band":"$TEMP_BAND","cfg_band":"$CFG_BAND","status":"$STATUS"}
 EOF

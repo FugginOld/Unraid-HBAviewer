@@ -1,0 +1,27 @@
+
+LSI Logic MPT Configuration Utility, Version 1.70, July 30, 2013
+
+3 MPT Ports found
+
+     Port Name         Chip Vendor/Type/Rev    MPT Rev  Firmware Rev  IOC
+ 3.  ioc2              LSI Logic SAS2308 D1      200      14000700     0
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 25
+
+Power Management actions menu, select an option:  [1-99 or e/p/w or 0 to quit] 2
+
+             CurrentPowerMode:       0x00
+            PreviousPowerMode:       0x00
+                    PCIeWidth:       0x08
+                    PCIeSpeed:       0x02
+               ProcessorState: 0x00000000
+  PowerManagementCapabilities: 0x0000010C
+               IOCTemperature:     0x003A
+          IOCTemperatureUnits:       0x02
+                     IOCSpeed:       0x01
+             BoardTemperature:     0x0000
+        BoardTemperatureUnits:       0x00
+
+Power Management actions menu, select an option:  [1-99 or e/p/w or 0 to quit] 0
+
+Main menu, select an option:  [1-99 or e/p/w or 0 to quit] 0

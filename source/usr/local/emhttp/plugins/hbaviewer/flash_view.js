@@ -1,11 +1,66 @@
-    function fesc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    /* HTML-escapes for an attribute VALUE or a text node. ' is covered because
+       this file also writes attribute values delimited by apostrophes.
 
-    function flashCard(i){ return document.querySelector('.lu-fc[data-ctl="'+i+'"]'); }
+       It is NOT sufficient for the body of an onclick handler, and must not be
+       relied on as if it were. The browser decodes entity references in the
+       attribute BEFORE handing the result to the JS parser, so &#39; becomes a
+       live apostrophe again and closes the string —
+       onclick="luFlashGo('&#39;);alert(1);//')" executes. What keeps the
+       onclick handlers below safe is not this function: it is that the only
+       value they interpolate is a server-built list of digits and commas
+       (ajax_info.php's implode(',', $group)), which flash.php independently
+       re-validates against /^\d+(,\d+)*\z/ before it can reach anything.
+       Interpolating any other value into a handler needs a real JS escape, or
+       addEventListener instead of an inline attribute. */
+    function fesc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+    /* The firmware verdict, in full. This is the surface where a flash actually
+       happens, so unlike the Overview's one-liner it shows the reason a verdict
+       was withheld — a suppressed comparison is a fact about the index's limits,
+       not about the card, and the user is entitled to know which. */
+    function fwVerdictBlock(v) {
+        if (!v || !v.status || v.status === 'unknown') return '';
+        // Colour is not recomputed here: ajax_info.php already ran the one
+        // verdict through fw_verdict_color() and sent the answer as v.color —
+        // amber-on-terminal is a rule with exactly one home, and a second copy
+        // in JS is a second place for it to quietly go wrong on the very page
+        // where a flash actually happens.
+        var rows = [], label = '', colour = v.color || '';
+        if (v.status === 'behind')  { label = 'BEHIND'; }
+        if (v.status === 'current') { label = 'CURRENT'; }
+        if (v.status === 'ahead')   { label = 'AHEAD OF INDEX'; }
+        if (label) {
+            rows.push(['Firmware', '<strong'+(colour?' style="color:'+colour+'"':'')+'>'+label+'</strong>']);
+            if (v.latest) rows.push(['Latest known IT', fesc(v.latest)]);
+            if (v.branch) rows.push(['Branch', fesc(v.branch)+(v.terminal?' (terminal)':' (not final — this is a floor, not a ceiling)')]);
+        } else {
+            rows.push(['Firmware', '<span class="lu-muted">no verdict</span>']);
+        }
+        if (v.reason)     rows.push(['Why', fesc(v.reason)]);
+        if (v.confidence) rows.push(['Confidence', fesc(v.confidence)+(v.index_date?' · index '+fesc(v.index_date):'')]);
+        if (v.note)       rows.push(['Note', fesc(v.note)]);
+        return '<div class="lu-fstep">'+rows.map(function(r){
+            return '<div><label class="step" style="display:inline-block;min-width:130px">'+r[0]+'</label>'+r[1]+'</div>';
+        }).join('')+'</div>';
+    }
+
+    /* Every function below is keyed by CTL — the controller number, or the
+       comma-separated list of them a dual-IOC board carries ("0,1"). It is
+       never the array index: ajax_info.php returns one entry per CARD, and a
+       card's controllers are not necessarily its position in that array (see
+       card_group.php). The same string keys the DOM ids, so there is one
+       identity per card rather than two that can drift apart. */
+    function flashCard(ctl){ return document.querySelector('.lu-fc[data-ctl="'+ctl+'"]'); }
     // Errored controllers render a card with data-ctl but no data-chip, so the
     // lookup can succeed while the attribute is absent. Coalesce to '' — chip is
     // only ever sent as a POST field, and URLSearchParams would stringify a null
     // into the literal "null", which flash.php's alnum filter happily accepts.
-    function flashChip(i){ var c=flashCard(i); return c ? (c.getAttribute('data-chip') || '') : ''; }
+    function flashChip(ctl){ var c=flashCard(ctl); return c ? (c.getAttribute('data-chip') || '') : ''; }
+    // "0,1" -> "/c0, /c1". The label names every controller the card covers, so
+    // the operator can see that Verify and Flash will both cover all of them.
+    function ctlLabel(ctl){
+        return String(ctl==null?'':ctl).split(',').map(function(n){ return '/c'+n; }).join(', ');
+    }
 
     window.luFlashInit = function () {
         var el = document.getElementById('flash-content');
@@ -15,97 +70,233 @@
           .then(function(d){
             var ctls = (d && d.controllers) || [];
             if (!ctls.length) { el.innerHTML = '<div class="lu-error">No controllers detected (or backend error).</div>'; return; }
-            el.innerHTML = ctls.map(function(c,i){
-              if (c.error) return '<div class="lu-fc lu-card first" data-ctl="'+i+'"><h4>Controller /c'+i+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
+            // One entry per CARD, so the loop index is deliberately not taken:
+            // it is not the controller number and never was safe as one.
+            el.innerHTML = ctls.map(function(c){
+              var ctl = fesc(c.ctl), lbl = fesc(ctlLabel(c.ctl));
+              if (c.error) return '<div class="lu-fc lu-card first" data-ctl="'+ctl+'"><h4>Controller '+lbl+'</h4><div class="lu-error">'+fesc(c.error)+'</div></div>';
               var chip = c.model || '';
-              return '<div class="lu-fc lu-card first" data-ctl="'+i+'" data-chip="'+fesc(chip)+'">'
-                + '<h4>Controller /c'+i+' — '+fesc(chip||'unknown chip')+'</h4>'
+              return '<div class="lu-fc lu-card first" data-ctl="'+ctl+'" data-chip="'+fesc(chip)+'">'
+                + '<h4>Controller '+lbl+' — '+fesc(chip||'unknown chip')+'</h4>'
                 + '<p class="sub">Current firmware: '+fesc(c.firmware||'?')+(c.bios?' · BIOS: '+fesc(c.bios):'')+'</p>'
-                + '<div class="lu-fstep"><label class="step">Step 1 — verify the flash tool sees THIS card (controller /c'+i+' only)</label>'
-                +   '<button class="lu-fbtn" onclick="luFlashList('+i+')">Verify /c'+i+'</button>'
-                +   '<pre id="flash-list-'+i+'" style="display:none"></pre></div>'
-                + '<div class="lu-fstep"><label class="step">Step 2 — upload the model-correct image (+ optional BIOS / tool)</label>'
-                +   'Firmware (.bin/.rom): <input type="file" id="flash-fw-'+i+'"><br><br>'
-                +   'BIOS (optional, .rom): <input type="file" id="flash-bios-'+i+'"><br><br>'
-                +   'Flash tool if not installed (sas2flash/sas3flash): <input type="file" id="flash-tool-'+i+'"> '
-                +   '<button class="lu-fbtn" onclick="luFlashUpload('+i+')">Upload</button> '
-                +   '<span id="flash-up-'+i+'" style="font-size:12px"></span></div>'
+                + fwVerdictBlock(c.firmware_verdict)
+                /* Step 1 is the TOOL, not Verify. Verify needs the flash tool, and
+                   the tool upload used to live in Step 2 — so Step 1 could not be
+                   completed until part of Step 2 had been, and the only way to
+                   discover which tool you needed was to press Verify and read the
+                   failure. The answer is knowable from the chip, so the page asks
+                   flash.php for it and says so up front. Filled in async by
+                   luFlashTool(); rendered empty so the card paints immediately. */
+                + '<div class="lu-fstep"><label class="step">Step 1 — the flash tool for this card</label>'
+                +   '<div id="flash-tool-info-'+ctl+'" class="lu-muted" style="font-size:12px">Checking…</div></div>'
+                /* Every controller on THIS card and nothing else. On a dual-IOC
+                   board that is both of them, which is why the label names them
+                   all: the listing the operator is about to read covers the same
+                   set the flash below will write. */
+                + '<div class="lu-fstep"><label class="step">Step 2 — verify the tool sees THIS card (controller '+lbl+' only)</label>'
+                +   '<button class="lu-fbtn" onclick="luFlashList(\''+ctl+'\')">Verify '+lbl+'</button>'
+                +   '<pre id="flash-list-'+ctl+'" style="display:none"></pre></div>'
+                /* No heading here: luFlashDrop() renders 3a and 3b with their own
+                   labels, because whether each is present is decided per file
+                   kind and a single heading could not say "optional" for one and
+                   not the other. */
+                + '<div class="lu-fstep">'
+                +   '<div id="flash-drop-'+ctl+'" class="lu-muted" style="font-size:12px">Checking…</div></div>'
                 + lockNote
-                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 3 — confirm &amp; flash</label>'
-                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+i+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
-                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+i+'" placeholder="FLASH"'+lockAttr+'> '
-                +   '<button class="lu-fbtn danger" onclick="luFlashGo('+i+')"'+lockAttr+'>Flash /c'+i+'</button></div>'
-                + '<pre id="flash-log-'+i+'" style="display:none"></pre>'
+                + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
+                +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+ctl+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
+                +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+ctl+'" placeholder="FLASH"'+lockAttr+'> '
+                +   '<button class="lu-fbtn danger" onclick="luFlashGo(\''+ctl+'\')"'+lockAttr+'>Flash '+lbl+'</button></div>'
+                + '<pre id="flash-log-'+ctl+'" style="display:none"></pre>'
                 + '</div>';
             }).join('');
+            // Cards are in the DOM; now fill each Step 1. One request per card
+            // rather than one for the page: a mixed box (a 9300 and a 9400) needs
+            // a different answer per controller, which is the case a single
+            // page-level "pick your tool" control could never get right.
+            ctls.forEach(function(c){ if (!c.error) luFlashTool(c.ctl); });
+            // One listing for the page, not one per card: the drop directory is
+            // shared, and asking N times for the same answer is how the last
+            // round of requests-per-card got out of hand.
+            luFlashDrop(ctls);
           })
           .catch(function(){ el.innerHTML = '<div class="lu-error">Failed to load controllers.</div>'; });
     };
 
-    window.luFlashList = function (i) {
-        var pre = document.getElementById('flash-list-'+i);
+    /* Step 3 for every card, from one listing of the shared drop directory.
+       There is no upload button anywhere on this page and there cannot be: a
+       multipart POST to any .php behind Unraid's nginx never completes, because
+       auth_request hands its subrequest the original Content-Length with no body
+       and PHP's multipart parser waits forever on it. Measured -- the same POST
+       to the same script answers in 12ms urlencoded and never answers at all as
+       multipart. So the user places files and this shows what it found. */
+    window.luFlashDrop = function (ctls) {
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'dropfiles', csrf_token:flashCsrf})})
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            var dir = d.dir || '/boot/config/plugins/hbaviewer/flash';
+            var imgs = d.images || [];
+            var ext = function (n) { var m = /\.([^.]+)$/.exec(n||''); return m ? m[1].toLowerCase() : ''; };
+            // Split by extension so each step offers only files of its own kind.
+            // LSI ships BIOS as .rom and firmware as .bin; .fw goes with firmware
+            // rather than being hidden, because a file the user can see in the
+            // folder and cannot select reads as a bug.
+            var bioses = imgs.filter(function (f) { return ext(f.name) === 'rom'; });
+            var fws    = imgs.filter(function (f) { return ext(f.name) !== 'rom'; });
+            var opt = function (f) {
+                return '<option value="'+fesc(f.name)+'">'+fesc(f.name)+'  ('+Math.round(f.size/1024)+' KB)</option>';
+            };
+            var missing = function (what, hint) {
+                return '<span style="color:var(--warn-text)">No ' + what + ' found.</span>'
+                     + '<div class="lu-muted" style="margin-top:6px">Put ' + hint + ' in <code>'+fesc(dir)+'</code>. '
+                     + 'Then reload this page.</div>';
+            };
+            ctls.forEach(function(c){
+              if (c.error) return;
+              var ctl = fesc(c.ctl);
+              var box = document.getElementById('flash-drop-'+c.ctl);
+              if (!box) return;
+              // A select, not a text field: the filename is passed to the
+              // flasher, and a typo here is a failed flash at best.
+              var bios = bioses.length
+                  ? '<select id="flash-bios-'+ctl+'"><option value="">— none —</option>'+bioses.map(opt).join('')+'</select>'
+                  : missing('BIOS image', 'your BIOS file (<code>.rom</code>)');
+              var fw = fws.length
+                  ? '<select id="flash-fw-'+ctl+'">'+fws.map(opt).join('')+'</select>'
+                  : missing('firmware image', 'your firmware file (<code>.bin</code>)');
+              box.innerHTML =
+                  '<label class="step">Step 3a — (optional) the model-correct BIOS file, a <code>.rom</code></label>'
+                + bios
+                + '<label class="step" style="margin-top:14px">Step 3b — the model-correct firmware file, a <code>.bin</code></label>'
+                + fw;
+            });
+          })
+          .catch(function(){
+            ctls.forEach(function(c){
+              var box = document.getElementById('flash-drop-'+c.ctl);
+              if (box) box.textContent = 'Could not read the flash folder.';
+            });
+          });
+    };
+
+    /* Fill Step 1 for one card: which tool its chip needs, whether it is here,
+       and the upload only when it is not. Never renders a Browse button for a
+       tool that is already present -- the commonest case (9400/9500 on storcli)
+       should read as "nothing to do", not as another form to fill in. */
+    window.luFlashTool = function (ctl) {
+        var box = document.getElementById('flash-tool-info-'+ctl);
+        if (!box) return;
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'toolinfo', chip:flashChip(ctl), csrf_token:flashCsrf})})
+          .then(function(r){ return r.json(); })
+          .then(function(t){
+            if (t.status === 'roc') {
+              box.innerHTML = '<span style="color:var(--crit-text)">This is a RAID-on-Chip (MegaRAID) part. '
+                + 'No IT firmware exists for it at any version and it cannot be crossflashed — nothing here can flash it.</span>';
+              return;
+            }
+            if (t.status === 'unknown' || !t.name) {
+              box.innerHTML = '<span style="color:var(--warn-text)">No flash tool is known for this chip. '
+                + 'Please open an issue with a diagnostic bundle rather than guessing at a tool.</span>';
+              return;
+            }
+            if (t.status === 'found') {
+              box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong> — found at <code>'+fesc(t.path)+'</code>. '
+                + 'Nothing to do here; continue to Step 2.';
+              return;
+            }
+            var dir = '/boot/config/plugins/hbaviewer/flash';
+            box.innerHTML = 'Flashed with <strong>'+fesc(t.name)+'</strong>, which is <strong>not installed</strong>. '
+              + 'Broadcom does not permit bundling it.'
+              + '<div class="lu-muted" style="margin-top:10px">Put <code>'+fesc(t.name)+'</code> in '
+              + '<code>'+fesc(dir)+'</code>, named exactly <code>'+fesc(t.name)+'</code>. '
+              + 'Use the Linux version — the bare binary with no extension, not the .exe or the EFI build. '
+              + 'Then reload this page.</div>';
+          })
+          .catch(function(){ box.textContent = 'Could not determine the flash tool for this card.'; });
+    };
+
+    window.luFlashList = function (ctl) {
+        var pre = document.getElementById('flash-list-'+ctl);
         pre.style.display='block'; pre.textContent='Running…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(i), ctl:i, csrf_token:flashCsrf})})
+        // ctl, not a loop index: on a dual-IOC board this is "0,1" and the
+        // listing comes back covering both controllers of the one card.
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'listall', chip:flashChip(ctl), ctl:ctl, csrf_token:flashCsrf})})
           .then(function(r){ return r.text(); })
           .then(function(t){ pre.textContent = t || '(no output)'; })
           .catch(function(){ pre.textContent='Request failed.'; });
     };
 
-    window.luFlashUpload = function (i) {
-        var out = document.getElementById('flash-up-'+i); out.style.color='var(--muted)'; out.textContent='Uploading…';
-        var fw=document.getElementById('flash-fw-'+i).files[0];
-        var bios=document.getElementById('flash-bios-'+i).files[0];
-        var tool=document.getElementById('flash-tool-'+i).files[0];
-        if (!fw && !tool) { out.style.color='var(--crit-text)'; out.textContent='Choose a firmware file first.'; return; }
-        var fd = new FormData(); fd.append('action','upload'); fd.append('csrf_token', flashCsrf);
-        if (fw) fd.append('firmware', fw);
-        if (bios) fd.append('bios', bios);
-        if (tool) fd.append('tool', tool);
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:fd})
-          .then(function(r){ return r.json(); })
-          .then(function(d){
-            if (d.error) { out.style.color='var(--crit-text)'; out.textContent=d.error; return; }
-            var c=flashCard(i);
-            if (d.firmware) c.setAttribute('data-fw', d.firmware);
-            if (d.bios) c.setAttribute('data-bios', d.bios);
-            out.style.color='var(--good-text)';
-            out.textContent='Stored: '+[d.firmware, d.bios, d.tool?('tool '+d.tool):''].filter(Boolean).join(', ');
-          })
-          .catch(function(){ out.style.color='var(--crit-text)'; out.textContent='Upload failed.'; });
-    };
 
-    window.luFlashGo = function (i) {
-        var log = document.getElementById('flash-log-'+i);
-        var c = flashCard(i);
-        var fw = c.getAttribute('data-fw'); var bios = c.getAttribute('data-bios') || '';
-        var ack = document.getElementById('flash-ack-'+i).checked;
-        var confirmTxt = document.getElementById('flash-confirm-'+i).value;
+    window.luFlashGo = function (ctl) {
+        var log = document.getElementById('flash-log-'+ctl);
+        // Straight off the Step 3 selects. These used to come from data-fw /
+        // data-bios attributes that the upload response set -- there is no
+        // upload now, and the selects only ever contain names the server found
+        // in the drop directory, so there is nothing to mistype.
+        var fwEl   = document.getElementById('flash-fw-'+ctl);
+        var biosEl = document.getElementById('flash-bios-'+ctl);
+        var fw   = fwEl   ? fwEl.value   : '';
+        var bios = biosEl ? biosEl.value : '';
+        var ack = document.getElementById('flash-ack-'+ctl).checked;
+        var confirmTxt = document.getElementById('flash-confirm-'+ctl).value;
         if (!flashArrayStopped) { alert('The array is not stopped. Stop it on the Main tab and reload this page.'); return; }
         if (!ack) { alert('Tick the acknowledgement box first.'); return; }
         if (confirmTxt !== 'FLASH') { alert('Type FLASH (all caps) to confirm.'); return; }
-        if (!fw) { alert('Upload a firmware image first.'); return; }
-        if (!window.confirm('FINAL confirmation: flash controller '+i+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
-        log.style.display='block'; log.textContent='Starting flash…';
-        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(i), ctl:i, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})
+        // Either alone is a real operation -- sasNflash takes -f, -b or both -- so
+        // the only thing that makes no sense is neither. flash.php re-checks this
+        // and additionally refuses BIOS-only on the storcli generation, where the
+        // BIOS is part of the firmware package.
+        if (!fw && !bios) { alert('Select a firmware image, a BIOS image, or both. Put them in the flash folder shown in Step 3, then reload this page.'); return; }
+        // Names every controller that is about to be written. On a dual-IOC
+        // board the flash writes both in sequence — the operator is confirming
+        // two writes, and a prompt naming one of them would be a lie.
+        if (!window.confirm('FINAL confirmation: flash controller '+ctlLabel(ctl)+' now?\n\nThis can brick the card if the image is wrong. Do not power off or reboot until it finishes.')) return;
+        /* Names the wait, because there is one. flash.php re-reads the hardware
+           to confirm these controllers really are one of this box's cards and
+           still carry the chip the page claims, and that read can take up to a
+           minute on a slow controller — a bare "Starting flash…" sitting there
+           silently is what makes someone press the button again. */
+        log.style.display='block';
+        log.textContent='Checking these controllers really are one of your cards… '
+          + 'this can take up to a minute on a slow controller.';
+        fetch('/plugins/hbaviewer/flash.php', {method:'POST', body:new URLSearchParams({action:'flash', chip:flashChip(ctl), ctl:ctl, firmware:fw, bios:bios, confirm:confirmTxt, csrf_token:flashCsrf})})
           .then(function(r){ return r.json(); })
           .then(function(d){
             if (d.error) { log.textContent='Refused: '+d.error; return; }
-            luFlashPoll(i);
+            luFlashPoll(ctl);
           })
           .catch(function(){ log.textContent='Request failed.'; });
     };
 
-    window.luFlashPoll = function (i) {
-        var log = document.getElementById('flash-log-'+i);
+    window.luFlashPoll = function (ctl) {
+        var log = document.getElementById('flash-log-'+ctl);
         fetch('/plugins/hbaviewer/flash.php?action=status')
           .then(function(r){ return r.json(); })
           .then(function(d){
             log.textContent = d.log || '(waiting for output…)';
-            if (d.running) { setTimeout(function(){ luFlashPoll(i); }, 2000); return; }
+            if (d.running) { setTimeout(function(){ luFlashPoll(ctl); }, 2000); return; }
             if (d.done === 'success') log.textContent += '\n\n✔ Flash completed. REBOOT the server to load the new firmware. (Linux flashers update the BIOS but cannot erase it.)';
+            /* Its own state, not a variant of 'error'. A partial flash left the
+               two controllers of one board on different firmware, and the log
+               above names which is which. The two outcomes ask opposite things
+               of the operator — 'error' means nothing was written and a retry
+               is safe — so this gets its own banner rather than the generic
+               "code N" line that used to cover both. */
+            else if (d.done === 'partial') {
+                /* Re-run the WHOLE CARD. The server-side membership gate only
+                   accepts a card's complete controller list, so "re-flash just
+                   the one that failed" is refused — and rewriting both is the
+                   safe action regardless: it puts one image on every controller
+                   of the board, which is where the failed run was headed. */
+                log.textContent += '\n\n⚠ PARTIAL FLASH — this card\'s controllers are now running DIFFERENT firmware.'
+                  + '\nDo NOT reboot. Read the log above: it names the controller that failed.'
+                  + '\nRe-run the flash for the WHOLE CARD — the same Flash button, the same image — before doing anything else.'
+                  + ' That rewrites BOTH controllers with the same firmware and is the safe action; flashing only the failed controller is refused.';
+                if (log.style) log.style.border = '2px solid var(--crit-text, #e74c3c)';
+            }
             else if (d.done === 'error') log.textContent += '\n\n✖ Flash tool exited with an error (code '+d.exit+'). Read the log above; do NOT reboot — reflash the correct image first.';
           })
-          .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(i); }, 3000); });
+          .catch(function(){ log.textContent += '\n(status poll failed — retrying)'; setTimeout(function(){ luFlashPoll(ctl); }, 3000); });
     };
 
     // The tab strip used to call this on first activation. Here the page IS the

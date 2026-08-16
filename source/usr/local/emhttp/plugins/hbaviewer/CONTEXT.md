@@ -49,12 +49,34 @@ the one exception is `Rbld`, and Unraid's own parity reconstruct (var.ini
 `mdResync` + `mdResyncAction`, read via `unraid_rebuilding()`) outranks it.
 This store is the only state the plugin cannot regenerate from hardware.
 
+## card grouping — `card_group.php` (`lsi_group_cards`, `lsi_ioc_counts`)
+Which controllers are one physical CARD. A SAS9300-16i is one board carrying two
+SAS3008 IOCs — two PCI functions, two indices, two temperature sensors — and only
+the display should say "one card". `lsi_group_cards()` buckets by PCI root port
+(`card_id`) **and** board name, then merges a bucket only when its size equals
+the `ioc_count` the firmware index declares for that board **exactly**: a riser
+can put two genuinely separate cards behind one root port, and merging those is
+worse than the split display this replaces. Everything unrecognised, and every
+controller with no resolvable slot, comes back as a group of one, so callers
+never special-case. Pure, fixture-tested (`tests/card_group_test.php`). Consumed
+by the Overview, the firmware page's JSON, and — the load-bearing one —
+`flash_cards_from()`, which is what makes a dual-IOC board flash as one card.
+
 ## flash (mutating) — `flash.php` + `scripts/flash_hba.sh`
 The ONE place HBAviewer writes to hardware, kept off the read-only path. Opt-in
 (`ENABLE_FLASH`, default off). `flash.php` owns the guards — `flash_preflight`
-(array STOPPED via `flash_array_stopped`, valid controller, confirmed image,
-single-flight lock), `flash_safe_name` (upload confinement) — all pure and
-unit-tested; the HTTP dispatch is skipped under CLI. `scripts/flash_hba.sh` maps
+(array STOPPED via `flash_array_stopped`, valid controller list, confirmed image,
+single-flight lock), `flash_ctl_list` (shape/size/uniqueness of the posted list),
+`flash_safe_name` (filename confinement) and the biggest of them,
+**`flash_ctl_is_card()`**: the posted list must *be* one of this box's cards and
+carry the chip that card actually reports. Its map comes from
+`flash_card_chips()`, the one impure guard — it shells out to `get_hba_info.sh`
+at flash time, because the client is the one party that cannot be asked. Its pure
+half is `flash_cards_from(array $data): array`, which groups via `card_group.php`
+and **drops any group smaller than the `ioc_count` its board declares**, so a
+degraded read of one IOC cannot present half a dual board as a flashable card.
+Everything except `flash_card_chips()`'s shell-out is pure and unit-tested; the
+HTTP dispatch is skipped under CLI. `scripts/flash_hba.sh` maps
 chip→tool (`flasher_for_chip`: SAS2→sas2flash, SAS30/31→sas3flash,
 SAS34/35→storcli), resolves it via `find_flasher`/`find_storcli`, and runs
 `list` (read-only preflight) or `flash`. Tool binaries are never bundled —
