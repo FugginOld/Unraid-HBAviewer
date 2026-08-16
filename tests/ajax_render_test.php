@@ -108,8 +108,12 @@ check('phy no baseline offers button', str_contains($h, 'Set Baseline')
 // (b) baseline an hour old, inv 100 -> 250: delta 150, rate 150/hr.
 $bl = ['0:0' => ['inv'=>100,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
 $h  = renderPhyTables($phyBase, $bl, 1000 + 3600, 5000 + 3600);
-check('phy delta rendered',   str_contains($h, '&Delta;150'));
-check('phy rate rendered',    str_contains($h, '150/hr'));
+// The HEADLINE is the count since the baseline; the driver's cumulative
+// counter is demoted to its own line. Resetting the baseline therefore sends
+// the column to 0, which is what pressing the button looks like it does.
+check('phy delta is the headline', str_contains($h, '>150</span>')
+                                || str_contains($h, '>150<'));
+check('phy cumulative demoted',    str_contains($h, 'since driver load: 250'));
 check('phy baseline time shown', str_contains($h, 'Baseline set'));
 check('phy offers reset',     str_contains($h, 'Reset Baseline'));
 check('phy raw counter kept', str_contains($h, '250'));
@@ -146,7 +150,17 @@ check('phy per-controller isolation', substr_count($h, 'lu-phy-stale') === 1
 $h = renderPhyTables(['backend'=>'lsiutil','controllers'=>[['phys'=>[
     ['phy'=>0,'link'=>'up','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
 ]]]], $bl, 1000 + 3600, 5000 + 3600);
-check('phy lsiutil delta rendered', str_contains($h, '&Delta;150') && str_contains($h, '150/hr'));
+check('phy lsiutil delta rendered', str_contains($h, '>150<')
+                                && str_contains($h, 'since driver load: 250'));
+
+// The point of the whole feature, stated as a test: a link that was bad and
+// has been fixed reads ZERO and is no longer flagged, while its cumulative
+// counter -- which no baseline can clear -- stays visible underneath.
+$blFixed = ['0:0' => ['inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0,'ts'=>1000,'up'=>5000]];
+$hFixed  = renderPhyTables($phyBase, $blFixed, 1000 + 3600, 5000 + 3600);
+check('a fixed link reads zero',       str_contains($hFixed, '>0<'));
+check('a fixed link is not flagged',   !str_contains($hFixed, 'lu-err-val'));
+check('a fixed link keeps its total',  str_contains($hFixed, 'since driver load: 250'));
 
 /* ── PHY top offenders (plan 027): the SAS-address join and the ranking ─────
    phy_drive_label() address pairs below are the real capture from the plan
@@ -244,29 +258,42 @@ check('phy_top_offenders unresolved drive still ranks', count($off) === 1 && $of
 check('luPhyCell fn exists',       function_exists('luPhyCell'));
 check('phy_recent_rate fn exists', function_exists('phy_recent_rate'));
 
+// $v is the driver's cumulative counter, $d['delta'] the count since the
+// baseline. They are DELIBERATELY different numbers here: a cell that printed
+// the wrong one would still pass if they matched.
 $dBase = ['reset' => false, 'delta' => ['inv' => 115], 'rate' => ['inv' => 1.9]];
 
-// No ring at all (null/null): the average prints with its "since baseline"
-// label, and nothing about a recent window is claimed.
-$cell = luPhyCell(115, false, $dBase, 'inv', null, null);
-check('luPhyCell labels the rate as an average since baseline', str_contains($cell, '1.9/hr since baseline'));
+// No ring at all (null/null): the count since baseline leads, the cumulative
+// counter follows on its own line, and nothing about a recent window is claimed.
+$cell = luPhyCell(4505, false, $dBase, 'inv', null, null);
+check('luPhyCell leads with the count since baseline', str_contains($cell, '>115<'));
+check('luPhyCell names the cumulative counter honestly', str_contains($cell, 'since driver load: 4505'));
+check('luPhyCell does not call the cumulative counter a lifetime', !str_contains($cell, 'lifetime'));
 check('luPhyCell omits the recent column with no ring', !str_contains($cell, 'in the last'));
 
-// Ring usable, this PHY quiet lately: the historical average survives
-// alongside the recent figure — the fix is MORE context, never less.
+// Ring usable, this PHY quiet lately: the recent figure joins the cumulative
+// one — the cell answers "since I fixed it" and "lately" at once.
 $recentQuiet = ['idx' => 5, 'inv' => 0.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
-$cell = luPhyCell(115, false, $dBase, 'inv', $recentQuiet, 46189);
+$cell = luPhyCell(4505, false, $dBase, 'inv', $recentQuiet, 46189);
 check('luPhyCell recent column appears when the ring is usable', str_contains($cell, '0/hr in the last'));
-check('luPhyCell keeps the historical average alongside the recent one',
-    str_contains($cell, '1.9/hr since baseline') && str_contains($cell, '0/hr in the last'));
+check('luPhyCell keeps the cumulative counter alongside the recent rate',
+    str_contains($cell, 'since driver load: 4505') && str_contains($cell, '0/hr in the last'));
 
-// Recent WORSE than historical (a fault that just started): both numbers
-// still print, correctly, in the order historical-then-recent.
+// A fault that just started: one tick since baseline flags the cell, even
+// though the cumulative counter dwarfs it.
 $dQuietHistory = ['reset' => false, 'delta' => ['inv' => 1], 'rate' => ['inv' => 0.1]];
 $recentHot     = ['idx' => 5, 'inv' => 40.0, 'disp' => 0.0, 'sync' => 0.0, 'rst' => 0.0];
-$cell = luPhyCell(1, false, $dQuietHistory, 'inv', $recentHot, 600);
-check('luPhyCell reads correctly when recent exceeds historical',
-    str_contains($cell, '0.1/hr since baseline') && str_contains($cell, '40/hr in the last'));
+$cell = luPhyCell(9000, false, $dQuietHistory, 'inv', $recentHot, 600);
+check('luPhyCell flags a single new error', str_contains($cell, 'lu-err-val'));
+check('luPhyCell still shows the recent rate', str_contains($cell, '40/hr in the last'));
+
+// The inverse, and the case that started this: a big cumulative counter with
+// nothing new since the baseline is NOT flagged. The caller still passes
+// $err = true from the raw counter; the delta overrides it.
+$dFixed = ['reset' => false, 'delta' => ['inv' => 0], 'rate' => ['inv' => 0.0]];
+$cell   = luPhyCell(13924, true, $dFixed, 'inv', $recentQuiet, 46189);
+check('luPhyCell clears the flag on a fixed link', !str_contains($cell, 'lu-err-val'));
+check('luPhyCell reads zero on a fixed link',      str_contains($cell, '>0<'));
 
 // The 'reset' counter is named 'rst' in the Health ring's own rows (sysfs'
 // field name) but 'reset' in phy_baseline's (the PHY tab's own field name) —

@@ -632,12 +632,24 @@ function luPhyBaselineBar(int $ctl, ?int $ts, bool $stale): string {
    $ringSpanSecs travels with it purely to word "in the last N" — absence
    prints nothing extra, never a misleading zero. */
 function luPhyCell($v, bool $err, ?array $d, string $k, ?array $recent = null, ?int $ringSpanSecs = null): string {
-    $s    = htmlspecialchars((string) $v);
-    $cell = $err ? '<span class="lu-err-val">' . $s . '</span>' : $s;
-    if ($d === null || !empty($d['reset'])) return $cell;
-    $r   = $d['rate'][$k];
-    $out = $cell . '<div class="lu-phy-delta" title="Average rate since the baseline was set — a past burst of errors still shows here, decaying toward zero rather than reflecting the link right now.">'
-         . '&Delta;' . (int) $d['delta'][$k] . ' &middot; ' . health_rate_str($r) . ' since baseline</div>';
+    // With a usable baseline the HEADLINE is the count since that baseline, not
+    // the cumulative counter. Resetting the baseline then does what pressing it
+    // looks like it does: the column goes to 0. It also fixes what the colour
+    // means — a cable you have actually fixed stops being orange, instead of
+    // staying orange until the next driver reload, which is the one event the
+    // plugin cannot cause and the user cannot see.
+    // The cumulative value keeps a line of its own, and is deliberately NOT
+    // called a lifetime: these counters are cumulative since the last DRIVER
+    // LOAD, so a reboot alone sends them to zero with no cable having changed.
+    $usable = $d !== null && empty($d['reset']);
+    $head   = $usable ? (string) (int) $d['delta'][$k] : (string) $v;
+    $err    = $usable ? ((int) $d['delta'][$k]) > 0 : $err;
+    $s      = htmlspecialchars($head);
+    $cell   = $err ? '<span class="lu-err-val">' . $s . '</span>' : $s;
+    if (!$usable) return $cell;
+    $out = '<span title="Errors on this PHY since the baseline was set. Reset the baseline to return it to zero.">' . $cell . '</span>'
+         . '<div class="lu-phy-delta" title="The driver\'s own cumulative counter, which no baseline can clear — it returns to zero only when the driver reloads or the box reboots.">'
+         . 'since driver load: ' . htmlspecialchars((string) $v) . '</div>';
     if ($recent !== null && $ringSpanSecs !== null) {
         $rk = $k === 'reset' ? 'rst' : $k;
         // Its own line and its own tooltip: the two numbers answer different
