@@ -111,27 +111,25 @@
    reads as two cards, which is the thing this feature exists to stop. */
 .lu-card-parent .lu-card-ioc {
     border-top: 1px solid var(--border);
-    padding: 10px 0 0;
+    padding: 10px 0 0 14px;
     margin-top: 10px;
 }
-/* A sub-card is content, not a column: it reads at ONE card's width, centred,
-   while the rule above it and the parent's own field list still span the frame.
-   Without this a lone dual-IOC board takes the whole grid (auto-fit collapses
-   to a single 1fr track when there is nothing to sit beside it), and each
-   controller's two-item field list stretches across ~1500px with the value
-   marooned at the right edge — the same three rows a single-card box fits
-   comfortably in 420. That 420 is the grid's own minmax floor above, so the
-   sub-card is exactly as wide as the narrowest card the Overview will draw,
-   and the two stay in step if that floor is ever retuned. */
-.lu-card-parent .lu-card-ioc > .lu-ioc-label,
-.lu-card-parent .lu-card-ioc > .lu-overview-row,
-.lu-card-parent .lu-card-ioc > .lu-error {   /* an IOC that could not be read */
-    max-width: 420px;
+/* A dual-IOC board is ONE card and should be one card WIDE. Alone in the grid
+   it is not: auto-fit collapses to a single 1fr track when there is nothing to
+   sit beside it, so the board spread across the whole frame and every value in
+   it sat marooned at the right edge, ~1500px from its label.
+   calc(50% - 8px) is the width this card would have if a second card existed —
+   half the frame less half the 16px gap — so a box with one dual-IOC board
+   draws it at exactly the size a box with two cards draws each of them, rather
+   than at a number picked to look right on one screen. The max() floor is the
+   grid's own 420px minmax, which keeps a narrow window (already collapsed to a
+   single column) from halving a card that has nothing to share the row with. */
+.lu-ov-grid .lu-card-parent {
+    max-width: max(420px, calc(50% - 8px));
     margin-left: auto;
     margin-right: auto;
 }
 .lu-card-parent .lu-ioc-label {
-    display: block;          /* a span will not take the auto margins above */
     color: var(--faint); font-size: 11.5px; font-weight: 700;
     letter-spacing: 0.04em; text-transform: uppercase;
 }
