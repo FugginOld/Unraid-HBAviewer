@@ -248,6 +248,45 @@ lsi_host_for() {   # $1 = bus   $2 = device   $3 = how many ports the box has
     [ "$3" = "1" ] && _first_sas_host
 }
 
+# Every lsiutil card, joined and ready to read. Captures the banner and the -b
+# board table ONCE (both list every port in a single call), enumerates the
+# ports, resolves each port's scsi host through the one join rule and that
+# host's PCI dir, calls $1 per card and comma-joins what it printed.
+#
+#   lsi_each_card CALLBACK
+#   CALLBACK PORT BANNER BOARD HNUM PDIR NPORTS
+#
+# Plan 059 taught five composers this loop and each of them assembled it from
+# lib.sh's primitives differently: five emit loops, three banner captures, two
+# spellings of the port count, and eleven mktemps with three traps between them.
+# This is that loop, once.
+#
+# HNUM is EMPTY when the join failed on a multi-card box -- deliberately, since
+# handing a card its neighbour's host is the bug issue #18 was filed about. What
+# a tab does with that is the tab's business and differs for good reasons: the
+# overview reports an unknown topology (which suppresses the firmware verdict),
+# health falls back to host 0 on a single-card box (which its goldens pin), and
+# attached-drives reports nothing rather than sweeping sysfs box-wide.
+lsi_each_card() {   # $1 = callback name
+    local BANNER BOARD ports nports p row bus dev hnum pdir first=1
+    BANNER=$(mktemp); BOARD=$(mktemp)
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    hba_query -b             2>/dev/null > "$BOARD"
+    ports=$(lsi_ports "$BANNER")
+    nports=$(echo $ports | wc -w | tr -d ' ')   # unquoted: count the tokens
+    for p in $ports; do
+        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
+        bus=$(echo "$row" | awk '{print $3}')
+        dev=$(echo "$row" | awk '{print $4}')
+        hnum=$(lsi_host_for "$bus" "$dev" "$nports")
+        pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
+        [ "$first" = 1 ] || printf ','
+        first=0
+        "$1" "$p" "$BANNER" "$BOARD" "$hnum" "$pdir" "$nports"
+    done
+    rm -f "$BANNER" "$BOARD"
+}
+
 # The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
 # unlike storcli there is no line to parse), but the kernel already knows it:
 # /sys/class/scsi_host/hostN resolves into the device tree under the card, so

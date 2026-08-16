@@ -241,6 +241,51 @@ ctrl() { awk -F'\\},\\{' -v n="$1" '{print $n}' <<< "$DOUT" | grep -oE '/dev/sd[
 eq "drives: card 1 lists only host1's disk" "/dev/sd1" "$(ctrl 1)"
 eq "drives: card 2 lists only host2's disk" "/dev/sd2" "$(ctrl 2)"
 
+# ── lsi_each_card ───────────────────────────────────────────────────────────
+# The per-card read: banner and board captured once, ports enumerated, each
+# port joined to its own host, callback called per card, output comma-joined.
+# Stubs are defined through eval so shellcheck does not see a definition below
+# the call sites the real functions serve above (SC2218).
+eval "$(sed -n '/^lsi_each_card()/,/^}/p' "$SRC")"
+eval 'hba_query() {
+    case "$1" in
+        -b) cat fixtures/lsiutil_multi/3card/board.txt ;;
+        *)  cat fixtures/lsiutil_multi/3card/banner.txt ;;
+    esac
+}'
+eval '_pci_dir_of_host() {
+    case "$1" in
+        1) printf "/sys/devices/pci0000:80/0000:80:01.0/0000:81:00.0" ;;
+        2) printf "/sys/devices/pci0000:80/0000:80:03.0/0000:82:00.0" ;;
+        3) printf "/sys/devices/pci0000:80/0000:80:03.2/0000:83:00.0" ;;
+    esac
+}'
+# Echoes every argument it was handed, so a wrong argument ORDER fails loudly
+# rather than passing because two fields happen to look alike.
+_probe_card() { printf "p=%s hnum=%s pdir=%s n=%s banner=%s board=%s" \
+    "$1" "$4" "$5" "$6" "$(basename "$2")" "$(basename "$3")"; }
+
+EACH=$(lsi_each_card _probe_card)
+eq "each: one entry per card"      "3"   "$(grep -o 'p=' <<<"$EACH" | wc -l | tr -d ' ')"
+eq "each: comma-joined"            "2"   "$(grep -o ',p=' <<<"$EACH" | wc -l | tr -d ' ')"
+eq "each: ports in banner order"   "1 2 3" \
+   "$(grep -oE 'p=[0-9]+' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: each card its own host"  "1 2 3" \
+   "$(grep -oE 'hnum=[0-9]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: each card its own pci dir" "0000:81:00.0 0000:82:00.0 0000:83:00.0" \
+   "$(grep -oE 'pdir=[^ ]*' <<<"$EACH" | cut -d= -f2 | xargs -n1 basename | tr '\n' ' ' | sed 's/ $//')"
+eq "each: port count passed through" "3 3 3" \
+   "$(grep -oE 'n=[0-9]+' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+# The banner and the board table list every port in one call, so they are
+# captured ONCE and handed to every card -- health read the banner twice per
+# request before this existed.
+# [^, ] not [^ ]: cards are joined with a bare comma, and board= is the last
+# field of a record, so a space-only class runs straight into the next card.
+eq "each: same banner file for every card" "1" \
+   "$(grep -oE 'banner=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
+eq "each: same board file for every card"  "1" \
+   "$(grep -oE 'board=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
+
 echo
 [ $fail -eq 0 ] && { echo "multiport: all pass"; exit 0; }
 echo "multiport: FAILURES"; exit 1
