@@ -260,10 +260,14 @@ eval '_pci_dir_of_host() {
         3) printf "/sys/devices/pci0000:80/0000:80:03.2/0000:83:00.0" ;;
     esac
 }'
-# Echoes every argument it was handed, so a wrong argument ORDER fails loudly
-# rather than passing because two fields happen to look alike.
-_probe_card() { printf "p=%s hnum=%s pdir=%s n=%s banner=%s board=%s" \
-    "$1" "$4" "$5" "$6" "$(basename "$2")" "$(basename "$3")"; }
+# Reads the CONTENT of the two files it is handed, so a swapped BANNER/BOARD
+# argument pair fails here rather than surfacing as a misparse in parse/hba.sh
+# five tasks later. Both files are equally "one unique path per run", so the
+# name alone cannot tell them apart.
+_probe_card() { printf "p=%s hnum=%s pdir=%s n=%s banner=%s board=%s bkind=%s dkind=%s" \
+    "$1" "$4" "$5" "$6" "$(basename "$2")" "$(basename "$3")" \
+    "$(grep -q 'Chip Vendor' "$2" && echo banner || echo WRONG)" \
+    "$(grep -q 'Board Assembly' "$3" && echo board || echo WRONG)"; }
 
 EACH=$(lsi_each_card _probe_card)
 eq "each: one entry per card"      "3"   "$(grep -o 'p=' <<<"$EACH" | wc -l | tr -d ' ')"
@@ -285,6 +289,10 @@ eq "each: same banner file for every card" "1" \
    "$(grep -oE 'banner=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
 eq "each: same board file for every card"  "1" \
    "$(grep -oE 'board=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
+eq "each: the banner position holds the banner" "banner banner banner" \
+   "$(grep -oE 'bkind=[^, ]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: the board position holds the board"   "board board board" \
+   "$(grep -oE 'dkind=[^, ]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
 
 echo
 [ $fail -eq 0 ] && { echo "multiport: all pass"; exit 0; }
