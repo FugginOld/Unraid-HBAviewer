@@ -29,13 +29,9 @@ phy_storcli() {
 }
 phy_lsiutil() {
     require_binary || return 1
-    # One entry per card, in lsi_ports order, so the index join in
-    # ajax_info.php lines up with the Overview's controllers[] (issue #18).
-    local p first=1
-    while read -r p _ _; do
-        [ "$first" = 1 ] || printf ','
-        first=0
-        hba_query -p"$p" -a 20,12,0,0 2>/dev/null | bash "$DIR/parse/phy.sh"
-    done < <(lsi_port_map)
+    lsi_each_card _phy_one
+}
+_phy_one() {   # $1 = port; the rest of lsi_each_card's context is unused here
+    hba_query -p"$1" -a 20,12,0,0 2>/dev/null | bash "$DIR/parse/phy.sh"
 }
 hba_each phy_storcli phy_lsiutil
