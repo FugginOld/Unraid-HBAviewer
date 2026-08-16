@@ -43,8 +43,16 @@ port 3  SAS9207-8i  59 C  83:00.0  host2 (SAS9207-8i)
 That clears STOP conditions 2, 3 and 5: `-p<n>` accepts the banner numbering for
 all three ports, each returns its own temperature, the decimal `129/130/131`
 bus values convert to the sysfs addresses `81/82/83`, and the port count equals
-the SAS2 host count with no dead tile. Steps 4–6 (the composers looping) remain,
-and are fixture-testable.
+the SAS2 host count with no dead tile.
+
+**What is still unverified**: everything downstream of that join. The five
+composers, the per-card firmware row, the per-card drive/PHY attribution and the
+card labels are covered by fixtures and stubs only — no multi-card box has run
+this code. The diagnostic bundle now captures every port (a bundle from a
+multi-card box on this branch is therefore the verification), which it did not
+when this plan was written; that single-port capture is why the issue took three
+rounds of hand-written command blocks and why `lsiutil_multi/` holds one raw IOC
+capture per box.
 
 ## Why this matters
 
