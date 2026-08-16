@@ -215,25 +215,6 @@ lsi_ports() {   # $1 = banner file
     fi
 }
 
-# Every port with the PCI bus and device lsiutil's own `-b` table gives it, one
-# "port bus dev" line each. Both reads list EVERY port in a single call, so a
-# composer that loops cards pays for them once here rather than once per card.
-# The bus/dev columns are what _host_for_pci joins on; a composer that only
-# needs the port numbers can read the first field and ignore the rest.
-# Empty bus/dev when the board table has no row for a port — _host_for_pci
-# rejects that, which is the intended "no join" answer, not an error.
-lsi_port_map() {
-    local BANNER BOARD p row
-    BANNER=$(mktemp); BOARD=$(mktemp)
-    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
-    hba_query -b             2>/dev/null > "$BOARD"
-    for p in $(lsi_ports "$BANNER"); do
-        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
-        printf '%s %s %s\n' "$p" "$(echo "$row" | awk '{print $3}')" "$(echo "$row" | awk '{print $4}')"
-    done
-    rm -f "$BANNER" "$BOARD"
-}
-
 # The scsi host a looping composer should attribute to one port, with the ONE
 # rule every one of them has to apply the same way: a failed join must not fall
 # back to card 1 when the box has more than one card. Two cards sharing a host

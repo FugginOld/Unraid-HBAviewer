@@ -84,3 +84,16 @@ tab already has.
 3. `hba_each`, `_host_for_pci`, `hba_card_id`, `hba_topology` and the 11 pure
    `parse/*.sh` filters are already deep. Do not touch them.
 4. `lsi_ports` keeps its own name and signature — `bundle_support.sh` calls it.
+
+## Outcome
+
+Shipped. The five lsiutil composers now declare only their own `hba_query` and
+their own reading of a failed join. `lsi_port_map` is gone — `lsi_each_card`
+consumes the board columns itself. `lsi_ports` stays for `bundle_support.sh`.
+
+`get_hba_health.sh` gained the composer-level golden it never had, once
+`LSI_NOW` and `LSI_UPTIME` made its output byte-stable.
+
+Still true, and deliberately: the SAS2/lsiutil path has no hardware coverage.
+Everything here is fixture- and stub-tested. The goldens were byte-identical at
+every step, which is the whole reason this refactor was safe to make.
