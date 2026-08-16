@@ -111,10 +111,27 @@
    reads as two cards, which is the thing this feature exists to stop. */
 .lu-card-parent .lu-card-ioc {
     border-top: 1px solid var(--border);
-    padding: 10px 0 0 14px;
+    padding: 10px 0 0;
     margin-top: 10px;
 }
+/* A sub-card is content, not a column: it reads at ONE card's width, centred,
+   while the rule above it and the parent's own field list still span the frame.
+   Without this a lone dual-IOC board takes the whole grid (auto-fit collapses
+   to a single 1fr track when there is nothing to sit beside it), and each
+   controller's two-item field list stretches across ~1500px with the value
+   marooned at the right edge — the same three rows a single-card box fits
+   comfortably in 420. That 420 is the grid's own minmax floor above, so the
+   sub-card is exactly as wide as the narrowest card the Overview will draw,
+   and the two stay in step if that floor is ever retuned. */
+.lu-card-parent .lu-card-ioc > .lu-ioc-label,
+.lu-card-parent .lu-card-ioc > .lu-overview-row,
+.lu-card-parent .lu-card-ioc > .lu-error {   /* an IOC that could not be read */
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+}
 .lu-card-parent .lu-ioc-label {
+    display: block;          /* a span will not take the auto margins above */
     color: var(--faint); font-size: 11.5px; font-weight: 700;
     letter-spacing: 0.04em; text-transform: uppercase;
 }
