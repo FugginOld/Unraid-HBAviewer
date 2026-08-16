@@ -198,8 +198,9 @@ eval "$_host_for_pci_real"
 # temperature. _drive_count is stubbed to echo the host number it was handed,
 # which is how a card silently reading its neighbour's sysfs becomes visible.
 HSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_health.sh"
-eval "$(sed -n '/^health_lsiutil()/,/^}/p' "$HSRC"; sed -n '/^_health_lsiutil_one()/,/^}/p' "$HSRC")"
-lsi_port_map()    { printf '1 129 0\n2 130 0\n3 131 0\n'; }   # the 3-card box
+eval "$(sed -n '/^health_lsiutil()/,/^}/p'      "$HSRC"
+        sed -n '/^_health_lsiutil_one()/,/^}/p' "$HSRC"
+        sed -n '/^lsi_each_card()/,/^}/p'       "$SRC")"
 band_of()         { printf 'normal'; }
 _drive_count()    { printf '%s' "${1:-none}"; }
 _phys_json()      { printf '[]'; }
@@ -211,6 +212,7 @@ NOW=1000 UPTIME=500
 sed '0,/ioc1/s/\(ioc1.*\)14000700/\111000000/' fixtures/lsiutil_multi/3card/banner.txt > "$STUBDIR/banner_mixed.txt"
 hba_query() {
     case "$1" in
+        -b)  cat fixtures/lsiutil_multi/3card/board.txt ;;
         -p*) cat "$STUBDIR/ioc_p${1#-p}.txt" ;;
         *)   cat "$STUBDIR/banner_mixed.txt" ;;
     esac
@@ -229,15 +231,22 @@ eq "health: each card its own scsi host" "1 2 3" \
 # disks and the Drives tab shows every disk under every card.
 DSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_attached_drives.sh"
 DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
-eval "$(sed -n '/^drv_lsiutil()/,/^}/p' "$DSRC"; sed -n '/^_drv_lsiutil_one()/,/^}/p' "$DSRC")"
-lsi_port_map() { printf '1 129 0\n2 130 0\n'; }
+eval "$(sed -n '/^drv_lsiutil()/,/^}/p'      "$DSRC"
+        sed -n '/^_drv_lsiutil_one()/,/^}/p' "$DSRC"
+        sed -n '/^lsi_each_card()/,/^}/p'    "$SRC")"
 require_binary() { :; }
 SCSI="$ROOT/drv/scsi_host"
 for h in 1 2; do
     mkdir -p "$SCSI/host$h/device/port-$h:0/end_device-$h:0/target$h:0:0/$h:0:0:0/block/sd$h"
     printf 'mpt2sas' > "$SCSI/host$h/proc_name"
 done
-hba_query() { :; }   # empty -a 42,0 reply -> Stage 3 fallback, the box-wide one
+hba_query() {
+    case "$1" in
+        -b)  cat fixtures/lsiutil_multi/3card/board.txt ;;
+        -p*) : ;;   # empty -a 42,0 reply -> Stage 3 fallback, the box-wide one
+        *)   cat fixtures/lsiutil_multi/3card/banner.txt ;;
+    esac
+}
 DOUT=$( (SYS_SAS_DEVICE="$ROOT/drv/none" SYS_SCSI_HOST="$SCSI" drv_lsiutil) 2>/dev/null )
 ctrl() { awk -F'\\},\\{' -v n="$1" '{print $n}' <<< "$DOUT" | grep -oE '/dev/sd[0-9]' | tr '\n' ' ' | sed 's/ $//'; }
 eq "drives: card 1 lists only host1's disk" "/dev/sd1" "$(ctrl 1)"
