@@ -45,14 +45,26 @@ all three ports, each returns its own temperature, the decimal `129/130/131`
 bus values convert to the sysfs addresses `81/82/83`, and the port count equals
 the SAS2 host count with no dead tile.
 
-**What is still unverified**: everything downstream of that join. The five
-composers, the per-card firmware row, the per-card drive/PHY attribution and the
-card labels are covered by fixtures and stubs only — no multi-card box has run
-this code. The diagnostic bundle now captures every port (a bundle from a
-multi-card box on this branch is therefore the verification), which it did not
-when this plan was written; that single-port capture is why the issue took three
-rounds of hand-written command blocks and why `lsiutil_multi/` holds one raw IOC
-capture per box.
+**The join is verified on four boxes**, by running Steps 1–2's logic on each:
+
+| Box | Cards | Result |
+|-----|-------|--------|
+| brianara3 | 3 × SAS9207-8i | ports 1/2/3 → host0/1/2, 53/61/59 C |
+| masterwishx | LSI2308-IT + SAS9207-8i | 63/59 C, 8 and 4 drives, DIFFERENT board names |
+| Raven | SAS9300-16i (dual IOC) | both IOCs → host0/host1, 2 and 7 drives, 8 phys each |
+| Golem | HBA 9400-16i + 9400-8i | 72/77 C, 16 and 8 drives |
+
+masterwishx's box is the one that settles per-card attribution: **asymmetric**
+drive counts (8 vs 4) and two different board names, both of which a card reading
+its neighbour's host or board row would print identically. Golem's is what found
+the spaced-board-name bug.
+
+**Still unverified**: the composers' JSON assembly itself — the five outputs are
+fixture- and stub-tested, and no multi-card box has run this branch's code. The
+diagnostic bundle now captures every port, so a bundle from a multi-card box on
+this branch is that verification. It did not when this plan was written: that
+single-port capture is why the issue took three rounds of hand-written command
+blocks, and why `lsiutil_multi/` holds one raw IOC capture per box.
 
 ## Why this matters
 
