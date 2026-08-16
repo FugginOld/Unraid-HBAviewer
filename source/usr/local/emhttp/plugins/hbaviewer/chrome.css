@@ -110,10 +110,20 @@
    and an indent rather than boxed again -- nesting a full card inside a card
    reads as two cards, which is the thing this feature exists to stop. */
 .lu-card-parent .lu-card-ioc {
-    border-top: 1px solid var(--border);
-    padding: 10px 0 0 14px;
-    margin-top: 10px;
+    /* Brighter than --border, which at #333 on a #1a1a1a card is nearly
+       invisible and read as no separator at all. Mixed toward the text colour
+       rather than hard-coded so it tracks whatever theme is in use. */
+    border-top: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+    padding: 12px 0 0 14px;
+    margin-top: 14px;
 }
+/* Pull each controller's label/value pairs together. .lu-meta is flex:1 by
+   default, so the list stretched to the card's right edge and every value sat
+   marooned from its label; sizing to content instead puts them side by side and
+   still right-aligns the values against the widest row. Centred so the tightened
+   block sits under the middle of the card rather than leaving a ragged gap. */
+.lu-card-parent .lu-card-ioc .lu-meta { flex: 0 1 auto; min-width: 260px; }
+.lu-card-parent .lu-card-ioc .lu-overview-row { justify-content: center; }
 /* A dual-IOC board is ONE card and should be one card WIDE. Alone in the grid
    it is not: auto-fit collapses to a single 1fr track when there is nothing to
    sit beside it, so the board spread across the whole frame and every value in
