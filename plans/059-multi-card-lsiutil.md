@@ -59,11 +59,25 @@ drive counts (8 vs 4) and two different board names, both of which a card readin
 its neighbour's host or board row would print identically. Golem's is what found
 the spaced-board-name bug.
 
-**Still unverified**: the composers' JSON assembly itself — the five outputs are
-fixture- and stub-tested, and no multi-card box has run this branch's code. The
-diagnostic bundle now captures every port, so a bundle from a multi-card box on
-this branch is that verification. It did not when this plan was written: that
-single-port capture is why the issue took three rounds of hand-written command
+**The composers are verified too.** Both reporters ran all five, from this
+branch, on their own hardware — the branch fetched to a temp dir and run
+read-only, nothing installed:
+
+- **brianara3, 3 × SAS9207-8i**: three entries in every composer, ports 1/2/3 as
+  `ioc0/1/2`, locations `81:00`/`82:00`/`83:00`, three DISTINCT `card_id`s, temps
+  53/62/59, four drives each with `/dev/sda-sdd`, `sde-sdh`, `sdi-sdl` and no
+  drive in two lists. `get_event_log` returns 254 entries where it returned
+  `{"entries":[]}` before the parser learned lsiutil's table form.
+- **masterwishx, LSI2308-IT + SAS9207-8i**: two entries, different board names,
+  temps 64/60, 8 and 4 drives, `x8` and `x4` links, and subvendors `0x15d9`
+  (Supermicro, onboard) vs `0x1000` (retail) — the OEM gate resolving per card.
+
+Neither box could have produced any of that before this plan: both rendered one
+card and called it the whole machine.
+
+The diagnostic bundle now captures every port, so the next report from a
+multi-card box arrives complete. It did not when this plan was written — that
+single-port capture is why this issue took three rounds of hand-written command
 blocks, and why `lsiutil_multi/` holds one raw IOC capture per box.
 
 ## Why this matters
