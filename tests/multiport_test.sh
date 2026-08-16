@@ -251,6 +251,10 @@ DOUT=$( (SYS_SAS_DEVICE="$ROOT/drv/none" SYS_SCSI_HOST="$SCSI" drv_lsiutil) 2>/d
 ctrl() { awk -F'\\},\\{' -v n="$1" '{print $n}' <<< "$DOUT" | grep -oE '/dev/sd[0-9]' | tr '\n' ' ' | sed 's/ $//'; }
 eq "drives: card 1 lists only host1's disk" "/dev/sd1" "$(ctrl 1)"
 eq "drives: card 2 lists only host2's disk" "/dev/sd2" "$(ctrl 2)"
+# Card 3 has no host under this block's SYS_SCSI_HOST, so its PCI join fails.
+# On a multi-card box that must emit NOTHING rather than sweeping sysfs
+# box-wide and handing this card every disk in the machine.
+eq "drives: card 3 is unjoined and emits nothing" "" "$(ctrl 3)"
 
 # ── lsi_each_card ───────────────────────────────────────────────────────────
 # The per-card read: banner and board captured once, ports enumerated, each

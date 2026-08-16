@@ -151,13 +151,15 @@ ZJSON=$(NOW=1000 UPTIME=500 SYS_SCSI_HOST=/nonexistent bash -c "$HL"$'\n''
     lsi_ports() { printf "1\n"; }
     lsi_host_for() { :; }
     _first_sas_host() { echo 0; }
-    _drive_count() { echo 7; }
+    _drive_count() { printf '%s' "${1:-EMPTY}"; }
     _phys_json() { echo "[]"; }
     hba_query() { printf "  IOCTemperature:                   0x0000\n"; }
     health_lsiutil' 2>/dev/null)
 eq "0x0000 is no sensor, not 0 C" "null" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"temp":([^,]*),.*/\1/p')"
 eq "no band on a sensorless card"  ""     "$(str "$ZJSON" temp_band)"
 eq "the card still counts as read" "true" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"read_ok":([a-z]+).*/\1/p')"
+# One port, no PCI join: the historic host-0 default must fire, not stay empty.
+eq "single-card box falls back to host 0" "0" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"drives":([^,]*),.*/\1/p')"
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT

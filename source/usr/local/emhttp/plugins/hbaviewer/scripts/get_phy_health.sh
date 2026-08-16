@@ -29,6 +29,8 @@ phy_storcli() {
 }
 phy_lsiutil() {
     require_binary || return 1
+    # One entry per card, in lsi_ports order, so the index join in
+    # ajax_info.php lines up with the Overview's controllers[] (issue #18).
     lsi_each_card _phy_one
 }
 _phy_one() {   # $1 = port; the rest of lsi_each_card's context is unused here

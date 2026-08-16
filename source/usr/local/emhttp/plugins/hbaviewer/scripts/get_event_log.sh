@@ -9,6 +9,8 @@ source "$DIR/config.sh"   # sets PORT, ALERT
 ev_storcli() { "$STORCLI" /c"$1" show events 2>/dev/null | bash "$DIR/parse/storcli_events.sh"; }
 ev_lsiutil() {
     require_binary || return 1
+    # One entry per card, in lsi_ports order, so the index join in
+    # ajax_info.php lines up with the Overview's controllers[] (issue #18).
     lsi_each_card _ev_one
 }
 _ev_one() {   # $1 = port; the rest of lsi_each_card's context is unused here

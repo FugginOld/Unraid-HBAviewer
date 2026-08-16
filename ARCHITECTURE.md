@@ -49,6 +49,13 @@ Two things about backend selection that have each caused a bug:
   infer the active backend from the binary's presence — read the `backend` field
   in the payload.
 
+`lib.sh` also carries a second, narrower seam: `lsi_each_card`, the loop every
+lsiutil composer shares for looping its cards, joining each port to its scsi
+host and calling back with `CALLBACK PORT BANNER BOARD HNUM PDIR NPORTS`. HNUM
+is empty when a card's PCI join fails on a multi-card box, and each tab decides
+what that means — health falls back to host 0 on a single-card box, while
+attached-drives reports nothing rather than sweeping sysfs box-wide.
+
 ### 3. Parsers — `scripts/parse/*.sh`
 
 **Pure filters: text on stdin (or as file arguments), JSON on stdout.** No

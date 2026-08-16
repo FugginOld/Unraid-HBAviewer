@@ -242,6 +242,10 @@ lsi_host_for() {   # $1 = bus   $2 = device   $3 = how many ports the box has
 # spellings of the port count, and eleven mktemps with three traps between them.
 # This is that loop, once.
 #
+# Every composer loops as a unit because ajax_info.php joins the tabs by
+# ARRAY INDEX: a tab that returns fewer cards mislabels hardware rather than
+# merely omitting it.
+#
 # HNUM is EMPTY when the join failed on a multi-card box -- deliberately, since
 # handing a card its neighbour's host is the bug issue #18 was filed about. What
 # a tab does with that is the tab's business and differs for good reasons: the
