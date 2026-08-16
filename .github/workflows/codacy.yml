@@ -71,6 +71,11 @@ jobs:
       # Reporting zero results is what retires them.
       - name: Drop style-only tool results from the SARIF
         run: |
+          # The Codacy CLI writes results.sarif from inside a container running
+          # as root, so the runner user can read it but cannot truncate it for
+          # writing — the rewrite below died on PermissionError every run. Take
+          # ownership first; the file is this job's own scratch output.
+          sudo chown "$(id -u):$(id -g)" results.sarif
           python3 - <<'PY'
           import json
 

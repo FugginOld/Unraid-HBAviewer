@@ -182,7 +182,10 @@ eq "loop: each card its own board row" "81:00 82:00 83:00" \
 # ov_lsiutil): with no matching host at all, every card_id comes back empty
 # rather than all three sharing _first_sas_host's slot.
 _host_for_pci_real=$(declare -f _host_for_pci)
-_host_for_pci() { return 1; }
+# Defined through eval so shellcheck does not see a function DEFINITION below
+# the calls the real one legitimately serves above (SC2218). The real one is
+# restored a few lines down; this stub exists only to fail the join.
+eval '_host_for_pci() { return 1; }'
 _first_sas_host() { printf '1'; }
 eq "loop: failed join yields no card_id on a multi-port box" "" \
    "$(ov_lsiutil | grep -oE '"card_id": "[^"]+"' | tr -d '\n')"
