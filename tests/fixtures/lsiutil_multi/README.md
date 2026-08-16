@@ -9,6 +9,7 @@ longer needed and its guesses turned out to be wrong in two places (see below).
 |-----|-----|-------|
 | `2card/` | masterwishx | `LSI2308-IT` at bus 1, `SAS9207-8i` at bus 6 |
 | `3card/` | brianara3 | three `SAS9207-8i`, buses 129, 130, 131 |
+| `9400/` | Golem | `HBA 9400-16i` at bus 193, `HBA 9400-8i` at bus 101 |
 
 Each holds the banner (`lsiutil` port table), the `lsiutil -b` board table, and
 the single IOC capture that bundle contains — port 1 on the 2-card box, **port 3
@@ -37,6 +38,17 @@ STOP condition 3 ("does `-p<n> -b` accept `-p`") is moot and was dropped.
 53/61/59 C at `81:00.0`, `82:00.0`, `83:00.0`, matching `host0`, `host1`,
 `host2`. `ioc_p3.txt` here is still the only raw per-port capture — the other
 two ports are confirmed by that summary, not by a stored transcript.
+
+**A board name can contain a space, and the columns do not line up.** `9400/`
+is `lsiutil -b` from Golem, whose cards read `HBA 9400-16i` and `HBA 9400-8i`
+where every SAS2 card reads a single token like `SAS9207-8i`. `awk $5` kept
+`HBA` and dropped the model — and `fw_evaluate` cannot match a board called
+`HBA`, so the card also lost its firmware verdict. Cutting at the header's
+`Board Name` offset does not work either: the board name starts at column 30 on
+the 1-digit buses in `2card/` and column 31 on the 3-digit buses in `3card/` and
+`9400/`. What IS stable is that the name is never double-spaced while the gap to
+the Board Assembly column always is. Only `board.txt` was captured here; Golem
+runs the storcli backend, so it has no lsiutil telemetry to go with it.
 
 **The columns are `Seg/Bus/Dev`,** so `awk $3`/`$4` in `parse/hba.sh` read bus
 and device correctly; the segment in `$2` is 0 on both boxes.

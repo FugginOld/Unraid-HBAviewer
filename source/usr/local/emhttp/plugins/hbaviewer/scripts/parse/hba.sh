@@ -127,7 +127,15 @@ if [ -n "$PORTSEL" ]; then
 else
     BOARD_LINE=$(echo "$BOARD" | grep "ioc" | head -1)
 fi
-BOARD_NAME=$(echo "$BOARD_LINE" | awk '{print $5}')
+# The board name can contain SPACES: a 9400 reads "HBA 9400-16i", where a 9207
+# reads "SAS9207-8i". Taking field 5 kept "HBA" and dropped the model, which
+# also cost that card its firmware verdict — fw_evaluate cannot match a board
+# called "HBA". Column offsets are no help (the Seg/Bus/Dev columns shift by a
+# character between a 1-digit and a 3-digit bus), but the name is never
+# double-spaced while the gap to the Board Assembly column always is: so take
+# everything after the four leading columns, up to the first run of 2+ spaces.
+# A card with no assembly or tracer (the 2-card fixture) just runs to the end.
+BOARD_NAME=$(echo "$BOARD_LINE" | sed -E 's/^[[:space:]]*([^[:space:]]+[[:space:]]+){4}//; s/[[:space:]]{2,}.*$//; s/[[:space:]]+$//')
 # The Seg/Bus/Dev columns are DECIMAL, and every other place a PCI address
 # appears — sysfs, lspci, the Overview's own storcli path — is hex. Issue #18's
 # 3-card box read "129:0" here where lspci says 81:00.0. Converted, not merely

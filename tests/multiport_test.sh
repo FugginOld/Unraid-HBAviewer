@@ -87,6 +87,24 @@ card() {  # $1 = fixture dir  $2 = ioc  $3 = port arg  $4 = field
         | grep -oE "\"$4\": *\"?[0-9A-Za-z.:-]+\"?"
 }
 M2=2card; M3=3card
+# A 9400's board name contains a SPACE ("HBA 9400-16i"); field 5 alone read
+# "HBA", which is also a name no firmware index can match. Reachable through
+# this parser on a mixed box, where a SAS2 card keeps the whole box on the
+# lsiutil backend and the loop then parses the 9400's row too.
+eq "parse: spaced board name survives" '"board_name": "HBA 9400-16i"' \
+   "$(bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt \
+        fixtures/lsiutil_multi/9400/board.txt 80 "" 1 \
+      | grep -oE '"board_name": "[^"]*"')"
+eq "parse: second 9400 row, also spaced" '"board_name": "HBA 9400-8i"' \
+   "$(bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt \
+        fixtures/lsiutil_multi/9400/board.txt 80 "" 2 \
+      | grep -oE '"board_name": "[^"]*"')"
+# The bus column shifts by a character between a 1-digit and a 3-digit bus, so
+# the name cannot be cut at a fixed offset -- 193 decimal is c1 hex.
+eq "parse: 9400 location survives the same cut" '"pci_location": "c1:00"' \
+   "$(bash "$P/hba.sh" fixtures/hba_ioc.txt fixtures/hba_banner.txt \
+        fixtures/lsiutil_multi/9400/board.txt 80 "" 1 \
+      | grep -oE '"pci_location": "[^"]*"')"
 # masterwishx's two cards are DIFFERENT models on different buses, so a loop
 # that reads the wrong row is visible as the wrong card, not a duplicate.
 eq "parse: 2card port 1 board"  '"board_name": "LSI2308-IT"' "$(card $M2 ioc_p1.txt 1 board_name)"
