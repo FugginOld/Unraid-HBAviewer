@@ -20,7 +20,8 @@ eq() {  # name  want  got
     if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 -- want '$2', got '$3'"; fail=1; fi
 }
 
-FN=$(sed -n '/^lsi_ports()/,/^}/p' "$SRC"; sed -n '/^_host_for_pci()/,/^}/p' "$SRC")
+FN=$(sed -n '/^lsi_ports()/,/^}/p' "$SRC"; sed -n '/^_host_for_pci()/,/^}/p' "$SRC"
+     sed -n '/^lsi_host_for()/,/^}/p' "$SRC")
 [ -n "$FN" ] || { echo "FAIL  lsi_ports/_host_for_pci not found in $SRC"; exit 1; }
 eval "$FN"
 
@@ -168,6 +169,56 @@ _first_sas_host() { printf '1'; }
 eq "loop: failed join yields no card_id on a multi-port box" "" \
    "$(ov_lsiutil | grep -oE '"card_id": "[^"]+"' | tr -d '\n')"
 eval "$_host_for_pci_real"
+
+# ── health_lsiutil loops, and reaches the RIGHT card's sysfs ────────────────
+# The dashboard tile is the symptom issue #18 was filed about: three cards, one
+# temperature. _drive_count is stubbed to echo the host number it was handed,
+# which is how a card silently reading its neighbour's sysfs becomes visible.
+HSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_health.sh"
+eval "$(sed -n '/^health_lsiutil()/,/^}/p' "$HSRC"; sed -n '/^_health_lsiutil_one()/,/^}/p' "$HSRC")"
+lsi_port_map()    { printf '1 129 0\n2 130 0\n3 131 0\n'; }   # the 3-card box
+band_of()         { printf 'normal'; }
+_drive_count()    { printf '%s' "${1:-none}"; }
+_phys_json()      { printf '[]'; }
+_link_from_sysfs(){ :; }
+NOW=1000 UPTIME=500
+# Port 2's firmware bumped to 0x11000000 = 17.00.00.00: a mixed-firmware box is
+# the normal state of a box mid-flash, and the firmware verdict hangs off this
+# field, so reading row 1 for every card would recommend the wrong image.
+sed '0,/ioc1/s/\(ioc1.*\)14000700/\111000000/' fixtures/lsiutil_multi/3card/banner.txt > "$STUBDIR/banner_mixed.txt"
+hba_query() {
+    case "$1" in
+        -p*) cat "$STUBDIR/ioc_p${1#-p}.txt" ;;
+        *)   cat "$STUBDIR/banner_mixed.txt" ;;
+    esac
+}
+HOUT=$(health_lsiutil)
+eq "health: each card its own firmware row" "20.00.07.00 17.00.00.00 20.00.07.00" \
+   "$(grep -oE '"fw":"[0-9.]+"' <<< "$HOUT" | cut -d'"' -f4 | tr '\n' ' ' | sed 's/ $//')"
+eq "health: one sample per card" "3" "$(grep -o '"fw"' <<< "$HOUT" | wc -l | tr -d ' ')"
+eq "health: each card its own temperature" "53 61 59" \
+   "$(grep -oE '"temp":[0-9]+' <<< "$HOUT" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "health: each card its own scsi host" "1 2 3" \
+   "$(grep -oE '"drives":[0-9]+' <<< "$HOUT" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
+
+# ── drv_lsiutil gives each card only its own drives ─────────────────────────
+# Stage 3's sweep is box-wide; without the per-card filter card 1 lists card 2's
+# disks and the Drives tab shows every disk under every card.
+DSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_attached_drives.sh"
+DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
+eval "$(sed -n '/^drv_lsiutil()/,/^}/p' "$DSRC"; sed -n '/^_drv_lsiutil_one()/,/^}/p' "$DSRC")"
+lsi_port_map() { printf '1 129 0\n2 130 0\n'; }
+require_binary() { :; }
+SCSI="$ROOT/drv/scsi_host"
+for h in 1 2; do
+    mkdir -p "$SCSI/host$h/device/port-$h:0/end_device-$h:0/target$h:0:0/$h:0:0:0/block/sd$h"
+    printf 'mpt2sas' > "$SCSI/host$h/proc_name"
+done
+hba_query() { :; }   # empty -a 42,0 reply -> Stage 3 fallback, the box-wide one
+DOUT=$( (SYS_SAS_DEVICE="$ROOT/drv/none" SYS_SCSI_HOST="$SCSI" drv_lsiutil) 2>/dev/null )
+ctrl() { awk -F'\\},\\{' -v n="$1" '{print $n}' <<< "$DOUT" | grep -oE '/dev/sd[0-9]' | tr '\n' ' ' | sed 's/ $//'; }
+eq "drives: card 1 lists only host1's disk" "/dev/sd1" "$(ctrl 1)"
+eq "drives: card 2 lists only host2's disk" "/dev/sd2" "$(ctrl 2)"
 
 echo
 [ $fail -eq 0 ] && { echo "multiport: all pass"; exit 0; }

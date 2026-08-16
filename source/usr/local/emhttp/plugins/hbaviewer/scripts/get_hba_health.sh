@@ -147,13 +147,29 @@ health_storcli() {   # $1 = controller index
 
 health_lsiutil() {
     require_binary || return 1
+    # The dashboard tile reads this, and on a multi-card box it read card 1's
+    # temperature for every card — the symptom issue #18 was filed about. One
+    # entry per port now, in lsi_ports order, so the index join in ajax_info.php
+    # lines up with the Overview's controllers[].
+    local MAP BANNER p bus dev nports first=1
+    MAP=$(lsi_port_map)
+    nports=$(echo "$MAP" | wc -l | tr -d ' ')
+    BANNER=$(mktemp)                        # lists every port; captured once
+    trap 'rm -f "$BANNER"' EXIT
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    while read -r p bus dev; do
+        [ "$first" = 1 ] || printf ','
+        first=0
+        _health_lsiutil_one "$p" "$bus" "$dev" "$nports" "$BANNER"
+    done <<< "$MAP"
+}
+
+_health_lsiutil_one() {   # $1 = port  $2 = bus  $3 = device  $4 = port count  $5 = banner file
     local IOC BANNER temp_hex temp fw_raw fw band readok=true
     local width_hex speed_hex hnum
     local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
-    IOC=$(mktemp); BANNER=$(mktemp)
-    trap 'rm -f "$IOC" "$BANNER"' EXIT
-    hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
-    printf '0\n' | hba_query        2>/dev/null > "$BANNER"
+    IOC=$(mktemp); BANNER="$5"
+    hba_query -p"$1" -a 25,2,0,0 2>/dev/null > "$IOC"
 
     temp_hex=$(grep "IOCTemperature:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
     if [ -n "$temp_hex" ]; then temp=$((16#${temp_hex#0x})); else temp=""; readok=false; fi
@@ -163,7 +179,9 @@ health_lsiutil() {
     band=""
     [ -n "$temp" ] && band=$(band_of "$temp")
 
-    fw_raw=$(grep -E "^\s+[0-9]+\.\s+ioc" "$BANNER" | head -1 | grep -oE '[0-9a-f]{8}' | head -1)
+    # This card's banner row, not the first one — every card on a multi-card box
+    # reported card 1's firmware otherwise, and the firmware verdict hangs off it.
+    fw_raw=$(grep -E "^[[:space:]]+$1\.[[:space:]]+ioc" "$BANNER" | head -1 | grep -oE '[0-9a-f]{8}' | head -1)
     if [ -n "$fw_raw" ]; then
         fw=$(printf '%02d.%02d.%02d.%02d' "$((16#${fw_raw:0:2}))" "$((16#${fw_raw:2:2}))" "$((16#${fw_raw:4:2}))" "$((16#${fw_raw:6:2}))")
     else
@@ -189,7 +207,14 @@ health_lsiutil() {
         esac
     fi
 
-    hnum=$(_first_sas_host)
+    # This port's own card, joined through its PCI bus/device — the drive count
+    # and the PHY counters below are per-card, and handing every card host 1's
+    # would be the same bug in a different field.
+    hnum=$(lsi_host_for "$2" "$3" "$4")
+    # One card and no join: keep the historic host-0 default, so single-card
+    # output stays byte-identical. More than one card, and empty means empty —
+    # zero drives and no PHYs beats another card's.
+    [ -z "$hnum" ] && [ "$4" = "1" ] && hnum=0
 
     # Same six link fields as the storcli path, from the same sysfs files —
     # only the route to the device dir differs, since there is no storcli line
@@ -199,9 +224,10 @@ health_lsiutil() {
 
     printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
         "$NOW" "$UPTIME" \
-        "${temp:-null}" "$band" "$fw" "$(_drive_count "${hnum:-0}")" "$readok" \
+        "${temp:-null}" "$band" "$fw" "$(_drive_count "$hnum")" "$readok" \
         "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
-        "$(_phys_json "${hnum:-0}")"
+        "$(_phys_json "$hnum")"
+    rm -f "$IOC"
 }
 
 hba_each health_storcli health_lsiutil

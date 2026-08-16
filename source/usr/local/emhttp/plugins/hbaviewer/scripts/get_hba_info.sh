@@ -158,7 +158,7 @@ ov_lsiutil() {
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD IDENT p ports first=1
+    local IOC BANNER BOARD IDENT p ports nports first=1
     IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
     trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
     # Both of these list EVERY port in one call, so they are captured once and
@@ -166,6 +166,7 @@ ov_lsiutil() {
     printf '0\n' | hba_query 2>/dev/null > "$BANNER"
     hba_query -b             2>/dev/null > "$BOARD"
     ports=$(lsi_ports "$BANNER")
+    nports=$(echo $ports | wc -w | tr -d ' ')   # unquoted: count the tokens
     for p in $ports; do
         hba_query -p"$p" -a 25,2,0,0 2>/dev/null > "$IOC"
         # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain
@@ -180,15 +181,7 @@ ov_lsiutil() {
         row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
         bus=$(echo "$row" | awk '{print $3}')
         dev=$(echo "$row" | awk '{print $4}')
-        # A failed join must NOT fall back to card 1 on a multi-port box: two
-        # cards sharing one topology and card_id would make card_group.php merge
-        # two physically separate cards into one display card, the exact inverse
-        # of the dual-IOC feature. With one port there is nothing to confuse, so
-        # the historic fallback stands and single-card output is unchanged.
-        if ! hnum=$(_host_for_pci "$bus" "$dev"); then
-            hnum=""
-            [ "$(printf '%s\n' "$ports" | wc -l)" = "1" ] && hnum=$(_first_sas_host)
-        fi
+        hnum=$(lsi_host_for "$bus" "$dev" "$nports")
         pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
         LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
         LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")

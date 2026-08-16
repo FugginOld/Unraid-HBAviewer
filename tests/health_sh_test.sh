@@ -139,11 +139,15 @@ rm -rf "$SROOT"
 # no onboard sensor -- so the sample must carry no temperature, while read_ok
 # stays TRUE: the query answered, unlike the absent-field case above it, which
 # means lsiutil produced nothing at all.
-HL=$(sed -n '/^health_lsiutil()/,/^}/p' "$SRC")
+HL=$(sed -n '/^health_lsiutil()/,/^}/p' "$SRC"; sed -n '/^_health_lsiutil_one()/,/^}/p' "$SRC")
 [ -n "$HL" ] || { echo "FAIL  health_lsiutil not found in $SRC"; exit 1; }
+# One port, unjoined: the single-card shape this case is about, and the one
+# where the historic _first_sas_host fallback still applies (plan 059).
 ZJSON=$(NOW=1000 UPTIME=500 SYS_SCSI_HOST=/nonexistent bash -c "$HL"$'\n''
     require_binary() { return 0; }
     band_of() { echo normal; }
+    lsi_port_map() { printf "1 1 0\n"; }
+    lsi_host_for() { :; }
     _first_sas_host() { echo 0; }
     _drive_count() { echo 7; }
     _phys_json() { echo "[]"; }
