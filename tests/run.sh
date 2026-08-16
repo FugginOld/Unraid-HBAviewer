@@ -283,6 +283,12 @@ check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # checks above, and the lsiutil captures live one level up in fixtures/.
 STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
 check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
+# The health composer, all the way through. It had no golden until its clock
+# became injectable: a wall clock and an uptime cannot live in an expectation.
+# LSI_NOW/LSI_UPTIME are test-only; production passes neither.
+LSI_NOW=1000 LSI_UPTIME=500 \
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
+check health-lsiutil   health_lsiutil.json   bash "$P/../get_hba_health.sh"
 # Controller generation comes from proc_name, never from /sys/module — the merged
 # mpt3sas driver reports proc_name=mpt2sas for SAS2 cards (issue #3). host9 is a
 # non-SAS host that must be ignored by the filter.

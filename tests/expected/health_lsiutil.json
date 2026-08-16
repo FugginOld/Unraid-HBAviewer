@@ -1,0 +1,1 @@
+{"backend":"lsiutil","driver":"","controllers":[{"t":1000,"uptime":500,"temp":47,"temp_band":"normal","fw":"20.00.07.00","drives":0,"read_ok":true,"link":{"width":8,"max_width":0,"speed":"8.0 GT/s","max_speed":"","slot_width":0,"slot_speed":""},"phys":[]}]}

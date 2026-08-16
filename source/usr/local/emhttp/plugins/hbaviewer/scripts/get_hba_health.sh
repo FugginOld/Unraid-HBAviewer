@@ -84,8 +84,11 @@ _drive_count() {   # $1 = controller host index
     printf '%d' "$n"
 }
 
-UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null); UPTIME="${UPTIME:-0}"
-NOW=$(date +%s)
+# Overridable so the composer has a byte-stable output to pin. Without this the
+# health tab is the one composer with no golden, because a wall clock and an
+# uptime cannot appear in an expectation file. Production passes neither.
+UPTIME="${LSI_UPTIME:-$(cut -d. -f1 /proc/uptime 2>/dev/null)}"; UPTIME="${UPTIME:-0}"
+NOW="${LSI_NOW:-$(date +%s)}"
 
 # PCIe link state from a sysfs PCI device dir. Bash is dynamically scoped, so
 # these land on the CALLER's locals (width/maxwidth/speed/maxspeed/slotwidth/
