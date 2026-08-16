@@ -256,7 +256,7 @@ right backend is in use before opening the Monitor.
 | Setting | Default | Description |
 | --- | --- | --- |
 | Access Method | (auto) | Read-only. Shows whether `storcli` (SAS3/3.5) or `lsiutil` (SAS2) is used, and warns if a SAS3 card is found but `storcli` isn't installed. |
-| lsiutil Port | 1 | *SAS2 only* — lsiutil port number. Only shown if SAS2 cards are detected. SAS3/storcli cards are enumerated automatically. |
+| lsiutil Port (fallback) | 1 | *SAS2 only* — every card lsiutil lists is read automatically, so this normally does nothing. It names the one port to fall back to if that list cannot be read. Only shown if SAS2 cards are detected. |
 | Alert Threshold | 80 °C | The badge turns red (ALERT) at or above this temperature. |
 | Show PCIe Info | On | PCIe width/speed row in the Overview. |
 | Show PHY Health | On | PHY tab. |

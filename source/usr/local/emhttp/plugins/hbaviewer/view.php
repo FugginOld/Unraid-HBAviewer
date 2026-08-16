@@ -233,7 +233,11 @@ function lsi_hba_view(array $data, int $port, int $idx = 0): array {
     $portName = $data['port_name'] ?? 'ioc0';
     // lsiutil cards name a port ("ioc0 (lsiutil -p1)"); storcli cards name the
     // controller index ("Controller /c0") since port_name is empty there.
-    $portLabel = $portName !== '' ? "$portName (lsiutil -p$port)" : "Controller /c$idx";
+    // The card's OWN port when the collector reported one — a multi-card box
+    // otherwise labels every card with the single port Settings names, so cards
+    // 2 and 3 tell you to run a command that reads card 1 (issue #18).
+    $cardPort  = (int)($data['port'] ?? $port);
+    $portLabel = $portName !== '' ? "$portName (lsiutil -p$cardPort)" : "Controller /c$idx";
 
     $pcie = [];
     foreach ([

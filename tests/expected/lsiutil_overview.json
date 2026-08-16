@@ -4,7 +4,7 @@
   "firmware": "20.00.07.00",
   "mode": "IT",
   "fw_old": false,
-  "port_name": "ioc0",
+  "port_name": "ioc0", "port": 1,
   "board_name": "SAS9207-8i",
   "pci_location": "03:00",
   "card_id": "0000:00:02.0",

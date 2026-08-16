@@ -17,6 +17,12 @@ BOARD=$(cat "$3" 2>/dev/null)
 ALERT="${4:-80}"
 IDENT=$(cat "$5" 2>/dev/null)
 PORTSEL="${6:-}"   # which banner row is this card's; empty = the first one
+# The card's own -p number, so the UI can label it "ioc1 (lsiutil -p2)" instead
+# of pasting the one port Settings names onto every card (issue #18). Emitted
+# only when the caller said which port this is, which keeps the output of a
+# caller that does not — every single-card expectation in the suite — unchanged.
+PORT_FIELD=""
+[ -n "$PORTSEL" ] && PORT_FIELD=" \"port\": $PORTSEL,"
 
 # Injected by the composer, which reads them from sysfs — this file stays a pure
 # filter with no hardware access. Defaults are the suppressing values: an
@@ -182,7 +188,7 @@ cat <<EOF
   "firmware": "${FW_VER}",
   "mode": "${MODE}",
   "fw_old": $FW_OLD,
-  "port_name": "${PORT_NAME:-ioc0}",
+  "port_name": "${PORT_NAME:-ioc0}",${PORT_FIELD}
   "board_name": "${BOARD_NAME:-}",
   "pci_location": "${PCI_BUS:-0}:${PCI_DEV:-0}",
   "card_id": "${CARD_ID}",

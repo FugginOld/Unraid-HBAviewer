@@ -83,6 +83,11 @@ check('no temp_stroke', !array_key_exists('temp_stroke', $v));
 $bare = lsi_hba_view(['temp' => 30, 'status' => 'alert'], 2);
 check('model fallback', $bare['model'] === 'Unknown');
 check('port name def',  $bare['port_label'] === 'ioc0 (lsiutil -p2)');
+// A card that reports its own port labels itself with it, not with the one
+// Settings names -- otherwise cards 2 and 3 of a multi-card box both tell you
+// to run -p1, which reads card 1 (issue #18).
+$own = lsi_hba_view(['port_name' => 'ioc2', 'port' => 3], 1);
+check('own port wins',  $own['port_label'] === 'ioc2 (lsiutil -p3)');
 check('pcie empty',     $bare['pcie'] === []);
 check('alert color',    $bare['color'] === '#e74c3c');
 

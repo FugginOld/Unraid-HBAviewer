@@ -21,7 +21,8 @@
 
 ## Status
 
-Steps 1–3 shipped on `advisor/059-multi-card-lsiutil`. Raised by issue #18
+All six steps shipped on `advisor/059-multi-card-lsiutil`; nothing is
+hardware-verified past the port→host join (see below). Raised by issue #18
 (three SAS2308 cards, only one ever shown) and confirmed by a second reporter in
 the same thread (two 9207-8i, second card has no temperature). P2 — nothing is
 at risk and nothing is wrong on a single-card box, but on a multi-card SAS2 box

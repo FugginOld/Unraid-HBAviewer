@@ -244,8 +244,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       <?php if ($has_sas2): ?>
       <div class="lu-s-row">
         <div class="lu-s-label">
-          lsiutil Port
-          <small>Run lsiutil without arguments to list ports. Usually 1.</small>
+          lsiutil Port (fallback)
+          <small>Every SAS2 card lsiutil lists is read automatically, so this normally does nothing. It is used only if that list cannot be read, and then it names the single port to fall back to. Leave it at 1 unless support asks.</small>
         </div>
         <div class="lu-s-control">
           <input type="number" name="port" value="<?= (int)$cfg['HBA_PORT'] ?>" min="1" max="8">
