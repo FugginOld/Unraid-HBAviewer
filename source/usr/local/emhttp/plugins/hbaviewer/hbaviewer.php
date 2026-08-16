@@ -24,7 +24,7 @@ $vi        = @parse_ini_file('/var/local/emhttp/var.ini');
 $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 ?>
 
-<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css">
+<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 
 <div id="lu-wrap">
 

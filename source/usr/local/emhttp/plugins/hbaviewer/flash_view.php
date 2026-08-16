@@ -34,7 +34,7 @@ if ($enableFlash) {
 }
 ?>
 
-<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css">
+<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 <style>
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
 .lu-flash-warn { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 38%, transparent); border-radius: 10px; color: var(--crit-text); font-size: 13px; line-height: 1.5; padding: 12px 16px; margin-bottom: 14px; }

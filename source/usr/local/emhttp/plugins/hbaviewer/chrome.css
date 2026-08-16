@@ -118,14 +118,17 @@
    it is not: auto-fit collapses to a single 1fr track when there is nothing to
    sit beside it, so the board spread across the whole frame and every value in
    it sat marooned at the right edge, ~1500px from its label.
-   calc(50% - 8px) is the width this card would have if a second card existed —
-   half the frame less half the 16px gap — so a box with one dual-IOC board
-   draws it at exactly the size a box with two cards draws each of them, rather
-   than at a number picked to look right on one screen. The max() floor is the
-   grid's own 420px minmax, which keeps a narrow window (already collapsed to a
-   single column) from halving a card that has nothing to share the row with. */
+   The ceiling is the width this card WOULD have if a second card existed: the
+   wrapper's 1560px cap, less its 24px side padding twice, less the 16px grid
+   gap, halved. Written out in absolute units on purpose — a percentage here
+   resolves against the GRID AREA, and during track sizing that basis is
+   indefinite, so `max(420px, calc(50% - 8px))` silently collapsed to the 420px
+   floor and drew a third-width card. Absolute units also degrade correctly on a
+   narrow window: the track is smaller than the ceiling, so the card fills it and
+   the cap never engages. Keep the three numbers in step with #lu-wrap's
+   max-width/padding and .lu-ov-grid's gap above. */
 .lu-ov-grid .lu-card-parent {
-    max-width: max(420px, calc(50% - 8px));
+    max-width: calc((1560px - 48px - 16px) / 2);
     margin-left: auto;
     margin-right: auto;
 }

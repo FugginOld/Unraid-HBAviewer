@@ -1041,7 +1041,16 @@ check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1
    is never loaded fails exactly like one that was deleted. */
 $css = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/chrome.css');
 check('hint line is styled', str_contains($css, '.lu-ind-hint {'));
-check('the shell loads chrome.css', str_contains($shell, 'href="/plugins/hbaviewer/chrome.css"'));
+// Cache-busted like hbaviewer.js already is: without the ?v= a browser serves
+// the stylesheet it cached before the update, so a CSS fix appears not to have
+// shipped until someone hard-refreshes. Cost a round of "it didn't change" on
+// real hardware before it was spotted.
+check('the shell loads chrome.css', str_contains($shell, 'href="/plugins/hbaviewer/chrome.css?v='));
+// $shell is the SOURCE, not rendered output, so the ?v= is followed by the PHP
+// tag rather than digits. What matters is that the stamp is the file's own
+// mtime -- a hand-maintained version would be one more thing to forget.
+check('the stylesheet stamp is chrome.css\'s own mtime', (bool) preg_match(
+    '~chrome\.css\?v=<\?=[^>]*filemtime\([^)]*chrome\.css.*?\?>"~', $shell));
 // Chrome is shared by two pages now, so it must stay pure CSS — a PHP tag in
 // there would be served as text and silently break every rule after it.
 check('chrome.css carries no PHP', !str_contains($css, '<?'));
