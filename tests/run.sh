@@ -40,6 +40,12 @@ check phy-healthy      phy_healthy.json      bash "$P/phy.sh"          < fixture
 check phy-unsupported  phy_unsupported.json  bash "$P/phy.sh"          < fixtures/phy_unsupported.txt
 check events-entries   events_entries.json   bash "$P/events.sh"       < fixtures/events_entries.txt
 check events-empty     events_empty.json     bash "$P/events.sh"       < fixtures/events_empty.txt
+# The form lsiutil 1.70 actually prints on a SAS2308 — a "SeqN Type Time Data"
+# table, not the Entry/Qualifier lines the parser was written for. Real capture
+# from brianara3's bundle (issue #18), whose 85 entries rendered as an empty
+# Events tab on every SAS2 box until this was matched. 85 in, 85 out.
+check events-table     events_table.json     bash "$P/events.sh"       < fixtures/hba_eventlog_table.txt
+check events-table-empty events_empty.json   bash "$P/events.sh"       < fixtures/events_table_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_hbaviewer.txt
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
