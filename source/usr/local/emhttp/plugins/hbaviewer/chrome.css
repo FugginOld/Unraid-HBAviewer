@@ -128,6 +128,13 @@
    the cap never engages. Keep the three numbers in step with #lu-wrap's
    max-width/padding and .lu-ov-grid's gap above. */
 .lu-ov-grid .lu-card-parent {
+    /* width:100% is NOT redundant. A grid item stretches to its track only while
+       its width is auto AND neither inline margin is auto -- the two auto
+       margins below (which do the centring) therefore switch stretching OFF and
+       leave the card at its fit-content width, about 430px. Both earlier
+       attempts at this rule capped a card that had already shrink-wrapped, so
+       raising the ceiling from 420 to 748 changed nothing on screen. */
+    width: 100%;
     max-width: calc((1560px - 48px - 16px) / 2);
     margin-left: auto;
     margin-right: auto;
