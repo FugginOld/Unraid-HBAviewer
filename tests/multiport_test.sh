@@ -109,6 +109,66 @@ eq "parse: 3card port 3 location" '"pci_location": "83:00"' "$(card $M3 ioc_p3.t
 eq "parse: 2card temperature" '"temp": 63' "$(card $M2 ioc_p1.txt 1 temp)"
 eq "parse: 3card temperature" '"temp": 58' "$(card $M3 ioc_p3.txt 3 temp)"
 
+# ── ov_lsiutil loops over every port ────────────────────────────────────────
+# The composer itself, with lsiutil replaced by a stub that replays the 3-card
+# fixture per -p. Everything the loop reaches into sysfs for is stubbed above or
+# here; what is under test is the WIRING -- three objects out, each carrying its
+# own port's temperature and its own card's identity.
+#
+# The three IOC captures are SYNTHESIZED from the one real capture the bundle
+# holds (ioc_p3.txt), with the temperature byte replaced by the values
+# brianara3's box actually reported on 2026-08-16: 53, 61, 59 C. The bundle can
+# only ever contain one port's capture -- that is the bug -- so a per-port
+# expectation has to come from the terminal output instead.
+STUBDIR=$(mktemp -d); trap 'rm -rf "$ROOT" "$STUBDIR"' EXIT
+i=0
+for c in 53 61 59; do
+    i=$((i + 1))
+    sed -E "s/(IOCTemperature:[[:space:]]*)0x[0-9A-Fa-f]+/\1$(printf '0x%04X' "$c")/" \
+        fixtures/lsiutil_multi/3card/ioc_p3.txt > "$STUBDIR/ioc_p$i.txt"
+done
+hba_query() {
+    case "$1" in
+        -b) cat fixtures/lsiutil_multi/3card/board.txt ;;
+        -p*) case "$3" in
+                 25,2,0,0) cat "$STUBDIR/ioc_p${1#-p}.txt" ;;
+                 *) : ;;   # -a 1,0 identify: absent from the bundle, empty is a valid read
+             esac ;;
+        *) cat fixtures/lsiutil_multi/3card/banner.txt ;;
+    esac
+}
+require_binary()  { return 0; }
+find_storcli()    { :; }
+hba_has_sas2()    { return 0; }
+hba_has_sas3()    { return 1; }
+hba_has_sas4()    { return 1; }
+hba_topology()    { printf 'direct'; }
+hba_subvendor()   { printf '0x1000'; }
+hba_card_id()     { basename "$1"; }   # the PCI slot, which is what groups IOCs
+DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
+ALERT=80
+eval "$(sed -n '/^ov_lsiutil()/,/^}/p' "$DIR/get_hba_info.sh")"
+OUT=$(ov_lsiutil)
+eq "loop: three controllers" "3" "$(grep -o '"temp"' <<< "$OUT" | wc -l | tr -d ' ')"
+eq "loop: each port its own temperature" "53 61 59" \
+   "$(grep -oE '"temp": [0-9]+' <<< "$OUT" | awk '{print $2}' | tr '\n' ' ' | sed 's/ $//')"
+# The join, end to end: port 1/2/3 -> decimal bus 129/130/131 -> host1/2/3 ->
+# three DIFFERENT slots. Identical card_ids here would make card_group.php fuse
+# three separate cards into one display card.
+eq "loop: each card its own card_id" "0000:81:00.0 0000:82:00.0 0000:83:00.0" \
+   "$(grep -oE '"card_id": "[^"]*"' <<< "$OUT" | cut -d'"' -f4 | tr '\n' ' ' | sed 's/ $//')"
+eq "loop: each card its own board row" "81:00 82:00 83:00" \
+   "$(grep -oE '"pci_location": "[^"]*"' <<< "$OUT" | cut -d'"' -f4 | tr '\n' ' ' | sed 's/ $//')"
+# A failed join must not hand card 1's identity to card 2 (see the gate in
+# ov_lsiutil): with no matching host at all, every card_id comes back empty
+# rather than all three sharing _first_sas_host's slot.
+_host_for_pci_real=$(declare -f _host_for_pci)
+_host_for_pci() { return 1; }
+_first_sas_host() { printf '1'; }
+eq "loop: failed join yields no card_id on a multi-port box" "" \
+   "$(ov_lsiutil | grep -oE '"card_id": "[^"]+"' | tr -d '\n')"
+eval "$_host_for_pci_real"
+
 echo
 [ $fail -eq 0 ] && { echo "multiport: all pass"; exit 0; }
 echo "multiport: FAILURES"; exit 1

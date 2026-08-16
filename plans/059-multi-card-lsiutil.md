@@ -21,16 +21,29 @@
 
 ## Status
 
-Not started. Raised by issue #18 (three SAS2308 cards, only one ever shown) and
-confirmed by a second reporter in the same thread (two 9207-8i, second card has
-no temperature). P2 — nothing is at risk and nothing is wrong on a single-card
-box, but on a multi-card SAS2 box the plugin silently monitors one card and
-gives no sign the others exist beyond the Detected Hardware line, which already
-names them.
+Steps 1–3 shipped on `advisor/059-multi-card-lsiutil`. Raised by issue #18
+(three SAS2308 cards, only one ever shown) and confirmed by a second reporter in
+the same thread (two 9207-8i, second card has no temperature). P2 — nothing is
+at risk and nothing is wrong on a single-card box, but on a multi-card SAS2 box
+the plugin silently monitors one card and gives no sign the others exist beyond
+the Detected Hardware line, which already names them.
 
-**Blocked on a fixture** — see Step 0. No two-SAS2-card hardware exists on
-either test box (Raven or Golem). Everything in this plan is fixture-testable;
-none of it is hardware-verifiable by us.
+**Fixture obtained** (`tests/fixtures/lsiutil_multi/`, real captures from both
+reporters), and **the port→host join is now hardware-verified**: brianara3 ran
+the Step 1–2 logic on his 3-card box on 2026-08-16 and every port resolved to
+its own card —
+
+```
+port 1  SAS9207-8i  53 C  81:00.0  host0 (SAS9207-8i)
+port 2  SAS9207-8i  61 C  82:00.0  host1 (SAS9207-8i)
+port 3  SAS9207-8i  59 C  83:00.0  host2 (SAS9207-8i)
+```
+
+That clears STOP conditions 2, 3 and 5: `-p<n>` accepts the banner numbering for
+all three ports, each returns its own temperature, the decimal `129/130/131`
+bus values convert to the sysfs addresses `81/82/83`, and the port count equals
+the SAS2 host count with no dead tile. Steps 4–6 (the composers looping) remain,
+and are fixture-testable.
 
 ## Why this matters
 

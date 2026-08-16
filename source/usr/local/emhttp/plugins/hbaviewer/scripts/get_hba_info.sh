@@ -158,29 +158,48 @@ ov_lsiutil() {
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD IDENT
+    local IOC BANNER BOARD IDENT p ports first=1
     IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
     trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
-    hba_query -p"$PORT" -a 25,2,0,0 2>/dev/null > "$IOC"
-    printf '0\n' | hba_query        2>/dev/null > "$BANNER"
-    hba_query -b                    2>/dev/null > "$BOARD"
-    # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
-    # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
-    hba_query -p"$PORT" -a 1,0      2>/dev/null > "$IDENT"
-    # lsiutil reports no PCI address at all, so the card is reached through its
-    # scsi_host — the same walk issue #14 added for the PCIe link maximum.
-    local hnum pdir
-    hnum=$(_first_sas_host)
-    pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
-    LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
-    LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
-    # At most one card here: lsiutil addresses a single controller, so this
-    # path never produces two entries to group — resolves to empty whenever
-    # the ancestry isn't visible, same as the storcli path. Emitted anyway so
-    # the field means the same thing on both backends.
-    LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
-    export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
-    bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT"
+    # Both of these list EVERY port in one call, so they are captured once and
+    # the per-card row is picked out by port number below and in parse/hba.sh.
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    hba_query -b             2>/dev/null > "$BOARD"
+    ports=$(lsi_ports "$BANNER")
+    for p in $ports; do
+        hba_query -p"$p" -a 25,2,0,0 2>/dev/null > "$IOC"
+        # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain
+        # menu item, NOT expert mode, so no -e. Read-only: it reports what is
+        # flashed.
+        hba_query -p"$p" -a 1,0      2>/dev/null > "$IDENT"
+        # lsiutil reports no PCI address in its telemetry, so the card is
+        # reached through its scsi_host — the same walk issue #14 added for the
+        # PCIe link maximum, but joined on THIS port's bus/device (issue #18)
+        # rather than on whichever SAS host happens to be first.
+        local hnum pdir bus dev row
+        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
+        bus=$(echo "$row" | awk '{print $3}')
+        dev=$(echo "$row" | awk '{print $4}')
+        # A failed join must NOT fall back to card 1 on a multi-port box: two
+        # cards sharing one topology and card_id would make card_group.php merge
+        # two physically separate cards into one display card, the exact inverse
+        # of the dual-IOC feature. With one port there is nothing to confuse, so
+        # the historic fallback stands and single-card output is unchanged.
+        if ! hnum=$(_host_for_pci "$bus" "$dev"); then
+            hnum=""
+            [ "$(printf '%s\n' "$ports" | wc -l)" = "1" ] && hnum=$(_first_sas_host)
+        fi
+        pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
+        LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
+        LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
+        # The slot, for grouping the two IOCs of a dual-controller board —
+        # per-card now, which is what keeps N separate cards separate.
+        LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
+        export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
+        [ "$first" = 1 ] || printf ','
+        first=0
+        bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT" "$p"
+    done
 }
 
 out=$(hba_each ov_storcli ov_lsiutil)

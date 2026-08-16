@@ -32,5 +32,11 @@ printing all along, has to convert.
 so a per-port `-b` capture is unnecessary — take the Nth `ioc` row. Plan 059's
 STOP condition 3 ("does `-p<n> -b` accept `-p`") is moot and was dropped.
 
+**All three ports are addressable, and the join lands.** On 2026-08-16 the
+3-card box ran the shipped enumeration + join logic live: ports `1 2 3` gave
+53/61/59 C at `81:00.0`, `82:00.0`, `83:00.0`, matching `host0`, `host1`,
+`host2`. `ioc_p3.txt` here is still the only raw per-port capture — the other
+two ports are confirmed by that summary, not by a stored transcript.
+
 **The columns are `Seg/Bus/Dev`,** so `awk $3`/`$4` in `parse/hba.sh` read bus
 and device correctly; the segment in `$2` is 0 on both boxes.
