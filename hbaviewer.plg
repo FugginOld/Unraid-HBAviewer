@@ -13,6 +13,45 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.16###
+Every HBA in the machine is now monitored, not just one. Thanks to @brianara3
+and @masterwishx, who reported the problem and then ran every test build on
+their own hardware until it was right. Firmware/BIOS flashing remains off.
+
+**Fixed**
+- **A machine with more than one SAS2 card monitored only one of them.** The
+  Overview, HBA Health, PHY Health, Event Log and Drives tabs all read the
+  single card named by the "lsiutil Port" setting, while Detected Hardware
+  listed them all — so the plugin looked complete and was watching one card.
+  Every card is now read, each with its own temperature, firmware, PCIe link,
+  drive count and PHY counters. Verified on a three-card box and a two-card
+  box before release.
+- **The Event Log was empty on every SAS2 card.** The log was being read
+  correctly and then discarded, because the plugin expected a layout lsiutil
+  does not print. One reporter's card held 85 entries behind that empty tab.
+- **A card whose name contains a space showed only the first word.** A 9400
+  read as "HBA" instead of "HBA 9400-16i", which also cost it its firmware
+  check, since no name like that can be matched.
+- **The two backends printed PCI addresses differently** — the same card read
+  as "00:c1:00:00" or "c1:00" depending on which tool could see it. Both now
+  print the short form that lspci starts with.
+- **The diagnostic bundle collected only one card's telemetry**, which is why
+  the bug above took three rounds of hand-written commands to pin down. It now
+  captures every card.
+
+**Changed**
+- **The PHY tab's error counts now read zero after you reset the baseline.**
+  The big number is what has happened since you last pressed the button, and a
+  link you have fixed stops being flagged, instead of staying flagged until the
+  next reboot. The driver's own running total keeps a line underneath, labelled
+  "since driver load" — because that is what it is: it returns to zero when the
+  driver reloads, with no cable having changed.
+- **A dual-controller board renders as one card**, with a section per
+  controller, rather than as two unrelated cards that happen to share a slot.
+- The "lsiutil Port" setting no longer chooses which card is watched, since
+  they all are. It stays as the fallback for a card table the plugin cannot
+  read, and says so.
+
 ###2026.08.09###
 Firmware/BIOS flashing is switched off in this release while it gets more
 testing. Nothing else changes.
