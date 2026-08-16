@@ -166,7 +166,9 @@ hba_subvendor()   { printf '0x1000'; }
 hba_card_id()     { basename "$1"; }   # the PCI slot, which is what groups IOCs
 DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
 ALERT=80
-eval "$(sed -n '/^ov_lsiutil()/,/^}/p' "$DIR/get_hba_info.sh")"
+eval "$(sed -n '/^ov_lsiutil()/,/^}/p' "$DIR/get_hba_info.sh"
+        sed -n '/^_ov_one()/,/^}/p'    "$DIR/get_hba_info.sh"
+        sed -n '/^lsi_each_card()/,/^}/p' "$SRC")"
 OUT=$(ov_lsiutil)
 eq "loop: three controllers" "3" "$(grep -o '"temp"' <<< "$OUT" | wc -l | tr -d ' ')"
 eq "loop: each port its own temperature" "53 61 59" \

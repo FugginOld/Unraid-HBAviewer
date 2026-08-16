@@ -158,41 +158,25 @@ ov_lsiutil() {
         return 1
     fi
     require_binary || return 1
-    local IOC BANNER BOARD IDENT p ports nports first=1
-    IOC=$(mktemp); BANNER=$(mktemp); BOARD=$(mktemp); IDENT=$(mktemp)
-    trap 'rm -f "$IOC" "$BANNER" "$BOARD" "$IDENT"' EXIT
-    # Both of these list EVERY port in one call, so they are captured once and
-    # the per-card row is picked out by port number below and in parse/hba.sh.
-    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
-    hba_query -b             2>/dev/null > "$BOARD"
-    ports=$(lsi_ports "$BANNER")
-    nports=$(echo $ports | wc -w | tr -d ' ')   # unquoted: count the tokens
-    for p in $ports; do
-        hba_query -p"$p" -a 25,2,0,0 2>/dev/null > "$IOC"
-        # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain
-        # menu item, NOT expert mode, so no -e. Read-only: it reports what is
-        # flashed.
-        hba_query -p"$p" -a 1,0      2>/dev/null > "$IDENT"
-        # lsiutil reports no PCI address in its telemetry, so the card is
-        # reached through its scsi_host — the same walk issue #14 added for the
-        # PCIe link maximum, but joined on THIS port's bus/device (issue #18)
-        # rather than on whichever SAS host happens to be first.
-        local hnum pdir bus dev row
-        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
-        bus=$(echo "$row" | awk '{print $3}')
-        dev=$(echo "$row" | awk '{print $4}')
-        hnum=$(lsi_host_for "$bus" "$dev" "$nports")
-        pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
-        LSI_TOPOLOGY=$([ -n "$hnum" ] && hba_topology "$hnum" || printf 'unknown')
-        LSI_SUBVENDOR=$([ -n "$pdir" ] && hba_subvendor "$pdir")
-        # The slot, for grouping the two IOCs of a dual-controller board —
-        # per-card now, which is what keeps N separate cards separate.
-        LSI_CARD_ID=$([ -n "$pdir" ] && hba_card_id "$pdir")
-        export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
-        [ "$first" = 1 ] || printf ','
-        first=0
-        bash "$DIR/parse/hba.sh" "$IOC" "$BANNER" "$BOARD" "$ALERT" "$IDENT" "$p"
-    done
+    lsi_each_card _ov_one
+}
+_ov_one() {   # $1 port  $2 banner  $3 board  $4 hnum  $5 pdir  $6 nports
+    local IOC IDENT
+    IOC=$(mktemp); IDENT=$(mktemp)
+    hba_query -p"$1" -a 25,2,0,0 2>/dev/null > "$IOC"
+    # Main-menu option 1 = "Identify firmware, BIOS, and/or FCode". Plain menu
+    # item, NOT expert mode, so no -e. Read-only: it reports what is flashed.
+    hba_query -p"$1" -a 1,0      2>/dev/null > "$IDENT"
+    # An unresolved host reads "unknown", which suppresses the firmware verdict.
+    # A WRONG topology would be worse than none: it is what gates the multipath
+    # suppression, and acting on a false BEHIND destroys a working config.
+    LSI_TOPOLOGY=$([ -n "$4" ] && hba_topology "$4" || printf 'unknown')
+    LSI_SUBVENDOR=$([ -n "$5" ] && hba_subvendor "$5")
+    # The slot, for grouping the two IOCs of a dual-controller board.
+    LSI_CARD_ID=$([ -n "$5" ] && hba_card_id "$5")
+    export LSI_TOPOLOGY LSI_SUBVENDOR LSI_CARD_ID
+    bash "$DIR/parse/hba.sh" "$IOC" "$2" "$3" "$ALERT" "$IDENT" "$1"
+    rm -f "$IOC" "$IDENT"
 }
 
 out=$(hba_each ov_storcli ov_lsiutil)
