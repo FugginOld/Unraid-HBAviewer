@@ -35,7 +35,16 @@ fi
 # Labels differ between `show` (brief) and `show all`; accept either.
 BOARD=$(val "Product Name"); [ -n "$BOARD" ] || BOARD=$(val "Model")
 FW=$(val "FW Version");      [ -n "$FW" ]    || FW=$(val "Firmware Version")
+# storcli prints "00:c1:00:00" — domain:bus:device:function, colon-separated.
+# The lsiutil path emits bus:dev ("c1:00"), so the same card read through the
+# two backends printed two different spellings of its own address. Normalise on
+# the shorter one, which is what lspci's own listing starts with: take bus and
+# device, drop the domain and the function rather than invent a function number
+# lsiutil never reports. The full sysfs address is still carried by card_id.
 PCI=$(val "PCI Address")
+case "$PCI" in
+    *:*:*:*) PCI=$(printf '%s' "$PCI" | cut -d: -f2,3) ;;
+esac
 BIOS=$(val "BIOS Version")
 DRIVES=$(val "Physical Drives")
 # Chip: prefer storcli's AdapterType (works for any SAS2/SAS3/SAS3.5 chipset);

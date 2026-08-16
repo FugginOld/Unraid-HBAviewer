@@ -1217,11 +1217,11 @@ $dualData = ['driver' => 'mpt3sas 54.100.00.00', 'controllers' => [
     ['model' => 'SAS3008', 'board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0',
      'temp' => 56, 'temp_band' => 'normal',   'cfg_band' => 'warning', 'status' => 'ok',
      'firmware' => '16.00.12.00', 'bios' => '08.15.00.00', 'mode' => 'IT',
-     'pci_location' => '00:84:00:00', 'drive_count' => '2'],
+     'pci_location' => '84:00', 'drive_count' => '2'],
     ['model' => 'SAS3008', 'board_name' => 'SAS9300-16i', 'card_id' => '0000:80:01.0',
      'temp' => 71, 'temp_band' => 'elevated', 'cfg_band' => 'warning', 'status' => 'warn',
      'firmware' => '16.00.12.00', 'bios' => '08.15.00.00', 'mode' => 'IT',
-     'pci_location' => '00:86:00:00', 'drive_count' => '6'],
+     'pci_location' => '86:00', 'drive_count' => '6'],
 ]];
 $html = renderOverviewCards($dualData, $dualCfg);
 
@@ -1276,7 +1276,7 @@ check('the real dual-IOC capture keeps both sensors',
 /* Width, speed and power mode are the SLOT's: one row, on the board. PCI
    Location is NOT — each IOC answers to its own PCI function, and that address
    is what a person matches against lspci and `storcli /cN`. The flat page showed
-   both 00:84:00:00 and 00:86:00:00; a single board-level row would have labelled
+   both 84:00 and 86:00; a single board-level row would have labelled
    one of them as the board's and dropped the other off the Overview entirely. */
 /* The item COUNT is the real guard: the renderer skips the location by matching
    the label lsi_hba_view() gives it, so a rename there would silently restore
@@ -1290,7 +1290,7 @@ check('the board PCIe row carries only slot-level facts',
       && !preg_match('~lu-pcie-row.*?00:8~s', $realHtml));
 check('each IOC states its own PCI location',
       substr_count($realHtml, '<p>PCI Location:') === 2
-      && str_contains($realHtml, '>00:84:00:00<') && str_contains($realHtml, '>00:86:00:00<'));
+      && str_contains($realHtml, '>84:00<') && str_contains($realHtml, '>86:00<'));
 // SHOW_PCIE off hides the per-IOC location too, exactly as it hides the row.
 check('SHOW_PCIE off hides the per-IOC location',
       !str_contains(renderOverviewCards($realDual, ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 0]),
