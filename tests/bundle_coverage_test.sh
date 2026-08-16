@@ -38,6 +38,29 @@ while IFS= read -r tok; do
     fi
 done <<<"$composer_tokens"
 
+# Every per-port lsiutil capture must be inside the lsi_ports loop and named
+# with the port it came from. A capture hard-coded to $PORT collects one card on
+# a multi-card box, which is what made issue #18 take three rounds of hand-written
+# command blocks: the bundle looked complete and held one card's telemetry.
+if grep -qE 'for p in \$\(lsi_ports ' "$BUNDLE"; then
+    ok "lsiutil captures loop over lsi_ports"
+else
+    bad "lsiutil captures do not loop" "a multi-card box would report one card and the bundle would not show the others exist"
+fi
+stray=$(grep -nE 'hba_query .*-p"\$PORT"' "$BUNDLE")
+if [ -z "$stray" ]; then
+    ok "no capture is pinned to the configured port"
+else
+    bad "capture pinned to \$PORT" "$stray"
+fi
+while IFS= read -r f; do
+    case "$f" in
+        02-raw/lsiutil_p\$\{p\}_*) ok "per-port capture named by port: $f" ;;
+        *) bad "per-port capture not named by port: $f" "every port would overwrite the last one's file" ;;
+    esac
+done < <(grep -oE '"?02-raw/lsiutil_[a-z${}_]*\.txt"?' "$BUNDLE" | tr -d '"' \
+         | grep -vE 'lsiutil_(banner|b)\.txt')
+
 # TRAN is the SAS-vs-SATA signal (read_smart.sh already branches on it) and has
 # no -a token to be caught by the loop above, so it needs its own assertion.
 if grep -E '^run 02-raw/lsblk\.txt lsblk .*-o [A-Za-z,]*TRAN' "$BUNDLE" >/dev/null; then

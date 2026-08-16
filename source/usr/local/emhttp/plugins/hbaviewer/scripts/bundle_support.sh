@@ -378,17 +378,26 @@ if [ -n "$SC" ]; then
 fi
 
 if [ -x "$LSIUTIL" ]; then
+    # The banner and the board table list every port in one call; everything
+    # else is per-port, so capture it per port — ONE file per port, named the
+    # way the storcli half names its per-controller files.
+    # This is why issue #18 took three round trips: the bundle captured the one
+    # port Settings named, so a three-card box produced one card's telemetry and
+    # the other two had to be collected by hand, twice.
     printf '0\n' | hba_query > "$B/02-raw/lsiutil_banner.txt" 2>&1
     run 02-raw/lsiutil_b.txt          hba_query -b
-    run 02-raw/lsiutil_ioc.txt        hba_query -p"$PORT" -a 25,2,0,0
-    # Main-menu option 1, "Identify firmware, BIOS, and/or FCode". Plain menu
-    # item, NOT expert mode, so no -e. Carries the flashed firmware image name
-    # whose suffix IS the IT/IR personality ("MPTFW-20.00.07.00-IT") — issue #10
-    # needed this collected by hand because the bundle did not have it.
-    run 02-raw/lsiutil_ident.txt      hba_query -p"$PORT" -a 1,0
-    run 02-raw/lsiutil_phy.txt        hba_query -p"$PORT" -a 20,12,0,0
-    run 02-raw/lsiutil_osmap.txt      hba_query -p"$PORT" -a 42,0
-    run 02-raw/lsiutil_eventlog.txt   hba_query -e -p"$PORT" -a 35,0
+    for p in $(lsi_ports "$B/02-raw/lsiutil_banner.txt"); do
+        run "02-raw/lsiutil_p${p}_ioc.txt"   hba_query -p"$p" -a 25,2,0,0
+        # Main-menu option 1, "Identify firmware, BIOS, and/or FCode". Plain
+        # menu item, NOT expert mode, so no -e. Carries the flashed firmware
+        # image name whose suffix IS the IT/IR personality
+        # ("MPTFW-20.00.07.00-IT") — issue #10 needed this collected by hand
+        # because the bundle did not have it.
+        run "02-raw/lsiutil_p${p}_ident.txt"    hba_query -p"$p" -a 1,0
+        run "02-raw/lsiutil_p${p}_phy.txt"      hba_query -p"$p" -a 20,12,0,0
+        run "02-raw/lsiutil_p${p}_osmap.txt"    hba_query -p"$p" -a 42,0
+        run "02-raw/lsiutil_p${p}_eventlog.txt" hba_query -e -p"$p" -a 35,0
+    done
 fi
 # TRAN is the SAS-vs-SATA signal. read_smart.sh already branches on it (a SAS
 # log-page read does not spin a drive up; an ATA one can), but nothing recorded
