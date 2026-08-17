@@ -342,25 +342,31 @@ printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
 printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
 check route-sas3-no-storcli route_sas3_no_storcli.json bash "$P/../get_hba_info.sh"
-# 24G/SAS4 on mpi3mr (issue #19): named and refused, never routed into lsiutil.
-# Without the gate this lands on "check the lsiutil port in Settings" — advice
-# that cannot work on any port, since lsiutil 1.70 predates the generation.
-# LSIUTIL points at the working stub here on purpose: if the SAS4 branch were
-# dropped, the run would reach the stub and produce a card's worth of JSON, so
-# this check fails loudly rather than by coincidence of a missing binary.
+# 24G/SAS4 on mpi3mr (issue #19), no StorCLI2 on the box: named and refused,
+# never routed into lsiutil. Without the gate this lands on "check the lsiutil
+# port in Settings" — advice that cannot work on any port, since lsiutil 1.70
+# predates the generation. LSIUTIL points at the working stub here on purpose:
+# if the SAS4 branch were dropped, the run would reach the stub and produce a
+# card's worth of JSON, so this check fails loudly rather than by coincidence
+# of a missing binary. This is the still-refused half of the gate; the check
+# below (route-sas4-storcli2-read) pins the other half, so neither can be
+# deleted without a test noticing.
 printf 'mpi3mr\n'     > "$SYSHOST/host0/proc_name"
 printf 'HBA 9600-24i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
-check route-sas4-mpi3mr route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+check route-sas4-mpi3mr route_sas4_no_storcli2.json bash "$P/../get_hba_info.sh"
 # ...and the same box with StorCLI2 on PATH, which is the realistic one: the
 # dkaser storcli plugin ships both binaries, and StorCLI2 DOES enumerate a 9600.
-# find_storcli must not pick it up — routed through the storcli parsers it would
-# replace the refusal above with a card's worth of misparsed fields.
+# find_storcli now picks it up (bare "storcli2" is a candidate again) and
+# routes through the storcli2 parsers, so this reads the card instead of
+# refusing it. The stub is copied into its own directory rather than adding
+# tests/stub to PATH, so it does not shadow tests/stub/storcli (used by the
+# classic-storcli route checks above) under a different fixture set.
 SC2DIR=$(mktemp -d)
-printf '#!/bin/bash\necho "Number of Controllers = 1"\n' > "$SC2DIR/storcli2"
+cp "$PWD/stub/storcli2" "$SC2DIR/storcli2"
 chmod +x "$SC2DIR/storcli2"
-PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
-check route-sas4-storcli2-ignored route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures/storcli2" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-storcli2-read route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
 rm -rf "$SC2DIR"
 
 # The seam picks a tool by what the tool SAYS it is, not what it is called --

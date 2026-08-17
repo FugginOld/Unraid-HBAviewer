@@ -27,15 +27,25 @@ hba_query() { "$LSIUTIL" "$@"; }
 # "storcli2" — resolved further by storcli_flavor below). Honors a preset
 # $STORCLI. Prints the resolved path, or nothing if not found.
 #
-# The bare names "storcli"/"storcli64" are tried first, ahead of storcli2's
-# absolute-path-only candidates: the dkaser/unraid-storcli plugin symlinks
-# BOTH /usr/local/bin/storcli and /usr/local/bin/storcli2 onto PATH, so on a
-# box with only classic storcli installed the bare name resolves first and a
-# 9600 box still needs storcli2 named explicitly to be found at all.
+# storcli2 IS a candidate (restored — issue #19 removed it only until this
+# plugin could read a 9600; it can now). The FLAVOR of whichever path this
+# returns is resolved afterward by storcli_flavor() reading the binary's own
+# banner, never trusted from the name — but the name still decides WHICH
+# binary is returned when more than one resolves, because this loop stops at
+# the first match. "storcli"/"storcli64" are listed ahead of "storcli2", so on
+# a box with both classic storcli and StorCLI2 installed (dkaser's
+# unraid-storcli plugin ships both), the classic tool still wins.
+#
+# The bare names are tried before the absolute-path candidates for the same
+# reason storcli2 needs to be in the bare-name group at all: dkaser's plugin
+# symlinks /usr/local/bin/storcli and /usr/local/bin/storcli2 onto PATH, but
+# ships the StorCLI2 Lite build as storcli2Lite-8.14 and symlinks THAT to
+# whatever name the packager chose — if that symlink lands anywhere on PATH
+# other than /usr/local/bin/storcli2, the absolute paths alone miss it.
 find_storcli() {
     if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
     local c
-    for c in storcli storcli64 \
+    for c in storcli storcli64 storcli2 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
              /usr/local/bin/storcli /usr/local/bin/storcli64 /usr/local/bin/storcli2 \
              /usr/sbin/storcli /usr/sbin/storcli64 \

@@ -330,18 +330,20 @@ run 01-environment/plugin-version.txt cat /boot/config/plugins/hbaviewer.plg
 [ -s "$B/01-environment/proc_name.txt" ] || printf '(no /sys/class/scsi_host entries)\n' > "$B/01-environment/proc_name.txt"
 
 SC=$(find_storcli)
+FLAVOR=""
 if [ -n "$SC" ]; then
-    { printf 'storcli: %s\n' "$SC"; "$SC" -v 2>&1; } > "$B/01-environment/storcli.txt"
+    FLAVOR=$(storcli_flavor "$SC")
+    { printf 'storcli: %s (%s)\n' "$SC" "$FLAVOR"; "$SC" -v 2>&1; } > "$B/01-environment/storcli.txt"
 else
     printf 'storcli: NOT FOUND (searched the same candidates as lib.sh find_storcli)\n' \
         > "$B/01-environment/storcli.txt"
     note "storcli was not installed on this machine. The storcli half of section 02-raw is absent; the lsiutil half and sections 01/03/04 are complete."
 fi
-# StorCLI2, captured but never routed through (see find_storcli). It is the 24G
-# CLI: it enumerates only 9600-series controllers and reports zero on anything
-# older. `show` therefore answers the one question a 24G report turns on — can
-# any installed tool see this card at all — for the cost of one call, so the
-# next 9600 bundle carries the answer instead of needing a round trip (#19).
+# StorCLI2, informational, independent of $SC/$FLAVOR above: on a box that has
+# BOTH tools (dkaser's plugin ships both), find_storcli's ordering picks the
+# classic one, so $SC never resolves to storcli2 and the 24G-specific 02-raw
+# capture below never runs — but a reporter with a 9600 still wants to know
+# StorCLI2 is there. `show` answers that for the cost of one call.
 SC2=$(command -v storcli2 2>/dev/null)
 if [ -n "$SC2" ]; then
     { printf 'storcli2: %s\n' "$SC2"; "$SC2" show 2>&1; } > "$B/01-environment/storcli2.txt"
@@ -358,7 +360,7 @@ fi
 # get_attached_drives / get_hba_health / get_event_log), not from a static list.
 # A new composer means a new entry here; without one this script keeps working
 # while quietly becoming incomplete.
-if [ -n "$SC" ]; then
+if [ -n "$SC" ] && [ "$FLAVOR" != storcli2 ]; then
     run 02-raw/storcli_show.txt "$SC" show
     CNT=$(STORCLI="$SC" storcli_count); CNT="${CNT:-0}"
     for c in $(seq 0 $((CNT - 1))); do
@@ -375,6 +377,27 @@ if [ -n "$SC" ]; then
         run "02-raw/storcli_c${c}_sall_show_all.txt"      "$SC" /c"$c"/sall show all
     done
     [ "$CNT" -gt 0 ] || note "storcli is installed but enumerated 0 controllers."
+fi
+# StorCLI2 / SAS4 (24G, 9600 series) — mirrors the classic block above, but with
+# the command set ov_storcli2/drv_storcli2/phy_storcli2/ev_storcli2 actually
+# issue: ONE `show all` (StorCLI2 has no `show temperature`), `nolog` on every
+# call (drops the 230KB debug log the real tool writes into the CWD), and a
+# BOUNDED event read (an unbounded `show events` on a 9600-24i is 62k lines).
+if [ -n "$SC" ] && [ "$FLAVOR" = storcli2 ]; then
+    EVENT_LIMIT="${EVENT_LIMIT:-50}"
+    run 02-raw/storcli2_show.txt "$SC" show nolog
+    CNT2=$(STORCLI="$SC" STORCLI_FLAVOR=storcli2 storcli_count); CNT2="${CNT2:-0}"
+    for c in $(seq 0 $((CNT2 - 1))); do
+        run "02-raw/storcli2_c${c}_show_all.txt"      "$SC" /c"$c" show all nolog
+        run "02-raw/storcli2_c${c}_pall_show_all.txt" "$SC" /c"$c"/pall show all nolog
+        run "02-raw/storcli2_c${c}_eall_show_all.txt" "$SC" /c"$c"/eall show all nolog
+        # eall/sall AND sall, both, always — same complements-not-alternatives
+        # reasoning as the classic block above.
+        run "02-raw/storcli2_c${c}_eall_sall_show_all.txt" "$SC" /c"$c"/eall/sall show all nolog
+        run "02-raw/storcli2_c${c}_sall_show_all.txt"       "$SC" /c"$c"/sall show all nolog
+        run "02-raw/storcli2_c${c}_events.txt" "$SC" /c"$c" show events type=latest="$EVENT_LIMIT" nolog
+    done
+    [ "$CNT2" -gt 0 ] || note "storcli2 is installed but enumerated 0 controllers."
 fi
 
 if [ -x "$LSIUTIL" ]; then

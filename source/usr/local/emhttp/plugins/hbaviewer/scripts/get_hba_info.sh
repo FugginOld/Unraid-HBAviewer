@@ -196,14 +196,16 @@ ov_lsiutil() {
             "$(_board_on 'mpt3sas mpt2sas mptsas')"
         return 1
     fi
-    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. Neither tool here can read
-    # it: lsiutil 1.70 predates the generation, and storcli enumerates zero
-    # controllers on it, which would otherwise route the card into the lsiutil
-    # branch below and end in "check the lsiutil port in Settings" — advice that
-    # cannot work on any port. Say what the card is and what it needs instead.
-    # Gated on there being no SAS2 or SAS3 card as well, so a mixed box still
-    # gets the backend that serves the cards this plugin CAN read.
-    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3; then
+    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. lsiutil 1.70 predates the
+    # generation and storcli enumerates zero controllers on it, which would
+    # otherwise route the card into the lsiutil branch below and end in "check
+    # the lsiutil port in Settings" — advice that cannot work on any port. When
+    # StorCLI2 is on the box, hba_each routes there instead and this branch is
+    # never reached; this is the fallback for when it is not, so say what the
+    # card is and what it needs. Gated on there being no SAS2 or SAS3 card as
+    # well, so a mixed box still gets the backend that serves the cards this
+    # plugin CAN read.
+    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3 && [ -z "$(find_storcli)" ]; then
         printf '{"error":"%s is a 24G/SAS4 controller on the mpi3mr driver. The bundled lsiutil and storcli cannot read this generation — it needs Broadcom StorCLI2, which HBAviewer does not support yet (issue #19)."}' \
             "$(_board_on 'mpi3mr')"
         return 1
