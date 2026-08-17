@@ -1,0 +1,35 @@
+#!/bin/bash
+# Test stub: pretends to be StorCLI2 (the SAS4 / 9600 tool), replaying captured
+# fixtures per command. STUB_FIX points at the fixtures dir (fixtures/storcli2).
+#
+# The `version` banner matters as much as the data: lib.sh storcli_flavor() tells
+# the two tools apart by that string alone, because the FILENAME cannot be trusted
+# (the real binary ships as storcli2Lite-8.14 and gets symlinked to whatever the
+# packager chose). Keep the "StorCli2" spelling exactly as the binary prints it.
+#
+# `show temperature` and (on the Lite build) `show events` are FAILURES on real
+# hardware, not omissions — both are replayed here so the composers are tested
+# against the refusal they will actually meet.
+#
+# `nolog` is stripped before matching rather than written into every pattern.
+# The real tool takes it as a trailing global argument and drops its 230 KB
+# debug log as a result; which commands carry it is a caller decision, and a
+# stub that only answered the nolog form would stop catching a caller that
+# forgot it.
+# Join first, THEN strip. "${*% nolog}" applies the suffix removal to each
+# positional parameter individually rather than to the joined string, so it
+# silently leaves "show nolog" intact and every pattern below misses.
+args="$*"; args="${args% nolog}"
+case "$args" in
+    "show")                      cat "$STUB_FIX/00_controllers.txt" ;;
+    "/c0 show")                  cat "$STUB_FIX/c0_show.txt" ;;
+    "/c0 show all")              cat "$STUB_FIX/c0_show_all.txt" ;;
+    "/c0 show temperature")      cat "$STUB_FIX/c0_temperature.txt"; exit 1 ;;
+    "/c0/pall show all")         cat "$STUB_FIX/c0_pall_show_all.txt" ;;
+    "/c0/eall/sall show all")    cat "$STUB_FIX/c0_drives.txt" ;;
+    "/c0/eall show all")         cat "$STUB_FIX/c0_enclosures.txt" ;;
+    "/c0 show events")           cat "$STUB_FIX/c0_events.txt"; exit 1 ;;
+    "/c0 show events type=latest="*) cat "$STUB_FIX/c0_events_latest20.txt" ;;
+    "version")                   echo "StorCli2 SAS Customization Utility Ver 008.0014.0000.0012 June 20, 2025" ;;
+    *) echo "stub: unhandled args: $*" >&2; exit 1 ;;
+esac

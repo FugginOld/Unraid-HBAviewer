@@ -1,0 +1,348 @@
+
+
+Sequence Number: 3772
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x26(e0x34/s11) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 38
+Enclosure Index: 52
+Slot Number: 11
+Error: 3
+
+
+Sequence Number: 3773
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x27(e0x34/s12) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 39
+Enclosure Index: 52
+Slot Number: 12
+Error: 3
+
+
+Sequence Number: 3774
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x2e(e0x34/s19) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 46
+Enclosure Index: 52
+Slot Number: 19
+Error: 3
+
+
+Sequence Number: 3775
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x2f(e0x34/s20) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 47
+Enclosure Index: 52
+Slot Number: 20
+Error: 3
+
+
+Sequence Number: 3776
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x2c(e0x34/s17) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 44
+Enclosure Index: 52
+Slot Number: 17
+Error: 3
+
+
+Sequence Number: 3777
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x32(e0x34/s23) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 50
+Enclosure Index: 52
+Slot Number: 23
+Error: 3
+
+
+Sequence Number: 3778
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 437
+Class: Warning
+Locale: 2
+Event Description: PD 0x1f(e0x34/s4) Path 0x0 reset (Type 0x03).
+Event Data:
+===========
+Device ID: 31
+Enclosure Index: 52
+Slot Number: 4
+Error: 3
+
+
+Sequence Number: 3779
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x2c(e0x34/s17) Path 0x3000000000000008, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 44
+Enclosure Index: 52
+Slot Number: 17
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3780
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x1f(e0x34/s4) Path 0x3000000000000003, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 31
+Enclosure Index: 52
+Slot Number: 4
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3781
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x27(e0x34/s12) Path 0x3000000000000006, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 39
+Enclosure Index: 52
+Slot Number: 12
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3782
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x2f(e0x34/s20) Path 0x3000000000000010, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 47
+Enclosure Index: 52
+Slot Number: 20
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3783
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x23(e0x34/s8) Path 0x3000000000000004, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 35
+Enclosure Index: 52
+Slot Number: 8
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3784
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x32(e0x34/s23) Path 0x3000000000000011, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 50
+Enclosure Index: 52
+Slot Number: 23
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3785
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x2b(e0x34/s16) Path 0x3000000000000007, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 43
+Enclosure Index: 52
+Slot Number: 16
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3786
+Time: Fri Aug 14 09:16:51 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x26(e0x34/s11) Path 0x3000000000000005, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 38
+Enclosure Index: 52
+Slot Number: 11
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3787
+Time: Fri Aug 14 09:17:36 2026
+
+Code: 610
+Class: Informational
+Locale: 32
+Event Description: The time on the controller has been set.
+Event Data:
+===========
+None
+
+
+Sequence Number: 3788
+Time: Fri Aug 14 09:17:36 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x2e(e0x34/s19) Path 0x3000000000000009, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 46
+Enclosure Index: 52
+Slot Number: 19
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3789
+Time: Fri Aug 14 09:17:36 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x1b(e0x34/s0) Path 0x3000000000000002, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 27
+Enclosure Index: 52
+Slot Number: 0
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+
+Sequence Number: 3790
+Time: Fri Aug 14 09:17:36 2026
+
+Code: 500
+Class: Informational
+Locale: 32
+Event Description: Host driver is loaded and operational.
+Event Data:
+===========
+None
+
+
+Sequence Number: 3791
+Time: Fri Aug 14 09:47:36 2026
+
+Code: 339
+Class: Informational
+Locale: 2
+Event Description: Unexpected sense: PD 0x1b(e0x34/s0) Path 0x3000000000000002, CDB: 4d 00 6f 00 00 00 00 00 0c 00, Sense:6/29/00.
+Event Data:
+===========
+Device ID: 27
+Enclosure Index: 52
+Slot Number: 0
+CDB Length: 10
+CDB Data:
+004d 0000 006f 0000 0000 0000 0000 0000 000c 0000 
+Sense Data : Key/ASC/ASCQ:0x6/0x29/0x0
+
+ 
+CLI Version = 08.017.000.0008 Mar 06, 2026
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Latest Event = 20
+
+Event Information :
+=================
+
+------------------
+Method    Status  
+------------------
+GetLatest Success 
+------------------
+
+
+

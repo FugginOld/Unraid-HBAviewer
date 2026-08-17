@@ -1,0 +1,34 @@
+{
+"Controllers":[
+{
+	"Command Status" : {
+		"CLI Version" : "008.0014.0000.0012 June 20, 2025",
+		"Operating system" : "Linux6.18.38-Unraid",
+		"Status Code" : 0,
+		"Status" : "Success",
+		"Description" : "None"
+	},
+	"Response Data" : {
+		"Number of Controllers" : 1,
+		"Host Name" : "node",
+		"Operating System " : "Linux6.18.38-Unraid",
+		"SL8 Library Version" : "08.1409.0000",
+		"System Overview" : [
+			{
+				"Ctrl" : 0,
+				"Product Name" : "eHBA 9600-24i Tri-Mode Storage Adapter",
+				"SASAddress" : "0X5000000000000001",
+				"Personality" : "eHBA",
+				"Status" : "Optimal",
+				"PD(s)" : 10,
+				"VD(s)" : 0,
+				"VNOpt" : 0,
+				"EPack" : "Unavailable",
+				"SerialNumber" : "SN00000001"
+			}
+		]
+	}
+}
+]
+}
+

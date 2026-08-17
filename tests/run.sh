@@ -70,6 +70,20 @@ check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
 check rollup-healthy   rollup_healthy.json   bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_healthy.txt
 
+# ── StorCLI2 parsers (SAS4 / 9600 series) ────────────────────────────────────
+# Fixtures are real captures from a 9600-24i on unraid99 (eHBA personality,
+# mpi3mr, 10 SATA drives behind a VirtualSES enclosure).
+F2=fixtures/storcli2
+check storcli2-overview      storcli2_overview.json      bash "$P/storcli2_overview.sh" 80 "" "" "x8" "Gen4 (16.0 GT/s)" "Full" < $F2/c0_show_all.txt
+# A card whose sensor says nothing must render grey, NOT error the whole tab and
+# not read as 0 °C. The classic parser fails closed here with
+# {"error":"No temperature..."}, which blanks the Overview (issue #17's rule).
+check storcli2-overview-notemp storcli2_overview_notemp.json \
+      bash -c "sed 's/^Chip temperature(C).*/Chip temperature(C) = /' $F2/c0_show_all.txt | bash '$P/storcli2_overview.sh' 80"
+# An unmeasured PHY total must not raise the badge either: empty is not zero.
+check storcli2-overview-phyerr storcli2_overview_phyerr.json \
+      bash -c "bash '$P/storcli2_overview.sh' 76 100 < $F2/c0_show_all.txt"
+
 # Band cut-points are the whole feature of plan 018 — one golden per boundary, so
 # an off-by-one in either direction fails loudly. 76 = "complain from Warning".
 for t in 65 66 75 76 85 86 95 96; do
@@ -118,6 +132,20 @@ check storcli-drives-noencl-ugood storcli_drives_noencl_ugood.json bash "$P/stor
 check storcli-drives-noencl-ugood8 storcli_drives_noencl_ugood8.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood8.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
+
+check storcli2-drives        storcli2_drives.json        bash "$P/storcli2_drives.sh"      < $F2/c0_drives.txt
+# Same card, same firmware, captured minutes apart with the OTHER StorCLI2 build.
+# The builds disagree on one field: Lite prints "OS Drive Name = sdf", Broadcom
+# full prints "= /dev/sdf". Prefixing unconditionally produced "/dev//dev/sdf" —
+# a Device column pointing at a path that does not exist. The two goldens differ
+# only in drive temperatures, which moved a degree between the two captures.
+check storcli2-drives-full   storcli2_drives_full.json   bash "$P/storcli2_drives.sh"      < $F2/c0_drives_fullbuild.txt
+check storcli2-encl          storcli2_enclosures.json    bash "$P/storcli2_enclosures.sh"  < $F2/c0_enclosures.txt
+check storcli2-phy           storcli2_phy.json           bash "$P/storcli2_phy.sh"         < $F2/c0_pall_show_all.txt
+# One events parser serves both backends — StorCLI2 renames seqNum to
+# "Sequence Number" and changes nothing else. Both fixtures run through it.
+check storcli2-events        storcli2_events.json        bash "$P/storcli_events.sh"       < $F2/c0_events_latest20.txt
+
 check smart-sas        smart_sas.json       bash "$P/smart.sh" sas  < fixtures/smart/sas_drive.txt
 check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/smart/sata_drive.txt
 # No transport arg passed (lsblk reported usb/nvme/nothing, or was never run).

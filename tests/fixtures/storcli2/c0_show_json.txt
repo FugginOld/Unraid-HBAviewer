@@ -1,0 +1,303 @@
+{
+"Controllers":[
+{
+	"Command Status" : {
+		"CLI Version" : "008.0014.0000.0012 June 20, 2025",
+		"Operating system" : "Linux6.18.38-Unraid",
+		"Controller" : "0",
+		"Status" : "Success",
+		"Description" : "None"
+	},
+	"Response Data" : {
+		"Product Name" : "eHBA 9600-24i Tri-Mode Storage Adapter",
+		"Board Name" : "eHBA 9600-24i                   ",
+		"Board Assembly" : "03-50111-01001                  ",
+		"Board Tracer Number" : "SN00000001                      ",
+		"Board Revision" : "01001   ",
+		"Chip Name" : "SAS4024                         ",
+		"Chip Revision" : "B0      ",
+		"Package Version" : "8.17.1.0-00000-00002",
+		"Firmware Version" : "8.17.1.0-00000-00001",
+		"Firmware Security Version Number" : "00.00.00.00",
+		"NVDATA Version" : "11.0E.00.51",
+		"Driver Name" : "mpi3mr",
+		"Driver Version" : "8.15.0.5.51",
+		"SAS Address" : "0x5000000000000001",
+		"Serial Number" : "SN00000001",
+		"Controller Time(LocalTime yyyy/mm/dd hh:mm:sec)" : "2026/08/14 18:17:25",
+		"System Time(LocalTime yyyy/mm/dd hh:mm:sec)" : "2026/08/14 18:17:25",
+		"Board Mfg Date(yyyy/mm/dd)" : "2022/07/16",
+		"Controller Personality" : "eHBA",
+		"Max PCIe Link Rate" : "0x08 (16GT/s)",
+		"Max PCIe Port Width" : 8,
+		"PCI Address" : "00:82:00:0",
+		"PCIe Link Width" : "X8 Lane(s)",
+		"Current Max PCI Link Speed" : "16GT/s",
+		"Current PCIe Port Width" : 8,
+		"SAS/SATA" : "SAS/SATA-6G, SAS-12G, SAS-22.5G",
+		"PCIe" : "PCIE-2.5GT, PCIE-5GT, PCIE-8GT, PCIE-16GT",
+		"PCI Vendor ID" : "0x1000",
+		"PCI Device ID" : "0x00A5",
+		"PCI Subsystem Vendor ID" : "0x1000",
+		"PCI Subsystem ID" : "0x4660",
+		"Security Protocol" : "SPDM-1.2.0,1.1.0,1.0.0",
+		"Certificate provisioning mode" : "Not Fully configured",
+		"PCI Slot Number" : 1,
+		"Physical Drives" : 10,
+		"PD LIST" : [
+			{
+				"EID:Slt" : "52:0",
+				"PID" : 27,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "7.277 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST8000AS0002-1NA17Z",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:4",
+				"PID" : 31,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "20.009 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "WDC  WUH722222ALE6L4",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:8",
+				"PID" : 35,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "9.095 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST10000VN0004-1ZD101",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:11",
+				"PID" : 38,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "25.466 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST28000NM000C-3WM103",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:12",
+				"PID" : 39,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "10.914 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST12000VN0007-2GS116",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:16",
+				"PID" : 43,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "9.095 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST10000VN0004-1ZD101",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:17",
+				"PID" : 44,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "20.009 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "WDC  WUH722222ALE6L4",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:19",
+				"PID" : 46,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "25.466 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST28000NM000C-3WM103",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:20",
+				"PID" : 47,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "9.095 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST10000VN0004-1ZD101",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			},
+			{
+				"EID:Slt" : "52:23",
+				"PID" : 50,
+				"State" : "JBOD",
+				"Status" : "Good",
+				"DG" : "-",
+				"Size" : "25.466 TiB",
+				"Intf" : "SATA",
+				"Med" : "HDD",
+				"SED_Type" : "-",
+				"SeSz" : "512B",
+				"Model" : "ST28000NM000C-3WM103",
+				"Sp" : "-",
+				"LU/NS Count" : 1,
+				"Alt-EID" : "-"
+			}
+		],
+		"LU/NS LIST" : [
+			{
+				"PID" : 27,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "7.277 TiB"
+			},
+			{
+				"PID" : 31,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "20.009 TiB"
+			},
+			{
+				"PID" : 35,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "9.095 TiB"
+			},
+			{
+				"PID" : 38,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "25.466 TiB"
+			},
+			{
+				"PID" : 39,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "10.914 TiB"
+			},
+			{
+				"PID" : 43,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "9.095 TiB"
+			},
+			{
+				"PID" : 44,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "20.009 TiB"
+			},
+			{
+				"PID" : 46,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "25.466 TiB"
+			},
+			{
+				"PID" : 47,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "9.095 TiB"
+			},
+			{
+				"PID" : 50,
+				"LUN/NSID" : "0/-",
+				"Index" : 0,
+				"Status" : "Good",
+				"Size" : "25.466 TiB"
+			}
+		],
+		"Enclosures" : 1,
+		"Enclosure List" : [
+			{
+				"EID" : 52,
+				"State" : "OK",
+				"DeviceType" : "Logical Enclosure",
+				"Slots" : 24,
+				"PD" : 10,
+				"Partner-EID" : "-",
+				"Multipath" : "No",
+				"PS" : 0,
+				"Fans" : 0,
+				"TSs" : 0,
+				"Alms" : 0,
+				"SIM" : 0,
+				"ProdID" : "VirtualSES      "
+			}
+		]
+	}
+}
+]
+}
+
