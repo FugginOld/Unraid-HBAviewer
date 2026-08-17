@@ -118,7 +118,7 @@ if [ "$do_go" -eq 1 ]; then
         cp -n "$GO" "$GO.bak-hbaviewer" 2>/dev/null || true
         cat >> "$GO" <<'EOF'
 
-# StorCLI2 for SAS4 / 9600-series HBAs (HBAviewer SAS4). /opt is RAM and the
+# StorCLI2 for SAS4 / 9600-series HBAs (HBAviewer). /opt is RAM and the
 # flash is FAT32 and cannot keep the execute bit, so restore both on each boot.
 mkdir -p /opt/MegaRAID/storcli2
 cp /boot/config/plugins/hbaviewer/tools/storcli2 /opt/MegaRAID/storcli2/storcli2
