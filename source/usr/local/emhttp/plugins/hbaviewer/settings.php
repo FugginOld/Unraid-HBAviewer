@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // the grid back to 6x4 — every time somebody toggled a tab here.
     lsi_config_update([
         'HBA_PORT'        => $_POST['port']      ?? 1,
-        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 80,
+        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 76,
         'SHOW_PCIE'       => isset($_POST['show_pcie'])   ? 1 : 0,
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,

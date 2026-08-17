@@ -493,7 +493,7 @@ mkdir -p /usr/local/emhttp/plugins/HBAviewer
 cp -f /usr/local/emhttp/plugins/hbaviewer/icon.png /usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
 if [ ! -f /boot/config/plugins/hbaviewer/hbaviewer.cfg ]; then
   mkdir -p /boot/config/plugins/hbaviewer
-  printf "HBA_PORT=1\nALERT_THRESHOLD=80\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
+  printf "HBA_PORT=1\nALERT_THRESHOLD=76\n" > /boot/config/plugins/hbaviewer/hbaviewer.cfg
 fi
 # The one directory the user drops flash files into: the sas2flash/sas3flash
 # tool, the firmware image, the optional BIOS. Survives updates and reboots, and
