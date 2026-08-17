@@ -710,7 +710,13 @@ check('baymap unplaceable drive still appears, with a null key',
    that guard), and no constant in the file is used before its declaration. */
 check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
 
+// ajax_info.php's dispatch/fetch requires every render/*.php file at load time
+// (see the CLI-seam comment above), so the same "declared before it's used"
+// guarantee has to scan those too, or a render file is a blind spot for it.
 $aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+foreach (glob(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/render/*.php') as $renderFile) {
+    $aj .= "\n" . file_get_contents($renderFile);
+}
 preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
 foreach ($mc[1] as [$cname, $declAt]) {
     check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
