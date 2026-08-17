@@ -903,8 +903,11 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             }
         }
 
-        // storcli backend if stamped; fall back to key-sniff pre-rollout.
-        if ($storcli || (($data['backend'] ?? '') === '' && isset($phys[0]['speed']))) {
+        // The backend field, and nothing else. It is always stamped: hba_each
+        // writes it on both paths, and the {"error":…} payload returns long
+        // before any renderer runs. The key-sniff that used to sit here read
+        // storcli columns onto an lsiutil payload whose keys happened to match.
+        if ($storcli) {
             // storcli backend: link/speed/attached-SAS (storcli) + error counters (sysfs)
             $rows = [];
             foreach ($phys as $n => $p) {
@@ -1034,8 +1037,8 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             );
         };
 
-        // storcli backend if stamped; fall back to key-sniff pre-rollout.
-        if ($storcli || (($data['backend'] ?? '') === '' && isset($drives[0]['slot']))) {
+        // The backend field, and nothing else -- see the PHY renderer above.
+        if ($storcli) {
             // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
             $rows = [];
             foreach ($drives as $d) {
@@ -1349,8 +1352,8 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
 
-        // storcli backend if stamped; fall back to key-sniff pre-rollout.
-        if ($storcli || (($data['backend'] ?? '') === '' && isset($entries[0]['description']))) {
+        // The backend field, and nothing else -- see the PHY renderer above.
+        if ($storcli) {
             // storcli backend: seq, time, code, human-readable description (newest first)
             $rows = [];
             foreach (array_reverse($entries) as $e) {

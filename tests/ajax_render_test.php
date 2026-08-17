@@ -91,6 +91,50 @@ check('phy multi heads controllers', str_contains(
 check('phy single omits head', !str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]]]]), 'Controller /c0'));
 
+/* The backend field is the ONLY input that picks columns. CONTEXT.md says so.
+   These are characterization checks, not regression ones: the key-sniff they
+   replaced could only fire when `backend` was absent entirely, which no live
+   payload is -- hba_each stamps both paths and the {"error":…} payload returns
+   before any renderer runs. First pair: a stated backend decides even when the
+   keys look like the other one. Second pair: with NO backend at all, the
+   renderers now fall to the lsiutil table rather than guessing from keys. */
+$sniffBait = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+check('phy: stated backend wins over storcli-looking keys',
+    !str_contains(renderPhyTables($sniffBait), 'Attached SAS Address'));
+
+$drvBait = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+// 'Encl:Slot' is the storcli drives header and 'Bus:Tgt' the lsiutil one --
+// those are the discriminators. ('Enclosure' is NOT: it appears only in a PHY
+// topology summary, so asserting on it passes on both branches and tests
+// nothing.) Asserting both directions proves which table rendered, not merely
+// which one did not.
+$drvOut = renderDrivesTables($drvBait);
+check('drives: stated backend wins over storcli-looking keys',
+    str_contains($drvOut, 'Bus:Tgt') && !str_contains($drvOut, 'Encl:Slot'));
+
+// No backend stated: no guessing. These two FAIL before the deletion and pass
+// after, which is the only behavioural difference the change makes.
+$noBackendPhy = ['controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+check('phy: an unstamped payload does not sniff its way to storcli columns',
+    !str_contains(renderPhyTables($noBackendPhy), 'Attached SAS Address'));
+
+$noBackendDrv = ['controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+$noBackendDrvOut = renderDrivesTables($noBackendDrv);
+check('drives: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendDrvOut, 'Bus:Tgt') && !str_contains($noBackendDrvOut, 'Encl:Slot'));
+
 /* ── PHY error baseline: the three display states (plan 022) ──────────────
    The raw-counter table is unchanged by this feature — it is purely additive,
    so the no-baseline case must render exactly what it always did. */
