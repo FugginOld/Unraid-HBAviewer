@@ -3,14 +3,28 @@
 Terms the code assumes you already know. Kept short on purpose.
 
 ## backend module — `scripts/lib.sh` (`hba_each`)
-The one seam that chooses **storcli** (SAS3/3.5) vs **lsiutil** (SAS2). A tab
-composer (`get_hba_info.sh`, `get_phy_health.sh`, `get_attached_drives.sh`,
-`get_event_log.sh`) declares only *what to read per controller* for each
-backend; `hba_each` owns *which backend* (`use_storcli`), *how many controllers*
-(`storcli_count`), the *driver string* (`hba_driver`), and the
-`{"backend","driver","controllers":[…]}` wrapper. Add a backend, or a per-tab
-read, in one place. PHP reads the explicit `backend` field to pick columns — no
-key-sniffing.
+The one seam that chooses **storcli2** (SAS4, 9600 series) vs **storcli**
+(SAS3/3.5) vs **lsiutil** (SAS2). A tab composer (`get_hba_info.sh`,
+`get_phy_health.sh`, `get_attached_drives.sh`, `get_event_log.sh`) declares only
+*what to read per controller* for each backend; `hba_each` owns *which backend*
+(`use_storcli`, `storcli_flavor`), *how many controllers* (`storcli_count`), the
+*driver string* (`hba_driver`), and the `{"backend","driver","controllers":[…]}`
+wrapper. Add a backend, or a per-tab read, in one place. PHP reads the explicit
+`backend` field to pick columns — no key-sniffing. `backend` carries three
+values now; `lsi_backend_shape()` folds `storcli2` to the same shape as
+`storcli` so the renderers stay one set.
+
+## StorCLI2 installer — `scripts/install_storcli2.sh`
+Installs Broadcom's proprietary FULL StorCLI2 (needed only for the firmware
+Event Log tab on a SAS4 / 9600 card — the Lite build the dkaser/unraid-storcli
+plugin ships covers every other tab). Downloads nothing: the download page is
+Cloudflare-gated with no stable URL, so you fetch the archive yourself and hand
+it to the script. It unpacks, installs to `/opt/MegaRAID/storcli2` (RAM on
+Unraid), and appends a restore line to `/boot/config/go` because FAT32 cannot
+hold the execute bit — backing `go` up first, and safe to re-run. Its paths
+(`HBAV_FLASH_TOOL`, `HBAV_LIVE_DIR`, `HBAV_GO`) are overridable so it can be
+exercised against a temp tree instead of a real flash. This entry is original
+to this repo; see `README.md` Credits for what was ported.
 
 ## event archive — `event_archive.php` (`event_merge`)
 Persists the firmware event ring-buffer to `/boot` so history survives reboots

@@ -30,14 +30,24 @@ https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg
 and is not bundled. Install the **storcli** plugin from Community Applications
 (dkaser). SAS2 cards use the bundled `lsiutil` and need nothing else.
 
+**SAS4 / 9600-series cards (`mpi3mr`) need `StorCLI2`**, which is a different
+binary rather than a newer storcli — the classic tool cannot see these cards at
+all, and reports `Number of Controllers = 0` next to one. The same dkaser
+plugin ships a `storcli2`, and that covers every tab except the firmware event
+log: Broadcom's *Lite* build answers `show events` with "Un-supported command",
+and only their full StorCLI2 (installed to `/opt/MegaRAID/storcli2/storcli2`)
+can read it. `/opt` is RAM on Unraid, so a manually installed copy has to be
+restored from `/boot` at every boot to survive one — the Settings page has a
+helper for that; see the Firmware Event Log row under **HBA Connection**.
+
 Nothing is downloaded at runtime, and nothing phones home.
 
 ## First run
 
 1. **User Utilities → HBAviewer** — the settings page opens instantly and shows
-   the detected **Access Method**. Confirm it says `storcli` or `lsiutil` as you
-   expect *before* opening the Monitor; if it warns that a SAS3 card was found
-   without storcli, install that plugin first.
+   the detected **Access Method**. Confirm it says `StorCLI2`, `storcli` or
+   `lsiutil` as you expect *before* opening the Monitor; if it warns that a
+   card was found without the tool it needs, install that first.
 2. Set your **Alert Threshold**. This is not "the temperature that is bad" — it
    names the first *band* at which the badge starts complaining. The bands are
    fixed: Normal ≤65, Elevated 66–75, Warning 76–85, Alert 86–95, Critical >95 °C.

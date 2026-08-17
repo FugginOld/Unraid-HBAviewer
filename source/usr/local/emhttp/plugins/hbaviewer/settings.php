@@ -235,6 +235,81 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
         </div>
       </div>
 
+      <?php /* SAS4 only. The StorCLI2 the storcli plugin ships is Broadcom's
+               Lite build, which has no `show events` command at all — so the
+               Event Log tab reports that rather than rendering an empty table.
+               Broadcom's full build fixes it but cannot be bundled (proprietary)
+               or even downloaded unattended (JS portal behind bot management),
+               so the one manual step is the download and scripts/install_storcli2.sh
+               does everything after it.
+               Shown only when a SAS4 card is present, and the steps stay folded
+               away once the helper's install path exists. */ ?>
+      <?php if ($has_sas4): $full_sc2 = is_executable('/opt/MegaRAID/storcli2/storcli2'); ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Firmware Event Log
+          <small>SAS4 / 9600 only. Needs Broadcom's full StorCLI2.</small>
+        </div>
+        <div class="lu-s-control" style="padding-top:8px">
+          <span style="color:<?= $full_sc2 ? '#7ac943' : '#f5a623' ?>;font-weight:600">
+            <?= $full_sc2 ? 'Full StorCLI2 installed' : 'Full StorCLI2 not installed' ?>
+          </span>
+          <small style="display:block;color:var(--text);margin-top:3px;line-height:1.5">
+            <?php if ($full_sc2): ?>
+              Found at <code>/opt/MegaRAID/storcli2/storcli2</code>. The Event Log tab
+              should work. Re-run the helper below after a Broadcom update, or if you
+              ever replace the flash drive.
+            <?php else: ?>
+              The StorCLI2 that the <em>storcli</em> plugin installs is Broadcom's
+              <strong>Lite</strong> build. It runs every other tab perfectly well, but
+              has no event-log command, so the Event Log tab will say so. Everything
+              else on this page works without doing anything below.
+            <?php endif; ?>
+          </small>
+
+          <?php /* max-width + overflow-wrap throughout: this card sits in a CSS
+                   multi-column grid (.lu-s-grid, columns 360px), so anything
+                   that refuses to wrap does not merely overflow its own box —
+                   it paints across the neighbouring column. The paths and the
+                   command below are all longer than the column is wide. */ ?>
+          <details style="margin-top:8px;max-width:100%">
+            <summary style="cursor:pointer;color:#f5a623">
+              How to install the full StorCLI2 (once per server)
+            </summary>
+            <div style="margin-top:8px;line-height:1.6;max-width:100%;overflow-wrap:anywhere">
+              <strong>1.</strong> On any machine, download <strong>StorCLI2</strong> from
+              <a href="https://docs.broadcom.com/docs/1232743171" target="_blank" rel="noreferrer">Broadcom's site</a>.
+              It cannot be fetched automatically — the page is JavaScript-driven behind
+              bot protection, and the tool is proprietary, so it is not shipped here.<br>
+
+              <strong>2.</strong> Copy that <code>.zip</code> onto this server — any share
+              will do, for example <code>/mnt/user/isos/</code>.<br>
+
+              <strong>3.</strong> On <em>this server</em> (Unraid terminal, or SSH — not on
+              your desktop), run:
+              <?php /* pre-wrap, not the default pre: the command is ~100 characters
+                       with no space to break at until the end, and a non-wrapping
+                       pre sets a min-content width the flex control cannot shrink
+                       below. It still copies as one line. */ ?>
+              <pre style="margin:6px 0;padding:8px;font-size:12px;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--border-soft);border-radius:6px">bash <?= htmlspecialchars(__DIR__) ?>/scripts/install_storcli2.sh /path/to/the-file.zip</pre>
+
+              <strong>4.</strong> Reload this page. This row should turn green, and the
+              Event Log tab will start working. Nothing needs restarting.<br>
+
+              <small style="color:var(--text-muted, #888)">
+                The helper unpacks the archive, checks the binary really is StorCLI2, copies it
+                to <code>/boot/config/plugins/hbaviewer/tools/</code> so it survives a reboot,
+                and adds three lines to <code>/boot/config/go</code> that restore it at boot —
+                <code>/opt</code> is RAM here, and the flash cannot keep the execute bit. It
+                backs up <code>go</code> first and is safe to re-run. Pass <code>--no-go</code>
+                to skip the boot-time part.
+              </small>
+            </div>
+          </details>
+        </div>
+      </div>
+      <?php endif; ?>
+
       <?php /* Host Link normally works this out: the slot's own ceiling is read
                from the upstream bridge, so a card in a narrower slot is judged
                against the slot rather than against itself (issues #13/#14).
