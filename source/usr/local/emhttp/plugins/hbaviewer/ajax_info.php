@@ -283,6 +283,29 @@ function luTable(array $headers, array $rows): string {
     return $h . '</tbody></table></div>';
 }
 
+/* One card per controller, and the three rules every tab shares about it: the
+   card shell carries data-ctl so the JS can find it, a heading appears only when
+   there is more than one controller, and an errored controller still gets its
+   own CLOSED card rather than bare text floating between its neighbours'.
+   Four renderers each carried these seven lines, byte-identical apart from one
+   word of comment, and each documented the contract by pointing at
+   renderOverviewCards. $body renders only what is inside the card, and is not
+   called at all for a controller that reported an error. */
+function luCardPerController(array $ctls, callable $body): string {
+    $multi = count($ctls) > 1;
+    $out   = '';
+    foreach ($ctls as $i => $ctl) {
+        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
+        if ($multi) $out .= luCtlHead($i);
+        if (isset($ctl['error'])) {
+            $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>';
+            continue;
+        }
+        $out .= $body($i, $ctl) . '</div>';
+    }
+    return $out;
+}
+
 /* ── The background SMART cache: one reader, one health rule ────────────────
    collect_smart.sh writes {"drives":[{dev,serial,model,smart:{…}}]} here. Both
    the SMART tab and the bay map read it, and they must never disagree about a
@@ -813,19 +836,12 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
 function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
-    $multi   = count($ctls) > 1;
     $now   ??= time();
     $uptime ??= phy_baseline_uptime();
-    $out   = '';
-    foreach ($ctls as $i => $ctl) {
-        // One card per HBA (see renderOverviewCards). Both early-outs below close
-        // it too: an errored or PHY-less controller still gets its own card
-        // instead of bare text floating between its neighbours'.
-        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
-        if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $now, $uptime, $drives, $devBySerial, $roles, $baselines): string {
+        $out = '';
         $phys = $ctl['phys'] ?? [];
-        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p></div>'; continue; }
+        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; return $out; }
         // This controller's drives, for the Device column and the offenders list
         // below. Empty while the drives cache is still warming — every Device
         // cell then reads "—" and the tab renders exactly as it used to.
@@ -944,9 +960,8 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             }
             $out .= luTable(['PHY', 'Device', 'Unraid', 'Link', 'Invalid DWords', 'Disparity Errors', 'Loss of Sync', 'Reset Problems'], $rows);
         }
-        $out .= '</div>';
-    }
-    return $out;
+        return $out;
+    });
 }
 
 if ($type === 'phy') {
@@ -973,16 +988,8 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                             array $addrByDev = [], array $locating = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
-    $multi   = count($ctls) > 1;
-    $out   = '';
-    foreach ($ctls as $i => $ctl) {
-        // One card per HBA (see renderOverviewCards). Both early-outs below close
-        // it too: an errored or driveless controller still gets its own card
-        // instead of bare text floating between its neighbours'.
-        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
-        if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
-
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $devBySerial, $roles, $addrByDev, $locating): string {
+        $out = '';
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         // storcli_drives.sh emits "eid/slot" when a drive carries an enclosure ID and a
         // bare "slot" when it does not. If NO drive on this controller carries one, the
@@ -1006,7 +1013,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
         }
 
         $drives = $ctl['drives'] ?? [];
-        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p></div>'; continue; }
+        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; return $out; }
 
         // Leading column on both backends: encl:slot and bus:target are the
         // controller's own addressing and line up with nothing on Unraid's Main
@@ -1081,9 +1088,8 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             }
             $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address', 'Locate'], $rows);
         }
-        $out .= '</div>';
-    }
-    return $out;
+        return $out;
+    });
 }
 
 if ($type === 'drives') {
@@ -1328,15 +1334,8 @@ if ($type === 'baymap') {
 function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hbaviewer'): string {
     $ctls    = $data['controllers'] ?? [$data];
     $storcli = ($data['backend'] ?? '') === 'storcli';
-    $multi   = count($ctls) > 1;
-    $out   = '';
-    foreach ($ctls as $i => $ctl) {
-        // One card per HBA (see renderOverviewCards). Both early-outs below close
-        // it too: an errored or entry-less controller still gets its own card
-        // instead of bare text floating between its neighbours'.
-        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
-        if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($dir, $storcli, $data): string {
+        $out = '';
         if (!empty($ctl['note'])) $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['note']) . '</p>';
 
         $file = event_store_path($i, $dir);
@@ -1347,7 +1346,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         // through the wrong renderer produces undefined-key warnings and blank rows.
         $entries = event_visible($archived, $data['backend'] ?? '');
         $hidden  = count($archived) - count($entries);
-        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p></div>'; continue; }
+        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; return $out; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
@@ -1378,9 +1377,8 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
             }
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);
         }
-        $out .= '</div>';
-    }
-    return $out;
+        return $out;
+    });
 }
 
 if ($type === 'events') { echo renderEventsTables($data); exit; }
@@ -1402,17 +1400,9 @@ function luHealthCtlMeta(int $i): array {
 /* $cfg is injected so this stays testable without /boot; the caller passes the
    live config. Only host_link reads it (the expected-PCIe-link settings). */
 function renderHealthTables(array $data, array $cfg = []): string {
-    $ctls  = $data['controllers'] ?? [$data];
-    $multi = count($ctls) > 1;
-    $out   = '';
-    foreach ($ctls as $i => $ctl) {
-        // One card per HBA, matching renderOverviewCards — including the error
-        // branch below, or an errored controller renders as bare text floating
-        // between two cards.
-        $out .= '<div class="lu-card first" data-ctl="' . $i . '">';
-        if ($multi) $out .= luCtlHead($i);
-        if (isset($ctl['error'])) { $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>'; continue; }
-
+    $ctls = $data['controllers'] ?? [$data];
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($cfg): string {
+        $out = '';
         // The only place that touches the /tmp ring — see health.php's header.
         $file  = health_store_path($i);
         $ring  = health_ingest(health_store_read($file), $ctl);
@@ -1496,7 +1486,7 @@ function renderHealthTables(array $data, array $cfg = []): string {
                   . ($hint !== '' ? '<span class="lu-ind-hint">' . htmlspecialchars($hint) . '</span>' : '')
                   . '</div>';
         }
-        $out .= '</div></div>';
-    }
-    return $out;
+        $out .= '</div>';
+        return $out;
+    });
 }

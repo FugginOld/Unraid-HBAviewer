@@ -947,6 +947,28 @@ check('luTable cells are html',  str_contains($t, '<code>x</code>'));
 check('luTable is wrapped in a horizontal scroller',
       str_starts_with($t, '<div class="lu-tscroll"><table') && str_ends_with($t, '</table></div>'));
 
+/* The card shell four renderers used to repeat verbatim. The error branch is
+   the load-bearing part: an errored controller must still get its own card and
+   the card must be CLOSED, or it renders as bare text floating between its
+   neighbours' cards. luCtlHead appears only when there is more than one
+   controller -- a single-controller box gets no heading, which is what every
+   existing single-controller expectation pins. */
+check('card: one card per controller', function_exists('luCardPerController')
+    && substr_count(luCardPerController([[], []], fn($i, $c) => 'X'), 'lu-card first') === 2);
+check('card: body output lands inside the card',
+    str_contains(luCardPerController([['phys' => []]], fn($i, $c) => 'BODYMARK'), 'BODYMARK'));
+check('card: single controller gets no heading',
+    !str_contains(luCardPerController([[]], fn($i, $c) => ''), 'Controller /c'));
+check('card: two controllers get headings',
+    substr_count(luCardPerController([[], []], fn($i, $c) => ''), 'Controller /c') === 2);
+check('card: an errored controller still gets a closed card',
+    luCardPerController([['error' => 'no response']], fn($i, $c) => 'NEVER')
+        === '<div class="lu-card first" data-ctl="0"><p class="lu-muted">no response</p></div>');
+check('card: the body is not called for an errored controller',
+    !str_contains(luCardPerController([['error' => 'x']], fn($i, $c) => 'NEVER'), 'NEVER'));
+check('card: error text is escaped',
+    str_contains(luCardPerController([['error' => '<b>x']], fn($i, $c) => ''), '&lt;b&gt;x'));
+
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of
    it is attacker-controlled in any realistic scenario — but a drive model
