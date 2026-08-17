@@ -38,4 +38,9 @@ phy_lsiutil() {
         hba_query -p"$p" -a 20,12,0,0 2>/dev/null | bash "$DIR/parse/phy.sh"
     done < <(lsi_port_map)
 }
-hba_each phy_storcli phy_lsiutil
+# StorCLI2 / SAS4. No sysfs snapshot to merge, and none to build: an
+# eHBA-personality 9600 registers no SAS transport class, so /sys/class/sas_phy
+# is empty. StorCLI2 reports the four error counters itself, so `pall show all`
+# (not the brief `pall show`) is the entire source here.
+phy_storcli2() { storcli_run /c"$1"/pall show all nolog 2>/dev/null | bash "$DIR/parse/storcli2_phy.sh"; }
+hba_each phy_storcli phy_lsiutil phy_storcli2

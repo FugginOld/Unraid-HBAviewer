@@ -9,8 +9,11 @@ source "$DIR/config.sh"   # sets PORT, ALERT
 
 drv_storcli() {   # $1 = controller index
     local encl drv
-    encl=$("$STORCLI" /c"$1"/eall show all      2>/dev/null | bash "$DIR/parse/storcli_enclosures.sh")
-    drv=$( "$STORCLI" /c"$1"/eall/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh")
+    # storcli_run, but WITHOUT `nolog`: that argument is verified on StorCLI2 and
+    # unverified on the classic tool, and there is no SAS3 card here to try it on.
+    # The wrapper alone already keeps the debug log out of the plugin directory.
+    encl=$(storcli_run /c"$1"/eall show all 2>/dev/null | bash "$DIR/parse/storcli_enclosures.sh")
+    drv=$( storcli_run /c"$1"/eall/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh")
     # Controllers whose drives carry no enclosure ID answer the eall form with
     # "No drive found!" and address their drives /cN/sN instead. Try the flat form
     # only when the enclosure form yielded nothing — the order matters, because on
@@ -19,11 +22,31 @@ drv_storcli() {   # $1 = controller index
     # box reports a VirtualSES enclosure that simply has no drives attached to it.
     case "$drv" in
         ''|'{"drives":[]}')
-            drv=$("$STORCLI" /c"$1"/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh") ;;
+            drv=$(storcli_run /c"$1"/sall show all 2>/dev/null | bash "$DIR/parse/storcli_drives.sh") ;;
     esac
     [ -n "$encl" ] || encl='{"enclosures":[]}'
     [ -n "$drv" ]  || drv='{"drives":[]}'
     printf '%s,%s' "${encl%\}}" "${drv#\{}"     # merge two single-key objects into one
+}
+
+# StorCLI2 / SAS4. Same two reads and the same enclosure-less fallback as
+# drv_storcli — only the parsers differ. Note this backend needs NO sysfs stage
+# at all: an eHBA-personality 9600 registers no SAS transport class, so the
+# lsiutil path's sas_address/phy join has nothing to read, and StorCLI2 supplies
+# the one thing the classic storcli path never could — "OS Drive Name", the real
+# /dev name, which ajax_info.php's drive_dev_name() prefers over guessing from
+# the serial.
+drv_storcli2() {   # $1 = controller index
+    local encl drv
+    encl=$(storcli_run /c"$1"/eall show all nolog 2>/dev/null | bash "$DIR/parse/storcli2_enclosures.sh")
+    drv=$( storcli_run /c"$1"/eall/sall show all nolog 2>/dev/null | bash "$DIR/parse/storcli2_drives.sh")
+    case "$drv" in
+        ''|'{"drives":[]}')
+            drv=$(storcli_run /c"$1"/sall show all nolog 2>/dev/null | bash "$DIR/parse/storcli2_drives.sh") ;;
+    esac
+    [ -n "$encl" ] || encl='{"enclosures":[]}'
+    [ -n "$drv" ]  || drv='{"drives":[]}'
+    printf '%s,%s' "${encl%\}}" "${drv#\{}"
 }
 
 drv_lsiutil() {
@@ -133,4 +156,4 @@ _drv_lsiutil_one() {   # $1 = port   $2 = this card's scsi host ("" if unjoined)
     rm -f "$TMPOS" "$TMPSAS"
 }
 
-hba_each drv_storcli drv_lsiutil
+hba_each drv_storcli drv_lsiutil drv_storcli2

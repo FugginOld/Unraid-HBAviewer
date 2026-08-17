@@ -136,10 +136,30 @@ use_storcli() {
     STORCLI="$sc"; STORCLI_FLAVOR=$(storcli_flavor "$sc"); export STORCLI STORCLI_FLAVOR; return 0
 }
 
+# Run the storcli-family binary from somewhere harmless. Both tools drop a debug
+# log into the CURRENT directory, and the plugin's own scripts/ dir is tmpfs --
+# upstream measured storcli2 writing ~230KB there per call.
+storcli_run() {
+    ( cd "${STORCLI_CWD:-/tmp}" 2>/dev/null || cd /; "$STORCLI" "$@" )
+}
+
+pci_addr_to_sysfs_dir() {   # $1 = "dom:bus:dev:fn"
+    local dom bus dev fn
+    [ -n "$1" ] || return 1
+    IFS=: read -r dom bus dev fn <<< "$1"
+    [ -n "$bus" ] && [ -n "$dev" ] || return 1
+    printf '%s/%s' "${SYS_PCI_ROOT:-/sys/bus/pci/devices}" \
+        "$(printf '%04x:%s:%s.%d' "0x${dom:-0}" "$bus" "$dev" "0x${fn:-0}")"
+}
+
 # Controller count from storcli's enumeration — the single parse of
 # "Number of Controllers" that every storcli path shares. Empty if none.
 storcli_count() {
-    "$STORCLI" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+'
+    if [ "$STORCLI_FLAVOR" = storcli2 ]; then
+        storcli_run show nolog 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+'
+    else
+        storcli_run show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+'
+    fi
 }
 
 # Driver + version string for the loaded mpt driver. One detector for both
