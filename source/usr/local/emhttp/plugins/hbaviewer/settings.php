@@ -40,7 +40,7 @@ $hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found
 // Sourcing lib.sh runs nothing: its top level only assigns variables and
 // defines functions. shell_exec is not new here; the old fallback used it too.
 $storcli = trim((string) shell_exec(
-    'bash -c ". /usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh 2>/dev/null; find_storcli" 2>/dev/null'
+    'bash -c ". ' . __DIR__ . '/scripts/lib.sh 2>/dev/null; find_storcli" 2>/dev/null'
 ));
 if ($storcli !== '') {
     $backend_label = 'storcli';

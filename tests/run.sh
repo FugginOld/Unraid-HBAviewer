@@ -270,13 +270,17 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
 # their alert_threshold field used to record whatever the shell default was.
 # Stating it here decouples them: the default itself is pinned once, in
 # tests/config_test.php, and changing it no longer moves three routing goldens.
-ALERT_THRESHOLD=76 \
+# LSI_CFG_PATH is pinned too: config.sh sources the cfg file AFTER reading the
+# environment, so a real /boot/config/plugins/hbaviewer/hbaviewer.cfg would win
+# over ALERT_THRESHOLD (and over HBA_PORT, which these goldens also pin) — the
+# nonexistent path is what makes the env prefix actually bite.
+ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 # Two SAS3008 IOCs both reporting board name SAS9300-16i, both resolving (via
 # SYSDUAL above) to the same root port -> the same card_id. The only check in
 # this suite that would catch the composer emitting DIFFERENT card_ids for a
 # genuine dual-IOC board -- everything else pins the split (distinct-slot) case.
-STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" ALERT_THRESHOLD=76 \
+STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
 check route-storcli-dual storcli_dual.json bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
@@ -286,7 +290,7 @@ check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # real storcli is installed on the machine running the suite.
 # STUB_FIX is overridden: the exported value points at fixtures/storcli for the
 # checks above, and the lsiutil captures live one level up in fixtures/.
-STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" ALERT_THRESHOLD=76 \
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
 check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
 # The health composer, all the way through. It had no golden until its clock
 # became injectable: a wall clock and an uptime cannot live in an expectation.

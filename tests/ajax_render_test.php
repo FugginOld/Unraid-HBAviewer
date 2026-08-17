@@ -102,8 +102,9 @@ $sniffBait = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
     ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
      'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
 ]]]];
+$sniffOut = renderPhyTables($sniffBait);
 check('phy: stated backend wins over storcli-looking keys',
-    !str_contains(renderPhyTables($sniffBait), 'Attached SAS Address'));
+    str_contains($sniffOut, 'Invalid DWords') && !str_contains($sniffOut, 'Attached SAS Address'));
 
 $drvBait = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
     ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
@@ -124,8 +125,9 @@ $noBackendPhy = ['controllers' => [['phys' => [
     ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
      'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
 ]]]];
+$noBackendPhyOut = renderPhyTables($noBackendPhy);
 check('phy: an unstamped payload does not sniff its way to storcli columns',
-    !str_contains(renderPhyTables($noBackendPhy), 'Attached SAS Address'));
+    str_contains($noBackendPhyOut, 'Invalid DWords') && !str_contains($noBackendPhyOut, 'Attached SAS Address'));
 
 $noBackendDrv = ['controllers' => [['drives' => [
     ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
@@ -134,6 +136,22 @@ $noBackendDrv = ['controllers' => [['drives' => [
 $noBackendDrvOut = renderDrivesTables($noBackendDrv);
 check('drives: an unstamped payload does not sniff its way to storcli columns',
     str_contains($noBackendDrvOut, 'Bus:Tgt') && !str_contains($noBackendDrvOut, 'Encl:Slot'));
+
+// 'Qualifier' is the lsiutil events header and 'Code' the storcli one -- the
+// entries below are storcli-shaped (seq/time/code/description) but the
+// payload carries no 'backend' key, so an unstamped payload must not sniff
+// the entry shape into rendering the storcli table.
+$evSniffDir = sys_get_temp_dir() . '/hbav_events_sniff_' . getmypid();
+@mkdir($evSniffDir, 0755, true);
+array_map('unlink', glob("$evSniffDir\*.json") ?: []);
+$noBackendEv = ['controllers' => [['entries' => [
+    ['seq' => '1', 'time' => '2026-07-01 10:00:00', 'code' => '0x0113', 'description' => 'Drive inserted'],
+]]]];
+$noBackendEvOut = renderEventsTables($noBackendEv, $evSniffDir);
+check('events: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendEvOut, 'Qualifier') && !str_contains($noBackendEvOut, 'Code'));
+array_map('unlink', glob("$evSniffDir\*.json") ?: []);
+@rmdir($evSniffDir);
 
 /* ── PHY error baseline: the three display states (plan 022) ──────────────
    The raw-counter table is unchanged by this feature — it is purely additive,
