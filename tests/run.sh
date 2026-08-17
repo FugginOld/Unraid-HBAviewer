@@ -334,6 +334,18 @@ chmod +x "$SC2DIR/storcli2"
 PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
 check route-sas4-storcli2-ignored route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
 rm -rf "$SC2DIR"
+
+# The seam picks a tool by what the tool SAYS it is, not what it is called --
+# dkaser's storcli plugin ships the StorCLI2 build as storcli2Lite-8.14, so the
+# filename cannot be the signal. These two stubs differ only in their banner.
+SEAMDIR=$(mktemp -d)
+printf '#!/bin/bash\ncase "$1" in version) echo "StorCLI SAS Customization Utility Ver 007.2705";; show) echo "Number of Controllers = 1";; esac\n' > "$SEAMDIR/tool1"
+printf '#!/bin/bash\ncase "$1" in version) echo "StorCli2 SAS Customization Utility Ver 008.0014";; show) echo "Number of Controllers = 1";; esac\n' > "$SEAMDIR/tool2"
+chmod +x "$SEAMDIR/tool1" "$SEAMDIR/tool2"
+STORCLI="$SEAMDIR/tool1" check seam-flavor-storcli  seam_storcli.json  bash -c '. '"$P"'/../lib.sh; use_storcli; printf "%s" "$STORCLI_FLAVOR"'
+STORCLI="$SEAMDIR/tool2" check seam-flavor-storcli2 seam_storcli2.json bash -c '. '"$P"'/../lib.sh; use_storcli; printf "%s" "$STORCLI_FLAVOR"'
+rm -rf "$SEAMDIR"
+
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"

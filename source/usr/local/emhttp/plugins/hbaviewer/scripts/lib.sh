@@ -23,27 +23,23 @@ require_binary() {
 
 hba_query() { "$LSIUTIL" "$@"; }
 
-# Locate storcli (SAS3/3.5 tool). Honors a preset $STORCLI. Prints the resolved
-# path, or nothing if not found.
+# Locate a storcli-family binary (SAS3/3.5 "storcli", or the SAS4/9600
+# "storcli2" — resolved further by storcli_flavor below). Honors a preset
+# $STORCLI. Prints the resolved path, or nothing if not found.
 #
-# **storcli2 is deliberately NOT a candidate** (it was, until issue #19).
-# StorCLI2 is a separate CLI for the 24G/SAS4 generation, not a newer storcli:
-# it enumerates ONLY 9600-series controllers — measured as "Number of
-# Controllers = 0" on the maintainer's SAS3/3.5 box — and its output layout is
-# its own. Nothing here parses it. Left in the list it would do exactly one
-# thing: on a 9600 box with the dkaser storcli plugin installed (which ships
-# both binaries) it would enumerate a controller, satisfy use_storcli, and feed
-# StorCLI2 text to the storcli parsers — displacing the honest "not supported
-# yet" refusal with a card's worth of wrong or empty fields.
-# scripts/capture_storcli.sh keeps probing it on purpose: capturing raw output
-# for a future backend is the one thing storcli2 is useful for today.
+# The bare names "storcli"/"storcli64" are tried first, ahead of storcli2's
+# absolute-path-only candidates: the dkaser/unraid-storcli plugin symlinks
+# BOTH /usr/local/bin/storcli and /usr/local/bin/storcli2 onto PATH, so on a
+# box with only classic storcli installed the bare name resolves first and a
+# 9600 box still needs storcli2 named explicitly to be found at all.
 find_storcli() {
     if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
     local c
     for c in storcli storcli64 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
-             /usr/local/bin/storcli /usr/local/bin/storcli64 \
-             /usr/sbin/storcli /usr/sbin/storcli64; do
+             /usr/local/bin/storcli /usr/local/bin/storcli64 /usr/local/bin/storcli2 \
+             /usr/sbin/storcli /usr/sbin/storcli64 \
+             /opt/MegaRAID/storcli2/storcli2; do
         command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
         [ -x "$c" ] && { echo "$c"; return; }
     done
@@ -112,15 +108,32 @@ find_flasher() {
     [ -x "$staged" ] && echo "$staged"
 }
 
-# True (and export a resolved $STORCLI) iff storcli is present and enumerates a
-# controller. The routing test every tab composer uses to pick its backend.
+# "storcli2" (SAS4 / 9600, mpi3mr) or "storcli" (SAS3/3.5, mpt3sas), read from
+# the binary's own banner — StorCLI2 prints "StorCli2 SAS Customization
+# Utility". The FILENAME is not a usable signal: the storcli2 build ships as
+# storcli2Lite-8.14 and is symlinked to whatever name the packager chose.
+# $STORCLI_FLAVOR overrides (tests).
+#
+# The cd is deliberate: both tools write a debug log into the current
+# directory, and running them from /tmp keeps that out of the plugin tree.
+storcli_flavor() {
+    [ -n "$STORCLI_FLAVOR" ] && { echo "$STORCLI_FLAVOR"; return; }
+    case "$( ( cd "${STORCLI_CWD:-/tmp}" 2>/dev/null || cd /; "$1" version 2>/dev/null ) | head -5)" in
+        *StorCli2*|*StorCLI2*|*storcli2*) echo storcli2 ;;
+        *)                                echo storcli  ;;
+    esac
+}
+
+# True (and export a resolved $STORCLI + $STORCLI_FLAVOR) iff storcli is
+# present and enumerates a controller. The routing test every tab composer
+# uses to pick its backend.
 use_storcli() {
     local sc n
     sc="$(find_storcli)"
     [ -n "$sc" ] || return 1
     n=$("$sc" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
     [ -n "$n" ] && [ "$n" -gt 0 ] || return 1
-    STORCLI="$sc"; export STORCLI; return 0
+    STORCLI="$sc"; STORCLI_FLAVOR=$(storcli_flavor "$sc"); export STORCLI STORCLI_FLAVOR; return 0
 }
 
 # Controller count from storcli's enumeration — the single parse of
@@ -138,6 +151,10 @@ hba_driver() {
     fi
 }
 
+# The one place the supported personality list lives. It was copy-pasted into
+# six scripts, so adding a driver meant finding all six.
+hba_is_sas_proc() { case "$1" in mpt3sas|mpt2sas|mptsas|mpi3mr) return 0 ;; esac; return 1; }
+
 # Which mpt personality claimed each controller — one line per SAS host, empty if
 # there is no LSI HBA. This, NOT /sys/module/*, is the honest SAS2-vs-SAS3 signal:
 # the merged mpt3sas driver registers SAS2 cards under the mpt2sas personality, so
@@ -147,7 +164,7 @@ hba_personalities() {
     local h p
     for h in "${SYS_SCSI_HOST:-/sys/class/scsi_host}"/host*/; do
         p=$(cat "${h}proc_name" 2>/dev/null)
-        case "$p" in mpt3sas|mpt2sas|mptsas|mpi3mr) echo "$p" ;; esac
+        hba_is_sas_proc "$p" && echo "$p"
     done
 }
 
@@ -168,21 +185,27 @@ hba_has_sas3() { case "$(hba_personalities)" in *mpt3sas*) return 0 ;; esac; ret
 # downstream of that predicate assumes storcli can read the card.
 hba_has_sas4() { case "$(hba_personalities)" in *mpi3mr*) return 0 ;; esac; return 1; }
 
-# The backend seam. Chooses storcli-vs-lsiutil ONCE, owns controller
+# The backend seam. Chooses storcli / storcli2 / lsiutil ONCE, owns controller
 # enumeration and the {"backend","driver","controllers":[...]} wrapper, so a
 # composer only declares *what to run per controller*.
 #   $1 = storcli fn: `fn <c>` prints controller c's JSON object ($STORCLI
 #        resolved+exported, count already > 0).
 #   $2 = lsiutil fn: prints the inner controller object(s) on success, OR
 #        prints a top-level error JSON and returns non-zero to abort the wrap.
+#   $3 = storcli2 fn (optional): same contract as $1, for the SAS4 tool whose
+#        command set and output differ. Defaults to $1, so a composer that has
+#        not been ported yet keeps its old behaviour instead of breaking.
+# The emitted "backend" is the FLAVOR — endpoints branch on that field, never on
+# which binary exists (a 9600 box can have both installed).
 hba_each() {
-    local storcli_fn="$1" lsiutil_fn="$2" c count body rc
+    local storcli_fn="$1" lsiutil_fn="$2" storcli2_fn="${3:-$1}" fn c count body rc
     if use_storcli; then
         count=$(storcli_count)
-        printf '{"backend":"storcli","driver":"%s","controllers":[' "$(hba_driver)"
+        if [ "$STORCLI_FLAVOR" = storcli2 ]; then fn="$storcli2_fn"; else fn="$storcli_fn"; fi
+        printf '{"backend":"%s","driver":"%s","controllers":[' "${STORCLI_FLAVOR:-storcli}" "$(hba_driver)"
         for c in $(seq 0 $((count - 1))); do
             [ "$c" -gt 0 ] && printf ','
-            "$storcli_fn" "$c"
+            "$fn" "$c"
         done
         printf ']}'
     else
