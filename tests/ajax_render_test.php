@@ -91,6 +91,16 @@ check('phy multi heads controllers', str_contains(
 check('phy single omits head', !str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]]]]), 'Controller /c0'));
 
+// A storcli2 payload must reach the storcli tables. Before lsi_backend_shape
+// existed it fell through to the lsiutil branch, because the field matched
+// neither 'storcli' nor ''.
+$sc2Phy = ['backend' => 'storcli2', 'controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '22.5 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+check('phy: a storcli2 payload gets the storcli columns',
+    str_contains(renderPhyTables($sc2Phy), 'Attached SAS Address'));
+
 /* ── PHY error baseline: the three display states (plan 022) ──────────────
    The raw-counter table is unchanged by this feature — it is purely additive,
    so the no-baseline case must render exactly what it always did. */

@@ -929,14 +929,25 @@
                         });
                         var util = utilN ? utilSum / utilN : 0;
                         var lat = dOps > 0 ? dWt / dOps : 0;
-                        var dPhy = (c.phy.inv + c.phy.disp + c.phy.sync + c.phy.reset)
-                                 - (pc.phy.inv + pc.phy.disp + pc.phy.sync + pc.phy.reset);
-                        var phyRate = dPhy >= 0 ? dPhy / dt : 0;
+                        // phy is null when the counters were never read, not zero.
+                        // A SAS4 controller in eHBA personality registers no SAS
+                        // transport class, so /sys/class/sas_phy — the only source
+                        // this poll is allowed to touch, being the instant path —
+                        // is empty for it. Plotting 0 there would draw a confident
+                        // flat line meaning "no link errors" on a card nobody
+                        // measured. NaN leaves a gap in the series instead.
+                        var phyRate = null;
+                        if (c.phy && pc.phy) {
+                            var dPhy = (c.phy.inv + c.phy.disp + c.phy.sync + c.phy.reset)
+                                     - (pc.phy.inv + pc.phy.disp + pc.phy.sync + pc.phy.reset);
+                            phyRate = dPhy >= 0 ? dPhy / dt : 0;
+                        }
                         perfPush(cells.thr,  [rMB, wMB], (rMB + wMB).toFixed(1));
                         perfPush(cells.iops, [iops], Math.round(iops).toString());
                         perfPush(cells.util, [util], util.toFixed(0) + '%');
                         perfPush(cells.lat,  [lat], lat.toFixed(1));
-                        perfPush(cells.phy,  [phyRate], phyRate.toFixed(1));
+                        perfPush(cells.phy,  [phyRate == null ? NaN : phyRate],
+                                 phyRate == null ? '–' : phyRate.toFixed(1));
                     }
                     var temp = (c.temp == null) ? null : c.temp;
                     perfPush(cells.temp, [temp == null ? NaN : temp], temp == null ? '–' : temp + '°');

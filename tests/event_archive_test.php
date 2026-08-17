@@ -75,5 +75,14 @@ check('visible infers lsiutil', count(event_visible([$lu, $sc], '')) === 1);
 check('visible unknown passes through', count(event_visible([['seq'=>'9']], '')) === 1);
 check('visible empty list',     event_visible([], 'storcli') === []);
 
+/* StorCLI2 is a different TOOL emitting the same record SHAPE as classic
+   storcli, so one renderer serves both and the shape is what callers ask about.
+   Folding here rather than in each renderer is also what keeps the event
+   archive's own shape test working: no archived entry is ever tagged storcli2. */
+check('shape: storcli2 folds onto storcli', lsi_backend_shape('storcli2') === 'storcli');
+check('shape: storcli is itself',           lsi_backend_shape('storcli')  === 'storcli');
+check('shape: lsiutil is itself',           lsi_backend_shape('lsiutil')  === 'lsiutil');
+check('shape: empty stays empty',           lsi_backend_shape('')         === '');
+
 echo $fails === 0 ? "event_archive: all pass\n" : "event_archive: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

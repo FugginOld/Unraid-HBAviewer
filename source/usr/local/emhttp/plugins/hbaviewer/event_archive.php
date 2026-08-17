@@ -56,6 +56,12 @@ function event_shape(array $entry): string {
     return '';
 }
 
+/* StorCLI2 is a different TOOL emitting the same record SHAPE as classic
+   storcli, so one renderer serves both and the shape is what callers ask about. */
+function lsi_backend_shape(string $backend): string {
+    return $backend === 'storcli2' ? 'storcli' : $backend;
+}
+
 /* The entries $backend's table can actually render. Nothing is deleted — the
    archive on disk keeps every entry; this only decides what is displayed.
    An empty $backend falls back to the shape of the first entry, matching the
