@@ -143,14 +143,14 @@ check('drives: an unstamped payload does not sniff its way to storcli columns',
 // the entry shape into rendering the storcli table.
 $evSniffDir = sys_get_temp_dir() . '/hbav_events_sniff_' . getmypid();
 @mkdir($evSniffDir, 0755, true);
-array_map('unlink', glob("$evSniffDir\*.json") ?: []);
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
 $noBackendEv = ['controllers' => [['entries' => [
     ['seq' => '1', 'time' => '2026-07-01 10:00:00', 'code' => '0x0113', 'description' => 'Drive inserted'],
 ]]]];
 $noBackendEvOut = renderEventsTables($noBackendEv, $evSniffDir);
 check('events: an unstamped payload does not sniff its way to storcli columns',
     str_contains($noBackendEvOut, 'Qualifier') && !str_contains($noBackendEvOut, 'Code'));
-array_map('unlink', glob("$evSniffDir\*.json") ?: []);
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
 @rmdir($evSniffDir);
 
 /* ── PHY error baseline: the three display states (plan 022) ──────────────
