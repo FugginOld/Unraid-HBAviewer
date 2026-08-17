@@ -34,14 +34,14 @@ foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
            . ($fw !== '' ? ", fw $fw" : '') . ')';
 }
 $hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found';
-$storcli  = '';
-foreach (['/usr/local/sbin/storcli','/usr/local/sbin/storcli64','/usr/sbin/storcli','/usr/sbin/storcli64'] as $c) {
-    if (is_executable($c)) { $storcli = $c; break; }
-}
-if ($storcli === '') {
-    $w = trim((string) shell_exec('command -v storcli storcli64 2>/dev/null'));
-    if ($w !== '') $storcli = strtok($w, "\n");
-}
+// One implementation of this lookup, and it lives in the shell. This page used
+// to carry its own four-path list against lib.sh's eight, already missing
+// /usr/local/bin/storcli* -- two copies of one question that had drifted apart.
+// Sourcing lib.sh runs nothing: its top level only assigns variables and
+// defines functions. shell_exec is not new here; the old fallback used it too.
+$storcli = trim((string) shell_exec(
+    'bash -c ". /usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh 2>/dev/null; find_storcli" 2>/dev/null'
+));
 if ($storcli !== '') {
     $backend_label = 'storcli';
     $backend_note  = $has_sas2
