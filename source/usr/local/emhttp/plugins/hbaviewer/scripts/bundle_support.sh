@@ -312,7 +312,7 @@ run 01-environment/unraid-version.txt cat /etc/unraid-version
 # The plugin's OWN .plg only. Nothing else under /boot/config is touched.
 run 01-environment/plugin-version.txt cat /boot/config/plugins/hbaviewer.plg
 {
-    for m in mpt3sas mpt2sas mptsas; do
+    for m in mpt3sas mpt2sas mptsas mpi3mr; do
         [ -r "/sys/module/$m/version" ] && printf '%s %s\n' "$m" "$(cat "/sys/module/$m/version")"
     done
     printf 'hba_driver(): %s\n' "$(hba_driver)"
@@ -455,7 +455,7 @@ dump_attrs 03-sysfs/sas_expander_class.txt /sys/class/sas_expander/expander-*
 # device path, so this never walks the whole PCI tree.
 {
     for h in /sys/class/scsi_host/host*/; do
-        case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
+        hba_is_sas_proc "$(cat "${h}proc_name" 2>/dev/null)" || continue
         p=$(readlink -f "$h" 2>/dev/null); p="${p%%/host*}"
         [ -d "$p" ] || continue
         printf '===== %s =====\n' "$p"
@@ -465,7 +465,7 @@ dump_attrs 03-sysfs/sas_expander_class.txt /sys/class/sas_expander/expander-*
         printf '\n'
     done
 } > "$B/03-sysfs/pci.txt" 2>/dev/null
-[ -s "$B/03-sysfs/pci.txt" ] || printf '(no mpt2sas/mpt3sas/mptsas host found)\n' > "$B/03-sysfs/pci.txt"
+[ -s "$B/03-sysfs/pci.txt" ] || printf '(no mpt2sas/mpt3sas/mptsas/mpi3mr host found)\n' > "$B/03-sysfs/pci.txt"
 
 # ── Section 4: what the plugin made of it ────────────────────────────────────
 # Raw and parsed side by side is the whole point: #3 was a proc_name mismatch,
