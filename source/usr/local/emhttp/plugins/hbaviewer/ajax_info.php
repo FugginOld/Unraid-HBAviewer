@@ -1348,12 +1348,9 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         // Archive everything, display only what this backend's table can format.
         // A box that switched backend keeps its old entries on disk; showing them
         // through the wrong renderer produces undefined-key warnings and blank rows.
-        // event_shape() classifies ARCHIVED entries and only ever returns 'storcli',
-        // 'lsiutil' or '' -- never 'storcli2' -- so the live tool name has to be
-        // folded to a shape before event_visible() can compare it, or a storcli2
-        // backend matches nothing and the Events tab reads empty. Diverges from
-        // upstream (882f88c), which has this same defect at its own equivalent site.
-        $entries = event_visible($archived, lsi_backend_shape($data['backend'] ?? ''));
+        // event_visible() folds the backend to its shape internally, matching
+        // upstream (882f88c) -- so the raw tool name is fine here.
+        $entries = event_visible($archived, $data['backend'] ?? '');
         $hidden  = count($archived) - count($entries);
         if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p></div>'; continue; }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'

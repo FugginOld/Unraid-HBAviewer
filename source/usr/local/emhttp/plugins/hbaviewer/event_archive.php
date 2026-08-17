@@ -67,8 +67,14 @@ function lsi_backend_shape(string $backend): string {
    An empty $backend falls back to the shape of the first entry, matching the
    renderer's own pre-rollout key-sniff.
    ponytail: hide foreign entries rather than render a second table for them.
-   If anyone asks to see pre-switch history, render both tables instead. */
+   If anyone asks to see pre-switch history, render both tables instead.
+
+   Archived entries are only ever storcli- or lsiutil-shaped -- event_shape()
+   never returns 'storcli2', which is a tool name, not a shape -- so a live
+   backend has to be folded to its shape before it can be compared against
+   them. Folding it here, not at each call site, covers every caller. */
 function event_visible(array $entries, string $backend): array {
+    $backend = lsi_backend_shape($backend);
     if ($backend === '') $backend = event_shape($entries[0] ?? []);
     if ($backend === '') return $entries;
     return array_values(array_filter($entries, fn($e) => event_shape($e) === $backend));

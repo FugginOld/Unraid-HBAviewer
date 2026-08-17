@@ -84,12 +84,13 @@ check('shape: storcli is itself',           lsi_backend_shape('storcli')  === 's
 check('shape: lsiutil is itself',           lsi_backend_shape('lsiutil')  === 'lsiutil');
 check('shape: empty stays empty',           lsi_backend_shape('')         === '');
 
-// Documents the trap, not our code: passing the raw tool name straight through
-// hides everything, because 'storcli2' is never a shape event_shape() produces.
-// The renderer-level check in ajax_render_test.php pins the actual call site
-// that has to fold it first.
-check('visible: an unshaped storcli2 backend would hide everything',
-    count(event_visible($mixed, 'storcli2')) === 0);
+// event_visible() folds a tool name to its shape internally (matching upstream
+// 882f88c), so every caller gets this for free -- a storcli2 backend keeps the
+// storcli-shaped entries and drops the lsiutil-shaped ones, same as 'storcli'
+// would. Fails if that internal fold is ever removed from the function.
+check('visible: a storcli2 backend folds to storcli internally',
+    count(event_visible($mixed, 'storcli2')) === 2
+    && event_shape(event_visible($mixed, 'storcli2')[0]) === 'storcli');
 
 echo $fails === 0 ? "event_archive: all pass\n" : "event_archive: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
