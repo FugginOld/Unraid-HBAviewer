@@ -78,7 +78,8 @@ installs it; Unraid's Slackware base ships it.
 
 | File | Role |
 | --- | --- |
-| `ajax_info.php` | The main dispatch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment. Read-only. |
+| `ajax_info.php` | The main dispatch and hardware fetch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment, by calling the composer scripts and handing the result to a `render/*.php` function. Read-only. |
+| `render/table.php`, `render/overview.php`, `render/phy.php`, `render/drives.php`, `render/events.php`, `render/smart.php`, `render/health.php`, `render/baymap.php` | The renderers behind each tab — one file per surface (PHY, Drives, Event Log, SMART, Health, Overview, the drive bay map) plus `table.php`'s shared card/table helpers. `ajax_info.php` `require_once`s all eight before its CLI guard, so the test runner gets every render function without touching a controller. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
 | `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
 | `card_group.php` | Which controllers are one physical CARD. A SAS9300-16i is one board carrying two SAS3008 IOCs — two PCI functions, two indices, two temperature sensors — and only the display should say "one card". `lsi_group_cards()` buckets by PCI root port **and** board name and merges only when the count matches the index's `ioc_count` exactly, because a riser can put two genuinely separate cards behind one root port. Everything unrecognised stays split. Consumed by the Overview (`renderOverviewCards`) and by the firmware page's JSON, which is what makes a dual-IOC board verify and flash as one card. |

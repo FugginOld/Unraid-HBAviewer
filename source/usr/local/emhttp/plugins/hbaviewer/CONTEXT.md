@@ -16,8 +16,8 @@ key-sniffing.
 Persists the firmware event ring-buffer to `/boot` so history survives reboots
 and ring-buffer wrap. `event_merge(history, current) -> [kept, changed]` is pure
 (dedup by `seq|time`, cap at `EVENT_ARCHIVE_CAP`); `event_store_{path,read,write}`
-is the injectable store. `ajax_info.php` `type=events` is a thin read→merge→write
-caller.
+is the injectable store. `render/events.php` (`type=events`) is a thin
+read→merge→write caller.
 
 ## performance snapshot — `scripts/get_metrics.sh` (+ `parse/diskstats.sh`)
 The INSTANT path behind the Performance tab. `get_metrics.sh` emits raw
@@ -29,7 +29,7 @@ from deltas itself — the server stays stateless. ponytail: controller index =
 position among the SAS scsi_hosts (host order), so the drivemap is instant sysfs
 (no cache), the same host-order the PHY rollup assumes.
 
-## drive bay map — `bay_map.php` (+ `bay_map_assemble()` in `ajax_info.php`)
+## drive bay map — `bay_map.php` (+ `bay_map_assemble()` in `render/baymap.php`)
 Where each drive physically sits in the chassis. `bay_map_{read,write,set}` is
 the `/boot` store, `bay_map_prune_to_dims()` returns the drives a shrunken grid
 displaces (they go back to the tray, never silently dropped), `bay_map_key()`

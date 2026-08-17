@@ -23,7 +23,7 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
 
-        // The backend field, and nothing else -- see the PHY renderer above.
+        // The backend field, and nothing else -- see the PHY renderer, render/phy.php.
         if ($storcli) {
             // storcli backend: seq, time, code, human-readable description (newest first)
             $rows = [];

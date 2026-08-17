@@ -3,7 +3,7 @@
 /* SERIAL -> /dev/NAME for every SCSI block device, from ONE lsblk call.
    Serial is the join key, not the WWN: storcli's WWN and /dev's differ by a
    nibble on the same physical drive, while the serials match exactly — the
-   same correlation the per-drive SMART button above has used since it shipped.
+   same correlation the per-drive SMART button (render/smart.php) has used since it shipped.
    Empty on a box without lsblk, which renders every Device cell as "—" rather
    than failing a tab. Callers pass the result in, so the render functions stay
    pure and the tests can inject a map. */
@@ -113,7 +113,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             );
         };
 
-        // The backend field, and nothing else -- see the PHY renderer above.
+        // The backend field, and nothing else -- see the PHY renderer, render/phy.php.
         if ($storcli) {
             // storcli backend: enclosure/slot, model, serial, state, size, SAS (WWN), link, fw
             $rows = [];

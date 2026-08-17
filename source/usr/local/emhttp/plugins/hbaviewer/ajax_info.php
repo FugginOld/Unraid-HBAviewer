@@ -60,10 +60,12 @@ const UNRAID_DISKINI = '/var/local/emhttp/disks.ini';
 
 /* ── Request dispatch (served only; skipped under the CLI test runner) ───────
    Everything below this line either shells out to the hardware-reading scripts
-   or renders a response for one request. The render functions themselves are
-   declared at file scope, so they are compiled and callable even though this
-   return skips past their definitions — which is what lets tests require this
-   file and exercise the table builders without touching a controller.
+   or renders a response for one request. The render functions live in
+   render/*.php, required above at :24-31 — those require_once lines run
+   BEFORE this guard, so every render function is already defined by the time
+   this file returns. That is what lets tests require this file and exercise
+   the table builders without touching a controller. Move a require below this
+   line and every render function goes undefined for the tests.
    Same posture as flash.php. */
 if (PHP_SAPI === 'cli') return;
 

@@ -974,6 +974,13 @@ check('card: the body is not called for an errored controller',
     !str_contains(luCardPerController([['error' => 'x']], fn($i, $c) => 'NEVER'), 'NEVER'));
 check('card: error text is escaped',
     str_contains(luCardPerController([['error' => '<b>x']], fn($i, $c) => ''), '&lt;b&gt;x'));
+// A malformed controllers[] entry -- a composer bug, a truncated read -- must
+// cost one blank card, not the whole tab. Before the closure conversion these
+// were foreach bodies with no type constraint; the typed closures made a null
+// entry fatal.
+check('card: a null controller entry degrades instead of throwing',
+    luCardPerController([null], fn(int $i, array $c) => 'BODY')
+        === '<div class="lu-card first" data-ctl="0">BODY</div>');
 
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of

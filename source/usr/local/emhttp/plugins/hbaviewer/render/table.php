@@ -37,7 +37,12 @@ function luCardPerController(array $ctls, callable $body): string {
             $out .= '<p class="lu-muted">' . htmlspecialchars($ctl['error']) . '</p></div>';
             continue;
         }
-        $out .= $body($i, $ctl) . '</div>';
+        // (array) cast: a malformed controllers[] entry (a composer bug, a
+        // truncated storcli read) must degrade to one blank card, not throw
+        // and take down the whole tab with a stack trace. This is the seam
+        // where that guarantee belongs -- the closures keep their typed
+        // `array $ctl` contract, and only a non-array entry pays the cast.
+        $out .= $body($i, (array) $ctl) . '</div>';
     }
     return $out;
 }

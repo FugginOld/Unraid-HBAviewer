@@ -41,7 +41,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
      Ids are `lu-i-` prefixed because the plugin renders inside Unraid's webGui
      DOM, not a standalone page; unprefixed ids can collide with the shell's own
-     markup. ajax_info.php's row loop maps indicator keys to these ids. -->
+     markup. render/health.php's row loop maps indicator keys to these ids. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <symbol id="lu-i-thermal" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
