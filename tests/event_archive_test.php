@@ -84,5 +84,16 @@ check('shape: storcli is itself',           lsi_backend_shape('storcli')  === 's
 check('shape: lsiutil is itself',           lsi_backend_shape('lsiutil')  === 'lsiutil');
 check('shape: empty stays empty',           lsi_backend_shape('')         === '');
 
+// event_visible() filters ARCHIVED entries by SHAPE ('storcli'/'lsiutil'/''), since
+// that is all event_shape() ever returns. A live backend of 'storcli2' has to be
+// folded through lsi_backend_shape() before it reaches event_visible(), or nothing
+// in the archive ever matches and a 9600's Events tab reads "No log entries".
+check('visible: a storcli2 backend keeps storcli-shaped entries',
+    count(event_visible($mixed, lsi_backend_shape('storcli2'))) === 2);
+// Documents the trap, not our code: passing the raw tool name straight through
+// hides everything, because 'storcli2' is never a shape event_shape() produces.
+check('visible: an unshaped storcli2 backend would hide everything',
+    count(event_visible($mixed, 'storcli2')) === 0);
+
 echo $fails === 0 ? "event_archive: all pass\n" : "event_archive: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
