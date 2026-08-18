@@ -13,8 +13,12 @@
  * internals -- which is also the only way in, since hbaviewer.js is one IIFE
  * and luBayCommit/luBayApply/luBayDims are private.
  *
- * Six of the eleven behaviours assert that NOTHING goes on the wire. For a
+ * Six of the thirteen behaviours assert that NOTHING goes on the wire. For a
  * store nobody can rebuild, the absent POST is the half that matters.
+ *
+ * NOT covered: luBayRestore (paste-a-map import), luBayUndo, and luBayLock.
+ * All three are writers named in the spec's in-scope list; none is exercised
+ * here.
  *
  * No jsdom, no framework, no package.json -- the repo has none and CI runs
  * bare node (docker node:20-alpine as fallback).
@@ -36,7 +40,14 @@ const CODE = fs.readFileSync(SRC, 'utf8');
    2x3 with drives at (0,1) and (1,2), so (1,0) is empty and is where the
    assign test aims. Column 0 kills the `col === null` -> `!col` mutant; row 1
    makes the coordinates asymmetric so a row/col swap cannot survive. Keys are
-   not coordinate-shaped on purpose. */
+   not coordinate-shaped on purpose.
+   One instance is handed to the production code as `luBay.data`, which
+   mutates it in place, and the same mutated object is what every later
+   `type=baymap` reload in a test replies with -- so a "reload" here never
+   shows a state the local code did not already produce. Fine for what this
+   file asserts today; a future assertion that needs to tell a real
+   server-confirmed reload apart from the optimistic local update would need a
+   fresh object per fetch instead. */
 const BAY = () => ({
     rows: 2, cols: 3, locked: false, warn_temp: 45,
     smart_age: '2 minutes', has_backup: true,
@@ -86,6 +97,7 @@ function boot(payload) {
     const els = new Map();
     const calls = [];
     const alerts = [];
+    const confirms = [];
     const prompts = [];
     const answers = {confirm: [], prompt: []};
     const timers = [];
@@ -138,7 +150,12 @@ function boot(payload) {
                 // The real markup nests bay-grid inside .lu-bay-scroll, and
                 // luBayPaint reaches through grid.parentNode.classList to toggle
                 // the locked state -- give every harvested node a stand-in
-                // parent so that reach never hits null.
+                // parent so that reach never hits null. The stand-in is
+                // detached and nothing reads its class, so this shim cannot
+                // see whether the CSS gate that class controls (blocking
+                // pointer events while locked) is actually toggled correctly
+                // -- behaviour 12 covers locked-ness entirely through the JS
+                // guards, not that class.
                 e.parentNode = mkEl('div');
                 els.set(m[1], e);
             }
@@ -177,8 +194,11 @@ function boot(payload) {
         alert: (m) => { alerts.push(String(m)); },
         // Queued answers; default DENY. A test that forgets to queue an answer
         // gets the safe outcome (nothing written) rather than a silent write.
+        // confirm() text goes to its own array, not `alerts` -- a mixed stream
+        // would let a confirm message satisfy an alert-shaped regex (or vice
+        // versa) with nothing to tell the two apart.
         confirm: (m) => {
-            alerts.push(String(m));
+            confirms.push(String(m));
             return answers.confirm.length ? answers.confirm.shift() : false;
         },
         prompt: (m) => {
@@ -191,6 +211,9 @@ function boot(payload) {
         document: {
             body: mkEl('body'),
             createElement: (t) => mkEl(t),
+            // Permanently empty: luLocateSync's post-reload DOM sync never finds
+            // anything to act on, so the reload assertions below prove only that
+            // a fetch was issued -- not that whatever runs after it survives.
             getElementById: (id) => els.get(id) || null,
             querySelectorAll: () => [],
             querySelector: () => null,
@@ -219,7 +242,7 @@ function boot(payload) {
     const setReply = (o) => { postReply = o; };
     const setPayload = (p) => { bayPayload = p; };
 
-    return {ctx, els, calls, alerts, prompts, answers, settle, flushTimers,
+    return {ctx, els, calls, alerts, confirms, prompts, answers, settle, flushTimers,
             grid, tray, cellAt, chipAt, posts, lastPost, setReply, setPayload};
 }
 
@@ -324,14 +347,16 @@ async function main() {
             h.posts().length === 0);
     }
     /* ── 5. Shrink the grid, accept the warning -> displaced drive, one dims ─
-       2x3 -> 2x2 evicts the drive at (1,2). The POST is debounced 400ms, so
-       nothing is on the wire until the timers are flushed. luBayDims reads
-       BOTH #bay-rows and #bay-cols and bails unless both parse to 1..12, so
-       both fields are set even though only cols is "changing" here. */
+       2x3 -> 1x2, not 2x2: rows != cols, the same trap the comment on
+       behaviour 1 names for the POST body. A square shrink lets a row/col
+       swap in the POST, a #bay-cols-for-both-fields read of luBayDims, and a
+       swapped fit predicate all survive it -- three mutants the reviewer
+       found alive against the old 2x2 version. The POST is debounced 400ms,
+       so nothing is on the wire until the timers are flushed. */
     {
         const h = await opened();
         h.answers.confirm.push(true);
-        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-rows').value = '1';
         h.els.get('bay-cols').value = '2';
         h.els.get('bay-cols').onchange();
         check('resize: the dims post is debounced, not immediate', h.posts().length === 0);
@@ -339,9 +364,14 @@ async function main() {
         await h.settle();
         const p = h.lastPost();
         check('resize: accepting the shrink posts the new dimensions',
-            !!p && p.action === 'dims' && p.params.get('rows') === '2' && p.params.get('cols') === '2');
+            !!p && p.action === 'dims' && p.params.get('rows') === '1' && p.params.get('cols') === '2');
         check('resize: the drive that no longer fits is back in the tray',
             h.tray().children.map(x => x.dataset.trayKey).includes('c0p5'));
+        // Without this, a swapped fit predicate (`p.row < cols && p.col < rows`)
+        // evicts BOTH drives instead of just c0p5, and the check above alone
+        // would not notice.
+        check('resize: the drive that still fits keeps its bay',
+            h.grid().children.some(x => x.dataset.bayKey === 'c0p4'));
     }
 
     /* ── 6. A blank field is not a resize request ────────────────────────────
@@ -355,7 +385,7 @@ async function main() {
     {
         const h = await opened();
         h.answers.confirm.push(true);          // consumed only if a confirm is reached
-        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-rows').value = '1';
         h.els.get('bay-cols').value = '';
         h.els.get('bay-cols').onchange();
         h.flushTimers();
@@ -372,7 +402,7 @@ async function main() {
     {
         const h = await opened();
         h.answers.confirm.push(false);
-        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-rows').value = '1';
         h.els.get('bay-cols').value = '2';
         h.els.get('bay-cols').onchange();
         h.flushTimers();
@@ -395,7 +425,23 @@ async function main() {
             h.answers.confirm.length === 1);
     }
 
-    /* ── 9. Clear declined -> nothing on the wire ────────────────────────────
+    /* ── 9. Clear accepted -> the clear POST goes out ────────────────────────
+       Behaviours 8 and 9 (empty, declined) both prove NOTHING is posted; on
+       their own the actual `{action: 'clear'}` write is unpinned -- renaming
+       the action or deleting the POST call entirely survives both. This is
+       the only behaviour that looks at what accepting a clear puts on the
+       wire, for the most destructive action this file covers. */
+    {
+        const h = await opened();
+        h.answers.confirm.push(true);
+        h.ctx.luBayClear();
+        await h.settle();
+        const p = h.lastPost();
+        check('clear: accepting the confirmation posts the clear',
+            !!p && p.action === 'clear');
+    }
+
+    /* ── 10. Clear declined -> nothing on the wire ────────────────────────────
        The confirm names the COUNT, because the number is what makes a person
        stop: a map of 24 bays was built by walking to the rack. */
     {
@@ -405,10 +451,10 @@ async function main() {
         await h.settle();
         check('clear: declining the confirmation posts nothing', h.posts().length === 0);
         check('clear: the confirmation names how many drives are placed',
-            h.alerts.some(a => /\b2\b/.test(a) && /placed/i.test(a)));
+            h.confirms.some(a => /\b2\b/.test(a) && /placed/i.test(a)));
     }
 
-    /* ── 10. A refused write must be undone on screen, not just reported ─────
+    /* ── 11. A refused write must be undone on screen, not just reported ─────
        The grid paints optimistically. Without the resync the map keeps showing
        a move the server rejected -- the one state the person cannot notice. */
     {
@@ -423,7 +469,7 @@ async function main() {
         check('refused: a rejected write triggers a reload', after > before);
     }
 
-    /* ── 11. Locked: no gesture writes ───────────────────────────────────────
+    /* ── 12. Locked: no gesture writes ───────────────────────────────────────
        Locked cells get no onclick and no dataset at all, so there is nothing
        to click -- and the delegated handlers return early regardless. Both are
        asserted: the absent wiring, and the silent grid handler.
@@ -442,6 +488,26 @@ async function main() {
         h.grid().ondblclick(ev(anyCell));
         await h.settle();
         check('locked: the delegated double-click writes nothing', h.posts().length === 0);
+    }
+
+    /* ── 13. The second click of a double-click does not toggle selection ────
+       Pins the `e.detail > 1` guard in luBayCellClick named by the ev()
+       comment above. Without it, the second click of a double-click would
+       select-then-deselect the drive before the dblclick that empties the bay
+       ever arrives -- harmless in the end state on a real browser (the
+       dblclick still fires), but this guard is the only thing stopping it,
+       and until now nothing here proved it does anything. */
+    {
+        const h = await opened();
+        const cell = h.cellAt(0, 1);                    // holds c0p4
+        cell.onclick(ev(cell));                          // first click: select it
+        const repainted = h.cellAt(0, 1);                 // selecting repaints the grid
+        repainted.onclick(ev(repainted, {detail: 2}));    // second click of a dblclick
+        // luBayPaint builds fresh cell nodes on every repaint, so `repainted`
+        // itself is stale after this click too -- re-read once more or this
+        // assertion would check a class that can never change under it.
+        check('select: a detail:2 click leaves the selection in place',
+            h.cellAt(0, 1).className.split(/\s+/).includes('sel'));
     }
     } catch (e) {
         check('the bay map ran to completion without throwing — ' + e.message, false);

@@ -172,10 +172,12 @@ CI needs no change: `php.yml` lints every `.js` with `node --check` and runs
 
 ## What this does and does not prove
 
-**Proves:** the write paths post what they claim to, and stay silent when they
-should — including the two wiring layers where real bugs shipped.
+**Proves:** `luBayCommit`/`luBayApply`, `luBayDims`, and `luBayClear` post what
+they claim to and stay silent when they should — including the two wiring
+layers where real bugs shipped.
 
 **Does not prove:** that the grid looks right, that drag-and-drop works in a
 real browser, or that `bay_map.php` persists correctly. The last already has 72
 checks of its own. The first two remain what the Raven install test covers, by
-hand.
+hand. Also not covered: `luBayRestore` (paste-a-map import), `luBayUndo`, and
+`luBayLock` — named as in-scope writers above but not exercised by this file.
