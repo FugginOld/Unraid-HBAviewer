@@ -472,6 +472,21 @@ else
 fi
 
 echo
+echo "=== bay map JS write-path tests ==="
+# Same local-then-docker fallback as the flash_view.js block above, and for the
+# same reason: Unraid has no node. The bay map is the one store that cannot be
+# regenerated, so its write paths are pinned by running them.
+if command -v node >/dev/null 2>&1; then
+    node baymap_js_test.js; baymap_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests \
+        node:20-alpine node baymap_js_test.js; baymap_js_fail=$?
+else
+    echo "SKIP  bay map JS runtime tests (no node, no docker)"; baymap_js_fail=0
+fi
+
+echo
 echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
@@ -516,7 +531,7 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1
