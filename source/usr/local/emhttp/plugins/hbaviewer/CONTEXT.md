@@ -14,6 +14,28 @@ wrapper. Add a backend, or a per-tab read, in one place. PHP reads the explicit
 values now; `lsi_backend_shape()` folds `storcli2` to the same shape as
 `storcli` so the renderers stay one set.
 
+## overview controller record — declared in `tests/controller_schema_test.php`
+The record the three overview parsers each build independently (`parse/hba.sh`,
+`parse/storcli_overview.sh`, `parse/storcli2_overview.sh`). Every consumer reads
+it with `?? ''` or `?? 'unknown'`, so a field one backend forgets renders blank
+instead of failing — which is why the shape is declared as data and pinned by a
+test rather than left to prose.
+
+| Group | Fields | Backends |
+|---|---|---|
+| **Core** — safe to read with no fallback | `temp` `model` `firmware` `mode` `board_name` `port_name` `pci_location` `pcie_width` `pcie_speed` `power_mode` `alert_threshold` `temp_band` `cfg_band` `status` | all three |
+| Backend-specific, correct | `fw_old`, `port` (optional) | lsiutil only |
+| Backend-specific, correct | `bios`, `drive_count` | storcli, storcli2 |
+| **Known gap** | `card_id`, `subvendor_id`, `topology` | lsiutil, storcli — **absent on storcli2** |
+
+The gap costs nothing today: `card_id` is what `lsi_group_cards` buckets on, and
+grouping only merges a bucket whose size equals the board's declared
+`ioc_count`, which exactly one board sets above 1 (`SAS9300-16i`) — no 9600 is
+in the firmware index at all. Add a dual-IOC SAS4 board and it renders as two
+half-cards. Closing it means threading `card_id` in as another positional
+argument, since the storcli2 filters stay pure (positional only, no environment
+reads) while storcli's parser takes it from `LSI_CARD_ID`.
+
 ## StorCLI2 installer — `scripts/install_storcli2.sh`
 Installs Broadcom's proprietary FULL StorCLI2 (needed only for the firmware
 Event Log tab on a SAS4 / 9600 card — the Lite build the dkaser/unraid-storcli
