@@ -13,7 +13,7 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
-###Unreleased###
+###2026.08.17###
 SAS4 / 9600-series (`mpi3mr`) cards are now read instead of being named and
 refused. Ported from techanonymous's `Unraid-HBAviewer-sas4` fork (MIT,
 commit 882f88c) — the backend, the parsers, the Settings-page install helper
