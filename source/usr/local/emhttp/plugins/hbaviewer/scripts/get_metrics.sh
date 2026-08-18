@@ -13,18 +13,21 @@
 #     {"idx":N,"temp":<n|null>,"phy":{"inv","disp","sync","reset"},
 #      "drives":[{"dev","r_io","r_sect","w_io","w_sect","io_ticks","weighted"}]}]}
 #
-# ponytail: controller idx = position among the SAS scsi_hosts (mpt2sas/mpt3sas),
-# the same host order the PHY rollup already assumes. sysfs is instant, so unlike
-# the slow storcli enumeration this needs no drivemap cache. Serial-exact
-# attribution (per storcli /cN) is the upgrade path if host order ever diverges.
+# ponytail: controller idx = position among the SAS scsi_hosts (hba_is_sas_proc's
+# personalities), the same host order the PHY rollup already assumes. sysfs is
+# instant, so unlike the slow storcli enumeration this needs no drivemap cache.
+# Serial-exact attribution (per storcli /cN) is the upgrade path if host order
+# ever diverges.
 
 DIR="$(dirname "$0")"
+. "$DIR/lib.sh"
 
-# Ordered SAS host numbers (mpt2sas/mpt3sas) — one per controller.
+# Ordered SAS host numbers (every personality hba_is_sas_proc recognizes) — one
+# per controller.
 hosts=()
 for h in /sys/class/scsi_host/host*/; do
     [ -d "$h" ] || continue
-    case "$(cat "${h}proc_name" 2>/dev/null)" in mpt3sas|mpt2sas|mptsas) ;; *) continue ;; esac
+    hba_is_sas_proc "$(cat "${h}proc_name" 2>/dev/null)" || continue
     hn=$(basename "$h"); hosts+=("${hn#host}")
 done
 # numeric sort so the index order is stable (host2 before host10)

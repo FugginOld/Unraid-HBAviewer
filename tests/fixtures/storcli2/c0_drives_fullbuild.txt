@@ -1,0 +1,1128 @@
+CLI Version = 08.017.000.0008 Mar 06, 2026
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = Show Drive Information Succeeded.
+
+
+Drive /c0/e52/s0 :
+================
+
+--------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG      Size Intf Med SED_Type SeSz Model               Sp LU/NS Count Alt-EID 
+--------------------------------------------------------------------------------------------------------
+52:0     27 JBOD  Good   -  7.277 TiB SATA HDD -        512B ST8000AS0002-1NA17Z -            1 -       
+--------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s0  :
+=======================================
+
+------------------------------------
+PID LUN/NSID Index Status      Size 
+------------------------------------
+ 27 0/-          0 Good   7.277 TiB 
+------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s0 - Detailed Information :
+=======================================
+Temperature(C) = 39
+Serial Number = SN000002
+Vendor = ATA     
+Model = ST8000AS0002-1NA17Z
+WWN = 5000000000000014
+Firmware Revision Level = AR13    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 7.277 TiB [0x3a3812ab0 Sectors]
+Coerced size = 7.276 TiB [0x3a3710000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 5980
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdf
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000002        27 Primary              1 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     1 C0.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s0  :
+==========================================
+Other Error Count = 3
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 7.277 TiB [0x3a3812ab0 Sectors]
+Coerced size = 7.276 TiB [0x3a3710000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdf
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+38 5a 30 34 47 30 46 50 00 00 00 80 00 00 52 41 
+33 31 20 20 20 20 54 53 30 38 30 30 53 41 30 30 
+32 30 31 2d 41 4e 37 31 20 5a 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5c ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s4 :
+================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:4     31 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s4  :
+=======================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 31 0/-          0 Good   20.009 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s4 - Detailed Information :
+=======================================
+Temperature(C) = 41
+Serial Number = SN000003
+Vendor = ATA     
+Model = WDC  WUH722222ALE6L4
+WWN = 5000000000000015
+Firmware Revision Level = LNGNW730
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 20.009 TiB [0xa01400000 Sectors]
+Coerced size = 20.009 TiB [0xa01300000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdg
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000003        31 Primary              2 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     1 C0.1 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s4  :
+==========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 20.009 TiB [0xa01400000 Sectors]
+Coerced size = 20.009 TiB [0xa01300000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdg
+
+Inquiry Data = 
+5a 04 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 5a 33 32 48 35 30 5a 45 20 20 20 20 
+20 20 20 20 20 20 20 20 03 00 00 00 38 00 4e 4c 
+4e 47 37 57 30 33 44 57 20 43 57 20 48 55 32 37 
+32 32 32 32 4c 41 36 45 34 4c 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 00 59 ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s8 :
+================
+
+---------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG      Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+---------------------------------------------------------------------------------------------------------
+52:8     35 JBOD  Good   -  9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+---------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s8  :
+=======================================
+
+------------------------------------
+PID LUN/NSID Index Status      Size 
+------------------------------------
+ 35 0/-          0 Good   9.095 TiB 
+------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s8 - Detailed Information :
+=======================================
+Temperature(C) = 33
+Serial Number = SN000004
+Vendor = ATA     
+Model = ST10000VN0004-1ZD101
+WWN = 5000000000000016
+Firmware Revision Level = SC61    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdh
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000004        35 Primary              3 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     2 C1.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s8  :
+==========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdh
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+41 5a 30 32 42 41 44 4a 00 00 00 00 00 00 43 53 
+31 36 20 20 20 20 54 53 30 31 30 30 56 30 30 4e 
+30 30 2d 34 5a 31 31 44 31 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s11 :
+=================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:11    38 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s11  :
+========================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 38 0/-          0 Good   25.466 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s11 - Detailed Information :
+========================================
+Temperature(C) = 44
+Serial Number = SN000005
+Vendor = ATA     
+Model = ST28000NM000C-3WM103
+WWN = 5000000000000017
+Firmware Revision Level = SN04    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdi
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000005        38 Primary              3 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     2 C1.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s11  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdi
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+58 5a 31 41 45 37 35 57 00 00 00 00 00 00 4e 53 
+34 30 20 20 20 20 54 53 38 32 30 30 4e 30 30 4d 
+30 30 2d 43 57 33 31 4d 33 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s12 :
+=================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:12    39 JBOD  Good   -  10.914 TiB SATA HDD -        512B ST12000VN0007-2GS116 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s12  :
+========================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 39 0/-          0 Good   10.914 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s12 - Detailed Information :
+========================================
+Temperature(C) = 35
+Serial Number = SN000006
+Vendor = ATA     
+Model = ST12000VN0007-2GS116
+WWN = 5000000000000018
+Firmware Revision Level = SC60    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 10.914 TiB [0x575000000 Sectors]
+Coerced size = 10.913 TiB [0x574f00000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdj
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000006        39 Primary              4 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     2 C1.1 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s12  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 10.914 TiB [0x575000000 Sectors]
+Coerced size = 10.913 TiB [0x574f00000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdj
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+43 5a 30 48 30 33 4b 43 00 00 00 00 00 00 43 53 
+30 36 20 20 20 20 54 53 32 31 30 30 56 30 30 4e 
+30 30 2d 37 47 32 31 53 36 31 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s16 :
+=================
+
+---------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG      Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+---------------------------------------------------------------------------------------------------------
+52:16    43 JBOD  Good   -  9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+---------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s16  :
+========================================
+
+------------------------------------
+PID LUN/NSID Index Status      Size 
+------------------------------------
+ 43 0/-          0 Good   9.095 TiB 
+------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s16 - Detailed Information :
+========================================
+Temperature(C) = 31
+Serial Number = SN000007
+Vendor = ATA     
+Model = ST10000VN0004-1ZD101
+WWN = 5000000000000019
+Firmware Revision Level = SC61    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdk
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000007        43 Primary              5 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     3 C2.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s16  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdk
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+41 5a 30 32 4b 41 48 38 00 00 00 00 00 00 43 53 
+31 36 20 20 20 20 54 53 30 31 30 30 56 30 30 4e 
+30 30 2d 34 5a 31 31 44 31 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s17 :
+=================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:17    44 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s17  :
+========================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 44 0/-          0 Good   20.009 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s17 - Detailed Information :
+========================================
+Temperature(C) = 36
+Serial Number = SN000008
+Vendor = ATA     
+Model = WDC  WUH722222ALE6L4
+WWN = 5000000000000020
+Firmware Revision Level = LNGNW730
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 20.009 TiB [0xa01400000 Sectors]
+Coerced size = 20.009 TiB [0xa01300000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdl
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000008        44 Primary              5 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     3 C2.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s17  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 20.009 TiB [0xa01400000 Sectors]
+Coerced size = 20.009 TiB [0xa01300000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdl
+
+Inquiry Data = 
+5a 04 ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 5a 33 31 48 36 4d 5a 4d 20 20 20 20 
+20 20 20 20 20 20 20 20 03 00 00 00 38 00 4e 4c 
+4e 47 37 57 30 33 44 57 20 43 57 20 48 55 32 37 
+32 32 32 32 4c 41 36 45 34 4c 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 00 59 ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s19 :
+=================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:19    46 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s19  :
+========================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 46 0/-          0 Good   25.466 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s19 - Detailed Information :
+========================================
+Temperature(C) = 44
+Serial Number = SN000009
+Vendor = ATA     
+Model = ST28000NM000C-3WM103
+WWN = 5000000000000021
+Firmware Revision Level = SN04    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdm
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000009        46 Primary              5 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     3 C2.0 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s19  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdm
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+58 5a 30 41 33 54 46 39 00 00 00 00 00 00 4e 53 
+34 30 20 20 20 20 54 53 38 32 30 30 4e 30 30 4d 
+30 30 2d 43 57 33 31 4d 33 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s20 :
+=================
+
+---------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG      Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+---------------------------------------------------------------------------------------------------------
+52:20    47 JBOD  Good   -  9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+---------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s20  :
+========================================
+
+------------------------------------
+PID LUN/NSID Index Status      Size 
+------------------------------------
+ 47 0/-          0 Good   9.095 TiB 
+------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s20 - Detailed Information :
+========================================
+Temperature(C) = 32
+Serial Number = SN000010
+Vendor = ATA     
+Model = ST10000VN0004-1ZD101
+WWN = 5000000000000022
+Firmware Revision Level = SC61    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdn
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000010        47 Primary              6 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     3 C2.1 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s20  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 9.095 TiB [0x48c400000 Sectors]
+Coerced size = 9.095 TiB [0x48c300000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdn
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+41 5a 30 32 43 36 57 43 00 00 00 00 00 00 43 53 
+31 36 20 20 20 20 54 53 30 31 30 30 56 30 30 4e 
+30 30 2d 34 5a 31 31 44 31 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+Drive /c0/e52/s23 :
+=================
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:23    50 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS Information for Drive /c0/e52/s23  :
+========================================
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 50 0/-          0 Good   25.466 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+
+Drive /c0/e52/s23 - Detailed Information :
+========================================
+Temperature(C) = 47
+Serial Number = SN000011
+Vendor = ATA     
+Model = ST28000NM000C-3WM103
+WWN = 5000000000000023
+Firmware Revision Level = SN04    
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+Capable Speed = 6.0Gb/s
+Capable Link Width = x1
+Negotiated Link Width = x1
+Sequence Number = 1
+SED Capable = No
+ISE Capable = No
+Unmap Capable = No
+Writesame Unmap Capable = No
+T10 Power Mode = Yes
+Secured By EKM = No
+Drive Authority Locked out = No
+Certified = Yes
+Supported Data Format = None
+Hard Disk Drive RPM = 7200
+Drive Ready for Firmware Update = No
+OS Drive Name = /dev/sdo
+Device port count = 1
+
+Path Information :
+================
+
+----------------------------------------------------------------------------------------
+SASAddress         DevicePID Path    ConnectorIndex NegotiatedSpeed NegotiatedLinkWidth 
+----------------------------------------------------------------------------------------
+0x3000000000000011        50 Primary              6 6.0Gb/s                           1 
+----------------------------------------------------------------------------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     3 C2.1 Internal SFF-8654 8I 
+---------------------------------
+
+
+LU/NS 0/- Properties for Drive /c0/e52/s23  :
+===========================================
+Other Error Count = 1
+Predictive Failure Count = 0
+Last Predictive Failure Event Sequence Number = 0
+Logical Sector Size = 512B
+Physical Sector Size = 4 KiB
+Raw size = 25.466 TiB [0xcbbc00000 Sectors]
+Coerced size = 25.466 TiB [0xcbbb00000 Sectors]
+FW managed drive security = No
+Secured = No
+Locked = No
+PI Formatted = No
+PI type = No PI
+Number of bytes of user data in LBA = 512B
+Current Write Cache = On
+Write Cache Changeable = Yes
+OS Drive Name = /dev/sdo
+
+Inquiry Data = 
+5a 0c ff 3f 37 c8 10 00 00 00 00 00 3f 00 00 00 
+00 00 00 00 20 20 20 20 20 20 20 20 20 20 20 20 
+58 5a 30 41 54 51 5a 56 00 00 00 00 00 00 4e 53 
+34 30 20 20 20 20 54 53 38 32 30 30 4e 30 30 4d 
+30 30 2d 43 57 33 31 4d 33 30 20 20 20 20 20 20 
+20 20 20 20 20 20 20 20 20 20 20 20 20 20 10 80 
+00 40 00 2f 00 40 00 02 00 02 07 00 ff 3f 10 00 
+3f 00 10 fc fb 00 10 5d ff ff ff 0f 00 00 07 00 
+
+
+
+

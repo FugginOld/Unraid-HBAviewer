@@ -113,6 +113,57 @@ ov_storcli() {   # $1 = controller index
     printf '%s\n' "$out" | bash "$DIR/parse/storcli_overview.sh" "$ALERT" "$perr" "$chip" "$width" "$speed" "$power"
 }
 
+# StorCLI2 / SAS4 (9600 series). Differs from ov_storcli in three ways that are
+# all forced by the hardware and the tool, not by preference:
+#   1. ONE `show all` instead of `show` + `show temperature`. StorCLI2 has no
+#      `show temperature` subcommand at all (syntax error on Lite and full
+#      alike), and the brief `show` carries no temperature. The reason the
+#      classic path avoids `show all` — a slow per-drive SMART scan — does not
+#      apply: measured under a second on a 9600-24i.
+#   2. PHY errors come from StorCLI2, not sysfs. An eHBA-personality controller
+#      registers no SAS transport class, so /sys/class/sas_phy is EMPTY. The
+#      classic composer's `phy-<controller>:*` glob would sum nothing and report
+#      a confident zero — and it is doubly wrong here anyway, because the
+#      controller index is not the scsi host number (this card is host17).
+#   3. No chip lookup. `show all` names the chip outright ("Chip Name = SAS4024"),
+#      so there is no AdapterType column to cut apart and no device-ID map.
+ov_storcli2() {   # $1 = controller index
+    local out perr dir v width speed power
+    out=$(storcli_run /c"$1" show all nolog 2>/dev/null)
+
+    # Empty (not 0) when the counters cannot be read: the parser scores an
+    # unmeasured card differently from a measured-clean one.
+    perr=$(storcli_run /c"$1"/pall show all nolog 2>/dev/null | awk '
+        /^SAS Phyerrorcounters Information[ \t]*:/ { s=1; next }
+        /^PCIe /                                   { s=0 }
+        s && /^[ \t]*[0-9]+[ \t]+[0-9]+/           { t += $2 + $3 + $4 + $5; seen=1 }
+        END { if (seen) print t+0 }')
+
+    width=""; speed=""; power=""
+    dir=$(pci_addr_to_sysfs_dir "$(printf '%s\n' "$out" | grep -m1 -E '^PCI Address[[:space:]]*=' | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//')")
+    if [ -n "$dir" ]; then
+        v=$(cat "$dir/current_link_width" 2>/dev/null)
+        [ -n "$v" ] && [ "$v" != "0" ] && width="x$v"
+        v=$(cat "$dir/current_link_speed" 2>/dev/null)
+        case "$v" in
+            2.5*)    speed="Gen1 (2.5 GT/s)"  ;;
+            5.0*|5*) speed="Gen2 (5.0 GT/s)"  ;;
+            8.0*|8*) speed="Gen3 (8.0 GT/s)"  ;;
+            16*)     speed="Gen4 (16.0 GT/s)" ;;
+            32*)     speed="Gen5 (32.0 GT/s)" ;;
+            64*)     speed="Gen6 (64.0 GT/s)" ;;
+        esac
+        v=$(cat "$dir/power_state" 2>/dev/null)
+        case "$v" in
+            D0)    power="Full"    ;;
+            D1|D2) power="Reduced" ;;
+            D3*)   power="Standby" ;;
+        esac
+    fi
+
+    printf '%s\n' "$out" | bash "$DIR/parse/storcli2_overview.sh" "$ALERT" "$perr" "" "$width" "$speed" "$power"
+}
+
 # The board name of the first host on one of $1's personalities, for the refusal
 # messages below — naming the card is what turns "unsupported" into something a
 # reporter can act on. Membership is tested against a space-separated list, NOT
@@ -145,14 +196,16 @@ ov_lsiutil() {
             "$(_board_on 'mpt3sas mpt2sas mptsas')"
         return 1
     fi
-    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. Neither tool here can read
-    # it: lsiutil 1.70 predates the generation, and storcli enumerates zero
-    # controllers on it, which would otherwise route the card into the lsiutil
-    # branch below and end in "check the lsiutil port in Settings" — advice that
-    # cannot work on any port. Say what the card is and what it needs instead.
-    # Gated on there being no SAS2 or SAS3 card as well, so a mixed box still
-    # gets the backend that serves the cards this plugin CAN read.
-    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3; then
+    # 24G / SAS4 (9600 series, mpi3mr) — issue #19. lsiutil 1.70 predates the
+    # generation and storcli enumerates zero controllers on it, which would
+    # otherwise route the card into the lsiutil branch below and end in "check
+    # the lsiutil port in Settings" — advice that cannot work on any port. When
+    # StorCLI2 is on the box, hba_each routes there instead and this branch is
+    # never reached; this is the fallback for when it is not, so say what the
+    # card is and what it needs. Gated on there being no SAS2 or SAS3 card as
+    # well, so a mixed box still gets the backend that serves the cards this
+    # plugin CAN read.
+    if hba_has_sas4 && ! hba_has_sas2 && ! hba_has_sas3 && [ -z "$(find_storcli)" ]; then
         printf '{"error":"%s is a 24G/SAS4 controller on the mpi3mr driver. The bundled lsiutil and storcli cannot read this generation — it needs Broadcom StorCLI2, which HBAviewer does not support yet (issue #19)."}' \
             "$(_board_on 'mpi3mr')"
         return 1
@@ -179,7 +232,7 @@ _ov_one() {   # $1 port  $2 banner  $3 board  $4 hnum  $5 pdir  $6 nports
     rm -f "$IOC" "$IDENT"
 }
 
-out=$(hba_each ov_storcli ov_lsiutil)
+out=$(hba_each ov_storcli ov_lsiutil ov_storcli2)
 
 printf '%s' "$out"
 # Cache only good output, so a transient error is retried next call.

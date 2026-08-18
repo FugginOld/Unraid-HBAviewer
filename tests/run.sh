@@ -70,6 +70,20 @@ check rollup-faildrive rollup_faildrive.json bash "$P/storcli_overview.sh" 80 0 
 check rollup-phyerr    rollup_phyerr.json    bash "$P/storcli_overview.sh" 80 5 < fixtures/storcli/rollup_healthy.txt
 check rollup-healthy   rollup_healthy.json   bash "$P/storcli_overview.sh" 80 0 < fixtures/storcli/rollup_healthy.txt
 
+# ── StorCLI2 parsers (SAS4 / 9600 series) ────────────────────────────────────
+# Fixtures are real captures from a 9600-24i on unraid99 (eHBA personality,
+# mpi3mr, 10 SATA drives behind a VirtualSES enclosure).
+F2=fixtures/storcli2
+check storcli2-overview      storcli2_overview.json      bash "$P/storcli2_overview.sh" 80 "" "" "x8" "Gen4 (16.0 GT/s)" "Full" < $F2/c0_show_all.txt
+# A card whose sensor says nothing must render grey, NOT error the whole tab and
+# not read as 0 °C. The classic parser fails closed here with
+# {"error":"No temperature..."}, which blanks the Overview (issue #17's rule).
+check storcli2-overview-notemp storcli2_overview_notemp.json \
+      bash -c "sed 's/^Chip temperature(C).*/Chip temperature(C) = /' $F2/c0_show_all.txt | bash '$P/storcli2_overview.sh' 80"
+# An unmeasured PHY total must not raise the badge either: empty is not zero.
+check storcli2-overview-phyerr storcli2_overview_phyerr.json \
+      bash -c "bash '$P/storcli2_overview.sh' 76 100 < $F2/c0_show_all.txt"
+
 # Band cut-points are the whole feature of plan 018 — one golden per boundary, so
 # an off-by-one in either direction fails loudly. 76 = "complain from Warning".
 for t in 65 66 75 76 85 86 95 96; do
@@ -118,6 +132,20 @@ check storcli-drives-noencl-ugood storcli_drives_noencl_ugood.json bash "$P/stor
 check storcli-drives-noencl-ugood8 storcli_drives_noencl_ugood8.json bash "$P/storcli_drives.sh" < fixtures/storcli/drives_noencl_ugood8.txt
 check storcli-encl     storcli_enclosures.json bash "$P/storcli_enclosures.sh" < fixtures/storcli/enclosures_c0.txt
 check storcli-events   storcli_events.json  bash "$P/storcli_events.sh" < fixtures/storcli/events_c0.txt
+
+check storcli2-drives        storcli2_drives.json        bash "$P/storcli2_drives.sh"      < $F2/c0_drives.txt
+# Same card, same firmware, captured minutes apart with the OTHER StorCLI2 build.
+# The builds disagree on one field: Lite prints "OS Drive Name = sdf", Broadcom
+# full prints "= /dev/sdf". Prefixing unconditionally produced "/dev//dev/sdf" —
+# a Device column pointing at a path that does not exist. The two goldens differ
+# only in drive temperatures, which moved a degree between the two captures.
+check storcli2-drives-full   storcli2_drives_full.json   bash "$P/storcli2_drives.sh"      < $F2/c0_drives_fullbuild.txt
+check storcli2-encl          storcli2_enclosures.json    bash "$P/storcli2_enclosures.sh"  < $F2/c0_enclosures.txt
+check storcli2-phy           storcli2_phy.json           bash "$P/storcli2_phy.sh"         < $F2/c0_pall_show_all.txt
+# One events parser serves both backends — StorCLI2 renames seqNum to
+# "Sequence Number" and changes nothing else. Both fixtures run through it.
+check storcli2-events        storcli2_events.json        bash "$P/storcli_events.sh"       < $F2/c0_events_latest20.txt
+
 check smart-sas        smart_sas.json       bash "$P/smart.sh" sas  < fixtures/smart/sas_drive.txt
 check smart-sata       smart_sata.json      bash "$P/smart.sh" sata < fixtures/smart/sata_drive.txt
 # No transport arg passed (lsblk reported usb/nvme/nothing, or was never run).
@@ -329,26 +357,61 @@ printf 'mpt3sas\n'    > "$SYSHOST/host0/proc_name"
 printf 'SAS9300-8i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL=/nonexistent SYS_SCSI_HOST="$SYSHOST" \
 check route-sas3-no-storcli route_sas3_no_storcli.json bash "$P/../get_hba_info.sh"
-# 24G/SAS4 on mpi3mr (issue #19): named and refused, never routed into lsiutil.
-# Without the gate this lands on "check the lsiutil port in Settings" — advice
-# that cannot work on any port, since lsiutil 1.70 predates the generation.
-# LSIUTIL points at the working stub here on purpose: if the SAS4 branch were
-# dropped, the run would reach the stub and produce a card's worth of JSON, so
-# this check fails loudly rather than by coincidence of a missing binary.
+# 24G/SAS4 on mpi3mr (issue #19), no StorCLI2 on the box: named and refused,
+# never routed into lsiutil. Without the gate this lands on "check the lsiutil
+# port in Settings" — advice that cannot work on any port, since lsiutil 1.70
+# predates the generation. LSIUTIL points at the working stub here on purpose:
+# if the SAS4 branch were dropped, the run would reach the stub and produce a
+# card's worth of JSON, so this check fails loudly rather than by coincidence
+# of a missing binary. This is the still-refused half of the gate; the check
+# below (route-sas4-storcli2-read) pins the other half, so neither can be
+# deleted without a test noticing.
 printf 'mpi3mr\n'     > "$SYSHOST/host0/proc_name"
 printf 'HBA 9600-24i\n' > "$SYSHOST/host0/board_name"
 STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
-check route-sas4-mpi3mr route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+check route-sas4-mpi3mr route_sas4_no_storcli2.json bash "$P/../get_hba_info.sh"
 # ...and the same box with StorCLI2 on PATH, which is the realistic one: the
 # dkaser storcli plugin ships both binaries, and StorCLI2 DOES enumerate a 9600.
-# find_storcli must not pick it up — routed through the storcli parsers it would
-# replace the refusal above with a card's worth of misparsed fields.
+# find_storcli now picks it up (bare "storcli2" is a candidate again) and
+# routes through the storcli2 parsers, so this reads the card instead of
+# refusing it. The stub is copied into its own directory rather than adding
+# tests/stub to PATH, so it does not shadow tests/stub/storcli (used by the
+# classic-storcli route checks above) under a different fixture set.
 SC2DIR=$(mktemp -d)
-printf '#!/bin/bash\necho "Number of Controllers = 1"\n' > "$SC2DIR/storcli2"
+cp "$PWD/stub/storcli2" "$SC2DIR/storcli2"
 chmod +x "$SC2DIR/storcli2"
-PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures" SYS_SCSI_HOST="$SYSHOST" \
-check route-sas4-storcli2-ignored route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures/storcli2" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-storcli2-read route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
 rm -rf "$SC2DIR"
+
+# Fix 1: the realistic dkaser-plugin box, both tools on PATH -- classic storcli
+# AND storcli2, exactly the shape find_storcli's old first-match order (storcli
+# ahead of storcli2) made dead on arrival: classic resolves first, answers zero
+# controllers, and use_storcli gave up without ever trying storcli2. No check
+# above puts both tools on PATH at once, which is how that shipped green.
+# The classic stub is planted ahead of storcli2 in its own PATH dir (never
+# tests/stub, to avoid shadowing the fixture-driven stub/storcli used above) so
+# a regression back to first-match-wins still fails this even on a machine with
+# no real storcli installed.
+MIXDIR=$(mktemp -d)
+printf '#!/bin/bash\ncase "$*" in show) echo "Number of Controllers = 0";; version) echo "StorCli SAS Customization Utility Ver 007.3404.0000.0000";; esac\n' > "$MIXDIR/storcli"
+cp "$PWD/stub/storcli2" "$MIXDIR/storcli2"
+chmod +x "$MIXDIR/storcli" "$MIXDIR/storcli2"
+PATH="$MIXDIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures/storcli2" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-mixed-storcli route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+rm -rf "$MIXDIR"
+
+# The seam picks a tool by what the tool SAYS it is, not what it is called --
+# dkaser's storcli plugin ships the StorCLI2 build as storcli2Lite-8.14, so the
+# filename cannot be the signal. These two stubs differ only in their banner.
+SEAMDIR=$(mktemp -d)
+printf '#!/bin/bash\ncase "$1" in version) echo "StorCLI SAS Customization Utility Ver 007.2705";; show) echo "Number of Controllers = 1";; esac\n' > "$SEAMDIR/tool1"
+printf '#!/bin/bash\ncase "$1" in version) echo "StorCli2 SAS Customization Utility Ver 008.0014";; show) echo "Number of Controllers = 1";; esac\n' > "$SEAMDIR/tool2"
+chmod +x "$SEAMDIR/tool1" "$SEAMDIR/tool2"
+STORCLI="$SEAMDIR/tool1" check seam-flavor-storcli  seam_storcli.json  bash -c '. '"$P"'/../lib.sh; use_storcli; printf "%s" "$STORCLI_FLAVOR"'
+STORCLI="$SEAMDIR/tool2" check seam-flavor-storcli2 seam_storcli2.json bash -c '. '"$P"'/../lib.sh; use_storcli; printf "%s" "$STORCLI_FLAVOR"'
+rm -rf "$SEAMDIR"
+
 check phy-route        get_phy_storcli.json  bash "$P/../get_phy_health.sh"
 check drives-route     get_drives_storcli.json bash "$P/../get_attached_drives.sh"
 check events-route     get_events_storcli.json bash "$P/../get_event_log.sh"

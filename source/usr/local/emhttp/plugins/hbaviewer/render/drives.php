@@ -56,7 +56,9 @@ function lsi_role_cell(?string $dev, array $roles): string {
 function renderDrivesTables(array $data, array $devBySerial = [], array $roles = [],
                             array $addrByDev = [], array $locating = []): string {
     $ctls    = $data['controllers'] ?? [$data];
-    $storcli = ($data['backend'] ?? '') === 'storcli';
+    // Shape, not tool name: StorCLI2 (SAS4 / 9600) feeds these tables the same
+    // record shape as the classic storcli backend, so one renderer serves both.
+    $storcli = lsi_backend_shape($data['backend'] ?? '') === 'storcli';
     return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $devBySerial, $roles, $addrByDev, $locating): string {
         $out = '';
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.

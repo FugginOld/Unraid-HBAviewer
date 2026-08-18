@@ -1,0 +1,425 @@
+CLI Version = 008.0014.0000.0012 June 20, 2025
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+
+Basics :
+======
+Product Name = eHBA 9600-24i Tri-Mode Storage Adapter
+Board Name = eHBA 9600-24i                   
+Board Assembly = 03-50111-01001                  
+Board Tracer Number = SN00000001                      
+Board Revision = 01001   
+Chip Name = SAS4024                         
+Chip Revision = B0      
+Board Mfg Date(yyyy/mm/dd) = 2022/07/16
+Board Rework Date(yyyy/mm/dd) = 2018/01/01
+Custom Serial Number = Unavailable
+SAS Address = 0x5000000000000001
+Serial Number = SN00000001
+Controller Time(LocalTime yyyy/mm/dd hh:mm:sec) = 2026/08/14 18:17:14
+System Time(LocalTime yyyy/mm/dd hh:mm:sec) = 2026/08/14 18:17:14
+OEM = Broadcom
+SubOEMID = 2
+PCI Slot Number = 1
+
+
+Version :
+=======
+Package Version = 8.17.1.0-00000-00002
+Firmware Version = 8.17.1.0-00000-00001
+Firmware Security Version Number = 00.00.00.00
+FMC Version = 8.17.1.0-00000-00001
+FMC Security Version Number = 00.00.00.00
+BSP Version = 8.17.1.0-00000-00001
+BSP Security Version Number = 00.00.00.00
+BIOS Version = 0x08110400
+BIOS Security Version Number = 00.00.00.00
+HIIM Version = 08.17.02.00
+HIIM Security Version Number = 00.00.00.00
+HIIA Version = 08.17.02.00
+HIIA Security Version Number = 00.00.00.00
+PSOC Hardware Version = 32.64
+PSOC Firmware Version = 10.00
+PSOC Part Number = 05877-100-aaa
+NVDATA Version = 11.0E.00.51
+Driver Name = mpi3mr
+Driver Version = 8.15.0.5.51
+SL8 Library Version = 08.1409.0000
+
+
+HostInterface :
+=============
+Max PCIe Link Rate = 0x08 (16GT/s)
+Max PCIe Port Width = 8
+PCI Address = 00:82:00:0
+PCIe Link Width = X8 Lane(s)
+Current Max PCI Link Speed = 16GT/s
+Current PCIe Port Width = 8
+
+
+DeviceInterface :
+===============
+SAS/SATA = SAS/SATA-6G, SAS-12G, SAS-22.5G
+PCIe = PCIE-2.5GT, PCIE-5GT, PCIE-8GT, PCIE-16GT
+PCI Vendor ID = 0x1000
+PCI Device ID = 0x00A5
+PCI Subsystem Vendor ID = 0x1000
+PCI Subsystem ID = 0x4660
+
+
+Status :
+======
+Controller Status = Optimal
+VD Count = 0
+VD Degraded Count = 0
+VD Offline Count = 0
+PD Count = 11
+PD Drive Count = 10
+Critical Predictive Failure PD Drive Count = 0
+Failed PD Drive Count = 0
+Memory Correctable Errors = 0
+Memory Uncorrectable Errors = 0
+ECC Bucket Count = 0
+Preserved Cache Present = No
+System Reboot Required = No
+System Shutdown Required = No
+Controller Reset Required = No
+Security Key Assigned = No
+Security Type = None
+Failed to get Security key on bootup = No
+Bios was not detected during boot = No
+Boot Time Secret Key Provider = OOB,In-band
+EKM Key Provider = OOB,In-band
+Controller must be rebooted to complete security operation = No
+Controller has booted into safe mode = No
+Controller has trial features enabled = No
+Personality Change Pending = No
+Security Key Rekey Pending = No
+Escrow Key Count = 0
+Reconfigure types = Change the format option only for existing name-spaces
+Controller Personality = eHBA
+
+
+Supported Controller operations :
+===============================
+Support Enclosure Affinity = No
+Support Foreign Config Import = Yes
+Support Foreign Config Clear = No
+Support Self Diagnostic Check = Yes
+Support Diag Retention Test = No
+Support Cache Offload Info = No
+FW and Event Time in GMT = Yes
+Support Abort CC on Error = No
+Support Multipath = Yes
+Support Security = Yes
+Support Security Suggest = Yes
+Support Portable Security Key = No
+Support Security Key Per PD = No
+Support Persistent Id Reuse = No
+Support LKM = Yes, Supported using both in-band and out-of-band command
+Support EKM = Yes, Supported using both in-band and out-of-band command
+Support LKM to EKM = Yes
+Support EKM to LKM = No
+Support PFK = No
+Support Electronic PFK = No
+Support Ldbbm = No
+Support Shield State = No
+Support SSD Ld Disk Cache Change = No
+Support Operation Suspend Resume = No
+Support Emergency Spares = No
+Support Device Mgmt PEL = Yes
+Support CC Schedule = No
+Support PatrolRead = No
+Support SSD PatrolRead = No
+Support Resize Array = No
+Support Drive Performance Monitoring = Yes
+Support Emulated Drives = Yes
+Support Limited Dedicated HotSpares = No
+Support Factory Defaults set = Yes
+Support Personality = Yes
+Support NVCache Info Get = No
+Support NVCache Erase = No
+Support Cache Offload Encryption = No
+Support CacheBypass Modes = No
+Support Purge Cache During VD Delete = No
+Support BoardLogic Update = Yes
+Support Ibuttonless = Yes
+Support Host Info = Yes
+Support Cache-Vault Health Info = No
+Support PCIe Devices = Yes
+Support Extended MPB VPD pages = Yes
+Support Snapdump = Yes
+Support Energy Pack = No
+Support Energy Pack VPD = No
+Support Multiple Security keys(One Per PD) = No
+Support Platform Security = Yes
+Support SESCtrl In Multipath Config = No
+Support R6 Individual PD Suspend/Resume = No
+Support SAS Config = Yes
+Support limiting of SAS Link speed = Yes, Supports only max link speed limit control of a SAS Phy
+Support limiting of SAS Link speed per Phy = Yes
+Support PCIe Config = Yes
+Support limiting of PCIe Link Speed = Yes
+Support limiting of PCIe Link Speed per Link = Yes
+Support PCIe Config Lane Mapping = Yes
+Support Immediate Auto-configure = Yes
+Support NVMe Recover = Yes
+Support PCIe Clock mode = Yes
+Support Enhanced Scheduling = No
+Support Parallel Drive FW Download = Yes
+Support Replicate IO = Yes
+Support Drive Makers Authority = Yes
+Support Drive FW download management = Yes
+Support Escrow Clear = Yes
+Support non-printable characters for keyid = No
+Support non-printable characters for securityKey = No
+Support non-printable characters for Passphrase = No
+Support Reprovision With PSID = Yes
+Support SID Ownership = Yes
+Support LD size assistance = No
+
+
+External Key Management :
+=======================
+Capability = Supported
+Boot Agent Status = Not Available
+Configured = No
+
+
+Supported PD operations :
+=======================
+Support Force Online = No
+Support Make Offline = No
+Support Make Failed = No
+Support SpinDown Unconfigured = No
+Support SpinDown HotSpare = No
+Support SpinDown Configured = No
+Support T10 Power State = Yes
+Support Temperature Monitoring = Yes
+Support WCE = Yes
+Support Degraded Media Detection = No
+Support PD Secure Erase = Yes
+Support SSD Wear Gauge = No
+Support Mark Missing = No
+Support Replace Missing = No
+Support Prepare For Removal = Yes
+Support Drive Power State Change = No
+Support NVMe Reconfigure = Yes
+Support Drive FIPS Compliance Descriptor = Yes
+
+
+Supported VD operations :
+=======================
+Support Changing Read Policy = No
+Support Changing Write Policy = No
+Support Changing Disk Cache Policy = No
+Support Online Capacity Expansion = No
+Support LDBBM = No
+Support Secure Erase = No
+Support Unmap for single drive RAID 0 VDs = No
+Support Unmap for RAID 0 VDs = No
+Support Unmap for RAID 1/10 VDs = No
+Support Unmap for RAID 5/50/6/60 VDs = No
+Support Writesame Unmap for single drive RAID 0 VDs = No
+Support Writesame Unmap for RAID 0 VDs = No
+Support Writesame Unmap for RAID 1/10 VDs = No
+Support Writesame Unmap for RAID 5/50/6/60 VDs = No
+Support T10 Atomicity = No
+
+
+HwCfg :
+=====
+NVRAM = Present
+NVRAM Size(KiB) = 128
+DDR Memory Size(MiB) = 0
+Flash = Present
+NOR Flash Size(MiB) = 32
+CacheVault Flash Size(MiB) = 0
+OCM Memory = Absent
+Current Size of FW Cache(MiB) = 0
+DDR Width = N/A
+Energy Pack = Absent
+Upgrade Key = Absent
+Upgrade Key Slot = Present
+On Board Expander = Absent
+Temperature Sensor for Chip = Present
+Temperature Sensor for Board = Present
+Upgradable Board Logic = Present
+PCI Switch = Absent
+Serial Debugger = Present
+Chip temperature(C) = 64
+Board temperature(C) = 44
+Controller Fan = Absent
+
+
+Max. Supported Config :
+=====================
+Max Number of Physical Drives = 240
+Max SAS/SATA Drives = 240
+Max NVMe Drives = 32
+Max Phys = 24
+Max JBODs = 240
+Max RAID Configurable PDs = 0
+Max Data Transfer Size(Bytes) = 1048576
+Max Parallel Commands = 8192
+Max NS/LU per JBOD = 4
+Max NS/LU per RAID PDs = 1
+Max Supported LUNs for SAS PDs = 4
+Max Namespaces = 1
+Max Persistent Id = 1024
+Max VD's per Array in configuration = 0
+Max Key Id length = 256
+Max Security Key length = 32
+Max Secret Key length = 32
+Max Parallel FW Download Drives = 32
+Max Replicate IO Drives = 32
+Max Replicate IO Data Transfer Size(KiB) = 1020
+
+
+Properties :
+==========
+Expose Enclosure Devices = Yes
+Maintain Drive Fail History = No
+Maintain Drive Fail History - JBOD = No
+All Online Controller Reset = Yes
+Auto Online Controller Reset = Yes
+LED management for JBOD = Yes
+SES VPD Association = TargetPort
+Base Enclosure Level = Enclosure level enumeration start with Zero
+SMART/Temperature PollInterval-For External PDs only(second(s)) = 300
+SMART/Temperature PollInterval-For Internal PDs only(second(s)) = 300
+Spinup Drive Count = 2
+Spinup Delay(second(s)) = 2
+Spinup Encl Drive Count = 4
+Spinup Enclosure Delay(second(s)) = 12
+Boot Mode = COE
+Name = 
+SmartPoll - RAID PDs = Yes
+SmartPoll - JBOD PDs = Yes
+PD Temperature Poll = Yes
+PD Temperature Poll - RAID = Yes
+PD Temperature Poll - JBOD = Yes
+Security on JBOD = Yes
+Host Managed Security on JBOD = No
+ATA Security Commands on JBOD = Yes
+First Reporting Device Persistent Id = None
+PCIe Reference Clock = Default (No Override)
+PERST = Default (No Override)
+Spindown direct attached SAS HDD at shutdown = Off
+Spindown expander attached SAS HDD at shutdown = Off
+Spindown direct attached SAS SSD at shutdown = Off
+Spindown expander attached SAS SSD at shutdown = Off
+Spindown direct attached SATA HDD at shutdown = Off
+Spindown expander attached SATA HDD at shutdown = Off
+Spindown direct attached SATA SSD at shutdown = Off
+Spindown expander attached SATA SSD at shutdown = Off
+Spindown direct attached NVME SSD at shutdown = Off
+Spindown Switch attached NVME SSD at shutdown = Off
+EID retention with i2c transport = EID retention upon a MPI soft reset for 30 seconds
+EID retention with pcie transport = EID retention upon a MPI soft reset for 30 seconds
+Security on Unconfigured JBOD = Yes
+Capture start-of-day PL logs = No
+
+
+Capabilities :
+============
+Supported Drive Interfaces = SAS, SATA, NVMe
+Supported RAID Levels = None
+Mix of SAS-HDD/SATA-HDD in VD = Not Allowed
+Mix of SAS-SSD/SATA-SSD in VD = Not Allowed
+Mix of SSD/HDD in VD = Not Allowed
+Mix of SED type(Enterprise, OPAL and RUBY) for Security Enabled Arrays = Not Allowed
+Mix of different NS/LU count in a VD = Not Allowed
+Mix of NVMe SGL and PRP in a VD = Not Allowed
+Supported Drive Media Types = HDD, SSD
+
+
+Secure Boot Details :
+===================
+Secure Boot State = Enabled
+Secure Boot Mode = Hard Secure
+Total Number Of Key Slots = 8
+Number Of Key Slots Used = 1
+Remaining Key Slots = 7
+Current Key Encryption Algorithm = RSA2048
+Key Hash Size = SHA256
+Key Hash Version = SHA3
+Key Hash Algorithm = SHA3-256
+Security Version Number = 00.00.00.00
+
+
+Security Protocol Details :
+=========================
+Security Protocol = SPDM-1.2.0,1.1.0,1.0.0
+Certificate provisioning mode = Not Fully configured
+
+Physical Drives = 10
+
+PD LIST :
+=======
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:0     27 JBOD  Good   -   7.277 TiB SATA HDD -        512B ST8000AS0002-1NA17Z  -            1 -       
+52:4     31 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+52:8     35 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:11    38 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+52:12    39 JBOD  Good   -  10.914 TiB SATA HDD -        512B ST12000VN0007-2GS116 -            1 -       
+52:16    43 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:17    44 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+52:19    46 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+52:20    47 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:23    50 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS LIST :
+==========
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 27 0/-          0 Good    7.277 TiB 
+ 31 0/-          0 Good   20.009 TiB 
+ 35 0/-          0 Good    9.095 TiB 
+ 38 0/-          0 Good   25.466 TiB 
+ 39 0/-          0 Good   10.914 TiB 
+ 43 0/-          0 Good    9.095 TiB 
+ 44 0/-          0 Good   20.009 TiB 
+ 46 0/-          0 Good   25.466 TiB 
+ 47 0/-          0 Good    9.095 TiB 
+ 50 0/-          0 Good   25.466 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+Enclosures = 1
+
+Enclosure List :
+==============
+
+-------------------------------------------------------------------------------------------------
+EID State DeviceType        Slots PD Partner-EID Multipath PS Fans TSs Alms SIM ProdID           
+-------------------------------------------------------------------------------------------------
+ 52 OK    Logical Enclosure    24 10 -           No         0    0   0    0   0 VirtualSES       
+-------------------------------------------------------------------------------------------------
+
+EID-Enclosure Persistent ID |SID-Slot ID |PID-Physical drive Persistent ID |PD-Physical drive count
+PS-Power Supply count |TSs-Temperature sensor count |Alms-Alarm count |SIM-SIM Count |ProdID-Product ID
+ConnId-ConnectorID
+
+
+

@@ -1,0 +1,5 @@
+CLI Version = 008.0014.0000.0012 June 20, 2025
+Operating system = Linux6.18.38-Unraid
+Status = Failure
+Description = syntax error, unexpected TOKEN_UNKNOWN, expecting $end
+

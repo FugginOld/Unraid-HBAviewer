@@ -1,0 +1,107 @@
+CLI Version = 008.0014.0000.0012 June 20, 2025
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Product Name = eHBA 9600-24i Tri-Mode Storage Adapter
+Board Name = eHBA 9600-24i                   
+Board Assembly = 03-50111-01001                  
+Board Tracer Number = SN00000001                      
+Board Revision = 01001   
+Chip Name = SAS4024                         
+Chip Revision = B0      
+Package Version = 8.17.1.0-00000-00002
+Firmware Version = 8.17.1.0-00000-00001
+Firmware Security Version Number = 00.00.00.00
+NVDATA Version = 11.0E.00.51
+Driver Name = mpi3mr
+Driver Version = 8.15.0.5.51
+SAS Address = 0x5000000000000001
+Serial Number = SN00000001
+Controller Time(LocalTime yyyy/mm/dd hh:mm:sec) = 2026/08/14 18:20:59
+System Time(LocalTime yyyy/mm/dd hh:mm:sec) = 2026/08/14 18:20:59
+Board Mfg Date(yyyy/mm/dd) = 2022/07/16
+Controller Personality = eHBA
+Max PCIe Link Rate = 0x08 (16GT/s)
+Max PCIe Port Width = 8
+PCI Address = 00:82:00:0
+PCIe Link Width = X8 Lane(s)
+Current Max PCI Link Speed = 16GT/s
+Current PCIe Port Width = 8
+SAS/SATA = SAS/SATA-6G, SAS-12G, SAS-22.5G
+PCIe = PCIE-2.5GT, PCIE-5GT, PCIE-8GT, PCIE-16GT
+PCI Vendor ID = 0x1000
+PCI Device ID = 0x00A5
+PCI Subsystem Vendor ID = 0x1000
+PCI Subsystem ID = 0x4660
+Security Protocol = SPDM-1.2.0,1.1.0,1.0.0
+Certificate provisioning mode = Not Fully configured
+PCI Slot Number = 1
+Physical Drives = 10
+
+PD LIST :
+=======
+
+----------------------------------------------------------------------------------------------------------
+EID:Slt PID State Status DG       Size Intf Med SED_Type SeSz Model                Sp LU/NS Count Alt-EID 
+----------------------------------------------------------------------------------------------------------
+52:0     27 JBOD  Good   -   7.277 TiB SATA HDD -        512B ST8000AS0002-1NA17Z  -            1 -       
+52:4     31 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+52:8     35 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:11    38 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+52:12    39 JBOD  Good   -  10.914 TiB SATA HDD -        512B ST12000VN0007-2GS116 -            1 -       
+52:16    43 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:17    44 JBOD  Good   -  20.009 TiB SATA HDD -        512B WDC  WUH722222ALE6L4 -            1 -       
+52:19    46 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+52:20    47 JBOD  Good   -   9.095 TiB SATA HDD -        512B ST10000VN0004-1ZD101 -            1 -       
+52:23    50 JBOD  Good   -  25.466 TiB SATA HDD -        512B ST28000NM000C-3WM103 -            1 -       
+----------------------------------------------------------------------------------------------------------
+
+
+LU/NS LIST :
+==========
+
+-------------------------------------
+PID LUN/NSID Index Status       Size 
+-------------------------------------
+ 27 0/-          0 Good    7.277 TiB 
+ 31 0/-          0 Good   20.009 TiB 
+ 35 0/-          0 Good    9.095 TiB 
+ 38 0/-          0 Good   25.466 TiB 
+ 39 0/-          0 Good   10.914 TiB 
+ 43 0/-          0 Good    9.095 TiB 
+ 44 0/-          0 Good   20.009 TiB 
+ 46 0/-          0 Good   25.466 TiB 
+ 47 0/-          0 Good    9.095 TiB 
+ 50 0/-          0 Good   25.466 TiB 
+-------------------------------------
+
+EID-Enclosure Persistent ID|Slt-Slot Number|PID-Persistent ID|DG-DriveGroup
+UConf-Unconfigured|UConfUnsp-Unconfigured Unsupported|Conf-Configured|Unusbl-Unusable
+GHS-Global Hot Spare|DHS-Dedicated Hot Spare|UConfShld-Unconfigured Shielded|
+ConfShld-Configured Shielded|Shld-JBOD Shielded|GHSShld-GHS Shielded|DHSShld-DHS Shielded
+UConfSntz-Unconfigured Sanitize|ConfSntz-Configured Sanitize|JBODSntz-JBOD Sanitize|GHSSntz-GHS Sanitize
+DHSSntz-DHS Sanitize|UConfDgrd-Unconfigured Degraded|ConfDgrd-Configured Degraded|JBODDgrd-JBOD Degraded
+GHSDgrd-GHS Degraded|DHSDgrd-DHS Degraded|Various-Multiple LU/NS Status|Med-Media|SED-Self Encryptive Drive
+SeSz-Logical Sector Size|Intf-Interface|Sp-Power state|U-Up/On|D-Down/PowerSave|T-Transitioning|F-Foreign
+NS-Namespace|LU-Logical Unit|LUN-Logical Unit Number|NSID-Namespace ID|Alt-EID-Alternate Enclosure Persistent ID
+UConfDepop-Unconfigured Depopulation
+
+Enclosures = 1
+
+Enclosure List :
+==============
+
+-------------------------------------------------------------------------------------------------
+EID State DeviceType        Slots PD Partner-EID Multipath PS Fans TSs Alms SIM ProdID           
+-------------------------------------------------------------------------------------------------
+ 52 OK    Logical Enclosure    24 10 -           No         0    0   0    0   0 VirtualSES       
+-------------------------------------------------------------------------------------------------
+
+EID-Enclosure Persistent ID |SID-Slot ID |PID-Physical drive Persistent ID |PD-Physical drive count
+PS-Power Supply count |TSs-Temperature sensor count |Alms-Alarm count |SIM-SIM Count |ProdID-Product ID
+ConnId-ConnectorID
+
+
+

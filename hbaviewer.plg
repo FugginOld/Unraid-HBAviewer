@@ -13,6 +13,30 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.17###
+SAS4 / 9600-series (`mpi3mr`) cards are now read instead of being named and
+refused. Ported from techanonymous's `Unraid-HBAviewer-sas4` fork (MIT,
+commit 882f88c) — the backend, the parsers, the Settings-page install helper
+and the StorCLI2 installer script are their work, adapted into this repo's
+existing structure and tests.
+
+**Important:** no 9600-series card has run this port on this repo's own
+hardware. techanonymous verified their original code on their own 9600-24i;
+that is a real and useful data point, but it is not the same claim as this
+repo having tested it. Treat this release as beta for SAS4 owners and report
+back on [issue #19](https://github.com/FugginOld/Unraid-HBAviewer/issues/19).
+
+**Added**
+- Every tab except the firmware Event Log works against the Lite StorCLI2
+  that the dkaser/unraid-storcli plugin ships.
+- The Event Log needs Broadcom's FULL StorCLI2, which is proprietary and not
+  downloadable automatically (its page is Cloudflare-gated with no stable
+  URL). `scripts/install_storcli2.sh` does everything after you fetch that
+  archive yourself: unpack, install to `/opt` (RAM on Unraid), and restore it
+  at boot since the flash is FAT32 and cannot keep the execute bit. Backed
+  up, idempotent, and driven from Settings → HBA Connection → Firmware Event
+  Log.
+
 ###2026.08.16###
 Every HBA in the machine is now monitored, not just one. Thanks to @brianara3
 and @masterwishx, who reported the problem and then ran every test build on

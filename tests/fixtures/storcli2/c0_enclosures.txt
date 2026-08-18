@@ -1,0 +1,116 @@
+CLI Version = 008.0014.0000.0012 June 20, 2025
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+Enclosure Count = 1
+
+Enclosure /c0/e52  :
+==================
+
+Properties :
+==========
+
+-------------------------------------------------------------------------------------------------
+EID State DeviceType        Slots PD Partner-EID Multipath PS Fans TSs Alms SIM ProdID           
+-------------------------------------------------------------------------------------------------
+ 52 OK    Logical Enclosure    24 10 -           No         0    0   0    0   0 VirtualSES       
+-------------------------------------------------------------------------------------------------
+
+
+Slot Map Information :
+====================
+
+-----------------------
+EID SID SlotStatus PID 
+-----------------------
+ 52   0 Good       27  
+ 52   1 -          -   
+ 52   2 -          -   
+ 52   3 -          -   
+ 52   4 Good       31  
+ 52   5 -          -   
+ 52   6 -          -   
+ 52   7 -          -   
+ 52   8 Good       35  
+ 52   9 -          -   
+ 52  10 -          -   
+ 52  11 Good       38  
+ 52  12 Good       39  
+ 52  13 -          -   
+ 52  14 -          -   
+ 52  15 -          -   
+ 52  16 Good       43  
+ 52  17 Good       44  
+ 52  18 -          -   
+ 52  19 Good       46  
+ 52  20 Good       47  
+ 52  21 -          -   
+ 52  22 -          -   
+ 52  23 Good       50  
+-----------------------
+
+
+Enclosure /c0/e52 Properties :
+============================
+
+Information :
+===========
+Logical ID = 0x3000000000000012
+Type = Virtual SES
+Location = Internal
+Position = 0
+Name = VirtualSES
+Enclosure Serial Number = 3000000000000012
+
+
+Inquiry Data :
+============
+Vendor Id = BROADCOM
+Product Id = VirtualSES      
+Product Revision Level = 04  
+Hex Data = 
+0d 00 07 12 45 00 40 00 42 52 4f 41 44 43 4f 4d 
+56 69 72 74 75 61 6c 53 45 53 00 00 00 00 00 00 
+30 34 20 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 a0 c8 00 20 e0 
+05 c0 05 80 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+
+
+
+EnclSasAddress :
+==============
+
+-------------------
+SAS address        
+-------------------
+0x3000000000000013 
+-------------------
+
+
+Connector Information :
+=====================
+
+---------------------------------
+ConnId Name Location Type        
+---------------------------------
+     1 C0.0 Internal SFF-8654 8I 
+     1 C0.1 Internal SFF-8654 8I 
+     2 C1.0 Internal SFF-8654 8I 
+     2 C1.1 Internal SFF-8654 8I 
+     3 C2.0 Internal SFF-8654 8I 
+     3 C2.1 Internal SFF-8654 8I 
+---------------------------------
+
+
+
+EID-Enclosure Persistent ID |SID-Slot ID |PID-Physical drive Persistent ID |PD-Physical drive count
+PS-Power Supply count |TSs-Temperature sensor count |Alms-Alarm count |SIM-SIM Count |ProdID-Product ID
+ConnId-ConnectorID
+
+
+

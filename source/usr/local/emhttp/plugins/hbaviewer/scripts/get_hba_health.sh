@@ -116,7 +116,7 @@ _link_from_sysfs() {   # $1 = /sys/bus/pci/devices/0000:xx:yy.z
 _link_speed() { cat "$1" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//'; }
 
 health_storcli() {   # $1 = controller index
-    local out pci dom bus dev fn dir
+    local out pci dir
     local temp fw drives band readok=true
     local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
 
@@ -135,17 +135,68 @@ health_storcli() {   # $1 = controller index
     # uses, extended to also read max_link_width/max_link_speed (which that
     # composer never needed, since it only shows the current link state).
     pci=$(printf '%s\n' "$out" | grep -m1 -E '^PCI Address[[:space:]]*=' | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//')
-    if [ -n "$pci" ]; then
-        IFS=: read -r dom bus dev fn <<< "$pci"
-        dir="${SYS_PCI_ROOT:-/sys/bus/pci/devices}/$(printf '%04x:%s:%s.%d' "0x${dom:-0}" "$bus" "$dev" "0x${fn:-0}")"
-        _link_from_sysfs "$dir"
-    fi
+    dir=$(pci_addr_to_sysfs_dir "$pci")
+    [ -n "$dir" ] && _link_from_sysfs "$dir"
 
     printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
         "$NOW" "$UPTIME" \
         "${temp:-null}" "$band" "$fw" "$drives" "$readok" \
         "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
         "$(_phys_json "$1")"
+}
+
+# Per-controller PHY read for the SAS4 backend — the StorCLI2 twin of
+# _phys_json. It cannot share that function: /sys/class/sas_phy is EMPTY on an
+# eHBA-personality 9600 (no SAS transport class is registered), so the sysfs
+# version would return an empty list and the Health tab would show a controller
+# with no links at all rather than 24 healthy ones.
+# The "host N == controller N" assumption _phys_json rests on is also false here:
+# this card is host17 behind sixteen ahci hosts. Addressing by /cN sidesteps it.
+_phys_json_storcli2() {   # $1 = controller index
+    local out
+    out=$(storcli_run /c"$1"/pall show all nolog 2>/dev/null | awk '
+        /^SAS Phy Information[ \t]*:/              { s="info"; next }
+        /^SAS Phyerrorcounters Information[ \t]*:/ { s="err";  next }
+        /^PCIe /                                   { s="";     next }
+        s == "info" && /^[ \t]*[0-9]+[ \t]/ { p=$1+0; if(!(p in seen)){seen[p]=1;o[n++]=p} rate[p]=$5; next }
+        s == "err"  && /^[ \t]*[0-9]+[ \t]+[0-9]+/ { p=$1+0; if(!(p in seen)){seen[p]=1;o[n++]=p}
+                                                     inv[p]=$2+0; d[p]=$3+0; sy[p]=$4+0; rs[p]=$5+0; next }
+        END { for(i=0;i<n;i++){ p=o[i]; if(i) printf ","
+                printf "{\"idx\":%d,\"inv\":%d,\"disp\":%d,\"sync\":%d,\"rst\":%d,\"rate\":\"%s\"}", \
+                       p, inv[p]+0, d[p]+0, sy[p]+0, rs[p]+0, (rate[p]=="" ? "" : rate[p]) } }')
+    printf '[%s]' "$out"
+}
+
+# StorCLI2 / SAS4 health. One `show all` covers temperature, firmware and drive
+# count; StorCLI2 has no `show temperature` subcommand at all, on either build.
+health_storcli2() {   # $1 = controller index
+    local out dir temp fw drives band readok=true
+    local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
+
+    out=$(storcli_run /c"$1" show all nolog 2>/dev/null)
+    _v2() { printf '%s\n' "$out" | awk -v k="$1" \
+        'index($0, k " =") == 1 { sub(/^[^=]*=[ \t]*/, ""); sub(/[ \t]+$/, ""); print; exit }'; }
+
+    temp=$(_v2 "Chip temperature(C)")
+    case "$temp" in ''|*[!0-9]*) temp="" ;; esac
+    fw=$(_v2 "Firmware Version")
+    drives=$(_v2 "Physical Drives"); drives="${drives:-0}"
+    band=""
+    if [ -n "$temp" ]; then band=$(band_of "$temp"); else readok=false; fi
+    [ -n "$out" ] || readok=false
+
+    # StorCLI2 does report its own PCIe figures, but sysfs is still the source:
+    # only sysfs carries the upstream bridge's ceiling one directory up, and
+    # judging the link against min(card, slot) rather than the card alone is the
+    # whole point of plan 056 / issues #13 and #14.
+    dir=$(pci_addr_to_sysfs_dir "$(_v2 'PCI Address')")
+    [ -n "$dir" ] && _link_from_sysfs "$dir"
+
+    printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
+        "$NOW" "$UPTIME" \
+        "${temp:-null}" "$band" "$fw" "$drives" "$readok" \
+        "$width" "$maxwidth" "$speed" "$maxspeed" "$slotwidth" "$slotspeed" \
+        "$(_phys_json_storcli2 "$1")"
 }
 
 health_lsiutil() {
@@ -219,4 +270,4 @@ _health_lsiutil_one() {   # $1 port  $2 banner  $3 board  $4 hnum  $5 pdir  $6 n
     rm -f "$IOC"
 }
 
-hba_each health_storcli health_lsiutil
+hba_each health_storcli health_lsiutil health_storcli2

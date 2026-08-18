@@ -1,0 +1,129 @@
+CLI Version = 008.0014.0000.0012 June 20, 2025
+Operating system = Linux6.18.38-Unraid
+Controller = 0
+Status = Success
+Description = None
+
+
+SAS Phy Information :
+===================
+
+-------------------------------------------------------------------------------------------------------------------------
+PhyNum PortNum LinkNum State NegSpeed MinSpeed MaxSpeed SupportedSpeeds           ConnName SASAddress         DevType    
+-------------------------------------------------------------------------------------------------------------------------
+     8       8       8 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.0     0x3000000000000004 End Device 
+     9       8       8 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.0     -                  -          
+    10       8       8 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.0     -                  -          
+    11       9       8 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.0     0x3000000000000005 End Device 
+    12      10      12 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.1     0x3000000000000006 End Device 
+    13       8      12 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.1     -                  -          
+    14       8      12 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.1     -                  -          
+    15       8      12 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C1.1     -                  -          
+    16      16      16 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.0     0x3000000000000007 End Device 
+    17      19      16 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.0     0x3000000000000008 End Device 
+    18      16      16 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.0     -                  -          
+    19      17      16 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.0     0x3000000000000009 End Device 
+    20      18      20 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.1     0x3000000000000010 End Device 
+    21      16      20 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.1     -                  -          
+    22      16      20 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.1     -                  -          
+    23      20      20 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C2.1     0x3000000000000011 End Device 
+    24      24      24 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.1     -                  -          
+    25      24      24 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.1     -                  -          
+    26      24      24 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.1     -                  -          
+    27      25      24 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.1     0x3000000000000003 End Device 
+    28      24      28 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.0     -                  -          
+    29      24      28 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.0     -                  -          
+    30      24      28 On    Unknown  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.0     -                  -          
+    31      24      28 On    6.0Gb/s  6.0Gb/s  22.5Gb/s 6.0Gb/s,12.0Gb/s,22.5Gb/s C0.0     0x3000000000000002 End Device 
+-------------------------------------------------------------------------------------------------------------------------
+
+
+SAS Phyerrorcounters Information :
+================================
+
+---------------------------------------------------------------------
+PhyNum InvalDwdCnt RungDispartyErrCnt LosOfDwrdSynCnt PhyResetPrbCnt 
+---------------------------------------------------------------------
+     8           0                  0               0              0 
+     9           0                  0               0              0 
+    10           0                  0               0              0 
+    11           0                  0               0              0 
+    12           0                  0               0              0 
+    13           0                  0               0              0 
+    14           0                  0               0              0 
+    15           0                  0               0              0 
+    16           0                  0               0              0 
+    17           0                  0               0              0 
+    18           0                  0               0              0 
+    19           0                  0               0              0 
+    20           0                  0               0              0 
+    21           0                  0               0              0 
+    22           0                  0               0              0 
+    23           0                  0               0              0 
+    24           0                  0               0              0 
+    25           0                  0               0              0 
+    26           0                  0               0              0 
+    27           0                  0               0              0 
+    28           0                  0               0              0 
+    29           0                  0               0              0 
+    30           0                  0               0              0 
+    31           0                  0               0              0 
+---------------------------------------------------------------------
+
+
+PCIe Lane Information :
+=====================
+
+----------------------------------------------------------------------------------------------------------
+PhyNum LinkNum State NegSpeed MaxSpeed SupportedSpeeds                  ConnName CurrClkMode WWID DevType 
+----------------------------------------------------------------------------------------------------------
+     8       8 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.0     Common      -    Unknown 
+     9       8 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.0     Common      -    Unknown 
+    10       8 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.0     Common      -    Unknown 
+    11       8 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.0     Common      -    Unknown 
+    12      12 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.1     Common      -    Unknown 
+    13      12 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.1     Common      -    Unknown 
+    14      12 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.1     Common      -    Unknown 
+    15      12 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C1.1     Common      -    Unknown 
+    16      16 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.0     Common      -    Unknown 
+    17      16 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.0     Common      -    Unknown 
+    18      16 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.0     Common      -    Unknown 
+    19      16 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.0     Common      -    Unknown 
+    20      20 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.1     Common      -    Unknown 
+    21      20 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.1     Common      -    Unknown 
+    22      20 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.1     Common      -    Unknown 
+    23      20 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C2.1     Common      -    Unknown 
+    24      24 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.1     Common      -    Unknown 
+    25      24 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.1     Common      -    Unknown 
+    26      24 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.1     Common      -    Unknown 
+    27      24 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.1     Common      -    Unknown 
+    28      28 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.0     Common      -    Unknown 
+    29      28 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.0     Common      -    Unknown 
+    30      28 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.0     Common      -    Unknown 
+    31      28 On    Unknown  16.0GT/s 2.5GT/s,5.0GT/s,8.0GT/s,16.0GT/s C0.0     Common      -    Unknown 
+----------------------------------------------------------------------------------------------------------
+
+
+PCIe Phyerrorcounters :
+=====================
+
+--------------------------------------------------------------------------------------------------------------------------
+LinkNum RecErrCnt RecovCnt CorrErrMsgCnt NonFatalErrMsgCnt FatalErrMsgCnt NonFatalErrCnt FatalErrCnt BadDLLPCnt BadTLPCnt 
+--------------------------------------------------------------------------------------------------------------------------
+      8         0        0             0                 0              0              0           0          0         0 
+     12         0        0             0                 0              0              0           0          0         0 
+     16         0        0             0                 0              0              0           0          0         0 
+     20         0        0             0                 0              0              0           0          0         0 
+     24         0        0             0                 0              0              0           0          0         0 
+     28         0        0             0                 0              0              0           0          0         0 
+--------------------------------------------------------------------------------------------------------------------------
+
+PhyNum-Phy Number|PortNum-Port Number|LinkNum-Link Number|NegSpeed-Negotiated Speed|DevType-Device Type
+MinSpeed-Minimum Speed|MaxSpeed-Maximum Speed|SupportedSpeeds-Supported Link Speeds|ConnName-Connector Name
+CurrClkMode-Current Clock Mode|InvalDwdCnt-Invalid dword count|RungDispartyErrCnt-Running Disparity error count
+LosOfDwrdSynCnt-Loss of dword synchronization count|PhyResetPrbCnt-Phy reset problem count|RecErrCnt-Receiver Error count
+RecovCnt-Recovery Count|CorrErrMsgCnt-Correctable error message count|NonFatalErrMsgCnt-Non fatal error message count
+FatalErrMsgCnt-Fatal error message count|NonFatalErrCnt-Non fatal error count|FatalErrCnt-Fatal error count
+BadDLLPCnt-Bad data link layer packet count|BadTLPCnt-Bad transaction layer packet count
+
+

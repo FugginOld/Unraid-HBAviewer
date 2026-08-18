@@ -6,7 +6,7 @@ require_once __DIR__ . '/config.php';
 $cfg   = lsi_config_read();
 $saved = false;
 
-// Backend detection — controller generation via sysfs + storcli path lookup. Both
+// Backend detection — controller generation via sysfs + tool path lookup. Both
 // are instant (no hardware enumeration), so the page never lags.
 //
 // Generation comes from each SCSI host's proc_name, NOT from which driver module
@@ -15,15 +15,15 @@ $saved = false;
 // so issue #3's box has no mpt2sas module while its SAS9207-8i reports
 // proc_name=mpt2sas. Keying off /sys/module called that card a SAS3 controller,
 // demanded storcli for it, and hid the lsiutil Port row it actually needs.
+// mpi3mr is the SAS4 driver (9600 series). It needs StorCLI2, a DIFFERENT binary
+// from the classic storcli — not a newer one — so the two are probed separately
+// below.
 $hw = [];          // one entry per SAS host, for the read-only diagnostic row
 $has_sas2 = false; // any host on the mpt2sas/mptsas personality -> bundled lsiutil
 $has_sas3 = false; // any host on the mpt3sas personality        -> needs storcli
 $has_sas4 = false; // any host on mpi3mr — 24G/SAS4, 9600 series -> needs StorCLI2
 foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
     $drv = trim((string) @file_get_contents($h . 'proc_name'));
-    // mpi3mr is listed so the card can be NAMED here, not so it can be read:
-    // nothing this plugin bundles or calls speaks 24G (issue #19). A card the
-    // diagnostic row cannot see is a card nobody can report properly.
     if (!in_array($drv, ['mpt3sas', 'mpt2sas', 'mptsas', 'mpi3mr'], true)) continue;
     if      ($drv === 'mpt3sas') { $has_sas3 = true; }
     elseif  ($drv === 'mpi3mr')  { $has_sas4 = true; }
@@ -39,10 +39,33 @@ $hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found
 // /usr/local/bin/storcli* -- two copies of one question that had drifted apart.
 // Sourcing lib.sh runs nothing: its top level only assigns variables and
 // defines functions. shell_exec is not new here; the old fallback used it too.
-$storcli = trim((string) shell_exec(
-    'bash -c ". ' . __DIR__ . '/scripts/lib.sh 2>/dev/null; find_storcli" 2>/dev/null'
+//
+// storcli_candidates rather than find_storcli, because a box with a 9600
+// typically has BOTH tools installed (the dkaser plugin ships storcli and
+// storcli2 alike) and the classic one simply enumerates nothing there.
+// find_storcli returns the first hit only, which would tell a 9600 owner they
+// have "storcli" and never mention the tool their card actually needs. One
+// shell call still answers both questions -- the list is already deduplicated
+// and ordered, so the first name of each kind is the one the backend will use.
+$cands = trim((string) shell_exec(
+    'bash -c ". ' . __DIR__ . '/scripts/lib.sh 2>/dev/null; storcli_candidates" 2>/dev/null'
 ));
-if ($storcli !== '') {
+$storcli = $storcli2 = '';
+foreach (preg_split('/\R/', $cands, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $p) {
+    if (basename($p) === 'storcli2') { if ($storcli2 === '') $storcli2 = $p; }
+    elseif ($storcli === '')         { $storcli  = $p; }
+}
+
+if ($has_sas4 && $storcli2 === '') {
+    $backend_label = 'StorCLI2 — NOT INSTALLED';
+    $backend_note  = 'A controller was found on the mpi3mr driver (SAS4, 9600 series). It needs StorCLI2 — the classic storcli cannot read these cards. The dkaser/unraid-storcli plugin ships one as storcli2.'
+        . ($has_sas2 || $has_sas3 ? ' Another controller generation is also present and uses its own backend.' : '');
+} elseif ($has_sas4) {
+    $backend_label = 'StorCLI2';
+    $backend_note  = 'SAS4 / 9600-series controller detected.'
+        . ($has_sas2 || $has_sas3 ? ' Another controller generation is also present and uses its own backend.' : '')
+        . ' Note the Lite StorCLI2 build has no event-log command; the full Broadcom build does.';
+} elseif ($storcli !== '') {
     $backend_label = 'storcli';
     $backend_note  = $has_sas2
         ? 'storcli is installed and is tried first; the bundled lsiutil covers any SAS2 card it does not enumerate.'
@@ -55,12 +78,9 @@ if ($storcli !== '') {
 } elseif ($has_sas3) {
     $backend_label = 'storcli — NOT INSTALLED';
     $backend_note  = 'A controller was found on the mpt3sas driver, which the bundled lsiutil cannot read through. Install storcli via the dkaser/unraid-storcli plugin (Community Applications).';
-} elseif ($has_sas4) {
-    $backend_label = '24G / SAS4 — NOT SUPPORTED YET';
-    $backend_note  = 'A 9600-series controller was found on the mpi3mr driver. This generation needs Broadcom StorCLI2; the bundled lsiutil and storcli cannot read it, so no monitoring is available for this card yet. Tracked as issue #19.';
 } else {
     $backend_label = 'none detected';
-    $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas) was found.';
+    $backend_note  = 'No supported HBA controller (mpt2sas / mpt3sas / mpi3mr) was found.';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
@@ -216,6 +236,81 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <span style="font-family:var(--mono);font-size:12px"><?= htmlspecialchars($hw_detail) ?></span>
         </div>
       </div>
+
+      <?php /* SAS4 only. The StorCLI2 the storcli plugin ships is Broadcom's
+               Lite build, which has no `show events` command at all — so the
+               Event Log tab reports that rather than rendering an empty table.
+               Broadcom's full build fixes it but cannot be bundled (proprietary)
+               or even downloaded unattended (JS portal behind bot management),
+               so the one manual step is the download and scripts/install_storcli2.sh
+               does everything after it.
+               Shown only when a SAS4 card is present, and the steps stay folded
+               away once the helper's install path exists. */ ?>
+      <?php if ($has_sas4): $full_sc2 = is_executable('/opt/MegaRAID/storcli2/storcli2'); ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Firmware Event Log
+          <small>SAS4 / 9600 only. Needs Broadcom's full StorCLI2.</small>
+        </div>
+        <div class="lu-s-control" style="padding-top:8px">
+          <span style="color:<?= $full_sc2 ? '#7ac943' : '#f5a623' ?>;font-weight:600">
+            <?= $full_sc2 ? 'Full StorCLI2 installed' : 'Full StorCLI2 not installed' ?>
+          </span>
+          <small style="display:block;color:var(--text);margin-top:3px;line-height:1.5">
+            <?php if ($full_sc2): ?>
+              Found at <code>/opt/MegaRAID/storcli2/storcli2</code>. The Event Log tab
+              should work. Re-run the helper below after a Broadcom update, or if you
+              ever replace the flash drive.
+            <?php else: ?>
+              The StorCLI2 that the <em>storcli</em> plugin installs is Broadcom's
+              <strong>Lite</strong> build. It runs every other tab perfectly well, but
+              has no event-log command, so the Event Log tab will say so. Everything
+              else on this page works without doing anything below.
+            <?php endif; ?>
+          </small>
+
+          <?php /* max-width + overflow-wrap throughout: this card sits in a CSS
+                   multi-column grid (.lu-s-grid, columns 360px), so anything
+                   that refuses to wrap does not merely overflow its own box —
+                   it paints across the neighbouring column. The paths and the
+                   command below are all longer than the column is wide. */ ?>
+          <details style="margin-top:8px;max-width:100%">
+            <summary style="cursor:pointer;color:#f5a623">
+              How to install the full StorCLI2 (once per server)
+            </summary>
+            <div style="margin-top:8px;line-height:1.6;max-width:100%;overflow-wrap:anywhere">
+              <strong>1.</strong> On any machine, download <strong>StorCLI2</strong> from
+              <a href="https://docs.broadcom.com/docs/1232743171" target="_blank" rel="noreferrer">Broadcom's site</a>.
+              It cannot be fetched automatically — the page is JavaScript-driven behind
+              bot protection, and the tool is proprietary, so it is not shipped here.<br>
+
+              <strong>2.</strong> Copy that <code>.zip</code> onto this server — any share
+              will do, for example <code>/mnt/user/isos/</code>.<br>
+
+              <strong>3.</strong> On <em>this server</em> (Unraid terminal, or SSH — not on
+              your desktop), run:
+              <?php /* pre-wrap, not the default pre: the command is ~100 characters
+                       with no space to break at until the end, and a non-wrapping
+                       pre sets a min-content width the flex control cannot shrink
+                       below. It still copies as one line. */ ?>
+              <pre style="margin:6px 0;padding:8px;font-size:12px;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--border-soft);border-radius:6px">bash <?= htmlspecialchars(__DIR__) ?>/scripts/install_storcli2.sh /path/to/the-file.zip</pre>
+
+              <strong>4.</strong> Reload this page. This row should turn green, and the
+              Event Log tab will start working. Nothing needs restarting.<br>
+
+              <small style="color:var(--text-muted, #888)">
+                The helper unpacks the archive, checks the binary really is StorCLI2, copies it
+                to <code>/boot/config/plugins/hbaviewer/tools/</code> so it survives a reboot,
+                and adds three lines to <code>/boot/config/go</code> that restore it at boot —
+                <code>/opt</code> is RAM here, and the flash cannot keep the execute bit. It
+                backs up <code>go</code> first and is safe to re-run. Pass <code>--no-go</code>
+                to skip the boot-time part.
+              </small>
+            </div>
+          </details>
+        </div>
+      </div>
+      <?php endif; ?>
 
       <?php /* Host Link normally works this out: the slot's own ceiling is read
                from the upstream bridge, so a card in a narrower slot is judged

@@ -1,0 +1,1 @@
+{"temp":64,"model":"SAS4024","firmware":"8.17.1.0-00000-00001","bios":"0x08110400","mode":"eHBA","drive_count":"10","port_name":"","board_name":"eHBA 9600-24i","pci_location":"00:82:00:0","pcie_width":"x8","pcie_speed":"Gen4 (16.0 GT/s)","power_mode":"Full","alert_threshold":80,"temp_band":"normal","cfg_band":"warning","status":"ok"}

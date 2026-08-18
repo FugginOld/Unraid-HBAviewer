@@ -152,6 +152,15 @@ check('events: an unstamped payload does not sniff its way to storcli columns',
     str_contains($noBackendEvOut, 'Qualifier') && !str_contains($noBackendEvOut, 'Code'));
 array_map('unlink', glob("$evSniffDir/*.json") ?: []);
 @rmdir($evSniffDir);
+// A storcli2 payload must reach the storcli tables. Before lsi_backend_shape
+// existed it fell through to the lsiutil branch, because the field matched
+// neither 'storcli' nor ''.
+$sc2Phy = ['backend' => 'storcli2', 'controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '22.5 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+check('phy: a storcli2 payload gets the storcli columns',
+    str_contains(renderPhyTables($sc2Phy), 'Attached SAS Address'));
 
 /* ── PHY error baseline: the three display states (plan 022) ──────────────
    The raw-counter table is unchanged by this feature — it is purely additive,
@@ -904,6 +913,27 @@ array_map('unlink', glob("$dirNote/*.json") ?: []);
 
 array_map('unlink', glob("$dir/*.json") ?: []);
 @rmdir($dir);
+
+/* The events renderer filters the archive by BACKEND SHAPE, and archived entries
+   are only ever storcli- or lsiutil-shaped -- never 'storcli2', which is a tool
+   name. Passing the raw field filtered every entry away, so a 9600 showed "No
+   log entries" for events it had just read. Upstream has the same defect; we
+   deliberately do not. */
+$dirShape = sys_get_temp_dir() . '/hbav_events_shape_' . getmypid();
+@mkdir($dirShape, 0755, true);
+array_map('unlink', glob("$dirShape/*.json") ?: []);
+
+$evSeed = ['backend' => 'storcli', 'controllers' => [['entries' => [
+    ['seq'=>'1','time'=>'Mon Jan  1 00:00:00 2026','code'=>'0x00','description'=>'SHAPEMARK'],
+]]]];
+renderEventsTables($evSeed, $dirShape); // seeds the on-disk archive
+
+$sc2Ev = ['backend' => 'storcli2', 'controllers' => [['entries' => []]]];
+check('events: a storcli2 payload still shows its archived entries',
+    str_contains(renderEventsTables($sc2Ev, $dirShape), 'SHAPEMARK'));
+
+array_map('unlink', glob("$dirShape/*.json") ?: []);
+@rmdir($dirShape);
 
 /* ── SMART table: health colouring, standby, and the empty case ───────────── */
 $h = renderSmartTable(['drives' => [
