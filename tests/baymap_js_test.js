@@ -233,6 +233,11 @@ async function opened(payload) {
 }
 
 async function main() {
+    // A throw partway through leaves every later check unrun with a raw stack
+    // trace instead of a named FAIL -- turn it into one, the way
+    // flash_js_test.js does, so a mutant that breaks an early behaviour still
+    // lets the summary line and exit code report the rest.
+    try {
     /* ── 1. Click a tray drive, then an empty bay -> one assign ──────────────
        Aimed at row 1, COLUMN 0, and both halves are load-bearing:
        - column 0 kills `col === null` -> `!col` in luBayCommit, which turns an
@@ -250,6 +255,70 @@ async function main() {
         check('assign: clicking a tray drive then an empty bay posts that bay',
             !!p && p.action === 'assign' && p.params.get('key') === 'c0p6'
                 && p.params.get('row') === '1' && p.params.get('col') === '0');
+    }
+
+    /* ── 2. Drop onto an OCCUPIED bay -> the occupant goes back to the tray ──
+       One drive per bay, matching the server. The local model is updated
+       optimistically before the POST, so if the displacement filter goes, the
+       grid shows two drives in one bay until the next reload.
+       This has to be a DRAG, not click-then-click: luBayCellClick treats a
+       click on a filled cell as re-selecting THAT cell's drive (see the `if
+       (drv)` branch), so click-to-move can only ever land on an empty bay.
+       grid.ondrop has no such guard -- it commits onto whatever cell it is
+       given -- so dragging the tray chip onto an occupied bay is the one
+       gesture that actually exercises the displacement filter. */
+    {
+        const h = await opened();
+        h.tray().ondragstart(ev(h.chipAt(0)));         // pick up c0p6 from the tray
+        const target = h.cellAt(0, 1);                 // occupied by c0p4
+        h.grid().ondrop(ev(target));
+        await h.settle();
+        const p = h.lastPost();
+        const trayKeys = h.tray().children.map(x => x.dataset.trayKey);
+        check('displace: dropping onto an occupied bay posts the assign',
+            !!p && p.action === 'assign' && p.params.get('key') === 'c0p6'
+                && p.params.get('row') === '0' && p.params.get('col') === '1');
+        check('displace: the drive that was in that bay is back in the tray',
+            trayKeys.includes('c0p4'));
+        // Counted across grid AND tray, not just the grid: luBayPaint's `at`
+        // map is last-write-wins on {row, col}, so a duplicate placement at
+        // the same bay silently loses its own cell instead of rendering
+        // twice -- a grid-only count would read that as "exactly one" too.
+        check('displace: between them, the grid and the tray hold each drive exactly once',
+            h.grid().children.filter(x => x.dataset.bayKey === 'c0p4' || x.dataset.bayKey === 'c0p6').length
+          + h.tray().children.filter(x => x.dataset.trayKey === 'c0p4' || x.dataset.trayKey === 'c0p6').length
+          === 2);
+    }
+
+    /* ── 3. Double-click a filled bay -> one unassign ────────────────────────
+       The handler is on the GRID, not the cell. A per-cell ondblclick shipped
+       in 2026.08.05 and could never fire: single-clicking a filled bay picks
+       the drive up, which repaints and replaces every cell, so the browser
+       sees the two clicks land on different nodes and dispatches dblclick at
+       their common ancestor. Invoking grid.ondblclick is exactly that path. */
+    {
+        const h = await opened();
+        const cell = h.cellAt(0, 1);                  // holds c0p4
+        h.grid().ondblclick(ev(cell));
+        await h.settle();
+        const p = h.lastPost();
+        check('unassign: double-clicking a filled bay posts unassign for that drive',
+            !!p && p.action === 'unassign' && p.params.get('key') === 'c0p4');
+    }
+
+    /* ── 4. Drag a tray chip back onto the tray -> nothing on the wire ───────
+       Unassigning something already unassigned is a no-op, not a POST. */
+    {
+        const h = await opened();
+        const chip = h.chipAt(0);                     // c0p6, already unassigned
+        h.tray().ondragstart(ev(chip));
+        h.tray().ondrop(ev(h.tray()));
+        await h.settle();
+        check('tray: dragging an unassigned drive back to the tray posts nothing',
+            h.posts().length === 0);
+    }
+    } catch (e) {
+        check('the bay map ran to completion without throwing — ' + e.message, false);
     }
 }
 
