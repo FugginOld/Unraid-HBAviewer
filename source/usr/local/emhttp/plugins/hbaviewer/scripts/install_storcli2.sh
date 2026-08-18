@@ -20,7 +20,8 @@
 #
 # Safe to re-run: it overwrites its own files and will not duplicate the go
 # lines. Writes to the flash (/boot) and edits /boot/config/go, backing it up
-# first.
+# first — but only the FIRST run's /boot/config/go is kept (cp -n): a re-run
+# after you have since edited go yourself will not refresh the backup.
 
 set -euo pipefail
 
@@ -41,12 +42,12 @@ src=""; do_go=1
 for a in "$@"; do
     case "$a" in
         --no-go) do_go=0 ;;
-        -h|--help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         -*) die "unknown option: $a" 2 ;;
         *)  [ -z "$src" ] || die "give exactly one archive or binary" 2; src="$a" ;;
     esac
 done
-[ -n "$src" ] || { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[ -n "$src" ] || { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ -e "$src" ] || die "not found: $src" 2
 [ -r /etc/unraid-version ] || die "this is meant to run ON the Unraid server, not on your workstation" 2
 command -v bsdtar >/dev/null || die "bsdtar is missing (it is what reads .deb/.rpm here)"
@@ -88,6 +89,13 @@ else
     bin="$src"
 fi
 [ -n "${bin:-}" ] && [ -f "$bin" ] || die "could not find a storcli2 binary to install"
+# Resolve to an absolute path: the bare-binary branch above hands back the
+# user's own (possibly relative, e.g. "./storcli2") $src verbatim, and the
+# version probe below cd's into $WORK before running it — a relative path
+# would silently fail to exec there, the failure would be swallowed by the
+# `|| true` on that probe, and the script would die claiming the binary
+# "does not identify itself as StorCLI2" about a binary it never ran.
+bin=$(readlink -f "$bin") || die "could not resolve path to $bin"
 
 echo "==> Checking it is what it claims to be"
 case "$(head -c4 "$bin" | tr -d '\0')" in

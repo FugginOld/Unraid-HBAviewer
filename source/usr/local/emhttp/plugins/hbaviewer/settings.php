@@ -57,7 +57,8 @@ $storcli2 = $find_tool(['storcli2']);
 
 if ($has_sas4 && $storcli2 === '') {
     $backend_label = 'StorCLI2 — NOT INSTALLED';
-    $backend_note  = 'A controller was found on the mpi3mr driver (SAS4, 9600 series). It needs StorCLI2 — the classic storcli cannot read these cards. The dkaser/unraid-storcli plugin ships one as storcli2.';
+    $backend_note  = 'A controller was found on the mpi3mr driver (SAS4, 9600 series). It needs StorCLI2 — the classic storcli cannot read these cards. The dkaser/unraid-storcli plugin ships one as storcli2.'
+        . ($has_sas2 || $has_sas3 ? ' Another controller generation is also present and uses its own backend.' : '');
 } elseif ($has_sas4) {
     $backend_label = 'StorCLI2';
     $backend_note  = 'SAS4 / 9600-series controller detected.'

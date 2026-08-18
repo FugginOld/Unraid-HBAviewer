@@ -113,7 +113,7 @@ _link_from_sysfs() {   # $1 = /sys/bus/pci/devices/0000:xx:yy.z
 _link_speed() { cat "$1" 2>/dev/null | sed -E 's/[[:space:]]*PCIe[[:space:]]*$//'; }
 
 health_storcli() {   # $1 = controller index
-    local out pci dom bus dev fn dir
+    local out pci dir
     local temp fw drives band readok=true
     local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
 
@@ -132,11 +132,8 @@ health_storcli() {   # $1 = controller index
     # uses, extended to also read max_link_width/max_link_speed (which that
     # composer never needed, since it only shows the current link state).
     pci=$(printf '%s\n' "$out" | grep -m1 -E '^PCI Address[[:space:]]*=' | sed 's/^[^=]*=[[:space:]]*//; s/[[:space:]]*$//')
-    if [ -n "$pci" ]; then
-        IFS=: read -r dom bus dev fn <<< "$pci"
-        dir="${SYS_PCI_ROOT:-/sys/bus/pci/devices}/$(printf '%04x:%s:%s.%d' "0x${dom:-0}" "$bus" "$dev" "0x${fn:-0}")"
-        _link_from_sysfs "$dir"
-    fi
+    dir=$(pci_addr_to_sysfs_dir "$pci")
+    [ -n "$dir" ] && _link_from_sysfs "$dir"
 
     printf '{"t":%d,"uptime":%d,"temp":%s,"temp_band":"%s","fw":"%s","drives":%s,"read_ok":%s,"link":{"width":%s,"max_width":%s,"speed":"%s","max_speed":"%s","slot_width":%s,"slot_speed":"%s"},"phys":%s}' \
         "$NOW" "$UPTIME" \

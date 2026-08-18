@@ -31,8 +31,10 @@ HS=$(sed -n '/^health_storcli()/,/^}/p' "$SRC")
 # and so lifted out alongside whichever function is under test.
 LIB="../source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh"
 PD=$(sed -n '/^_pci_dir_of_host()/,/^}/p' "$LIB")
+PA=$(sed -n '/^pci_addr_to_sysfs_dir()/,/^}/p' "$LIB")
 LF=$(sed -n '/^_link_from_sysfs()/,/^}/p' "$SRC"; sed -n '/^_link_speed()/,/^}/p' "$SRC")
 [ -n "$PD" ] || { echo "FAIL  _pci_dir_of_host not found in $LIB"; exit 1; }
+[ -n "$PA" ] || { echo "FAIL  pci_addr_to_sysfs_dir not found in $LIB"; exit 1; }
 [ -n "$LF" ] || { echo "FAIL  link helpers not found in $SRC"; exit 1; }
 
 LROOT=$(mktemp -d)
@@ -58,7 +60,7 @@ STUB
 chmod +x "$LROOT/storcli"
 
 LJSON=$(NOW=1000 UPTIME=500 STORCLI="$LROOT/storcli" SYS_PCI_ROOT="$LROOT" \
-        bash -c "$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
+        bash -c "$PA"$'\n'"$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
 
 # Parsed with sed, NOT php: this is the shell suite and it runs where php may
 # not be installed. That is not a lesser check for the bug being guarded --
@@ -83,7 +85,7 @@ printf '8\n' > "$BROOT/0000:65:00.0/current_link_width"
 printf '8\n' > "$BROOT/0000:65:00.0/max_link_width"
 cp "$LROOT/storcli" "$BROOT/storcli"
 BJSON=$(NOW=1000 UPTIME=500 STORCLI="$BROOT/storcli" SYS_PCI_ROOT="$BROOT" \
-        bash -c "$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
+        bash -c "$PA"$'\n'"$LF"$'\n'"$HS"$'\n''_phys_json() { echo "[]"; }'$'\n''health_storcli 0' 2>/dev/null)
 eq "no bridge: slot width is 0, not missing" "0" "$(num "$BJSON" slot_width)"
 if printf '%s' "$BJSON" | grep -q '"slot_speed":""'; then
     echo "PASS  no bridge: slot speed is empty, not missing"

@@ -369,6 +369,23 @@ PATH="$SC2DIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixture
 check route-sas4-storcli2-read route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
 rm -rf "$SC2DIR"
 
+# Fix 1: the realistic dkaser-plugin box, both tools on PATH -- classic storcli
+# AND storcli2, exactly the shape find_storcli's old first-match order (storcli
+# ahead of storcli2) made dead on arrival: classic resolves first, answers zero
+# controllers, and use_storcli gave up without ever trying storcli2. No check
+# above puts both tools on PATH at once, which is how that shipped green.
+# The classic stub is planted ahead of storcli2 in its own PATH dir (never
+# tests/stub, to avoid shadowing the fixture-driven stub/storcli used above) so
+# a regression back to first-match-wins still fails this even on a machine with
+# no real storcli installed.
+MIXDIR=$(mktemp -d)
+printf '#!/bin/bash\ncase "$*" in show) echo "Number of Controllers = 0";; version) echo "StorCli SAS Customization Utility Ver 007.3404.0000.0000";; esac\n' > "$MIXDIR/storcli"
+cp "$PWD/stub/storcli2" "$MIXDIR/storcli2"
+chmod +x "$MIXDIR/storcli" "$MIXDIR/storcli2"
+PATH="$MIXDIR:$PATH" STORCLI= LSIUTIL="$PWD/stub/lsiutil" STUB_FIX="$PWD/fixtures/storcli2" SYS_SCSI_HOST="$SYSHOST" \
+check route-sas4-mixed-storcli route_sas4_mpi3mr.json bash "$P/../get_hba_info.sh"
+rm -rf "$MIXDIR"
+
 # The seam picks a tool by what the tool SAYS it is, not what it is called --
 # dkaser's storcli plugin ships the StorCLI2 build as storcli2Lite-8.14, so the
 # filename cannot be the signal. These two stubs differ only in their banner.

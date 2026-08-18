@@ -23,36 +23,39 @@ require_binary() {
 
 hba_query() { "$LSIUTIL" "$@"; }
 
-# Locate a storcli-family binary (SAS3/3.5 "storcli", or the SAS4/9600
-# "storcli2" — resolved further by storcli_flavor below). Honors a preset
-# $STORCLI. Prints the resolved path, or nothing if not found.
+# Every storcli-family binary on the box, deduped, in probe order — both
+# flavors mixed together on purpose. WHICH one can actually read the hardware
+# is decided by use_storcli() probing each in turn below, never by position in
+# this list.
 #
-# storcli2 IS a candidate (restored — issue #19 removed it only until this
-# plugin could read a 9600; it can now). The FLAVOR of whichever path this
-# returns is resolved afterward by storcli_flavor() reading the binary's own
-# banner, never trusted from the name — but the name still decides WHICH
-# binary is returned when more than one resolves, because this loop stops at
-# the first match. "storcli"/"storcli64" are listed ahead of "storcli2", so on
-# a box with both classic storcli and StorCLI2 installed (dkaser's
-# unraid-storcli plugin ships both), the classic tool still wins.
+# The bare names are tried before the absolute-path candidates because
+# dkaser's plugin symlinks /usr/local/bin/storcli and /usr/local/bin/storcli2
+# onto PATH, but ships the StorCLI2 Lite build as storcli2Lite-8.14 and
+# symlinks THAT to whatever name the packager chose — if that symlink lands
+# anywhere on PATH other than /usr/local/bin/storcli2, the absolute paths
+# alone miss it.
 #
-# The bare names are tried before the absolute-path candidates for the same
-# reason storcli2 needs to be in the bare-name group at all: dkaser's plugin
-# symlinks /usr/local/bin/storcli and /usr/local/bin/storcli2 onto PATH, but
-# ships the StorCLI2 Lite build as storcli2Lite-8.14 and symlinks THAT to
-# whatever name the packager chose — if that symlink lands anywhere on PATH
-# other than /usr/local/bin/storcli2, the absolute paths alone miss it.
-find_storcli() {
-    if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
+# Loop structure and the awk dedupe: techanonymous, 882f88c, MIT.
+storcli_candidates() {
     local c
     for c in storcli storcli64 storcli2 \
              /usr/local/sbin/storcli /usr/local/sbin/storcli64 \
              /usr/local/bin/storcli /usr/local/bin/storcli64 /usr/local/bin/storcli2 \
              /usr/sbin/storcli /usr/sbin/storcli64 \
              /opt/MegaRAID/storcli2/storcli2; do
-        command -v "$c" >/dev/null 2>&1 && { command -v "$c"; return; }
-        [ -x "$c" ] && { echo "$c"; return; }
-    done
+        if   command -v "$c" >/dev/null 2>&1; then command -v "$c"
+        elif [ -x "$c" ];                     then echo "$c"
+        fi
+    done | awk '!seen[$0]++'
+}
+
+# First storcli-family binary present — a PRESENCE test only, for "is any
+# storcli installed at all?" (get_hba_info.sh's SAS4 refusal guard, and
+# settings.php). To get the one that can actually read THIS card, call
+# use_storcli. Honors a preset $STORCLI.
+find_storcli() {
+    if [ -n "$STORCLI" ]; then echo "$STORCLI"; return; fi
+    storcli_candidates | head -1
 }
 
 # Locate the per-generation flash tool — sibling of find_storcli, same posture
@@ -134,16 +137,46 @@ storcli_flavor() {
     esac
 }
 
-# True (and export a resolved $STORCLI + $STORCLI_FLAVOR) iff storcli is
-# present and enumerates a controller. The routing test every tab composer
-# uses to pick its backend.
-use_storcli() {
-    local sc n
-    sc="$(find_storcli)"
-    [ -n "$sc" ] || return 1
-    n=$("$sc" show 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
+# True (the count) iff $1 enumerates a controller. Run through the same
+# scratch-dir subshell storcli_run uses (issue: this probe used to run "$sc
+# show" straight in the caller's cwd — the plugin's own scripts/ dir, which is
+# tmpfs — dropping a ~230KB debug log there on every tab read, on a StorCLI2
+# box, before the flavor was even known well enough to call storcli_run).
+_storcli_enumerates() {   # $1 = binary -> prints the count, non-zero if none
+    local n
+    n=$( ( cd "${STORCLI_CWD:-/tmp}" 2>/dev/null || cd /; "$1" show 2>/dev/null ) \
+         | grep -m1 'Number of Controllers' | grep -oE '[0-9]+')
     [ -n "$n" ] && [ "$n" -gt 0 ] || return 1
-    STORCLI="$sc"; STORCLI_FLAVOR=$(storcli_flavor "$sc"); export STORCLI STORCLI_FLAVOR; return 0
+    echo "$n"
+}
+
+# True (and export a resolved $STORCLI + $STORCLI_FLAVOR) iff some storcli-
+# family binary enumerates a controller. The routing test every tab composer
+# uses to pick its backend.
+#
+# Probes every candidate rather than trusting the first name found: a 9600 box
+# typically has classic storcli installed too (dkaser's unraid-storcli plugin
+# ships both), and it answers "Number of Controllers = 0" there —
+# indistinguishable from "no card" unless the other flavor gets a turn. That
+# used to be find_storcli's job, and its first-match order (storcli ahead of
+# storcli2) made SAS4 boxes with both tools installed dead on arrival.
+use_storcli() {
+    local sc
+    # A preset override is honored verbatim and never probed past — the suite
+    # points $STORCLI at a stub, and falling through to a real binary on the
+    # runner's PATH would make the fixture silently not the thing under test.
+    if [ -n "$STORCLI" ]; then
+        _storcli_enumerates "$STORCLI" >/dev/null || return 1
+        STORCLI_FLAVOR=$(storcli_flavor "$STORCLI")
+        export STORCLI STORCLI_FLAVOR; return 0
+    fi
+    while read -r sc; do
+        [ -n "$sc" ] || continue
+        _storcli_enumerates "$sc" >/dev/null || continue
+        STORCLI="$sc"; STORCLI_FLAVOR=$(storcli_flavor "$sc")
+        export STORCLI STORCLI_FLAVOR; return 0
+    done < <(storcli_candidates)
+    return 1
 }
 
 # Run the storcli-family binary from somewhere harmless. Both tools drop a debug
