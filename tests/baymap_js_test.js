@@ -317,6 +317,64 @@ async function main() {
         check('tray: dragging an unassigned drive back to the tray posts nothing',
             h.posts().length === 0);
     }
+    /* ── 5. Shrink the grid, accept the warning -> displaced drive, one dims ─
+       2x3 -> 2x2 evicts the drive at (1,2). The POST is debounced 400ms, so
+       nothing is on the wire until the timers are flushed. luBayDims reads
+       BOTH #bay-rows and #bay-cols and bails unless both parse to 1..12, so
+       both fields are set even though only cols is "changing" here. */
+    {
+        const h = await opened();
+        h.answers.confirm.push(true);
+        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-cols').value = '2';
+        h.els.get('bay-cols').onchange();
+        check('resize: the dims post is debounced, not immediate', h.posts().length === 0);
+        h.flushTimers();
+        await h.settle();
+        const p = h.lastPost();
+        check('resize: accepting the shrink posts the new dimensions',
+            !!p && p.action === 'dims' && p.params.get('rows') === '2' && p.params.get('cols') === '2');
+        check('resize: the drive that no longer fits is back in the tray',
+            h.tray().children.map(x => x.dataset.trayKey).includes('c0p5'));
+    }
+
+    /* ── 6. A blank field is not a resize request ────────────────────────────
+       THE WIPE BUG. Clearing the box to retype it read as "1 row", and the
+       debounced save then displaced every drive below row 0 -- destroying a
+       map somebody walked to the rack to build. Nothing may happen at all: no
+       confirm, no model change, no POST. bay-rows is left at the valid
+       current value '2' so the ONLY thing wrong is the blank cols field --
+       otherwise this would also fail on the missing rows value for the wrong
+       reason and prove nothing about the guard being tested. */
+    {
+        const h = await opened();
+        h.answers.confirm.push(true);          // consumed only if a confirm is reached
+        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-cols').value = '';
+        h.els.get('bay-cols').onchange();
+        h.flushTimers();
+        await h.settle();
+        check('resize: a blank dimension field posts nothing', h.posts().length === 0);
+        check('resize: a blank dimension field displaces no drive',
+            h.tray().children.filter(x => x.dataset.trayKey).length === 1);
+        check('resize: a blank dimension field does not even ask', h.answers.confirm.length === 1);
+    }
+
+    /* ── 7. Declining the shrink puts the fields back ────────────────────────
+       Without the restore the boxes keep showing a grid size the map does not
+       have, and the next change is computed from a lie. */
+    {
+        const h = await opened();
+        h.answers.confirm.push(false);
+        h.els.get('bay-rows').value = '2';
+        h.els.get('bay-cols').value = '2';
+        h.els.get('bay-cols').onchange();
+        h.flushTimers();
+        await h.settle();
+        check('resize: declining the shrink posts nothing', h.posts().length === 0);
+        check('resize: declining the shrink puts the field back to 3',
+            String(h.els.get('bay-cols').value) === '3');
+    }
     } catch (e) {
         check('the bay map ran to completion without throwing — ' + e.message, false);
     }
