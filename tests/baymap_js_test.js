@@ -161,7 +161,13 @@ function boot(payload) {
         calls.push({url, params, body, action: params.get('action') || '',
                     method: (opts && opts.method) || 'GET'});
         if (url.includes('type=baymap')) return json(bayPayload);
-        return json(postReply);
+        // Scoped to bay_map.php specifically: luLocateSync fires its own POST
+        // to locate.php after every reload (line 40/167 of hbaviewer.js), and a
+        // shared reply would leak setReply()'s failure into THAT call too --
+        // its own `if (!j.ok) alert(...)` would then produce an alert that
+        // matches a bay-write test's regex for the wrong reason.
+        if (url.includes('bay_map.php')) return json(postReply);
+        return json({ok: true});
     }
 
     const ctx = {
@@ -374,6 +380,68 @@ async function main() {
         check('resize: declining the shrink posts nothing', h.posts().length === 0);
         check('resize: declining the shrink puts the field back to 3',
             String(h.els.get('bay-cols').value) === '3');
+    }
+
+    /* ── 8. Clear with nothing placed -> say so, do not ask, do not post ─────
+       A confirm whose answer changes nothing is a question not worth asking. */
+    {
+        const h = await opened(Object.assign(BAY(), {placed: []}));
+        h.answers.confirm.push(true);
+        h.ctx.luBayClear();
+        await h.settle();
+        check('clear: an already-empty map posts nothing', h.posts().length === 0);
+        check('clear: an already-empty map says so', h.alerts.some(a => /already empty/i.test(a)));
+        check('clear: an already-empty map does not ask for confirmation',
+            h.answers.confirm.length === 1);
+    }
+
+    /* ── 9. Clear declined -> nothing on the wire ────────────────────────────
+       The confirm names the COUNT, because the number is what makes a person
+       stop: a map of 24 bays was built by walking to the rack. */
+    {
+        const h = await opened();
+        h.answers.confirm.push(false);
+        h.ctx.luBayClear();
+        await h.settle();
+        check('clear: declining the confirmation posts nothing', h.posts().length === 0);
+        check('clear: the confirmation names how many drives are placed',
+            h.alerts.some(a => /\b2\b/.test(a) && /placed/i.test(a)));
+    }
+
+    /* ── 10. A refused write must be undone on screen, not just reported ─────
+       The grid paints optimistically. Without the resync the map keeps showing
+       a move the server rejected -- the one state the person cannot notice. */
+    {
+        const h = await opened();
+        h.setReply({ok: false, error: 'bay map is locked'});
+        const before = h.calls.filter(c => c.url.includes('type=baymap')).length;
+        const cell = h.cellAt(0, 1);
+        h.grid().ondblclick(ev(cell));
+        await h.settle();
+        const after = h.calls.filter(c => c.url.includes('type=baymap')).length;
+        check('refused: a rejected write is reported', h.alerts.some(a => /locked/.test(a)));
+        check('refused: a rejected write triggers a reload', after > before);
+    }
+
+    /* ── 11. Locked: no gesture writes ───────────────────────────────────────
+       Locked cells get no onclick and no dataset at all, so there is nothing
+       to click -- and the delegated handlers return early regardless. Both are
+       asserted: the absent wiring, and the silent grid handler.
+       children[1] specifically, not children[0]: painting order is row-major
+       and BAY() places a drive at (0,1) -- the second cell -- so this is a
+       bay that WOULD carry a dataset.bayKey if the locked wiring guard were
+       bypassed. children[0] is (0,0), permanently empty in this fixture, so
+       its dataset.bayKey is absent for a reason that has nothing to do with
+       the lock (`if (drv) cell.dataset.bayKey = drv.key` never fires there
+       either way) -- asserting against it would prove nothing. */
+    {
+        const h = await opened(LOCKED_BAY());
+        const anyCell = h.grid().children[1];
+        check('locked: cells carry no click handler', !anyCell.onclick);
+        check('locked: cells carry no bay key to drag', anyCell.dataset.bayKey === undefined);
+        h.grid().ondblclick(ev(anyCell));
+        await h.settle();
+        check('locked: the delegated double-click writes nothing', h.posts().length === 0);
     }
     } catch (e) {
         check('the bay map ran to completion without throwing — ' + e.message, false);
