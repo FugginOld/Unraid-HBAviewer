@@ -22,10 +22,27 @@ php_run() {
         -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests php:8.2-cli php "$@"
 }
 
+# Goldens UPDATE=1 must refuse to touch. These two record what the Overview
+# emitted BEFORE the dual-IOC branch (rendered at acb52d68); that provenance
+# cannot be recovered from the repo once overwritten, and a golden rebuilt by
+# the code it exists to police proves nothing. The rule used to live only in a
+# comment beside them, which is worth exactly as much as the reader's attention
+# -- and it now sits above a block of three checks, only one of which is
+# regenerable. Enforce it here instead, where UPDATE=1 has to go through it.
+PROVENANCE_GOLDENS=" overview_single.html overview_single_pcie.html "
+
 check() {  # name  expected_file  command...
     local name=$1 exp=$2; shift 2
     local got; got=$("$@")
-    if [ "${UPDATE:-}" = "1" ]; then printf '%s' "$got" > "expected/$exp"; echo "WROTE $name"; return; fi
+    if [ "${UPDATE:-}" = "1" ]; then
+        case "$PROVENANCE_GOLDENS" in
+            *" $exp "*)
+                echo "KEPT  $name (provenance golden -- UPDATE=1 will not overwrite it;"
+                echo "      re-render from acb52d68, or delete it and say why)"
+                return ;;
+        esac
+        printf '%s' "$got" > "expected/$exp"; echo "WROTE $name"; return
+    fi
     if [ "$got" = "$(cat "expected/$exp")" ]; then
         echo "PASS  $name"
     else
