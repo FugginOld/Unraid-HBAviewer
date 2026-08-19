@@ -114,8 +114,17 @@ check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh
 if command -v php >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
     check overview-single-html      overview_single.html      php_run render_overview.php expected/storcli_overview.json
     check overview-single-pcie-html overview_single_pcie.html php_run render_overview.php expected/storcli_overview_pcie.json
+    # The grouped card, byte-for-byte. Everything else that pins it counts
+    # substrings -- one lu-card-parent, two lu-card-ioc, a Model row somewhere
+    # after the parent -- so a renderer that emitted every right row in the
+    # wrong ORDER passed the whole suite. This is the golden that notices.
+    #
+    # Unlike the two above, this one IS regenerable: it records what the
+    # grouped renderer emits today, not a shape from before a branch that can
+    # no longer be rendered. Regenerate it deliberately when the card changes.
+    check overview-dual-grouped-html overview_dual_grouped.html php_run render_overview.php expected/storcli_dual.json
 else
-    echo "SKIP  overview-single-html / overview-single-pcie-html (no php and no docker)"
+    echo "SKIP  overview-single-html / overview-single-pcie-html / overview-dual-grouped-html (no php and no docker)"
 fi
 
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt

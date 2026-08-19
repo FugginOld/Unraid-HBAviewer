@@ -25,6 +25,62 @@ function luTempTile(array $v, int $i): string {
          . '</div>';
 }
 
+/* The rows that describe the BOARD: what it is, and what is running on it.
+   Both the plain card and a grouped board's parent open with exactly these,
+   which is the whole reason they live here. The firmware expression below in
+   particular carries a flex-layout trap that had to be fixed once already --
+   a second copy of it is a second chance to miss the next fix. */
+function luIdentityRows(array $v, string $driver, string $fwClause): string {
+    return '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
+         . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
+         // The verdict clause is strictly more informative than the bare
+         // pre-P20 flag — it names the exact version — so once it has
+         // something to say, the older flag steps aside rather than
+         // repeating the same fact in a second amber. A suppressed or
+         // unknown verdict has nothing to say, and the flag still does.
+         /* Version and verdict live in ONE span. .lu-meta p is a flex row with
+            justify-content:space-between, so every direct child becomes a
+            separately-spaced column: a second span sent the version to the
+            middle of the row and the verdict to the right edge, with the label
+            stranded on the left. Keeping them in one child preserves the
+            label-left / value-right shape every other row in this card has.
+            The pre-P20 chip had the same defect before the verdict existed —
+            it just only showed on SAS2 cards, so nobody had seen it. */
+         . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
+         . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+         . $fwClause . '</span></p>'
+         . ($v['bios'] !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
+         . ($driver    !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
+         . ($v['mode'] !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '');
+}
+
+/* The rows that describe ONE die: what is attached to it, and which lsiutil
+   port answers for it. On a plain card these sit in the single meta block
+   between the identity rows and the sensitivity pair; on a grouped board they
+   sit in each IOC's sub-card, because two dies do not share a drive list. */
+function luDieRows(array $v): string {
+    return ($v['drives']    !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
+         . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '');
+}
+
+/* Which band the badge is tuned to, and when the reading was taken. Both are
+   properties of the poll rather than of a die, so a grouped card shows them
+   once on the parent instead of repeating them under every IOC. */
+function luSensitivityRows(array $v, int $threshold): string {
+    return '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+         . '<p>Last read: <span>' . lsi_time() . '</span></p>';
+}
+
+/* The health badge. The id is the handle the poller updates in place and must
+   be unique per controller, so it is emitted only when there is a controller
+   to name: a grouped board's parent badge shows a worst-of rollup rather than
+   any one die's reading, and deliberately carries no id. */
+function luBadgeRow(string $label, ?int $i = null): string {
+    return '<p>HBA Health: <span class="lu-badge"'
+         . ($i !== null ? ' id="lu-badge-' . $i . '"' : '')
+         . '>' . $label . '</span></p>';
+}
+
 /* One controller, one card -- the markup this page has always emitted. Pulled
    out of renderOverviewCards's loop so a dual-IOC board can compose a grouped
    card from the same pieces instead of a second copy of them drifting apart. */
@@ -46,32 +102,13 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
           . '<div class="lu-overview-row">'
           . luTempTile($v, $i)
           . '<div class="lu-meta">'
-          . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
-          . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
-          // The verdict clause is strictly more informative than the bare
-          // pre-P20 flag — it names the exact version — so once it has
-          // something to say, the older flag steps aside rather than
-          // repeating the same fact in a second amber. A suppressed or
-          // unknown verdict has nothing to say, and the flag still does.
-          /* Version and verdict live in ONE span. .lu-meta p is a flex row with
-             justify-content:space-between, so every direct child becomes a
-             separately-spaced column: a second span sent the version to the
-             middle of the row and the verdict to the right edge, with the label
-             stranded on the left. Keeping them in one child preserves the
-             label-left / value-right shape every other row in this card has.
-             The pre-P20 chip had the same defect before the verdict existed —
-             it just only showed on SAS2 cards, so nobody had seen it. */
-          . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
-          . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
-          . $fwClause . '</span></p>'
-          . ($v['bios']   !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
-          . ($driver      !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
-          . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
-          . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
-          . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
-          . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
-          . '<p>Last read: <span>' . lsi_time() . '</span></p>'
-          . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
+          // Identity, then this die's own rows, then the poll's -- the order
+          // the page has always had. A grouped board splits these same three
+          // groups across its parent and its sub-cards instead.
+          . luIdentityRows($v, $driver, $fwClause)
+          . luDieRows($v)
+          . luSensitivityRows($v, $threshold)
+          . luBadgeRow($v['label'], $i)
           . '</div></div>';
     if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
         $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
@@ -121,19 +158,14 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $out = '<div class="lu-card first lu-card-parent" data-status="' . htmlspecialchars($worst) . '"'
          . ' style="--sc:' . lsi_status_color($worst) . '">'
          . '<div class="lu-meta">'
-         . '<p>Model: <span>' . htmlspecialchars($hv['model']) . '</span></p>'
-         . '<p>Chip: <span>' . htmlspecialchars($hv['chip']) . '</span></p>'
-         // Same one-span shape as the plain card: .lu-meta p is a flex row, so a
-         // verdict beside the version rather than inside it strands the label.
-         . '<p>Firmware: <span>' . htmlspecialchars($hv['firmware'])
-         . ($hv['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
-         . $fwClause . '</span></p>'
-         . ($hv['bios'] !== '' ? '<p>BIOS: <span>' . htmlspecialchars($hv['bios']) . '</span></p>' : '')
-         . ($driver     !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
-         . ($hv['mode'] !== '' ? '<p>Mode: <span>' . htmlspecialchars($hv['mode']) . '</span></p>' : '')
-         . '<p>Badge Sensitivity: <span>' . htmlspecialchars($hv['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
-         . '<p>Last read: <span>' . lsi_time() . '</span></p>'
-         . '<p>HBA Health: <span class="lu-badge">' . lsi_status_label($worst) . '</span></p>'
+         // The board's own rows and the poll's, read from the first member.
+         // luDieRows is absent by design: drives and lsiutil port belong to a
+         // die, and each sub-card below carries its own.
+         . luIdentityRows($hv, $driver, $fwClause)
+         . luSensitivityRows($hv, $threshold)
+         // No $i: this badge is the worst-of rollup, not any one die's reading,
+         // so it must not answer to a per-controller id the poller updates.
+         . luBadgeRow(lsi_status_label($worst))
          . '</div>';
 
     foreach ($group as $n) {
@@ -168,9 +200,8 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
               . luTempTile($v, $i)
               . '<div class="lu-meta">'
               . ($loc !== '' ? '<p>PCI Location: <span>' . htmlspecialchars($loc) . '</span></p>' : '')
-              . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
-              . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
-              . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
+              . luDieRows($v)
+              . luBadgeRow($v['label'], $i)
               . '</div></div></div>';
     }
 
