@@ -15,7 +15,7 @@ W=/tmp/hbav-ab; rm -rf "$W"; mkdir -p "$W"
 
 set -o pipefail
 for S in $A $B; do
-    curl -fsSL "https://github.com/Fuggin/Unraid-HBAviewer/archive/$S.tar.gz" \
+    curl -fsSL "https://github.com/FugginOld/Unraid-HBAviewer/archive/$S.tar.gz" \
         | tar xz -C "$W" || { echo "fetch $S failed"; exit 1; }
 done
 set +o pipefail
@@ -31,8 +31,18 @@ run() {
 run $A "$W/a"
 run $B "$W/b"
 
+# The clock and uptime tick between the two runs; normalise them so a
+# surviving diff is a real one. Raw files stay in $W/a and $W/b.
+for s in a b; do
+    mkdir -p "$W/$s.norm"
+    for f in "$W/$s"/*; do
+        sed -e 's/"t":[0-9]*/"t":T/g' -e 's/"uptime":[0-9]*/"uptime":U/g' \
+            "$f" > "$W/$s.norm/$(basename "$f")"
+    done
+done
+
 echo "=== diff (empty means identical) ==="
-diff -r "$W/a" "$W/b" && echo "IDENTICAL"
+diff -r "$W/a.norm" "$W/b.norm" && echo "IDENTICAL"
 echo "=== sizes ==="
 wc -c "$W"/a/*.json "$W"/b/*.json
 ```
@@ -41,6 +51,6 @@ wc -c "$W"/a/*.json "$W"/b/*.json
 
 **What to send back:** just the output from `=== diff` onward. If it prints `IDENTICAL` that's the whole answer and you're done. If it prints differences instead, the diff itself is what I need — that's the bug, and finding it here rather than after release is the entire point of asking.
 
-One thing worth knowing: a couple of the collectors read live counters (temperature, PHY error counts, the event log), so those can legitimately differ by a digit or two purely because the two runs happen seconds apart. If the only diffs are in `get_phy_health.json` or `get_event_log.json` and they look like counters ticking rather than structure changing, that's expected — send it anyway and I'll confirm.
+One thing worth knowing: the collectors read live hardware, so a few values legitimately move between the two runs. The wall clock and uptime are normalised away above (masterwishx's run on a 2-card box differed in exactly those and nothing else). Temperature, PHY error counts and the event log are not — a degree of drift or a counter ticking is expected rather than a bug. If a diff survives and looks like values moving rather than structure changing, send it anyway and I'll confirm which it is.
 
 Takes under a minute. Thanks again — the multi-card support in the last release only works because you two tested it.
