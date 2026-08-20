@@ -341,6 +341,16 @@ lsi_host_for() {   # $1 = bus   $2 = device   $3 = how many ports the box has
 lsi_each_card() {   # $1 = callback name
     local BANNER BOARD ports nports p row bus dev hnum pdir first=1
     BANNER=$(mktemp); BOARD=$(mktemp)
+    # The rm at the end of this function only runs if the function reaches it.
+    # ov_lsiutil and health_lsiutil each carried this trap before the per-card
+    # read replaced their loops, and dropping it was an accident of the move: a
+    # wedged IOC blocks hba_query, PHP's request timeout kills the CGI, and /tmp
+    # is tmpfs -- so a card stuck that way leaks two files of RAM per poll, and
+    # the dashboard tile polls on a timer. Safe to set here: hba_each runs one
+    # backend, so the only other EXIT trap in this tree (phy_storcli's SYSFS)
+    # is on a path where lsi_each_card is never called, and no callback of ours
+    # sets one. Nothing to clobber, nothing to be clobbered by.
+    trap 'rm -f "$BANNER" "$BOARD"' EXIT
     printf '0\n' | hba_query 2>/dev/null > "$BANNER"
     hba_query -b             2>/dev/null > "$BOARD"
     ports=$(lsi_ports "$BANNER")

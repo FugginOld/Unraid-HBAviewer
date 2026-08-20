@@ -284,6 +284,16 @@ async function main() {
         check('assign: clicking a tray drive then an empty bay posts that bay',
             !!p && p.action === 'assign' && p.params.get('key') === 'c0p6'
                 && p.params.get('row') === '1' && p.params.get('col') === '0');
+        /* The POST is only half of it. `col === null` appears TWICE -- in
+           luBayCommit, which the assertion above pins, and again in luBayApply,
+           which paints the optimistic grid. Weakening the luBayApply copy to
+           `!col` sends a correct POST and still drops the drive into the TRAY
+           instead of bay (1,0) until the next reload, so a check that only reads
+           the POST sees a clean assign and passes. Read the DOM too. */
+        check('assign: column 0 is painted into the bay',
+            h.cellAt(1, 0).dataset.bayKey === 'c0p6');
+        check('assign: column 0 does not stay in the tray',
+            !h.tray().children.map(x => x.dataset.trayKey).includes('c0p6'));
     }
 
     /* ── 2. Drop onto an OCCUPIED bay -> the occupant goes back to the tray ──
@@ -485,9 +495,31 @@ async function main() {
         const anyCell = h.grid().children[1];
         check('locked: cells carry no click handler', !anyCell.onclick);
         check('locked: cells carry no bay key to drag', anyCell.dataset.bayKey === undefined);
-        h.grid().ondblclick(ev(anyCell));
+    }
+    /* The grid handler needs its own fixture. Fired at a cell from a LOCKED
+       render it proves nothing: locked cells never receive dataset.bayKey, so
+       closest('.lu-bay-cell[data-bay-key]') misses and the handler returns
+       early whether or not the lock guard exists -- deleting that guard left
+       this green. Open UNLOCKED so the cell really carries the key, then lock
+       the live state and fire at that cell, which is the only way the guard is
+       the thing being tested. */
+    {
+        const h = await opened();
+        const cell = h.cellAt(0, 1);                 // occupied -> has a bay key
+        check('locked probe: the cell under test really carries a bay key',
+            cell.dataset.bayKey !== undefined);
+        // Lock through the real toggle -- luBay is IIFE-private, so there is no
+        // reaching in. The relock repaints and the repainted cells lose their
+        // keys, but `cell` is the reference captured while unlocked and still
+        // carries one, which is exactly the state the guard exists to refuse.
+        h.setReply({ok: true, locked: 1});
+        h.ctx.luBayLock();
         await h.settle();
-        check('locked: the delegated double-click writes nothing', h.posts().length === 0);
+        const before = h.posts().length;             // the lock POST itself
+        h.grid().ondblclick(ev(cell));
+        await h.settle();
+        check('locked: the delegated double-click writes nothing',
+            h.posts().length === before);
     }
 
     /* ── 13. The second click of a double-click does not toggle selection ────

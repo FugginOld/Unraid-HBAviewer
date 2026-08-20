@@ -10,6 +10,20 @@
    renders blank, or silently takes a default that happens to look plausible.
    That is the failure this file exists to make loud.
 
+   WHEN it makes it loud matters, and this file cannot do it alone. It reads
+   the GOLDENS, not the parsers -- so a field deleted from a parser today is
+   caught by tests/run.sh (whose goldens stop matching), and only reaches this
+   file once someone regenerates with UPDATE=1. Verified: deleting `topology`
+   from parse/storcli_overview.sh leaves this file reporting "all pass" while
+   run.sh fails. Its job is to stop a regenerated golden from quietly enshrining
+   the loss, not to be the first alarm.
+
+   Five checks below are tautologies over CTL_SCHEMA rather than tests of any
+   backend: the two that assert temp and status are core, and the three
+   known-gap checks. They restate a const declared a few lines up, so they can
+   only fail if someone edits that literal -- which is the point. They are
+   tripwires on the declaration, and nothing more.
+
    It already happened once. storcli2 arrived (issue #19, released 2026.08.17)
    emitting neither card_id, subvendor_id nor topology, and nothing noticed
    until someone went looking. See KNOWN GAPS below for what that costs.

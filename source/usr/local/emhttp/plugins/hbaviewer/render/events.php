@@ -43,10 +43,14 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
             $rows = [];
             foreach (array_reverse($entries) as $e) {
                 $rows[] = [
-                    htmlspecialchars((string) $e['seq']),
-                    '<code>' . htmlspecialchars((string) $e['qualifier']) . '</code>',
-                    '<code>' . htmlspecialchars($e['data']) . '</code>',
-                    '<code>' . htmlspecialchars((string) $e['timestamp']) . '</code>',
+                    // Routing is by the backend field alone now, so a record whose
+                    // shape disagrees with its label arrives here missing keys
+                    // instead of being sniffed onto the other branch. data also
+                    // needs the cast: htmlspecialchars(null) is deprecated in 8.1+.
+                    htmlspecialchars((string) ($e['seq'] ?? '')),
+                    '<code>' . htmlspecialchars((string) ($e['qualifier'] ?? '')) . '</code>',
+                    '<code>' . htmlspecialchars((string) ($e['data'] ?? '')) . '</code>',
+                    '<code>' . htmlspecialchars((string) ($e['timestamp'] ?? '')) . '</code>',
                 ];
             }
             $out .= luTable(['Seq', 'Qualifier', 'Data', 'Timestamp'], $rows);

@@ -152,7 +152,10 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                 $rows[] = [
                     $devCell($d),
                     lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
-                    htmlspecialchars((string) $d['bus']) . ':' . htmlspecialchars((string) $d['target']),
+                    // ?? like sas_address and phy above: routing is by the backend
+                    // field alone now, so a record whose shape disagrees with its
+                    // label lands here missing keys rather than being sniffed away.
+                    htmlspecialchars((string) ($d['bus'] ?? '')) . ':' . htmlspecialchars((string) ($d['target'] ?? '')),
                     $phy, $sas,
                     $locCell($d),
                 ];

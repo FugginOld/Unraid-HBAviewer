@@ -226,6 +226,20 @@ eq "health: each card its own temperature" "53 61 59" \
 eq "health: each card its own scsi host" "1 2 3" \
    "$(grep -oE '"drives":[0-9]+' <<< "$HOUT" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
 
+# The host-0 fallback is for a ONE-card box, where every disk found IS this
+# card's. On a multi-card box an unjoined card must stay unjoined -- reporting
+# host 0's drive count and PHYs as this card's is the exact confusion issue #18
+# was filed about, and the drives side pins the same rule ("card 3 is unjoined
+# and emits nothing"). Health had no equivalent: deleting the [ "$6" = "1" ]
+# condition, so the fallback fired on any card count, left every assertion
+# above green. _drive_count's stub prints the host it was handed, or "none" for
+# an empty one, so host 0 leaking through reads as 0 rather than none.
+# lsi_host_for is overridden inside the substitution only: the drives block
+# below builds its own join and must not inherit a broken one.
+HUNJOINED=$(lsi_host_for() { :; }; health_lsiutil)
+eq "health: unjoined cards on a multi-card box do not fall back to host 0" "none none none" \
+   "$(grep -oE '"drives":[a-z0-9]+' <<< "$HUNJOINED" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
+
 # ── drv_lsiutil gives each card only its own drives ─────────────────────────
 # Stage 3's sweep is box-wide; without the per-card filter card 1 lists card 2's
 # disks and the Drives tab shows every disk under every card.

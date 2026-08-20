@@ -139,6 +139,12 @@ if command -v php >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
     # Unlike the two above, this one IS regenerable: it records what the
     # grouped renderer emits today, not a shape from before a branch that can
     # no longer be rendered. Regenerate it deliberately when the card changes.
+    # Its input, expected/storcli_dual.json, is itself a golden -- and one this
+    # file regenerates ~200 lines BELOW here. So under UPDATE=1 this HTML is
+    # rebuilt from the PREVIOUS storcli_dual.json and the two end up one
+    # generation apart: a single pass leaves this check failing, a second pass
+    # converges it. If you change what storcli_dual.json contains, run UPDATE=1
+    # twice and diff, or this golden silently records the old input.
     check overview-dual-grouped-html overview_dual_grouped.html php_run render_overview.php expected/storcli_dual.json
 else
     echo "SKIP  overview-single-html / overview-single-pcie-html / overview-dual-grouped-html (no php and no docker)"
@@ -327,14 +333,21 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
 # LSI_CFG_PATH is pinned too: config.sh sources the cfg file AFTER reading the
 # environment, so a real /boot/config/plugins/hbaviewer/hbaviewer.cfg would win
 # over ALERT_THRESHOLD (and over HBA_PORT, which these goldens also pin) — the
-# nonexistent path is what makes the env prefix actually bite.
-ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
+# nonexistent path is what lets the env prefix through at all.
+#
+# 86, not 76. 76 is also config.sh's built-in default, so a golden recorded
+# under it reads the same whether the environment was honoured or ignored
+# entirely — the decoupling this comment claims was unverifiable while the
+# number agreed with the fallback. 86 is a legal threshold that disagrees, and
+# it moves the 77 °C controller in storcli_multi from warn/warning to
+# ok/elevated, so these goldens now fail if the env stops being read.
+ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 # Two SAS3008 IOCs both reporting board name SAS9300-16i, both resolving (via
 # SYSDUAL above) to the same root port -> the same card_id. The only check in
 # this suite that would catch the composer emitting DIFFERENT card_ids for a
 # genuine dual-IOC board -- everything else pins the split (distinct-slot) case.
-STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
+STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-storcli-dual storcli_dual.json bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
@@ -344,7 +357,7 @@ check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # real storcli is installed on the machine running the suite.
 # STUB_FIX is overridden: the exported value points at fixtures/storcli for the
 # checks above, and the lsiutil captures live one level up in fixtures/.
-STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" ALERT_THRESHOLD=76 LSI_CFG_PATH=/nonexistent \
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
 # The health composer, all the way through. It had no golden until its clock
 # became injectable: a wall clock and an uptime cannot live in an expectation.
