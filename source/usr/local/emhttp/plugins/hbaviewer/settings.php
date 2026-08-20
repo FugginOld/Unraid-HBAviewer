@@ -34,26 +34,27 @@ foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
            . ($fw !== '' ? ", fw $fw" : '') . ')';
 }
 $hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found';
-
-// Two independent lookups: a box with a 9600 typically has BOTH tools installed
-// (the dkaser plugin symlinks storcli and storcli2 alike), and the classic one
-// simply enumerates nothing there. Presence of one says nothing about the other,
-// so a single lookup would tell a 9600 owner they have "storcli" and never
-// mention the tool their card actually needs.
-$find_tool = function (array $names): string {
-    foreach ($names as $n) {
-        foreach (['/usr/local/sbin/', '/usr/local/bin/', '/usr/sbin/'] as $d) {
-            if (is_executable($d . $n)) return $d . $n;
-        }
-    }
-    if (is_executable('/opt/MegaRAID/storcli2/storcli2') && in_array('storcli2', $names, true)) {
-        return '/opt/MegaRAID/storcli2/storcli2';
-    }
-    $w = trim((string) shell_exec('command -v ' . implode(' ', $names) . ' 2>/dev/null'));
-    return $w !== '' ? (string) strtok($w, "\n") : '';
-};
-$storcli  = $find_tool(['storcli', 'storcli64']);
-$storcli2 = $find_tool(['storcli2']);
+// One implementation of this lookup, and it lives in the shell. This page used
+// to carry its own four-path list against lib.sh's eight, already missing
+// /usr/local/bin/storcli* -- two copies of one question that had drifted apart.
+// Sourcing lib.sh runs nothing: its top level only assigns variables and
+// defines functions. shell_exec is not new here; the old fallback used it too.
+//
+// storcli_candidates rather than find_storcli, because a box with a 9600
+// typically has BOTH tools installed (the dkaser plugin ships storcli and
+// storcli2 alike) and the classic one simply enumerates nothing there.
+// find_storcli returns the first hit only, which would tell a 9600 owner they
+// have "storcli" and never mention the tool their card actually needs. One
+// shell call still answers both questions -- the list is already deduplicated
+// and ordered, so the first name of each kind is the one the backend will use.
+$cands = trim((string) shell_exec(
+    'bash -c ". ' . __DIR__ . '/scripts/lib.sh 2>/dev/null; storcli_candidates" 2>/dev/null'
+));
+$storcli = $storcli2 = '';
+foreach (preg_split('/\R/', $cands, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $p) {
+    if (basename($p) === 'storcli2') { if ($storcli2 === '') $storcli2 = $p; }
+    elseif ($storcli === '')         { $storcli  = $p; }
+}
 
 if ($has_sas4 && $storcli2 === '') {
     $backend_label = 'StorCLI2 — NOT INSTALLED';
@@ -90,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // the grid back to 6x4 — every time somebody toggled a tab here.
     lsi_config_update([
         'HBA_PORT'        => $_POST['port']      ?? 1,
-        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 80,
+        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 76,
         'SHOW_PCIE'       => isset($_POST['show_pcie'])   ? 1 : 0,
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,

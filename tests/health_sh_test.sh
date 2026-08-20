@@ -141,23 +141,27 @@ rm -rf "$SROOT"
 # no onboard sensor -- so the sample must carry no temperature, while read_ok
 # stays TRUE: the query answered, unlike the absent-field case above it, which
 # means lsiutil produced nothing at all.
-HL=$(sed -n '/^health_lsiutil()/,/^}/p' "$SRC"; sed -n '/^_health_lsiutil_one()/,/^}/p' "$SRC")
+HL=$(sed -n '/^health_lsiutil()/,/^}/p'      "$SRC"
+     sed -n '/^_health_lsiutil_one()/,/^}/p' "$SRC"
+     sed -n '/^lsi_each_card()/,/^}/p'       "$LIB")
 [ -n "$HL" ] || { echo "FAIL  health_lsiutil not found in $SRC"; exit 1; }
 # One port, unjoined: the single-card shape this case is about, and the one
 # where the historic _first_sas_host fallback still applies (plan 059).
 ZJSON=$(NOW=1000 UPTIME=500 SYS_SCSI_HOST=/nonexistent bash -c "$HL"$'\n''
     require_binary() { return 0; }
     band_of() { echo normal; }
-    lsi_port_map() { printf "1 1 0\n"; }
+    lsi_ports() { printf "1\n"; }
     lsi_host_for() { :; }
     _first_sas_host() { echo 0; }
-    _drive_count() { echo 7; }
+    _drive_count() { printf '%s' "${1:-EMPTY}"; }
     _phys_json() { echo "[]"; }
     hba_query() { printf "  IOCTemperature:                   0x0000\n"; }
     health_lsiutil' 2>/dev/null)
 eq "0x0000 is no sensor, not 0 C" "null" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"temp":([^,]*),.*/\1/p')"
 eq "no band on a sensorless card"  ""     "$(str "$ZJSON" temp_band)"
 eq "the card still counts as read" "true" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"read_ok":([a-z]+).*/\1/p')"
+# One port, no PCI join: the historic host-0 default must fire, not stay empty.
+eq "single-card box falls back to host 0" "0" "$(printf '%s' "$ZJSON" | sed -nE 's/.*"drives":([^,]*),.*/\1/p')"
 
 ROOT=$(mktemp -d)
 trap 'rm -rf "$ROOT"' EXIT

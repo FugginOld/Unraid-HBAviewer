@@ -29,6 +29,21 @@ check('defaults port',      $d['HBA_PORT'] === 1);
 check('defaults threshold', $d['ALERT_THRESHOLD'] === 76);
 check('defaults are int',   is_int($d['SHOW_PCIE']));
 
+/* One declaration, two views. The shell reads the same cfg file PHP does, and
+   used to restate the default itself -- with a different number. On a box whose
+   cfg lacks the key, the shell banded temperatures against 80 while PHP labelled
+   them against 76. 80 was never a legal value for what this setting means: it is
+   the FIRST BAND at which the badge complains, stored as that band's floor, and
+   the floors are 66/76/86/96. */
+$shellDefault = trim((string) shell_exec(
+    'LSI_CFG_PATH=/nonexistent bash -c '
+    . escapeshellarg('. ' . __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/config.sh; printf %s "$ALERT"')
+));
+check('shell and PHP agree on the ALERT_THRESHOLD default',
+    $shellDefault === (string) LSI_SCHEMA['ALERT_THRESHOLD'][0]);
+check('the default is a real band floor',
+    in_array((int) $shellDefault, [66, 76, 86, 96], true));
+
 // write clamps out-of-range input, read returns clamped values
 lsi_config_write(['HBA_PORT' => 99, 'ALERT_THRESHOLD' => 0, 'SHOW_PHY' => 0], $tmp);
 $r = lsi_config_read($tmp);

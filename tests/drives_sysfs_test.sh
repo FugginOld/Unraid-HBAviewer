@@ -13,12 +13,15 @@
 cd "$(dirname "$0")" || exit 2
 SRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_attached_drives.sh"
 DIR="$(dirname "$SRC")"
+LIB="../source/usr/local/emhttp/plugins/hbaviewer/scripts/lib.sh"
 fail=0
 eq() {  # name  want  got
     if [ "$2" = "$3" ]; then echo "PASS  $1"; else echo "FAIL  $1 -- want '$2', got '$3'"; fail=1; fi
 }
 
-FN=$(sed -n '/^drv_lsiutil()/,/^}/p' "$SRC"; sed -n '/^_drv_lsiutil_one()/,/^}/p' "$SRC")
+FN=$(sed -n '/^drv_lsiutil()/,/^}/p'      "$SRC"
+     sed -n '/^_drv_lsiutil_one()/,/^}/p' "$SRC"
+     sed -n '/^lsi_each_card()/,/^}/p'    "$LIB")
 [ -n "$FN" ] || { echo "FAIL  drv_lsiutil not found in $SRC"; exit 1; }
 eval "$FN"
 
@@ -26,7 +29,7 @@ require_binary() { :; }
 # One port, unjoined — the single-card shape these fixtures were built as, and
 # the one where the sysfs sweep stays unfiltered (plan 059). The per-card filter
 # has its own cases in multiport_test.sh.
-lsi_port_map() { printf '0 1 0\n'; }
+lsi_ports() { printf '1\n'; }
 lsi_host_for() { :; }
 
 ROOT=$(mktemp -d)

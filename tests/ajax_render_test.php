@@ -91,6 +91,67 @@ check('phy multi heads controllers', str_contains(
 check('phy single omits head', !str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]]]]), 'Controller /c0'));
 
+/* The backend field is the ONLY input that picks columns. CONTEXT.md says so.
+   These are characterization checks, not regression ones: the key-sniff they
+   replaced could only fire when `backend` was absent entirely, which no live
+   payload is -- hba_each stamps both paths and the {"error":…} payload returns
+   before any renderer runs. First pair: a stated backend decides even when the
+   keys look like the other one. Second pair: with NO backend at all, the
+   renderers now fall to the lsiutil table rather than guessing from keys. */
+$sniffBait = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+$sniffOut = renderPhyTables($sniffBait);
+check('phy: stated backend wins over storcli-looking keys',
+    str_contains($sniffOut, 'Invalid DWords') && !str_contains($sniffOut, 'Attached SAS Address'));
+
+$drvBait = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+// 'Encl:Slot' is the storcli drives header and 'Bus:Tgt' the lsiutil one --
+// those are the discriminators. ('Enclosure' is NOT: it appears only in a PHY
+// topology summary, so asserting on it passes on both branches and tests
+// nothing.) Asserting both directions proves which table rendered, not merely
+// which one did not.
+$drvOut = renderDrivesTables($drvBait);
+check('drives: stated backend wins over storcli-looking keys',
+    str_contains($drvOut, 'Bus:Tgt') && !str_contains($drvOut, 'Encl:Slot'));
+
+// No backend stated: no guessing. These two FAIL before the deletion and pass
+// after, which is the only behavioural difference the change makes.
+$noBackendPhy = ['controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+$noBackendPhyOut = renderPhyTables($noBackendPhy);
+check('phy: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendPhyOut, 'Invalid DWords') && !str_contains($noBackendPhyOut, 'Attached SAS Address'));
+
+$noBackendDrv = ['controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+$noBackendDrvOut = renderDrivesTables($noBackendDrv);
+check('drives: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendDrvOut, 'Bus:Tgt') && !str_contains($noBackendDrvOut, 'Encl:Slot'));
+
+// 'Qualifier' is the lsiutil events header and 'Code' the storcli one -- the
+// entries below are storcli-shaped (seq/time/code/description) but the
+// payload carries no 'backend' key, so an unstamped payload must not sniff
+// the entry shape into rendering the storcli table.
+$evSniffDir = sys_get_temp_dir() . '/hbav_events_sniff_' . getmypid();
+@mkdir($evSniffDir, 0755, true);
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
+$noBackendEv = ['controllers' => [['entries' => [
+    ['seq' => '1', 'time' => '2026-07-01 10:00:00', 'code' => '0x0113', 'description' => 'Drive inserted'],
+]]]];
+$noBackendEvOut = renderEventsTables($noBackendEv, $evSniffDir);
+check('events: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendEvOut, 'Qualifier') && !str_contains($noBackendEvOut, 'Code'));
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
+@rmdir($evSniffDir);
 // A storcli2 payload must reach the storcli tables. Before lsi_backend_shape
 // existed it fell through to the lsiutil branch, because the field matched
 // neither 'storcli' nor ''.
@@ -658,7 +719,13 @@ check('baymap unplaceable drive still appears, with a null key',
    that guard), and no constant in the file is used before its declaration. */
 check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
 
+// ajax_info.php's dispatch/fetch requires every render/*.php file at load time
+// (see the CLI-seam comment above), so the same "declared before it's used"
+// guarantee has to scan those too, or a render file is a blind spot for it.
 $aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+foreach (glob(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/render/*.php') as $renderFile) {
+    $aj .= "\n" . file_get_contents($renderFile);
+}
 preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
 foreach ($mc[1] as [$cname, $declAt]) {
     check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
@@ -915,6 +982,35 @@ check('luTable cells are html',  str_contains($t, '<code>x</code>'));
    what makes a wide table readable, so it is pinned here. */
 check('luTable is wrapped in a horizontal scroller',
       str_starts_with($t, '<div class="lu-tscroll"><table') && str_ends_with($t, '</table></div>'));
+
+/* The card shell four renderers used to repeat verbatim. The error branch is
+   the load-bearing part: an errored controller must still get its own card and
+   the card must be CLOSED, or it renders as bare text floating between its
+   neighbours' cards. luCtlHead appears only when there is more than one
+   controller -- a single-controller box gets no heading, which is what every
+   existing single-controller expectation pins. */
+check('card: one card per controller', function_exists('luCardPerController')
+    && substr_count(luCardPerController([[], []], fn($i, $c) => 'X'), 'lu-card first') === 2);
+check('card: body output lands inside the card',
+    str_contains(luCardPerController([['phys' => []]], fn($i, $c) => 'BODYMARK'), 'BODYMARK'));
+check('card: single controller gets no heading',
+    !str_contains(luCardPerController([[]], fn($i, $c) => ''), 'Controller /c'));
+check('card: two controllers get headings',
+    substr_count(luCardPerController([[], []], fn($i, $c) => ''), 'Controller /c') === 2);
+check('card: an errored controller still gets a closed card',
+    luCardPerController([['error' => 'no response']], fn($i, $c) => 'NEVER')
+        === '<div class="lu-card first" data-ctl="0"><p class="lu-muted">no response</p></div>');
+check('card: the body is not called for an errored controller',
+    !str_contains(luCardPerController([['error' => 'x']], fn($i, $c) => 'NEVER'), 'NEVER'));
+check('card: error text is escaped',
+    str_contains(luCardPerController([['error' => '<b>x']], fn($i, $c) => ''), '&lt;b&gt;x'));
+// A malformed controllers[] entry -- a composer bug, a truncated read -- must
+// cost one blank card, not the whole tab. Before the closure conversion these
+// were foreach bodies with no type constraint; the typed closures made a null
+// entry fatal.
+check('card: a null controller entry degrades instead of throwing',
+    luCardPerController([null], fn(int $i, array $c) => 'BODY')
+        === '<div class="lu-card first" data-ctl="0">BODY</div>');
 
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of

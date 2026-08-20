@@ -301,25 +301,6 @@ lsi_ports() {   # $1 = banner file
     fi
 }
 
-# Every port with the PCI bus and device lsiutil's own `-b` table gives it, one
-# "port bus dev" line each. Both reads list EVERY port in a single call, so a
-# composer that loops cards pays for them once here rather than once per card.
-# The bus/dev columns are what _host_for_pci joins on; a composer that only
-# needs the port numbers can read the first field and ignore the rest.
-# Empty bus/dev when the board table has no row for a port — _host_for_pci
-# rejects that, which is the intended "no join" answer, not an error.
-lsi_port_map() {
-    local BANNER BOARD p row
-    BANNER=$(mktemp); BOARD=$(mktemp)
-    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
-    hba_query -b             2>/dev/null > "$BOARD"
-    for p in $(lsi_ports "$BANNER"); do
-        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
-        printf '%s %s %s\n' "$p" "$(echo "$row" | awk '{print $3}')" "$(echo "$row" | awk '{print $4}')"
-    done
-    rm -f "$BANNER" "$BOARD"
-}
-
 # The scsi host a looping composer should attribute to one port, with the ONE
 # rule every one of them has to apply the same way: a failed join must not fall
 # back to card 1 when the box has more than one card. Two cards sharing a host
@@ -332,6 +313,59 @@ lsi_host_for() {   # $1 = bus   $2 = device   $3 = how many ports the box has
     local h
     if h=$(_host_for_pci "$1" "$2"); then printf '%s' "$h"; return 0; fi
     [ "$3" = "1" ] && _first_sas_host
+}
+
+# Every lsiutil card, joined and ready to read. Captures the banner and the -b
+# board table ONCE (both list every port in a single call), enumerates the
+# ports, resolves each port's scsi host through the one join rule and that
+# host's PCI dir, calls $1 per card and comma-joins what it printed.
+#
+#   lsi_each_card CALLBACK
+#   CALLBACK PORT BANNER BOARD HNUM PDIR NPORTS
+#
+# Plan 059 taught five composers this loop and each of them assembled it from
+# lib.sh's primitives differently: five emit loops, three banner captures, two
+# spellings of the port count, and eleven mktemps with three traps between them.
+# This is that loop, once.
+#
+# Every composer loops as a unit because ajax_info.php joins the tabs by
+# ARRAY INDEX: a tab that returns fewer cards mislabels hardware rather than
+# merely omitting it.
+#
+# HNUM is EMPTY when the join failed on a multi-card box -- deliberately, since
+# handing a card its neighbour's host is the bug issue #18 was filed about. What
+# a tab does with that is the tab's business and differs for good reasons: the
+# overview reports an unknown topology (which suppresses the firmware verdict),
+# health falls back to host 0 on a single-card box (which its goldens pin), and
+# attached-drives reports nothing rather than sweeping sysfs box-wide.
+lsi_each_card() {   # $1 = callback name
+    local BANNER BOARD ports nports p row bus dev hnum pdir first=1
+    BANNER=$(mktemp); BOARD=$(mktemp)
+    # The rm at the end of this function only runs if the function reaches it.
+    # ov_lsiutil and health_lsiutil each carried this trap before the per-card
+    # read replaced their loops, and dropping it was an accident of the move: a
+    # wedged IOC blocks hba_query, PHP's request timeout kills the CGI, and /tmp
+    # is tmpfs -- so a card stuck that way leaks two files of RAM per poll, and
+    # the dashboard tile polls on a timer. Safe to set here: hba_each runs one
+    # backend, so the only other EXIT trap in this tree (phy_storcli's SYSFS)
+    # is on a path where lsi_each_card is never called, and no callback of ours
+    # sets one. Nothing to clobber, nothing to be clobbered by.
+    trap 'rm -f "$BANNER" "$BOARD"' EXIT
+    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
+    hba_query -b             2>/dev/null > "$BOARD"
+    ports=$(lsi_ports "$BANNER")
+    nports=$(echo $ports | wc -w | tr -d ' ')   # unquoted: count the tokens
+    for p in $ports; do
+        row=$(grep "ioc" "$BOARD" | sed -n "${p}p")
+        bus=$(echo "$row" | awk '{print $3}')
+        dev=$(echo "$row" | awk '{print $4}')
+        hnum=$(lsi_host_for "$bus" "$dev" "$nports")
+        pdir=$([ -n "$hnum" ] && _pci_dir_of_host "$hnum")
+        [ "$first" = 1 ] || printf ','
+        first=0
+        "$1" "$p" "$BANNER" "$BOARD" "$hnum" "$pdir" "$nports"
+    done
+    rm -f "$BANNER" "$BOARD"
 }
 
 # The PCI device behind a scsi_host. lsiutil never reports a PCI address (and
