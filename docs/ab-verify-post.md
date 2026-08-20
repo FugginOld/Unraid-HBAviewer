@@ -10,7 +10,7 @@ Paste the whole block into an Unraid terminal:
 
 ```bash
 A=8e4a12d   # released
-B=4558d7f   # new code
+B=8e7b38d   # branch tip (includes the card-renderer merge)
 W=/tmp/hbav-ab; rm -rf "$W"; mkdir -p "$W"
 
 set -o pipefail
