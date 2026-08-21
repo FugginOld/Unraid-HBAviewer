@@ -102,17 +102,22 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 </svg>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
-<div class="lu-tabs">
-  <button class="lu-tab-btn active" data-tab="overview" onclick="luTab('overview')">Overview</button>
-  <button class="lu-tab-btn" data-tab="health" onclick="luTab('health')">HBA Health</button>
-  <?php if ($showPhy):    ?><button class="lu-tab-btn" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
-  <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
+<!-- role=tablist, and the two buttons at the end that NAVIGATE rather than
+     switch a pane carry role=link instead of role=tab: a screen reader that
+     announces "tab 9 of 10" and then leaves the page is worse than no
+     grouping at all. Arrow-key movement and the roving tabindex live in
+     luTab()/luTabKey() in hbaviewer.js. -->
+<div class="lu-tabs" role="tablist" aria-label="HBAviewer views" onkeydown="luTabKey(event)">
+  <button class="lu-tab-btn active" type="button" role="tab" id="tabbtn-overview" aria-controls="tab-overview" aria-selected="true" data-tab="overview" onclick="luTab('overview')">Overview</button>
+  <button class="lu-tab-btn" type="button" role="tab" id="tabbtn-health" aria-controls="tab-health" aria-selected="false" tabindex="-1" data-tab="health" onclick="luTab('health')">HBA Health</button>
+  <?php if ($showPhy):    ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-phy" aria-controls="tab-phy" aria-selected="false" tabindex="-1" data-tab="phy"    onclick="luTab('phy')">PHY Health</button><?php endif; ?>
+  <?php if ($showDrives): ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-drives" aria-controls="tab-drives" aria-selected="false" tabindex="-1" data-tab="drives" onclick="luTab('drives')">Drives</button><?php endif; ?>
   <?php /* Same payload as Drives, arranged as the chassis — so it follows the
            same toggle rather than adding a second setting for one data source. */ ?>
-  <?php if ($showDrives): ?><button class="lu-tab-btn" data-tab="baymap" onclick="luTab('baymap')">Array Map</button><?php endif; ?>
-  <button class="lu-tab-btn" data-tab="smart" onclick="luTab('smart')">SMART</button>
-  <?php if ($showEvents): ?><button class="lu-tab-btn" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
-  <?php if ($showPerf):   ?><button class="lu-tab-btn" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
+  <?php if ($showDrives): ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-baymap" aria-controls="tab-baymap" aria-selected="false" tabindex="-1" data-tab="baymap" onclick="luTab('baymap')">Array Map</button><?php endif; ?>
+  <button class="lu-tab-btn" type="button" role="tab" id="tabbtn-smart" aria-controls="tab-smart" aria-selected="false" tabindex="-1" data-tab="smart" onclick="luTab('smart')">SMART</button>
+  <?php if ($showEvents): ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-events" aria-controls="tab-events" aria-selected="false" tabindex="-1" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
+  <?php if ($showPerf):   ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-perf" aria-controls="tab-perf" aria-selected="false" tabindex="-1" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php /* Firmware sits at the end of the strip, red, and only once the user
            has ticked the box in Settings and the maintainer lock is off — so it
            cannot appear on a stock install and cannot appear on a locked one.
@@ -130,20 +135,20 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
            -- the warning sign carries the meaning, and fighting whichever theme
            the user picked is not worth the CSS. */ ?>
   <?php if (!LSI_FLASH_LOCKED && (int) $cfg['ENABLE_FLASH'] === 1): ?>
-  <button class="lu-tab-btn" type="button"
+  <button class="lu-tab-btn" type="button" role="link"
           onclick="location.href='/Tools/HBAviewer_Flash'">&#9888; Firmware</button>
   <?php endif; ?>
-  <button class="lu-tab-btn lu-tab-right" type="button"
+  <button class="lu-tab-btn lu-tab-right" type="button" role="link"
           onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->
-<div id="tab-overview" class="lu-tab-pane active">
+<div id="tab-overview" class="lu-tab-pane active" role="tabpanel" aria-labelledby="tabbtn-overview">
   <div id="overview-content"><div class="lu-loading">Loading HBA information… (first read can take up to 60 seconds)</div></div>
 </div>
 
 <!-- ── HBA Health tab (five sub-indicators + a worst-of rollup; no config toggle) -->
-<div id="tab-health" class="lu-tab-pane">
+<div id="tab-health" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-health">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Thermal, link integrity, topology, host link, and read health — each judged independently</span>
     <button class="lu-refresh-btn" onclick="luReloadTab('health')">Refresh</button>
@@ -153,7 +158,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <!-- ── PHY Health tab ────────────────────────────────────────────────────── -->
 <?php if ($showPhy): ?>
-<div id="tab-phy" class="lu-tab-pane">
+<div id="tab-phy" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-phy">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">SAS link status, speed, and error counters per physical port</span>
     <button class="lu-refresh-btn" onclick="luReloadTab('phy')">Refresh</button>
@@ -164,7 +169,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <!-- ── Drives tab ────────────────────────────────────────────────────────── -->
 <?php if ($showDrives): ?>
-<div id="tab-drives" class="lu-tab-pane">
+<div id="tab-drives" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-drives">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Devices attached to the HBA</span>
     <button class="lu-refresh-btn" onclick="luReloadTab('drives')">Refresh</button>
@@ -175,7 +180,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <!-- ── Array Map tab (plan 047): the same drives, arranged as the chassis ─── -->
 <?php if ($showDrives): ?>
-<div id="tab-baymap" class="lu-tab-pane">
+<div id="tab-baymap" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-baymap">
   <div class="lu-tab-toolbar">
     <!-- Both spans wrap in one flex child so the toolbar still has exactly two,
          and space-between keeps Refresh pinned right as the hint text changes. -->
@@ -191,7 +196,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <!-- ── Event Log tab ─────────────────────────────────────────────────────── -->
 <?php if ($showEvents): ?>
-<div id="tab-events" class="lu-tab-pane">
+<div id="tab-events" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-events">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">HBA firmware event log (newest first)</span>
     <span>
@@ -204,7 +209,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 <?php endif; ?>
 
 <!-- ── SMART tab (all drives, collected in the background) ────────────────── -->
-<div id="tab-smart" class="lu-tab-pane">
+<div id="tab-smart" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-smart">
   <div class="lu-card first">
     <div class="lu-tab-toolbar">
       <span style="font-size:12px;color:var(--text);">Per-drive SMART health — collected in the background (safe: never wakes a standby drive)</span>
@@ -216,7 +221,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->
 <?php if ($showPerf): ?>
-<div id="tab-perf" class="lu-tab-pane">
+<div id="tab-perf" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-perf">
   <div class="lu-tab-toolbar">
     <span style="font-size:12px;color:var(--text);">Real-time throughput / IOPS / %util / latency / PHY-error-rate / temp &middot; sampled ~2s in your browser (last ~5&nbsp;min; resets on reload)</span>
   </div>

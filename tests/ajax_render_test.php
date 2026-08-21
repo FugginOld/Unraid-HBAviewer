@@ -1315,8 +1315,13 @@ check('smart stays uncarded', !str_contains(renderSmartTable(['drives' => [
 /* The shell must no longer wrap these four panes in a card — the renderers own
    that now, and a leftover wrapper would nest every card inside another. */
 foreach (['health', 'phy', 'drives', 'events'] as $tab) {
+    // `[^>]*` after the class: the pane also carries role=tabpanel and
+    // aria-labelledby now. What this asserts is that NOTHING SITS BETWEEN the
+    // pane and its toolbar, so the open tag's own attributes are none of its
+    // business — pinning them made it fail on an accessibility attribute that
+    // wraps nothing.
     check("shell: tab-$tab pane has no card wrapper",
-          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*">\s*<div class="lu-tab-toolbar">~', $shell));
+          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*"[^>]*>\s*<div class="lu-tab-toolbar">~', $shell));
 }
 
 array_map('unlink', glob("$cdir/*.json") ?: []);

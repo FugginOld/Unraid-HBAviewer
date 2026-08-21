@@ -8,7 +8,18 @@
     window.luTab = function (name) {
         if (window.luMetricsStop) luMetricsStop();   // pause perf polling on any switch
         document.querySelectorAll('.lu-tab-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.tab === name);
+            var on = b.dataset.tab === name;
+            b.classList.toggle('active', on);
+            /* The class is what the eye reads; these two are what a screen
+               reader and the Tab key read, and they have to say the same thing.
+               A ROVING tabindex: exactly one tab is in the page's tab order, so
+               Tab leaves the strip in one press instead of walking ten buttons,
+               and the arrow keys (luTabKey) move within it. Guarded on role
+               because the strip also holds the two navigators, which are
+               role=link and must keep their own place in the order. */
+            if (b.getAttribute('role') !== 'tab') return;
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) b.removeAttribute('tabindex'); else b.setAttribute('tabindex', '-1');
         });
         document.querySelectorAll('.lu-tab-pane').forEach(function (p) {
             p.classList.toggle('active', p.id === 'tab-' + name);
@@ -23,6 +34,28 @@
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
+    };
+
+    /* Arrow-key movement along the strip, which is what role=tablist promises a
+       screen-reader user it will get. Delegated from .lu-tabs so the two PHP
+       conditionals that hide optional tabs cannot leave a handler bound to a
+       button that is not there.
+       Only role=tab participates: Left/Right must skip the Firmware and
+       Settings navigators at the end, or an arrow press leaves the page.
+       Activation follows focus, matching the mouse — switching a pane here is
+       free, so the manual-activation variant would only cost a second press. */
+    window.luTabKey = function (e) {
+        var step = {ArrowRight: 1, ArrowLeft: -1, Home: 'first', End: 'last'}[e.key];
+        if (step === undefined) return;
+        var tabs = [].slice.call(e.currentTarget.querySelectorAll('[role="tab"]'));
+        var i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;                       // focus is on a navigator, not a tab
+        var next = step === 'first' ? 0
+                 : step === 'last'  ? tabs.length - 1
+                 : (i + step + tabs.length) % tabs.length;   // wraps, per the ARIA pattern
+        e.preventDefault();                      // Home/End would otherwise scroll the page
+        tabs[next].focus();
+        luTab(tabs[next].dataset.tab);
     };
 
     /* ── Load / reload a tab's content via AJAX ───────────────────────────── */
@@ -260,9 +293,13 @@
            locked, because none of those gestures do anything then. */
         var hint = document.getElementById('bay-hint');
         if (hint) {
+            // The keyboard path is named here rather than left to be discovered:
+            // a control that only works if you already know it exists is not
+            // much better than one that does not work.
             hint.textContent = d.locked ? ''
                 : 'Drag a drive into a bay, or click one then a bay. '
-                + 'Drag it back to the tray — or double-click it — to empty the bay.';
+                + 'Drag it back to the tray — or double-click it — to empty the bay. '
+                + 'By keyboard: Enter to pick up and place, Delete to empty.';
         }
         if (!d.locked) {
             // change, not input: `input` fires on every keystroke, so clearing
@@ -372,6 +409,21 @@
         var d = luBay.data;
         var grid = document.getElementById('bay-grid');
         if (!grid) return;
+        /* Keyboard focus has to survive the repaint. Every cell and chip below
+           is a brand-new node, so the element the user was standing on when
+           they pressed Enter is thrown away mid-action and the browser drops
+           focus to the top of the document — one press in, the keyboard path
+           is over. Remember the COORDINATES rather than the node (the node is
+           the thing that will not exist), and re-focus whatever lands on them.
+           A bay stays a bay across a repaint even when the drive in it moved,
+           which is what a keyboard user expects: put a drive down, and you are
+           still standing at the bay you put it in. */
+        var af = document.activeElement, want = null, land = null;
+        if (af && af.dataset) {
+            want = af.dataset.trayKey !== undefined ? {tray: af.dataset.trayKey}
+                 : af.dataset.row !== undefined ? {row: af.dataset.row, col: af.dataset.col}
+                 : null;
+        }
         grid.parentNode.classList.toggle('lu-bay-locked', !!d.locked);
         /* Emptying a bay is delegated to the GRID, which survives a repaint.
            A per-cell ondblclick cannot work here and shipped broken in
@@ -388,6 +440,28 @@
             var hit = e.target.closest('.lu-bay-cell[data-bay-key]');
             if (!hit) return;
             luBayCommit(hit.dataset.bayKey, null, null);
+        };
+        /* The keyboard's half of the map, delegated for the same reason the two
+           handlers either side of it are: luBayPaint() replaces every cell.
+
+           Every write this view can perform now has a keyboard path — Enter or
+           Space picks a drive up and puts it down (WCAG 2.2's single-pointer
+           alternative to the drag, which click-then-click already gave the
+           mouse), and Delete empties a bay, which was double-click only and so
+           had no keyboard equivalent at all.
+
+           Space is prevented before it scrolls the page out from under the
+           bay the user is standing on. */
+        grid.onkeydown = function (e) {
+            var cell = e.target.closest && e.target.closest('.lu-bay-cell');
+            if (!cell || luBay.data.locked) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (cell.onclick) cell.onclick({detail: 1, target: cell});
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && cell.dataset.bayKey) {
+                e.preventDefault();
+                luBayCommit(cell.dataset.bayKey, null, null);
+            }
         };
         /* Drag and drop, delegated to the grid for the same reason dblclick is:
            luBayPaint() replaces every cell, so a handler bound to a cell is
@@ -533,6 +607,22 @@
 
                 if (!d.locked) {
                     cell.onclick = luBayCellClick(r, c, drv);
+                    /* The cell is a div with an onclick, which the keyboard
+                       cannot reach at all — this is what makes it a control.
+                       The name is spelled out rather than left to the cell's
+                       own text, which reads as an unpunctuated run of every
+                       field in the card ("sdb OK 8 TB 38 UNRAID Disk 1 PORT
+                       Port 4 MODEL..."). Bay first, because the bay is the
+                       coordinate the user is navigating by. */
+                    cell.setAttribute('role', 'button');
+                    cell.tabIndex = 0;
+                    cell.setAttribute('aria-label', drv
+                        ? 'Bay ' + slot + ', ' + (drv.dev || drv.serial || 'drive')
+                          + (drv.role ? ', ' + drv.role : '')
+                        : 'Bay ' + slot + ', empty');
+                    // Picking a drive up is a toggle, and pressed is how a
+                    // button says so.
+                    if (drv) cell.setAttribute('aria-pressed', luBay.sel === drv.key ? 'true' : 'false');
                     // The key rides on the element; the grid's delegated
                     // dblclick reads it. A handler here could never fire.
                     if (drv) cell.dataset.bayKey = drv.key;
@@ -541,6 +631,7 @@
                     // closure over r and c the way cell.onclick does.
                     cell.dataset.row = r;
                     cell.dataset.col = c;
+                    if (want && +want.row === r && +want.col === c) land = cell;
                     if (drv) cell.draggable = true;
                 }
                 grid.appendChild(cell);
@@ -563,6 +654,12 @@
                 chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
                 chip.draggable = true;
                 chip.dataset.trayKey = u.key;
+                // Same reason as the cells: a <span> with an onclick is not a
+                // control until it says so and the keyboard can land on it.
+                chip.setAttribute('role', 'button');
+                chip.tabIndex = 0;
+                chip.setAttribute('aria-pressed', luBay.sel === u.key ? 'true' : 'false');
+                if (want && want.tray === u.key) land = chip;
             }
             tray.appendChild(chip);
         });
@@ -571,6 +668,15 @@
            the drag equivalent of double-clicking it. Assigned after the chips
            because tray.innerHTML above replaces its contents, not the element,
            so these survive as properties on the same node. */
+        // The tray's half of the keyboard path. Only Enter/Space: a chip is
+        // already unassigned, so there is nothing here for Delete to do.
+        tray.onkeydown = function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var chip = e.target.closest && e.target.closest('.lu-bay-chip[data-tray-key]');
+            if (!chip || !chip.onclick) return;
+            e.preventDefault();
+            chip.onclick();
+        };
         tray.ondragstart = function (e) {
             var chip = e.target.closest('.lu-bay-chip[data-tray-key]');
             if (luBay.data.locked || !chip) { e.preventDefault(); return; }
@@ -596,6 +702,13 @@
             luBayCommit(key, null, null);
         };
         tray.ondragend = luBayDragEnd;
+
+        // A drive that moved from the tray into a bay leaves no chip to return
+        // to, so `land` is null and focus stays where the browser put it. That
+        // is the one case worth a fallback, but the bay it went into is not
+        // reachable from here without guessing which one, and guessing wrong
+        // would move a keyboard user somewhere they did not ask to be.
+        if (land && land.focus) land.focus();
     }
 
     /* Move a drive in the LOCAL model, so the grid redraws on the spot instead

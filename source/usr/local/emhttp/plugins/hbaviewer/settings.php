@@ -172,7 +172,11 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-s-label small { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.4; }
 .lu-s-control { flex: 1; }
 .lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
-.lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
+/* Was `outline: none` with only a border-colour change. A 1px border tint is
+   not a focus indicator — on the white theme it is the only thing separating a
+   focused field from an unfocused one, and it is the same accent the field
+   already sits next to. Ring restored, matching chrome.css's. */
+.lu-s-control input[type=number]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 /* A card the maintainer has switched off. Greyed by opacity rather than by
    recolouring: the danger notice inside it keeps its own colour relationships,
    and its text stays selectable and readable by a screen reader. The heading

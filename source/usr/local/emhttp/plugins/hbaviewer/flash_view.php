@@ -73,7 +73,10 @@ if ($enableFlash) {
 .lu-flock { color: var(--warn-text); font-size: 12px; margin: 14px 0 0; }
 .lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
 .lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
-.lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
+/* Ring restored — see the same note in settings.php. This field names the
+   firmware file that is about to be written to a controller; it is the last
+   place in the plugin to leave a keyboard user guessing where they are. */
+.lu-fc input[type=text]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 .lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
 .lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
 .lu-fbtn:hover { background: #d9901a; }

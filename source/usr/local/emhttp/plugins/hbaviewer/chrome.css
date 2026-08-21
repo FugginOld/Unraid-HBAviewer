@@ -46,6 +46,27 @@
     box-sizing: border-box;
 }
 
+/* ── Focus ────────────────────────────────────────────────────────────────
+   One ring for everything the keyboard can reach, stated once rather than per
+   control — there was none at all before this, and Unraid's own themes do not
+   supply one for a plugin's markup.
+
+   :focus-visible, not :focus, so clicking a tab or a bay does not leave a ring
+   sitting on it; the keyboard is the only thing this is for.
+
+   outline rather than box-shadow: it follows border-radius, it is NOT clipped
+   by .lu-bay-cell's overflow:hidden, and it survives Windows high-contrast,
+   where a box-shadow is dropped entirely.
+
+   offset is positive so the ring sits OUTSIDE the element. .lu-bay-chip.sel
+   already draws an accent outline at offset -2px, and a focused selected chip
+   has to be distinguishable from a merely selected one — inside vs outside is
+   that difference. */
+#lu-wrap :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 /* ── Tabs (underline) ────────────────────────────────────────────────────── */
 .lu-tabs { display: flex; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; overflow-x: auto; }
 .lu-tab-btn {

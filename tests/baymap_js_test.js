@@ -541,6 +541,52 @@ async function main() {
         check('select: a detail:2 click leaves the selection in place',
             h.cellAt(0, 1).className.split(/\s+/).includes('sel'));
     }
+    /* ── 14. The keyboard drives the same writes the pointer does ─────────
+       Placing a drive was drag-or-click and emptying a bay was double-click
+       only, so a keyboard could reach neither: the cells are divs. These pin
+       the delegated grid.onkeydown, which is the single-pointer/keyboard
+       alternative WCAG 2.2 asks for and the only path Delete has at all.
+       Fired at the grid, not at the cell, because that is where the handler
+       lives -- a per-cell handler would be bound to a node the next repaint
+       throws away, the bug that shipped in 2026.08.05. */
+    {
+        const h = await opened();
+        // Pick the tray's placeable drive up by keyboard...
+        h.tray().onkeydown(ev(h.chipAt(0), {key: 'Enter'}));
+        // ...and put it into the empty bay at (1,0).
+        h.grid().onkeydown(ev(h.cellAt(1, 0), {key: 'Enter'}));
+        await h.settle();
+        const p = h.lastPost();
+        check('keyboard: Enter on a chip then a bay assigns the drive',
+            !!p && p.action === 'assign' && p.params.get('key') === 'c0p6');
+        check('keyboard: it lands in the bay the keyboard was standing on',
+            !!p && p.params.get('row') === '1' && p.params.get('col') === '0');
+    }
+    {
+        const h = await opened();
+        h.grid().onkeydown(ev(h.cellAt(0, 1), {key: 'Delete'}));
+        await h.settle();
+        const p = h.lastPost();
+        // The unassign wire shape: a key and no coordinates at all. Same call
+        // the double-click makes, which is the point -- one write path, two
+        // ways in.
+        check('keyboard: Delete empties the bay under the cursor',
+            !!p && p.action === 'unassign' && p.params.get('key') === 'c0p4'
+               && p.params.get('row') === null && p.params.get('col') === null);
+    }
+    {
+        // The lock guard has to hold for the keyboard too, or it is a hole in
+        // the one state the user puts the map into to stop touching it.
+        const h = await opened();
+        const cell = h.cellAt(0, 1);           // captured while unlocked: carries a key
+        h.setReply({ok: true, locked: 1});
+        h.ctx.luBayLock();
+        await h.settle();
+        const before = h.posts().length;
+        h.grid().onkeydown(ev(cell, {key: 'Delete'}));
+        await h.settle();
+        check('locked: a Delete keypress writes nothing', h.posts().length === before);
+    }
     } catch (e) {
         check('the bay map ran to completion without throwing — ' + e.message, false);
     }

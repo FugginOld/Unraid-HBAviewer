@@ -186,16 +186,18 @@ canonical when adding UI: **10.5 / 11 / 12.5 / 13 / 16** and radius **6 / 12 / 1
 Priority = impact on a user standing at a rack at 2am, not novelty. Each gap
 names the rule from above that it violates.
 
-## P0 — Accessibility floor (ship first)
+## P0 — Accessibility floor — **DONE** (commit 2 of this branch)
 
-| # | Rule | Current state | Fix |
+| # | Rule | Was | Now |
 | --- | --- | --- | --- |
-| **P0-A** | Every interactive control has a visible focus ring | No `:focus-visible` rule exists in `chrome.css`. Two inputs actively remove it (`flash_view.php:76`, `settings.php:175` — `outline:none` with only a border-colour change, which is not a focus indicator on its own). | One rule: `.lu-tab-btn, .lu-refresh-btn, .lu-bay-cell, .lu-bay-chip, input { outline: 2px solid var(--accent); outline-offset: 2px }` on `:focus-visible`. ~6 lines total. |
-| **P0-B** | Clickable things are buttons | Bay cells and chips are `div`s with `.onclick` (`hbaviewer.js:438,535,563`). Not tabbable, not Enter/Space operable, not announced as controls. | `tabindex="0"` + `role="button"` + a keydown handler on the two element types, or emit `<button>`. |
-| **P0-C** | WCAG 2.2 — dragging has a single-pointer alternative | Placing a drive into a bay is drag-only. | Click-to-select then click-to-place already half exists (`luBay.sel`); extend it to cells and document it in `.lu-bay-hint`. |
-| **P0-D** | Tab strips announce themselves | `.lu-tabs` is a row of bare `<button>`s. No `role="tablist"`/`tab`/`tabpanel`, no `aria-selected`, no arrow-key movement. A screen reader hears eight unrelated buttons. | ARIA attributes in `hbaviewer.php` + `aria-selected` toggling in `luTab()` (one line each). Arrow keys optional. |
-| **P0-E** | Meaningful graphics have a text alternative | Gauges are `aria-hidden` with the number rendered as styled `<span>`s — recoverable. But `title=` is the *only* carrier for several explanations (`render/phy.php:62-70`, `view.php:212-225`) on non-focusable `<span>`s: invisible to keyboard and touch. | Move load-bearing text out of `title=` into visible `.lu-ind-hint`-style sub-lines, or attach it to a focusable element. |
-| **P0-F** | Tab buttons declare their type | Lines 106–115 of `hbaviewer.php` omit `type="button"` (the two navigation buttons below have it). Defaults to `submit`. | Add `type="button"`. Two-character fix per line. |
+| **P0-A** | Every interactive control has a visible focus ring | No `:focus-visible` rule existed anywhere, and two inputs actively removed the UA ring (`outline:none` plus a 1px border tint, which is not an indicator). | One `#lu-wrap :focus-visible` rule in `chrome.css`; the two inputs restate it locally. `outline`, not `box-shadow` — it follows the radius, survives `overflow:hidden`, and survives forced-colors. |
+| **P0-B** | Clickable things are controls | Bay cells and tray chips were `div`/`span` with `.onclick`: unreachable by keyboard, unannounced by AT. | `role="button"`, `tabIndex`, an explicit `aria-label` (the cell's own text reads as an unpunctuated run of every field), and `aria-pressed` for the pick-up toggle. |
+| **P0-C** | WCAG 2.2 — dragging has a single-pointer alternative | **The original entry was wrong.** Click-then-click already existed and is documented at `hbaviewer.js` as the deliberate touch fallback, so the *pointer* alternative was there. The real hole was the keyboard, and emptying a bay — double-click only, with no keyboard equivalent at all. | Delegated `grid.onkeydown` / `tray.onkeydown`: Enter or Space picks up and places, Delete empties. Delegated for the same reason the dblclick handler is — the repaint replaces every node. Named in the visible hint line, not left to be discovered. |
+| **P0-D** | Tab strips announce themselves | Ten bare `<button>`s, no roles, no `aria-selected`, no arrow keys. | `role="tablist"` + `tab`/`tabpanel` + `aria-labelledby`, a roving tabindex so Tab leaves the strip in one press, and `luTabKey()` for Left/Right/Home/End. The two buttons that *navigate* carry `role="link"`, not `role="tab"` — announcing "tab 9 of 10" and then leaving the page is worse than no grouping. |
+| **P0-E** | Meaningful graphics have a text alternative | **Partly wrong as originally written.** The `title=` attributes in `render/phy.php` and `view.php` sit beside text that IS visible, so they are supplementary help, not the only carrier — that is a P2, and it moved there. One case was genuine: `render/drives.php`'s no-address cell, whose entire visible content is an em dash. | `role="img"` + `aria-label` on that cell, which is what lets a bare glyph take an author-supplied name. |
+| **P0-F** | Tab buttons declare their type | The eight pane tabs omitted `type="button"`, defaulting to `submit`. | Added. |
+
+**Kept honest by:** three new checks in `tests/baymap_js_test.js` (Enter assigns, Delete unassigns, a locked map ignores both), each verified against a mutant. One over-specific regex in `tests/ajax_render_test.php` was relaxed — it pinned the pane's whole open tag while asserting only that nothing sits between the pane and its toolbar.
 
 ## P1 — Consistency debt (the thing that makes it look unowned)
 
@@ -216,6 +218,7 @@ names the rule from above that it violates.
 | **P2-C** | Empty and error states per tab | `.lu-loading` and `.lu-error` exist; several tabs render a blank card when a tool is absent. State *why* (e.g. "storcli not installed") with the recovery path. |
 | **P2-D** | Stale-data indicator on every polled tab | `.lu-phy-stale` proves the pattern. A panel that silently shows a five-minute-old temperature at 2am is worse than one that says so. |
 | **P2-E** | `.lu-table tbody tr:hover` uses a raw `rgba(245,166,35,.05)` | Should be `color-mix(in srgb, var(--accent) 5%, transparent)` so it tracks the token. |
+| **P2-G** | `title=` is the only carrier for several explanations (`render/phy.php`, `view.php`) | Mouse-only supplementary help. The visible text beside it is sufficient, so this is polish, not a floor — but a touch or keyboard user never sees the reasoning. Move the load-bearing sentences into a `.lu-ind-hint`-style sub-line or the column header. |
 | **P2-F** | Chart.js colours are not themed | The Performance tab's charts should read `--accent`/`--good` off the computed style rather than carrying their own palette. |
 
 ## P3 — Deferred (needs its own brainstorm)
