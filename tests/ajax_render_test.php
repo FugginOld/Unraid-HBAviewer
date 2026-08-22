@@ -884,6 +884,47 @@ check('smart_state nodata is uncoloured', smart_state_color('nodata') === '');
 check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
 check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
 check('drive_dev_name null when unmatched', drive_dev_name(['serial'=>'NOPE'], ['X'=>'/dev/sdq']) === null);
+
+/* ── Compound serials (reported 2026-08-22) ─────────────────────────────────
+   The lsblk fixture is Raven's real output. Four of its nine drives report a
+   serial WITH A SPACE IN IT, and the map was built by taking field 1 of the
+   split line -- so those four were filed under the first half of their own
+   serial, every lookup missed, and the Drives tab showed "-" in the Device
+   column for drives it was listing. SMART named them, because it joins by a
+   different path; that disagreement between two tabs is what the report was. */
+$lsblk = "sda   ZA220HHM0000C746GTXQ\n"
+       . "sdb   ZA2208180000C74967DA\n"
+       . "sdc   VJGRBK9X\n"
+       . "sdf   001848RG2JHN JEHG2JHN\n"
+       . "sdh   001536PY083V 2EGY083V\n"
+       . "sdl   9000028F24B41875\n"
+       . "sdz\n";                                  // present, no serial column
+$bySerial = lsi_dev_by_serial($lsblk);
+
+check('a single-token serial still resolves',
+      drive_dev_name(['serial' => 'VJGRBK9X'], $bySerial) === '/dev/sdc');
+// The bug itself.
+check('a serial containing a space resolves',
+      drive_dev_name(['serial' => '001848RG2JHN JEHG2JHN'], $bySerial) === '/dev/sdf');
+check('and so does the other one',
+      drive_dev_name(['serial' => '001536PY083V 2EGY083V'], $bySerial) === '/dev/sdh');
+/* storcli and lsblk disagree about how much whitespace sits in the middle --
+   the reporter's two screenshots show two spaces on one tab and one on the
+   other. Both spellings must land on the same key, or this is fixed for the
+   tab that happens to match the map's spacing and still broken for the other. */
+check('extra whitespace in the middle still resolves',
+      drive_dev_name(['serial' => '001848RG2JHN  JEHG2JHN'], $bySerial) === '/dev/sdf');
+check('leading and trailing whitespace still resolves',
+      drive_dev_name(['serial' => '  VJGRBK9X '], $bySerial) === '/dev/sdc');
+check('case still does not matter',
+      drive_dev_name(['serial' => '001848rg2jhn jehg2jhn'], $bySerial) === '/dev/sdf');
+// Half a compound serial is not that drive. Filing it under the first token is
+// exactly what the bug did, so this is the assertion that keeps it gone.
+check('half a compound serial resolves to nothing',
+      drive_dev_name(['serial' => '001848RG2JHN'], $bySerial) === null);
+check('a device with no serial creates no entry', !in_array('/dev/sdz', $bySerial, true));
+check('an unknown serial is still null',
+      drive_dev_name(['serial' => 'NOPE'], $bySerial) === null);
 check('drives empty', str_contains(
     renderDrivesTables(['backend'=>'storcli','controllers'=>[[]]]), 'No drives detected.'));
 
