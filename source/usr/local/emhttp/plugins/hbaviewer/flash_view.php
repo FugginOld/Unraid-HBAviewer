@@ -34,6 +34,7 @@ if ($enableFlash) {
 }
 ?>
 
+<link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
 <link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 <style>
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */

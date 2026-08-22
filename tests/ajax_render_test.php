@@ -1324,6 +1324,37 @@ foreach (['health', 'phy', 'drives', 'events'] as $tab) {
           (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*"[^>]*>\s*<div class="lu-tab-toolbar">~', $shell));
 }
 
+/* ── Token wiring (design-system P1-A) ───────────────────────────────────────
+   The token block used to be copy-pasted into settings.php, and the two copies
+   drifted: settings.php's --mono had quietly lost "JetBrains Mono". It lives in
+   tokens.css now, which means a page that reads a token but forgets the <link>
+   renders with every colour falling back to its literal -- readable enough on a
+   dark theme to survive a glance, and wrong on the other three.
+   So: anything that READS a shared token must LINK the file, and nothing may
+   declare one outside it. Text checks on purpose -- there is no CSS engine
+   here, and the failure being guarded against is a missing line, not a
+   cascade. */
+$pluginDir = __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer';
+foreach (['hbaviewer.php', 'settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    // The lookahead keeps --text-color and --border-color out of it: those are
+    // UNRAID's variables, which need no link from us. Matching one of those
+    // would let this check pass on a page that reads no shared token at all.
+    check("$page reads shared tokens", (bool) preg_match('~var\\(--(bg|surface|surface-2|border|border-soft|text|muted|faint|accent|good|warn|crit|mono)(?![-\\w])~', $src));
+    check("$page links tokens.css",    str_contains($src, '/plugins/hbaviewer/tokens.css'));
+}
+/* The point of the extraction, stated as an assertion: exactly one file in the
+   plugin declares these. dashboard.php is deliberately not in scope -- it is
+   injected into Unraid's own dashboard page, carries its own --d-* set, and
+   shares one token with these three, so it declares none of the names below. */
+$declarers = [];
+foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
+    if (preg_match('~(?:^|[{;])\s*--(surface-2|border-soft|good-text|mono)\s*:~m', (string) file_get_contents($path))) {
+        $declarers[] = basename($path);
+    }
+}
+check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
+
 array_map('unlink', glob("$cdir/*.json") ?: []);
 @rmdir($cdir);
 if ($hSaved1 === null) @unlink($hRing1); else file_put_contents($hRing1, $hSaved1);

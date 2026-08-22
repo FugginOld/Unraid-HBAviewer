@@ -115,30 +115,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
 function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
+<link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
 <style>
-/* Original HBAviewer palette in the new component format. Matches the Monitor. */
+/* Component styles for the Settings page. Tokens come from tokens.css above,
+   which is the same file the Monitor links -- that shared file is what keeps
+   this page matching it. */
 #lu-settings-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     /* 1000px so the two-column grid below gets ~468px per column — near the 532px
        a section had when the page was one 580px column. It also caps the grid at
        two tracks: a third would need 1112px of content box. */

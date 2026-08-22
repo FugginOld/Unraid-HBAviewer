@@ -27,8 +27,8 @@ HBAviewer renders **inside** the Unraid webGui, which already owns the page.
 
 ## 1. Tokens
 
-Declared on `#lu-wrap`. **Currently duplicated in `settings.php` and partially in
-`dashboard.php` — see Gap P1-A.**
+Declared once, in **`tokens.css`**, on `#lu-wrap, #lu-settings-wrap`. Any page
+that reads a shared token must link that file; a test enforces both halves.
 
 ### Chrome
 ```
@@ -203,7 +203,7 @@ names the rule from above that it violates.
 
 | # | Rule | Current state | Fix |
 | --- | --- | --- | --- |
-| **P1-A** | One token block | The `#lu-wrap` token block is copy-pasted into `settings.php` and partially into `dashboard.php`, and has **already drifted**: `settings.php`'s `--mono` has lost `"JetBrains Mono"`, `dashboard.php` hardcodes `#e74c3c` instead of `--crit`, and dashboard defines a parallel `--d-bg`/`--d-border`/`--d-text` set. | Extract the token block into `tokens.css`, include it from all four surfaces. The dashboard tile has to stay standalone-safe, so scope by `:where(#lu-wrap, .lu-d-tile, #lu-settings, .lu-fc)`. |
+| **P1-A** | One token block | ~~Copy-pasted into `settings.php` and `dashboard.php`~~ **DONE.** The genuine duplicate was `settings.php` alone, and it had already drifted — its `--mono` had lost `"JetBrains Mono"`, so the same number rendered in a different face depending on the page. `flash_view.php` was never a copy (it sits inside `#lu-wrap` and links `chrome.css`). `dashboard.php` shares exactly **one** token, `--crit-text`: it is injected as a `<tbody>` into Unraid's own dashboard, carries its own `--d-*` set, and linking a stylesheet into someone else's page to save one variable is the worse trade — it stays standalone **by decision, not by neglect**. Extracted to `tokens.css` with a selector list, not `:where()`: both wrappers keep the specificity they had. |
 | **P1-B** | One button | Three button classes with three visual languages: `.lu-refresh-btn` (ghost, uppercase), `.lu-btn` (solid accent, 13px), `.lu-fbtn` (solid accent, 12px). Two independent `#d9901a` hover literals. | Keep two roles — ghost (`.lu-refresh-btn`) and solid primary — and delete the third. Derive hover with `color-mix` off `--accent`. |
 | **P1-C** | No dingbats as icons | `&#9888;` (⚠) and `&#9881;` (⚙) label the Firmware and Settings tabs; `&#9650;`/`&#10003;` carry firmware verdicts in `view.php`. Font-dependent, untintable, unreadable to a screen reader. | The sprite already exists — add `alert-triangle`, `settings`, `check`, `arrow-up` and swap the entities. |
 | **P1-D** | One type scale | 13 distinct font sizes across a 4-file UI, including 8.5/9.5/10/10.5 within one component. | Collapse to 10 / 11 / 12.5 / 13 / 16 / 19 / 30. Bay-map micro-labels are the only justified exception — pin them at 10. |
