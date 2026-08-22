@@ -236,10 +236,54 @@
 .lu-tscroll { overflow-x: auto; }
 .lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-table th {
-    text-align: left; padding: 8px 12px; color: var(--faint);
+    /* The padding moved to the button inside (see .lu-sort): a control that
+       fills its header cell is a ~30px target, where a control wrapped tight
+       around 10.5px text is under the 24px pointer floor. Visually identical --
+       the same 8/12 is still there, one element in. */
+    text-align: left; padding: 0; position: relative; color: var(--faint);
     font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     border-bottom: 1px solid var(--border); white-space: nowrap;
 }
+/* The header IS the sort control. It inherits every type property from the th
+   so the table looks exactly as it did before it could be sorted -- the only
+   thing announcing it is the cursor, the hover, and the arrow once a column is
+   active. A header row of obviously-buttons would read as a toolbar. */
+.lu-table th .lu-sort {
+    appearance: none; background: none; border: none; cursor: pointer;
+    font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+    padding: 8px 20px 8px 12px; width: 100%; text-align: inherit; white-space: nowrap;
+    transition: color .15s;
+}
+.lu-table th .lu-sort:hover { color: var(--accent); }
+/* The active column keeps the accent so the sorted column stays obvious after
+   the pointer has moved away. The arrow is generated content on the TH, not on
+   the button, so it cannot be selected into a copied support ticket -- the
+   Events tab's Copy button lifts innerText out of this table. */
+.lu-table th[aria-sort="ascending"]  .lu-sort,
+.lu-table th[aria-sort="descending"] .lu-sort { color: var(--accent); }
+/* The arrow is generated content on the TH, not on the button, so it stays out
+   of innerText -- the Events tab's Copy button lifts innerText out of this
+   table for support tickets.
+   ABSOLUTE, inside a position:relative th. It was an inline ::after, which put
+   it after a button that is width:100% -- so it rendered past the cell's right
+   edge, outside the focus ring and on top of the next column's header. The gap
+   it sits in is reserved by .lu-sort's padding-right and is there whether or
+   not the column is sorted, so sorting does not shift the label. */
+.lu-table th[aria-sort="ascending"]::after,
+.lu-table th[aria-sort="descending"]::after {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    color: var(--accent); font-size: 9px; line-height: 1; pointer-events: none;
+}
+/* Solid triangles, not the thin arrows this started with: a stroked glyph at
+   this size is a few hairlines of accent against a dark header and reads as
+   dust. A filled shape carries the same information in ink you cannot miss,
+   which is the whole job of the mark.
+   U+25B2/U+25BC specifically, and NOT U+25B6 and friends: these two have no
+   emoji presentation, so they take var(--accent) on every platform. That is
+   the same test the firmware verdict glyphs in view.php pass and the two
+   dingbats P1-C removed did not. */
+.lu-table th[aria-sort="ascending"]::after  { content: "\25B2"; }
+.lu-table th[aria-sort="descending"]::after { content: "\25BC"; }
 /* line-height is STATED, not inherited. Cells here stack up to three lines (the
    counter, the since-baseline rate, the recent rate), and inheriting the
    webGui's body line-height spent about a third of each row on leading. 1.4 is

@@ -9,7 +9,18 @@
    exposure, and overflow-x:auto costs nothing on a table that already fits. */
 function luTable(array $headers, array $rows): string {
     $h = '<div class="lu-tscroll"><table class="lu-table"><thead><tr>';
-    foreach ($headers as $hdr) $h .= '<th>' . htmlspecialchars($hdr) . '</th>';
+    /* Every header is a sort control. A <button> inside the <th> rather than a
+       click handler on the <th> itself: the th is not focusable and announces
+       as a column header, so a handler there is mouse-only. The button is what
+       makes the column reachable by keyboard and announced as something you can
+       press.
+       aria-sort lives on the th, not the button -- it describes the COLUMN, and
+       "none" on all of them says the table is sortable but currently unsorted,
+       which is different from a table that cannot be sorted at all. */
+    foreach ($headers as $hdr) {
+        $h .= '<th aria-sort="none"><button type="button" class="lu-sort" onclick="luSort(this)">'
+            . htmlspecialchars($hdr) . '</button></th>';
+    }
     $h .= '</tr></thead><tbody>';
     foreach ($rows as $cols) {
         $h .= '<tr>';

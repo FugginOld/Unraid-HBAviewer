@@ -21,6 +21,30 @@ register_shutdown_function(function () use (&$completed) {
 require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php';
 
 $fails = 0;
+/* "Is this column present", asked without pinning the header's markup. These
+   checks used to match '<th>Name</th>' literally, and P2-B -- which wrapped
+   every header in a sort button -- failed seventeen of them at once while
+   every column was exactly where it had always been. What they mean is the
+   column, not the tag around it. */
+function hasCol(string $html, string $name): bool {
+    return (bool) preg_match('~<th(?:\s[^>]*)?>(?:<[^>]+>)*\s*' . preg_quote($name, '~') . '\s*<~', $html);
+}
+/* "Is column $a to the left of column $b", and BOTH have to be there.
+   These were three strpos() comparisons on literal '<th>Name</th>' markup, and
+   they had a second problem beyond the markup: a missing column makes strpos()
+   return false, false coerces to 0, and `false < 12` is TRUE -- so the check
+   passed most loudly exactly when the column it names had disappeared. Asking
+   for both positions explicitly is what closes that. */
+function colBefore(string $html, string $a, string $b): bool {
+    if (!hasCol($html, $a) || !hasCol($html, $b)) return false;
+    $pa = colPos($html, $a);
+    $pb = colPos($html, $b);
+    return $pa !== null && $pb !== null && $pa < $pb;
+}
+function colPos(string $html, string $name): ?int {
+    $re = '~<th(?:\s[^>]*)?>(?:<[^>]+>)*\s*' . preg_quote($name, '~') . '\s*<~';
+    return preg_match($re, $html, $m, PREG_OFFSET_CAPTURE) ? (int) $m[0][1] : null;
+}
 function check(string $name, bool $ok): void {
     global $fails;
     echo ($ok ? "PASS  " : "FAIL  ") . $name . "\n";
@@ -39,8 +63,8 @@ $phyStorcli = ['backend' => 'storcli', 'controllers' => [['phys' => [
     ['phy'=>1,'link'=>'down','speed'=>'unknown','sas_addr'=>'','inv'=>3,'disp'=>1,'sync'=>0,'reset'=>0],
 ]]]];
 $h = renderPhyTables($phyStorcli);
-check('phy storcli has speed col',   str_contains($h, '<th>Speed</th>'));
-check('phy storcli has sas col',     str_contains($h, '<th>Attached SAS Address</th>'));
+check('phy storcli has speed col',   hasCol($h, 'Speed'));
+check('phy storcli has sas col',     hasCol($h, 'Attached SAS Address'));
 check('phy storcli link up badge',   str_contains($h, 'lu-link-up'));
 check('phy storcli link down badge', str_contains($h, 'lu-link-down'));
 check('phy storcli flags errors',    str_contains($h, 'lu-err-val'));
@@ -50,8 +74,8 @@ $phyLsi = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
     ['phy'=>0,'link'=>'up','inv'=>1,'disp'=>2,'sync'=>3,'reset'=>4],
 ]]]];
 $h = renderPhyTables($phyLsi);
-check('phy lsiutil omits speed col', !str_contains($h, '<th>Speed</th>'));
-check('phy lsiutil has counters',    str_contains($h, '<th>Invalid DWords</th>'));
+check('phy lsiutil omits speed col', !hasCol($h, 'Speed'));
+check('phy lsiutil has counters',    hasCol($h, 'Invalid DWords'));
 
 /* ── PHY Device column (issue #11) ────────────────────────────────────────────
    Same join as the Drives tab, one hop further: PHY -> drive (sas_addr prefix on
@@ -66,16 +90,16 @@ $h = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
     ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
     ['phy'=>1,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA999999999','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
 ]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg']);
-check('phy storcli has device col',   str_contains($h, '<th>Device</th>'));
+check('phy storcli has device col',   hasCol($h, 'Device'));
 check('phy storcli device resolves',  str_contains($h, '<code>/dev/sdg</code>'));
 check('phy storcli device follows phy col',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Link</th>'));
+      colBefore($h, 'Device', 'Link'));
 // PHY 1 matches no drive (a VirtualSES PHY is the real-world case) — em dash,
 // never the drive that happens to sit on the neighbouring PHY.
 check('phy storcli unmatched device is em dash', substr_count($h, '<code>/dev/sdg</code>') === 1);
 // No drives cached yet: the table still renders, every Device cell blank.
 $h = renderPhyTables($phyStorcli);
-check('phy device col renders without drives', str_contains($h, '<th>Device</th>') && !str_contains($h, '/dev/'));
+check('phy device col renders without drives', hasCol($h, 'Device') && !str_contains($h, '/dev/'));
 
 $h = renderPhyTables($phyLsi, [], null, null,
     ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]]);
@@ -430,7 +454,7 @@ $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
                   'size'=>'7.276 TB','sas_address'=>'5000c500a1b2c3d4','link'=>'12.0Gb/s','firmware'=>'SN02']],
 ]]];
 $h = renderDrivesTables($drvStorcli);
-check('drives storcli col set',    str_contains($h, '<th>Encl:Slot</th>') && str_contains($h, '<th>Firmware</th>'));
+check('drives storcli col set',    hasCol($h, 'Encl:Slot') && hasCol($h, 'Firmware'));
 check('drives enclosure summary',  str_contains($h, 'VirtualSES') && str_contains($h, 'direct-attach'));
 check('drives smart button',       str_contains($h, 'luSmart(this') && str_contains($h, 'ZA1ABCDE'));
 check('drives uppercases sas',     str_contains($h, '5000C500A1B2C3D4'));
@@ -480,7 +504,7 @@ $drvLsi = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
     ['bus'=>'0','target'=>'3','phy'=>'2','sas_address'=>'5000c500a1b2c3d4','os_name'=>'/dev/sdb'],
 ]]]];
 $h = renderDrivesTables($drvLsi);
-check('drives lsiutil col set', str_contains($h, '<th>Bus:Tgt</th>') && str_contains($h, '<th>Device</th>'));
+check('drives lsiutil col set', hasCol($h, 'Bus:Tgt') && hasCol($h, 'Device'));
 check('drives lsiutil no smart btn', !str_contains($h, 'luSmart(this'));
 
 /* ── Device column (issue #11): encl:slot and bus:target line up with nothing
@@ -491,7 +515,7 @@ check('drives lsiutil no smart btn', !str_contains($h, 'luSmart(this'));
    injected here, so nothing in this suite shells out to lsblk. */
 check('drives lsiutil device is os_name, no map needed', str_contains($h, '<code>/dev/sdb</code>'));
 check('drives device column leads the row',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Bus:Tgt</th>'));
+      colBefore($h, 'Device', 'Bus:Tgt'));
 
 $h = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg']);
 check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>'));
@@ -499,10 +523,10 @@ check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>
 /* The Unraid column: the same slot name on all four surfaces, so a row here can
    be matched against Main without tracking /dev/sdX by eye. */
 $hRole = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
-check('drives table has an Unraid column',  str_contains($hRole, '<th>Unraid</th>'));
+check('drives table has an Unraid column',  hasCol($hRole, 'Unraid'));
 check('drives table names the slot',        str_contains($hRole, '<td>Disk 1</td>'));
 check('drives lsiutil has an Unraid column',
-      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<th>Unraid</th>'));
+      hasCol(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), 'Unraid'));
 check('drives lsiutil names the slot',
       str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<td>Parity</td>'));
 // A drive the array does not use gets an em dash, never a blank cell that reads
@@ -512,20 +536,20 @@ check('an unassigned drive shows an em dash',
 
 $hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
                                null, ['/dev/sdp' => 'Parity']);
-check('SMART table has an Unraid column', str_contains($hSmartRole, '<th>Unraid</th>'));
+check('SMART table has an Unraid column', hasCol($hSmartRole, 'Unraid'));
 check('SMART table names the slot',       str_contains($hSmartRole, '<td>Parity</td>'));
 
 $hPhyRole = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
     ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
 ]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
-check('PHY table has an Unraid column', str_contains($hPhyRole, '<th>Unraid</th>'));
+check('PHY table has an Unraid column', hasCol($hPhyRole, 'Unraid'));
 check('PHY table names the slot',       str_contains($hPhyRole, '<td>Disk 1</td>'));
 check('PHY lsiutil table has an Unraid column',
       str_contains(renderPhyTables($phyLsi, [], null, null,
           ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]], [], ['/dev/sdb' => 'Parity']),
           '<td>Parity</td>'));
 check('drives storcli device leads the row',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Encl:Slot</th>'));
+      colBefore($h, 'Device', 'Encl:Slot'));
 // Serials come off lsblk in whatever case the drive reports; the map is keyed
 // uppercase and the lookup must not care.
 check('drives storcli device serial match is case-insensitive',
@@ -873,7 +897,7 @@ $evStorcli = ['backend' => 'storcli', 'controllers' => [['entries' => [
     ['seq'=>'12','time'=>'2026-07-01 10:05:00','code'=>'0x0114','description'=>'Drive removed'],
 ]]]];
 $h = renderEventsTables($evStorcli, $dir);
-check('events storcli col set', str_contains($h, '<th>Description</th>'));
+check('events storcli col set', hasCol($h, 'Description'));
 check('events wrote archive',   is_file("$dir/events_c0.json"));
 check('events newest first',    strpos($h, 'Drive removed') < strpos($h, 'Drive inserted'));
 check('events counts entries',  str_contains($h, '2 entries'));
@@ -895,7 +919,7 @@ $evLsi = ['backend' => 'lsiutil', 'controllers' => [['entries' => [
     ['seq'=>'7','qualifier'=>'0x02','data'=>'00 11 22','timestamp'=>'0x0001d4c0'],
 ]]]];
 $h = renderEventsTables($evLsi, $dirLsi);
-check('events lsiutil col set', str_contains($h, '<th>Qualifier</th>') && !str_contains($h, '<th>Description</th>'));
+check('events lsiutil col set', hasCol($h, 'Qualifier') && !hasCol($h, 'Description'));
 
 array_map('unlink', glob("$dirLsi/*.json") ?: []);
 @rmdir($dirLsi);
@@ -1090,7 +1114,7 @@ restore_error_handler();
 check('mixed archive: no PHP warning',   $warned === false);
 check('mixed archive: storcli row shown', str_contains($h, 'Drive inserted'));
 check('mixed archive: lsiutil rows hidden', !str_contains($h, 'deadbeef'));
-check('mixed archive: storcli columns',  str_contains($h, '<th>Description</th>'));
+check('mixed archive: storcli columns',  hasCol($h, 'Description'));
 check('mixed archive: counts visible only', str_contains($h, '1 entries'));
 check('mixed archive: reports hidden',   str_contains($h, '2 from a previous backend not shown'));
 
@@ -1359,6 +1383,38 @@ foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
     }
 }
 check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
+
+/* ── No stray control characters in hand-edited source ───────────────────────
+   The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
+   written through a tool whose "91" is an OCTAL escape, so  became a
+   control character and 91 stayed as text. On screen that is a small glyph and
+   a digit sitting next to the header -- visible, but only if someone looks,
+   and invisible in a diff, in a review, and to every other check here.
+   Tab and newline are the only control characters these files may contain. */
+foreach (glob("$pluginDir/{*.css,*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    $src = (string) file_get_contents($path);
+    check('no control characters in ' . basename($path),
+          !preg_match('~[ --]~', $src));
+}
+// hbaviewer.js by name rather than by glob: chart.umd.min.js is vendored and
+// is not ours to police.
+check('no control characters in hbaviewer.js',
+      !preg_match('~[ --]~', (string) file_get_contents("$pluginDir/hbaviewer.js")));
+
+/* ── Sortable table headers (design-system P2-B) ─────────────────────────────
+   The server's half of the sort. luSort()'s behaviour is pinned in
+   sort_js_test.js; what has to be true HERE is that the control it drives
+   actually reaches the page, on every table, keyboard-reachable.
+   A plain <th> with a click handler would look identical and be mouse-only,
+   which is the failure this checks for. */
+$tbl = luTable(['Device', 'Temp'], [['/dev/sdb', '38'], ['/dev/sdc', '31']]);
+check('every header carries the sort control', substr_count($tbl, '<button type="button" class="lu-sort"') === 2);
+check('every header starts unsorted', substr_count($tbl, '<th aria-sort="none">') === 2);
+// aria-sort belongs on the column, not on the control inside it -- a screen
+// reader reads the sort state off the header cell.
+check('the sort state is on the th, not the button', !preg_match('~<button[^>]*aria-sort~', $tbl));
+check('header text is still escaped',
+      str_contains(luTable(['<b>x</b>'], []), '&lt;b&gt;x&lt;/b&gt;'));
 
 /* ── Button consolidation (design-system P1-B) ───────────────────────────────
    There were two solid buttons, .lu-btn and .lu-fbtn, identical but for 1px of

@@ -526,6 +526,19 @@ else
 fi
 
 echo
+echo "=== table sort JS tests ==="
+# Same local-then-docker fallback as the two JS blocks above. Sorting is the
+# first thing on these tabs that reorders what the operator is reading, and a
+# comparator that looks sorted without being sorted is invisible on screen.
+if command -v node >/dev/null 2>&1; then
+    node sort_js_test.js; sort_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm         -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests         node:20-alpine node sort_js_test.js; sort_js_fail=$?
+else
+    echo "SKIP  table sort JS tests (no node, no docker)"; sort_js_fail=0
+fi
+
+echo
 echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
@@ -587,7 +600,7 @@ done
 [ $nl_fail -eq 0 ] && echo "PASS  no golden carries a trailing newline"
 
 echo
-if [ $fail -eq 0 ] && [ $nl_fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $nl_fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $sort_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1
