@@ -120,6 +120,14 @@ canonical when adding UI: **10.5 / 11 / 12.5 / 13 / 16** and radius **6 / 12 / 1
   column — nothing in a bay cell is centre-aligned.
 - Truncation (`text-overflow: ellipsis`) is allowed only in `.lu-bay-val`, where
   the cell floor is fixed. Everywhere else, wrap.
+- **Identifiers reflow, they do not overflow.** `<code>` carries every device
+  name, SAS address, serial and URL in this plugin, and a session host is a
+  40-character hash with no break opportunity in it — the Export/API card
+  rendered one straight out through its right edge. `overflow-wrap: anywhere`
+  on `<code>`, never `word-break: break-all`, which would also chop ordinary
+  words mid-letter. `anywhere` additionally lets a container's min-content
+  width shrink, which `break-word` does not — the Settings page's columns
+  layout needs that before it will narrow a card at all.
 
 ---
 

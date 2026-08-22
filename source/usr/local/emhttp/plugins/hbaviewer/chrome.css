@@ -308,6 +308,24 @@
 .lu-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
 
+/* ── Long tokens ──────────────────────────────────────────────
+   An identifier is one unbreakable run to a browser. The Export/API card puts
+   a session URL in a fixed-width card, and a myunraid.net session host is a
+   40-character hash followed by a path -- no spaces, and once the hyphens run
+   out there is no break the browser will take on its own. It rendered straight
+   out through the card's right edge.
+
+   overflow-wrap:anywhere, NOT word-break:break-all -- break-all also chops
+   ordinary words mid-letter wherever it applies. `anywhere` breaks only what
+   would otherwise overflow, and unlike break-word it lets the container's
+   min-content width shrink, which is what the Settings page's columns layout
+   needs before it will narrow a card at all.
+
+   Scoped to <code>, which is where this plugin puts every device name, SAS
+   address, URL and serial. Short ones are unaffected: there is nothing to
+   break when it already fits. */
+#lu-wrap code, #lu-settings-wrap code { overflow-wrap: anywhere; }
+
 /* ── Link + error badges ─────────────────────────────────────────────────── */
 .lu-link-up   { color: var(--good); font-weight: 700; font-size: 11px; letter-spacing: 0.03em; }
 .lu-link-down { color: var(--crit); font-weight: 700; font-size: 11px; }
