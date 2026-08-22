@@ -292,11 +292,20 @@
 /* A button inside a row sets that row's height on its own. The Drives tab has a
    Locate button in every row and the SMART tab has none, which is the whole
    reason one looked taller than the other — the cells were already identical.
-   Compact only inside a table; the toolbar buttons keep their size, and this
-   stays ~22px tall so it is still a comfortable click target. */
-.lu-table .lu-refresh-btn { padding: 3px 10px; font-size: 10.5px; line-height: 1.4; }
+   Compact only inside a table; the toolbar buttons keep their size.
+   min-height, not more padding: 3px + 10.5px/1.4 + the border landed at ~23px,
+   which is under WCAG 2.2's 24px pointer floor by one pixel nobody would ever
+   notice and every pointer would. Stating the floor means the type inside can
+   change later without silently dropping back under it. Rows grow ~1px. */
+.lu-table .lu-refresh-btn {
+    padding: 3px 10px; font-size: 10.5px; line-height: 1.4;
+    min-height: 24px;
+}
 .lu-table tr:last-child td { border-bottom: none; }
-.lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
+/* Was the accent written out by hand as an rgba triplet, which is the same
+   drift P1-B took out of the buttons: change --accent and the row highlight
+   keeps the old hue. */
+.lu-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
 
 /* ── Link + error badges ─────────────────────────────────────────────────── */
@@ -551,7 +560,12 @@
 .lu-bay-val.dim { opacity: .8; }
 
 .lu-bay-tray { display: flex; flex-wrap: wrap; gap: 6px; }
+/* inline-flex so min-height actually sizes it: this is a <span>, and a span
+   takes its height from the line box, which 11px text and 5px of padding put
+   at ~23px -- a pixel under the 24px pointer floor. Centring keeps the label
+   where it already sat, so nothing moves. */
 .lu-bay-chip {
+    display: inline-flex; align-items: center; min-height: 24px;
     border: 1px solid var(--border-soft); border-radius: 6px; padding: 5px 9px;
     font-size: 11px; font-family: var(--mono); cursor: pointer; background: var(--surface-2);
 }
@@ -579,7 +593,9 @@
    about which drive is being pointed at. Motion is the whole signal here, so
    under prefers-reduced-motion it becomes a steady outline rather than nothing
    — the same trade the rebuild stripe makes. */
-.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
+/* The widest of the three and the shortest: full-width, but 9.5px text in 3px
+   of padding is ~19px tall. Width was never the problem. */
+.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; min-height: 24px; }
 /* The button blinks while the drive does, so the screen and the rack are
    telling you the same thing. Motion is the signal, so reduced-motion keeps a
    steady highlight rather than dropping to nothing. */

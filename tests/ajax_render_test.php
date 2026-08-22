@@ -1384,6 +1384,27 @@ foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
 }
 check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
 
+/* ── The accent is declared once (design-system P1-A/P2-E) ───────────────────
+   tokens.css owns --accent. Every other spelling of that colour is a copy
+   that will not move when the token does -- the row-hover highlight was an
+   rgba triplet of it, and four inline style="" attributes were the hex. None
+   of them would have changed with the token, and nothing would have said so.
+
+   hbaviewer.js is the one exception, and it is listed rather than skipped so
+   it stays visible: Chart.js takes colours as values, not as CSS, so its
+   series palette cannot read a custom property without going through
+   getComputedStyle. That is P2-F. When P2-F lands, delete the exception --
+   do not widen it. */
+$accent = '#f5a6' . '23';          // spelled in halves so this check cannot match itself
+$copies = [];
+foreach (glob("$pluginDir/{*.css,*.php,*.js,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    $base = basename($path);
+    if ($base === 'tokens.css' || $base === 'chart.umd.min.js') continue;
+    $src = (string) file_get_contents($path);
+    if (stripos($src, $accent) !== false || str_contains($src, '245,166,35')) { $copies[] = $base; }
+}
+check('the accent colour is written down in exactly one place', $copies === ['hbaviewer.js']);
+
 /* ── No stray control characters in hand-edited source ───────────────────────
    The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
    written through a tool whose "91" is an OCTAL escape, so  became a

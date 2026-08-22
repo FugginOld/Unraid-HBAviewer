@@ -62,6 +62,6 @@ function luCardPerController(array $ctls, callable $body): string {
 function luCtlHead(int $i): string {
     // No top margin: this is now the first child of its controller's card, and
     // the card already supplies 18px of padding above it.
-    return '<h3 style="margin:0 0 7px;color:#f5a623;font-size:12px;'
+    return '<h3 style="margin:0 0 7px;color:var(--accent);font-size:12px;'
          . 'text-transform:uppercase;letter-spacing:0.06em;">Controller /c' . $i . '</h3>';
 }
