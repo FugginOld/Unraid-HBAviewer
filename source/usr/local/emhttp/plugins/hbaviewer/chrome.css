@@ -272,10 +272,18 @@
 .lu-table th[aria-sort="ascending"]::after,
 .lu-table th[aria-sort="descending"]::after {
     position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
-    color: var(--accent); font-size: 11px; line-height: 1; pointer-events: none;
+    color: var(--accent); font-size: 9px; line-height: 1; pointer-events: none;
 }
-.lu-table th[aria-sort="ascending"]::after  { content: "\2191"; }
-.lu-table th[aria-sort="descending"]::after { content: "\2193"; }
+/* Solid triangles, not the thin arrows this started with: a stroked glyph at
+   this size is a few hairlines of accent against a dark header and reads as
+   dust. A filled shape carries the same information in ink you cannot miss,
+   which is the whole job of the mark.
+   U+25B2/U+25BC specifically, and NOT U+25B6 and friends: these two have no
+   emoji presentation, so they take var(--accent) on every platform. That is
+   the same test the firmware verdict glyphs in view.php pass and the two
+   dingbats P1-C removed did not. */
+.lu-table th[aria-sort="ascending"]::after  { content: "\25B2"; }
+.lu-table th[aria-sort="descending"]::after { content: "\25BC"; }
 /* line-height is STATED, not inherited. Cells here stack up to three lines (the
    counter, the since-baseline rate, the recent rate), and inheriting the
    webGui's body line-height spent about a third of each row on leading. 1.4 is
