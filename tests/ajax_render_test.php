@@ -1384,6 +1384,23 @@ foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
 }
 check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
 
+/* ── No stray control characters in hand-edited source ───────────────────────
+   The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
+   written through a tool whose "91" is an OCTAL escape, so  became a
+   control character and 91 stayed as text. On screen that is a small glyph and
+   a digit sitting next to the header -- visible, but only if someone looks,
+   and invisible in a diff, in a review, and to every other check here.
+   Tab and newline are the only control characters these files may contain. */
+foreach (glob("$pluginDir/{*.css,*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    $src = (string) file_get_contents($path);
+    check('no control characters in ' . basename($path),
+          !preg_match('~[ --]~', $src));
+}
+// hbaviewer.js by name rather than by glob: chart.umd.min.js is vendored and
+// is not ours to police.
+check('no control characters in hbaviewer.js',
+      !preg_match('~[ --]~', (string) file_get_contents("$pluginDir/hbaviewer.js")));
+
 /* ── Sortable table headers (design-system P2-B) ─────────────────────────────
    The server's half of the sort. luSort()'s behaviour is pinned in
    sort_js_test.js; what has to be true HERE is that the control it drives
