@@ -41,7 +41,7 @@
    already draws an accent outline at offset -2px, and a focused selected chip
    has to be distinguishable from a merely selected one — inside vs outside is
    that difference. */
-#lu-wrap :focus-visible {
+#lu-wrap :focus-visible, #lu-settings-wrap :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
@@ -286,6 +286,32 @@
     font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
 }
 .lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* The solid button. There were two of these, one on the Settings page and one
+   on the flash page, identical but for 1px of type and a few px of
+   padding, and each carried its OWN hardcoded hover hex. Two literals for one
+   colour is the shape of a bug waiting to happen: change --accent and one of
+   them keeps the old hue.
+   So: one class, and the hover is DERIVED. color-mix toward black darkens the
+   accent by the same feel the literal did, and now it cannot drift from it.
+   The flash page's buttons grow slightly (12px/7-16 -> 13px/9-24). That is the
+   trade for one button, and it moves them further past the 24px pointer-target
+   floor rather than nearer it.
+
+   Ghost (.lu-refresh-btn) and solid (.lu-btn) are the two roles this plugin
+   has: refresh/toolbar actions, and the one committing action on a page. There
+   is no third. */
+.lu-btn {
+    background: var(--accent); border: none; border-radius: 6px; color: #111;
+    font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.03em; transition: background .15s;
+}
+.lu-btn:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+/* Destructive actions are the crit colour and nothing else changes -- same
+   size, same shape, so the difference reads as meaning rather than as a
+   different kind of control. */
+.lu-btn.danger { background: var(--crit); color: #fff; }
+.lu-btn.danger:hover { background: color-mix(in srgb, var(--crit) 85%, #000); }
 
 /* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
 /* One column per controller instead of a stack, the same move #flash-content

@@ -79,10 +79,8 @@ if ($enableFlash) {
    place in the plugin to leave a keyboard user guessing where they are. */
 .lu-fc input[type=text]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 .lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
-.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
-.lu-fbtn:hover { background: #d9901a; }
-.lu-fbtn.danger { background: var(--crit); color: #fff; }
-.lu-fbtn.danger:hover { background: #c0392b; }
+/* The buttons on this page are .lu-btn from chrome.css, which this page
+   already links. It used to keep its own near-identical copy of that rule. */
 .lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 </style>
 

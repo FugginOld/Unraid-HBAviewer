@@ -116,6 +116,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
 <link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
+<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 <style>
 /* Component styles for the Settings page. Tokens come from tokens.css above,
    which is the same file the Monitor links -- that shared file is what keeps
@@ -175,16 +176,17 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: var(--good-text); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
 .lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: var(--crit-text); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
 .lu-danger strong { color: var(--crit-text); }
-.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
-.lu-btn:hover { background: #d9901a; }
-/* The action row. Save and Open Monitor stay left where the eye lands after
+/* .lu-btn itself is chrome.css's, linked above -- what stays here is only how
+   this page ARRANGES them, which is not part of what a button is.
+   The action row. Save and Open Monitor stay left where the eye lands after
    filling a form; the firmware button is pushed to the far right by
    margin-left:auto, away from the two buttons someone presses routinely. */
 .lu-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 0; }
+.lu-actions .lu-btn { margin-right: 10px; }
 /* Red, and the only red button on the page. It leads to the one screen here
-   that writes to hardware, so it must not read as a peer of Save. */
-.lu-btn.danger { background: var(--crit); color: #fff; margin-right: 0; margin-left: auto; }
-.lu-btn.danger:hover { background: #c0392b; }
+   that writes to hardware, so it must not read as a peer of Save. The colour
+   comes from .lu-btn.danger; only its place in the row is decided here. */
+.lu-actions .lu-btn.danger { margin-right: 0; margin-left: auto; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
