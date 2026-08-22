@@ -1390,11 +1390,10 @@ check('exactly one file declares the shared tokens', $declarers === ['tokens.css
    rgba triplet of it, and four inline style="" attributes were the hex. None
    of them would have changed with the token, and nothing would have said so.
 
-   hbaviewer.js is the one exception, and it is listed rather than skipped so
-   it stays visible: Chart.js takes colours as values, not as CSS, so its
-   series palette cannot read a custom property without going through
-   getComputedStyle. That is P2-F. When P2-F lands, delete the exception --
-   do not widen it. */
+   hbaviewer.js used to be a listed exception here, for the Chart.js series
+   palette -- Chart.js takes colour VALUES, not CSS. P2-F moved that palette
+   into tokens.css and reads it back with getComputedStyle, so the exception
+   is gone rather than widened, and there are none left. */
 $accent = '#f5a6' . '23';          // spelled in halves so this check cannot match itself
 $copies = [];
 foreach (glob("$pluginDir/{*.css,*.php,*.js,render/*.php}", GLOB_BRACE) ?: [] as $path) {
@@ -1403,7 +1402,24 @@ foreach (glob("$pluginDir/{*.css,*.php,*.js,render/*.php}", GLOB_BRACE) ?: [] as
     $src = (string) file_get_contents($path);
     if (stripos($src, $accent) !== false || str_contains($src, '245,166,35')) { $copies[] = $base; }
 }
-check('the accent colour is written down in exactly one place', $copies === ['hbaviewer.js']);
+check('the accent colour is written down in exactly one place', $copies === []);
+
+/* Chart.js is the one consumer that must COPY a colour out of CSS rather than
+   reference it, which is exactly the position the accent was in before P2-E.
+   So: the series palette is declared in tokens.css and nowhere else, and the
+   JS reads it by name. A literal creeping back into hbaviewer.js is the whole
+   failure mode this guards.
+
+   Scoped to hbaviewer.js, not swept across the plugin: view.php's status map
+   spells #e67e22 for 'warning', which is the same VALUE as --chart-phy and has
+   nothing to do with it. A sweep would tie two unrelated palettes together and
+   fail the next time either moved -- the risk being guarded is a literal in
+   the chart defs, and that is where it lives. */
+$perf = (string) file_get_contents("$pluginDir/hbaviewer.js");
+check('the chart palette lives only in tokens.css',
+      !preg_match('~#(3aa0ff|9b59b6|e67e22|1abc9c|f5a623|2ecc71|e74c3c)~i', $perf));
+check('and hbaviewer.js reads it by name',
+      substr_count((string) file_get_contents("$pluginDir/hbaviewer.js"), "pal('--chart-") === 7);
 
 /* ── No stray control characters in hand-edited source ───────────────────────
    The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
