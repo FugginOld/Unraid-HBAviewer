@@ -1159,7 +1159,12 @@ preg_match_all('~<use href="#(lu-i-[a-z]+)"/>~', $h, $mIco);
 check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 'lu-i-topology', 'lu-i-hostlink', 'lu-i-controller']);
 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
-preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
+// The sprite moved out of the shell in P1-C: settings.php and flash_view.php
+// need it too, and inlining it three times is how the dingbats survived on
+// those pages in the first place. Symbols come from icons.php now; the shell
+// only requires it.
+preg_match_all('~<symbol id="(lu-i-[a-z]+)"~',
+    (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/icons.php'), $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
 /* The hint line is only readable as a sub-line if it is styled; unstyled it
    inherits the row's 12.5px flex and lands next to the value. The rules moved
@@ -1315,8 +1320,91 @@ check('smart stays uncarded', !str_contains(renderSmartTable(['drives' => [
 /* The shell must no longer wrap these four panes in a card — the renderers own
    that now, and a leftover wrapper would nest every card inside another. */
 foreach (['health', 'phy', 'drives', 'events'] as $tab) {
+    // `[^>]*` after the class: the pane also carries role=tabpanel and
+    // aria-labelledby now. What this asserts is that NOTHING SITS BETWEEN the
+    // pane and its toolbar, so the open tag's own attributes are none of its
+    // business — pinning them made it fail on an accessibility attribute that
+    // wraps nothing.
     check("shell: tab-$tab pane has no card wrapper",
-          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*">\s*<div class="lu-tab-toolbar">~', $shell));
+          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*"[^>]*>\s*<div class="lu-tab-toolbar">~', $shell));
+}
+
+/* ── Token wiring (design-system P1-A) ───────────────────────────────────────
+   The token block used to be copy-pasted into settings.php, and the two copies
+   drifted: settings.php's --mono had quietly lost "JetBrains Mono". It lives in
+   tokens.css now, which means a page that reads a token but forgets the <link>
+   renders with every colour falling back to its literal -- readable enough on a
+   dark theme to survive a glance, and wrong on the other three.
+   So: anything that READS a shared token must LINK the file, and nothing may
+   declare one outside it. Text checks on purpose -- there is no CSS engine
+   here, and the failure being guarded against is a missing line, not a
+   cascade. */
+$pluginDir = __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer';
+foreach (['hbaviewer.php', 'settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    // The lookahead keeps --text-color and --border-color out of it: those are
+    // UNRAID's variables, which need no link from us. Matching one of those
+    // would let this check pass on a page that reads no shared token at all.
+    check("$page reads shared tokens", (bool) preg_match('~var\\(--(bg|surface|surface-2|border|border-soft|text|muted|faint|accent|good|warn|crit|mono)(?![-\\w])~', $src));
+    check("$page links tokens.css",    str_contains($src, '/plugins/hbaviewer/tokens.css'));
+}
+/* The point of the extraction, stated as an assertion: exactly one file in the
+   plugin declares these. dashboard.php is deliberately not in scope -- it is
+   injected into Unraid's own dashboard page, carries its own --d-* set, and
+   shares one token with these three, so it declares none of the names below. */
+$declarers = [];
+foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
+    if (preg_match('~(?:^|[{;])\s*--(surface-2|border-soft|good-text|mono)\s*:~m', (string) file_get_contents($path))) {
+        $declarers[] = basename($path);
+    }
+}
+check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
+
+/* ── Icon wiring (design-system P1-C) ────────────────────────────────────────
+   The dingbats are gone: U+26A0 takes emoji presentation on Windows and
+   Android, which renders it in the font's own colour and ignores whatever the
+   surrounding element set -- a danger marker that could not be made to look
+   like one. They are sprite refs now, which fail in a quieter way: a <use>
+   pointing at an id nothing defines renders NOTHING AT ALL, no gap, no
+   fallback glyph, so a typo removes a warning sign from a firmware flasher and
+   the page still looks fine.
+   Hence both halves: every id referenced exists, and every page that
+   references one pulls the sprite in. */
+$refs = [];
+foreach (glob("$pluginDir/{*.php,render/*.php,*.js}", GLOB_BRACE) ?: [] as $path) {
+    $src = (string) file_get_contents($path);
+    if (preg_match_all('~#lu-i-([a-z-]+)~', $src, $m)) {
+        foreach ($m[1] as $id) { $refs[$id][] = basename($path); }
+    }
+}
+$sprite = (string) file_get_contents("$pluginDir/icons.php");
+preg_match_all('~id="lu-i-([a-z-]+)"~', $sprite, $dm);
+$defined = $dm[1];
+check('every icon referenced is defined in the sprite',
+      $refs !== [] && array_diff(array_keys($refs), $defined) === []);
+// health.php's row loop builds ids from data, so it is expected to reference
+// icons no page names literally -- the reverse check would fail on those and
+// is deliberately not made.
+
+/* A fragment (render/*.php) is injected into a page that already carries the
+   sprite; a top-level PAGE has to pull it in itself. settings.php is the one
+   this protects: it renders on its own, and before P1-C it had no sprite,
+   which is exactly why it was still using entities. */
+foreach (['hbaviewer.php', 'settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    if (!str_contains($src, '#lu-i-')) continue;
+    check("$page pulls in the icon sprite", str_contains($src, "require __DIR__ . '/icons.php'"));
+}
+
+// The entities these replaced, gone for good. Written as codepoints so this
+// check cannot be satisfied by the very characters it is banning.
+$banned = ['&#' . '9888;' => 'warning sign', '&#' . '9881;' => 'gear'];
+foreach ($banned as $ent => $what) {
+    $hits = [];
+    foreach (glob("$pluginDir/{*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+        if (str_contains((string) file_get_contents($path), $ent)) { $hits[] = basename($path); }
+    }
+    check("no $what dingbat entity survives", $hits === []);
 }
 
 array_map('unlink', glob("$cdir/*.json") ?: []);

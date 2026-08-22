@@ -1,4 +1,4 @@
-/* ── Design tokens: original HBAviewer palette in the new component format ── */
+/* Component styles. The tokens they read live in tokens.css. */
 /* One width for every tab. This was `fit-content` so the panel could hug the
    active tab's contents and Overview would not sit in dead space — but hidden
    tabs contribute nothing to max-content, so the frame resized on every tab
@@ -9,29 +9,8 @@
    would only be right on one box's controller data. The cost is the dead space
    either side of Overview that fit-content was avoiding, which is the trade
    asked for: a steady frame beats a snug one. */
+/* Tokens for this wrapper live in tokens.css. */
 #lu-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the ~40 call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --accent-2:#88aaff; --track: var(--border-color, #2a2a2a);
-    --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
     font-family: inherit; width: 100%; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
@@ -44,6 +23,27 @@
        sets box-sizing, so this must not depend on Unraid's reset. Scoped to the
        wrapper — children keep whatever they had. */
     box-sizing: border-box;
+}
+
+/* ── Focus ────────────────────────────────────────────────────────────────
+   One ring for everything the keyboard can reach, stated once rather than per
+   control — there was none at all before this, and Unraid's own themes do not
+   supply one for a plugin's markup.
+
+   :focus-visible, not :focus, so clicking a tab or a bay does not leave a ring
+   sitting on it; the keyboard is the only thing this is for.
+
+   outline rather than box-shadow: it follows border-radius, it is NOT clipped
+   by .lu-bay-cell's overflow:hidden, and it survives Windows high-contrast,
+   where a box-shadow is dropped entirely.
+
+   offset is positive so the ring sits OUTSIDE the element. .lu-bay-chip.sel
+   already draws an accent outline at offset -2px, and a focused selected chip
+   has to be distinguishable from a merely selected one — inside vs outside is
+   that difference. */
+#lu-wrap :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 /* ── Tabs (underline) ────────────────────────────────────────────────────── */

@@ -100,7 +100,12 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
         $locCell = function (array $d) use ($devBySerial, $addrByDev, $locating): string {
             $dev  = drive_dev_name($d, $devBySerial);
             $addr = $dev !== null ? ($addrByDev[$dev] ?? '') : '';
-            if ($addr === '') return '<span class="lu-muted" title="No SCSI address for this drive">—</span>';
+            /* role=img + aria-label, because an em dash is the ONLY visible
+               content here and `title` is mouse-only: a screen reader otherwise
+               announces this cell as "dash", or as nothing at all. role=img is
+               what lets a bare glyph take an author-supplied name. */
+            if ($addr === '') return '<span class="lu-muted" role="img" aria-label="No SCSI address for this drive"'
+                                   . ' title="No SCSI address for this drive">—</span>';
             $on = in_array($addr, $locating, true);
             // The address is [0-9:] by construction (lsi_scsi_addr_by_dev drops
             // anything else) and the /dev name comes from lsblk, so neither can

@@ -115,30 +115,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
 function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
+<link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
 <style>
-/* Original HBAviewer palette in the new component format. Matches the Monitor. */
+/* Component styles for the Settings page. Tokens come from tokens.css above,
+   which is the same file the Monitor links -- that shared file is what keeps
+   this page matching it. */
 #lu-settings-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     /* 1000px so the two-column grid below gets ~468px per column — near the 532px
        a section had when the page was one 580px column. It also caps the grid at
        two tracks: a third would need 1112px of content box. */
@@ -172,7 +154,11 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-s-label small { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.4; }
 .lu-s-control { flex: 1; }
 .lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
-.lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
+/* Was `outline: none` with only a border-colour change. A 1px border tint is
+   not a focus indicator — on the white theme it is the only thing separating a
+   focused field from an unfocused one, and it is the same accent the field
+   already sits next to. Ring restored, matching chrome.css's. */
+.lu-s-control input[type=number]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 /* A card the maintainer has switched off. Greyed by opacity rather than by
    recolouring: the danger notice inside it keeps its own colour relationships,
    and its text stays selectable and readable by a screen reader. The heading
@@ -204,6 +190,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 </style>
 
 <div id="lu-settings-wrap">
+
+<?php require __DIR__ . '/icons.php'; ?>
 
   <?php if ($saved): ?>
   <div class="lu-notice">Settings saved.</div>
@@ -468,12 +456,12 @@ foreach ($bands as $floor => $label) {
       <h3>Advanced — Firmware Flashing</h3>
       <?php if (LSI_FLASH_LOCKED): ?>
       <div class="lu-danger">
-        <strong>&#9888; Disabled in this release.</strong>
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Disabled in this release.</strong>
         <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
       </div>
       <?php else: ?>
       <div class="lu-danger">
-        <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Danger:</strong> Flashing HBA firmware/BIOS can permanently
         <strong>brick</strong> your controller if the wrong image is used. The array
         must be <strong>stopped</strong> before flashing. The flash tools
         (sas2flash / sas3flash) are not bundled — you supply the model-correct image
@@ -509,7 +497,7 @@ foreach ($bands as $floor => $label) {
                the URL root: Menu="HBAviewer" hangs the page off HBAviewer.page,
                and that is a Tools page. Pinned in flash_php_test.php. */ ?>
       <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 
