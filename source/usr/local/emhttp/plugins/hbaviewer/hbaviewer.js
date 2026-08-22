@@ -58,6 +58,57 @@
         luTab(tabs[next].dataset.tab);
     };
 
+    /* ── Sort a table by one of its columns ─────────────────────────────
+       Drives and SMART are lists you scan for the WORST row -- the hottest
+       drive, the one with reallocated sectors -- and until now the only order
+       available was the one the controller happened to report.
+
+       Client-side and text-based. The alternative is a data-sort attribute per
+       cell carrying the raw value, which would be more precise and would mean
+       threading it through all nine luTable() callers; the cells already hold
+       the number as text, and reading it back is the smaller change by a wide
+       margin.
+
+       localeCompare with numeric:true rather than parseFloat, and that choice
+       is load-bearing: it reads digit RUNS, so "9.095 TB" sorts before
+       "12.733 TB" (a plain string compare puts 12 first), "0/2" before "0/10",
+       and /dev/sdb before /dev/sdc -- one comparator for capacities, slot
+       pairs, temperatures, error counts and device names, not one parser each.
+
+       ponytail: a column mixing TB and TiB would sort by the number rather than
+       the real size. That needs two backends feeding one table, and a table is
+       one controller. Parse the unit if that ever stops being true. */
+    window.luSort = function (btn) {
+        var th   = btn.parentNode;
+        var head = th.parentNode;
+        var idx  = [].indexOf.call(head.children, th);
+        var tbl  = th.closest('table');
+        var body = tbl && tbl.tBodies[0];
+        if (!body || idx < 0) return;
+
+        // A third press does NOT restore the original order: the rows were
+        // reordered in place, so there is no "original" left to go back to.
+        // Ascending/descending only, and the arrow always says which.
+        var asc = th.getAttribute('aria-sort') !== 'ascending';
+        [].forEach.call(head.children, function (o) { o.setAttribute('aria-sort', 'none'); });
+        th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+
+        // A row without this column -- the colspan'd "No entries" line -- is
+        // not comparable, so it is not sorted. It keeps its place at the end
+        // rather than vanishing, which is what re-appending only the sorted
+        // rows would do to it.
+        var all  = [].slice.call(body.rows);
+        var rows = all.filter(function (r) { return r.cells.length > idx; });
+        var wide = all.filter(function (r) { return r.cells.length <= idx; });
+
+        var key = function (r) { return (r.cells[idx].textContent || '').trim(); };
+        rows.sort(function (a, b) {
+            return (asc ? 1 : -1) * key(a).localeCompare(key(b), undefined, {numeric: true});
+        });
+        rows.concat(wide).forEach(function (r) { body.appendChild(r); });
+    };
+
+
     /* ── Load / reload a tab's content via AJAX ───────────────────────────── */
     window.luReloadTab = function (name) {
         var el = document.getElementById(name + '-content');
