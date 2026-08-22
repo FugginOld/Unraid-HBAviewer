@@ -47,7 +47,7 @@ function luIdentityRows(array $v, string $driver, string $fwClause): string {
             The pre-P20 chip had the same defect before the verdict existed —
             it just only showed on SAS2 cards, so nobody had seen it. */
          . '<p>Firmware: <span>' . htmlspecialchars($v['firmware'])
-         . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2">&#9888; pre-P20</span>' : '')
+         . ($v['fw_old'] && $fwClause === '' ? ' <span style="color:#f39c12" title="P20 is the IT-mode baseline for SAS2"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> pre-P20</span>' : '')
          . $fwClause . '</span></p>'
          . ($v['bios'] !== '' ? '<p>BIOS: <span>' . htmlspecialchars($v['bios']) . '</span></p>' : '')
          . ($driver    !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')

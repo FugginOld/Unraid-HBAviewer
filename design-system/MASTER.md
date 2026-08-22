@@ -172,12 +172,19 @@ canonical when adding UI: **10.5 / 11 / 12.5 / 13 / 16** and radius **6 / 12 / 1
 
 ## 8. Icons
 
-- SVG sprite defined once in `hbaviewer.php` (`aria-hidden`, `focusable="false"`),
-  referenced by `<use href="#lu-i-…">`. Current set: `thermal`, `link`,
-  `topology`, `hostlink`, `controller` (Tabler, stroke, `currentColor`).
-- Icon size token: 15px in indicator rows.
-- **No emoji, no HTML dingbat entities as structural icons.** Currently violated
-  (Gap P1-C).
+- SVG sprite defined once in **`icons.php`**, `require`d by the three top-level
+  pages (`hbaviewer.php`, `settings.php`, `flash_view.php`) and referenced by
+  `<use href="#lu-i-…">`. Fragments under `render/` reference ids freely: they
+  are injected into a page that already carries the sprite.
+- Current set: `thermal`, `link`, `topology`, `hostlink`, `controller`, `warn`,
+  `settings` — Tabler Icons, stroked, `currentColor`, paths verbatim.
+- Sizes: 15px in indicator rows; `.lu-i` is `1em` so an icon inside text tracks
+  that text. `.lu-i` ships **inside `icons.php`**, not `chrome.css`, because
+  `settings.php` does not link `chrome.css`.
+- **No emoji, no HTML dingbat entity that can take emoji presentation.** A
+  `<use>` pointing at an undefined id renders *nothing at all* — no gap, no
+  fallback — so the sprite is covered by a test on both halves: every id
+  referenced exists, and every page referencing one pulls the sprite in.
 
 ---
 
@@ -205,7 +212,7 @@ names the rule from above that it violates.
 | --- | --- | --- | --- |
 | **P1-A** | One token block | ~~Copy-pasted into `settings.php` and `dashboard.php`~~ **DONE.** The genuine duplicate was `settings.php` alone, and it had already drifted — its `--mono` had lost `"JetBrains Mono"`, so the same number rendered in a different face depending on the page. `flash_view.php` was never a copy (it sits inside `#lu-wrap` and links `chrome.css`). `dashboard.php` shares exactly **one** token, `--crit-text`: it is injected as a `<tbody>` into Unraid's own dashboard, carries its own `--d-*` set, and linking a stylesheet into someone else's page to save one variable is the worse trade — it stays standalone **by decision, not by neglect**. Extracted to `tokens.css` with a selector list, not `:where()`: both wrappers keep the specificity they had. |
 | **P1-B** | One button | Three button classes with three visual languages: `.lu-refresh-btn` (ghost, uppercase), `.lu-btn` (solid accent, 13px), `.lu-fbtn` (solid accent, 12px). Two independent `#d9901a` hover literals. | Keep two roles — ghost (`.lu-refresh-btn`) and solid primary — and delete the third. Derive hover with `color-mix` off `--accent`. |
-| **P1-C** | No dingbats as icons | `&#9888;` (⚠) and `&#9881;` (⚙) label the Firmware and Settings tabs; `&#9650;`/`&#10003;` carry firmware verdicts in `view.php`. Font-dependent, untintable, unreadable to a screen reader. | The sprite already exists — add `alert-triangle`, `settings`, `check`, `arrow-up` and swap the entities. |
+| **P1-C** | No dingbats as icons | ~~Four glyphs~~ **DONE, for two of them.** `&#9888;` (U+26A0) and `&#9881;` (U+2699) are gone from all nine sites — the tab and page controls *and* the prose warning blocks. They take **emoji presentation** on Windows and Android, which renders them in the font's own colour and ignores whatever the element sets: a danger marker beside a firmware flasher that could not be made to look like one. `&#10003;` (✓) and `&#9650;` (▲) in `view.php` are **deliberately kept** — they are plain text glyphs that do inherit `currentColor`, they sit directly beside the word they mark, and being text they survive copy-to-clipboard into a support ticket, which an SVG does not. |
 | **P1-D** | One type scale | 13 distinct font sizes across a 4-file UI, including 8.5/9.5/10/10.5 within one component. | Collapse to 10 / 11 / 12.5 / 13 / 16 / 19 / 30. Bay-map micro-labels are the only justified exception — pin them at 10. |
 | **P1-E** | One radius scale | 3, 6, 8, 10, 12, 14, 16, 20 all in use. | 6 (controls) / 12 (tiles) / 14 (cards) / 20 (pills). |
 

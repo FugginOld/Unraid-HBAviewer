@@ -29,78 +29,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
 <div id="lu-wrap">
 
-<!-- ── HBA Health row icons ──────────────────────────────────────────────────
-     Icons are Tabler Icons (https://tabler.io/icons), MIT licensed. Paths are
-     verbatim from tabler/tabler-icons: temperature, plug-connected, server-2,
-     topology-star-3, cpu. Keep this notice with the sprite.
-
-     Emitted HERE, once, and NOT from ajax_info.php: that file re-renders the
-     Health tab on every poll and its HTML replaces the pane's contents, so a
-     sprite defined there would be re-inserted each refresh — duplicate DOM ids
-     with <use> resolving against whichever copy won. Parsed once here, it
-     persists across every poll.
-
-     Ids are `lu-i-` prefixed because the plugin renders inside Unraid's webGui
-     DOM, not a standalone page; unprefixed ids can collide with the shell's own
-     markup. render/health.php's row loop maps indicator keys to these ids. -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
-  <symbol id="lu-i-thermal" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M10 13.5a4 4 0 1 0 4 0v-8.5a2 2 0 0 0 -4 0v8.5" />
-    <path d="M10 9l4 0" />
-  </symbol>
-
-  <symbol id="lu-i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M7 12l5 5l-1.5 1.5a3.536 3.536 0 1 1 -5 -5l1.5 -1.5" />
-    <path d="M17 12l-5 -5l1.5 -1.5a3.536 3.536 0 1 1 5 5l-1.5 1.5" />
-    <path d="M3 21l2.5 -2.5" />
-    <path d="M18.5 5.5l2.5 -2.5" />
-    <path d="M10 11l-2 2" />
-    <path d="M13 14l-2 2" />
-  </symbol>
-
-  <symbol id="lu-i-topology" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M3 7a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-2" />
-    <path d="M3 15a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v2a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3l0 -2" />
-    <path d="M7 8l0 .01" />
-    <path d="M7 16l0 .01" />
-    <path d="M11 8h6" />
-    <path d="M11 16h6" />
-  </symbol>
-
-  <symbol id="lu-i-hostlink" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M10 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M18 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M10 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M6 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M18 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M14 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M22 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0" />
-    <path d="M6 12h4" />
-    <path d="M14 12h4" />
-    <path d="M15 7l-2 3" />
-    <path d="M9 7l2 3" />
-    <path d="M11 14l-2 3" />
-    <path d="M13 14l2 3" />
-  </symbol>
-
-  <symbol id="lu-i-controller" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 6a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v12a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -12" />
-    <path d="M9 9h6v6h-6l0 -6" />
-    <path d="M3 10h2" />
-    <path d="M3 14h2" />
-    <path d="M10 3v2" />
-    <path d="M14 3v2" />
-    <path d="M21 10h-2" />
-    <path d="M21 14h-2" />
-    <path d="M14 21v-2" />
-    <path d="M10 21v-2" />
-  </symbol>
-</svg>
+<?php require __DIR__ . '/icons.php'; ?>
 
 <!-- ── Tab bar ───────────────────────────────────────────────────────────── -->
 <!-- role=tablist, and the two buttons at the end that NAVIGATE rather than
@@ -137,10 +66,10 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
            the user picked is not worth the CSS. */ ?>
   <?php if (!LSI_FLASH_LOCKED && (int) $cfg['ENABLE_FLASH'] === 1): ?>
   <button class="lu-tab-btn" type="button" role="link"
-          onclick="location.href='/Tools/HBAviewer_Flash'">&#9888; Firmware</button>
+          onclick="location.href='/Tools/HBAviewer_Flash'"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware</button>
   <?php endif; ?>
   <button class="lu-tab-btn lu-tab-right" type="button" role="link"
-          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
+          onclick="location.href='/Settings/HBAviewer_Settings'"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-settings"/></svg> Settings</button>
 </div>
 
 <!-- ── Overview tab (loaded via AJAX; banner shows until hardware read done) ─ -->

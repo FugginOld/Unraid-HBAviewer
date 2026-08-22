@@ -191,6 +191,8 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 
 <div id="lu-settings-wrap">
 
+<?php require __DIR__ . '/icons.php'; ?>
+
   <?php if ($saved): ?>
   <div class="lu-notice">Settings saved.</div>
   <?php endif; ?>
@@ -454,12 +456,12 @@ foreach ($bands as $floor => $label) {
       <h3>Advanced — Firmware Flashing</h3>
       <?php if (LSI_FLASH_LOCKED): ?>
       <div class="lu-danger">
-        <strong>&#9888; Disabled in this release.</strong>
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Disabled in this release.</strong>
         <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
       </div>
       <?php else: ?>
       <div class="lu-danger">
-        <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Danger:</strong> Flashing HBA firmware/BIOS can permanently
         <strong>brick</strong> your controller if the wrong image is used. The array
         must be <strong>stopped</strong> before flashing. The flash tools
         (sas2flash / sas3flash) are not bundled — you supply the model-correct image
@@ -495,7 +497,7 @@ foreach ($bands as $floor => $label) {
                the URL root: Menu="HBAviewer" hangs the page off HBAviewer.page,
                and that is a Tools page. Pinned in flash_php_test.php. */ ?>
       <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 

@@ -88,6 +88,8 @@ if ($enableFlash) {
 
 <div id="lu-wrap">
 
+<?php require __DIR__ . '/icons.php'; ?>
+
 <div class="lu-tab-toolbar">
   <div class="lu-bay-head">
     <span style="font-size:12px;color:var(--text);">Firmware and BIOS flashing for the LSI/Broadcom controllers in this server</span>
@@ -109,7 +111,7 @@ if ($enableFlash) {
   <button class="lu-tab-btn" type="button"
           onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
   <button class="lu-tab-btn lu-tab-right" type="button"
-          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
+          onclick="location.href='/Settings/HBAviewer_Settings'"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-settings"/></svg> Settings</button>
 </div>
 
 <?php if (LSI_FLASH_LOCKED): ?>
@@ -118,7 +120,7 @@ if ($enableFlash) {
        page gone learns nothing, while a page that explains itself does. -->
   <div class="lu-card first">
     <div class="lu-danger">
-      <strong>&#9888; Firmware/BIOS flashing is disabled in this release.</strong>
+      <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware/BIOS flashing is disabled in this release.</strong>
       <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
     </div>
     <p class="lu-muted" style="margin:0">
@@ -140,7 +142,7 @@ if ($enableFlash) {
 <div id="tab-flash">
   <div class="lu-card first">
     <div class="lu-flash-warn">
-      <strong>&#9888; Firmware / BIOS flashing.</strong> A wrong or mismatched image
+      <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware / BIOS flashing.</strong> A wrong or mismatched image
       will <strong>permanently brick</strong> your controller. Verify the image
       matches your exact card and chip. The array must be stopped. Proceed entirely
       at your own risk.
