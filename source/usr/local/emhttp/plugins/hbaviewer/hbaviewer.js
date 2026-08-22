@@ -1042,13 +1042,27 @@
     }
     function perfBuild(ctls) {
         var host = document.getElementById('perf-content'); host.innerHTML = ''; perfCharts = {};
+        /* Chart.js takes colour VALUES, not CSS, so the palette is read out of
+           the stylesheet rather than referenced from it -- this is the one
+           place in the plugin that has to copy a colour out of CSS, and doing
+           it here means tokens.css is still the only place one is WRITTEN.
+           Read once per build rather than per chart: getComputedStyle forces
+           style resolution, and there are six charts per controller. */
+        var css = getComputedStyle(document.getElementById('lu-wrap') || document.body);
+        var pal = function (name) {
+            // One neutral fallback, not six: if the custom property is missing
+            // the stylesheet did not load, and six literals here would be six
+            // more copies to drift. Grey charts are a visible symptom of a
+            // real problem, which is the right failure.
+            return (css.getPropertyValue(name) || '').trim() || '#888888';
+        };
         var defs = [
-            { key:'thr',  title:'Throughput MB/s', series:['#3aa0ff','#f5a623'] },  // read, write
-            { key:'iops', title:'IOPS',            series:['#2ecc71'] },
-            { key:'util', title:'% Util',          series:['#9b59b6'] },
-            { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
-            { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
-            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
+            { key:'thr',  title:'Throughput MB/s', series:[pal('--chart-read'), pal('--chart-write')] },
+            { key:'iops', title:'IOPS',            series:[pal('--chart-iops')] },
+            { key:'util', title:'% Util',          series:[pal('--chart-util')] },
+            { key:'lat',  title:'Latency ms',      series:[pal('--chart-lat')] },
+            { key:'phy',  title:'PHY err/s',       series:[pal('--chart-phy')] },
+            { key:'temp', title:'Temp °C',         series:[pal('--chart-temp')] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl lu-card first';

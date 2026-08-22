@@ -212,7 +212,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>How HBAviewer reads controller information.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
+          <span style="color:var(--accent);font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
           <small style="display:block;color:var(--text);margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
@@ -243,7 +243,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>SAS4 / 9600 only. Needs Broadcom's full StorCLI2.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:<?= $full_sc2 ? '#7ac943' : '#f5a623' ?>;font-weight:600">
+          <span style="color:<?= $full_sc2 ? '#7ac943' : 'var(--accent)' ?>;font-weight:600">
             <?= $full_sc2 ? 'Full StorCLI2 installed' : 'Full StorCLI2 not installed' ?>
           </span>
           <small style="display:block;color:var(--text);margin-top:3px;line-height:1.5">
@@ -265,7 +265,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
                    it paints across the neighbouring column. The paths and the
                    command below are all longer than the column is wide. */ ?>
           <details style="margin-top:8px;max-width:100%">
-            <summary style="cursor:pointer;color:#f5a623">
+            <summary style="cursor:pointer;color:var(--accent)">
               How to install the full StorCLI2 (once per server)
             </summary>
             <div style="margin-top:8px;line-height:1.6;max-width:100%;overflow-wrap:anywhere">

@@ -40,4 +40,23 @@
     --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
     --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
     --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
+
+    /* Performance chart series. Declared here because this is where colours
+       live, and read out by hbaviewer.js with getComputedStyle -- Chart.js
+       takes colour VALUES, not CSS, so a chart cannot reference a custom
+       property the way a stylesheet rule can.
+
+       Deliberately NOT reusing --good/--crit, though write/iops/latency
+       happen to match --accent/--good/--crit by value today. Those three mean
+       STATUS. Latency is not "critical" and throughput is not "good"; wiring a
+       series to a status token would mean retuning a status colour silently
+       retunes a chart, for a reason nobody reading either would guess. The
+       values below are the ones these series have always had. */
+    --chart-read:  #3aa0ff;
+    --chart-write: #f5a623;
+    --chart-iops:  #2ecc71;
+    --chart-util:  #9b59b6;
+    --chart-lat:   #e74c3c;
+    --chart-phy:   #e67e22;
+    --chart-temp:  #1abc9c;
 }

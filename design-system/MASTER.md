@@ -120,6 +120,14 @@ canonical when adding UI: **10.5 / 11 / 12.5 / 13 / 16** and radius **6 / 12 / 1
   column — nothing in a bay cell is centre-aligned.
 - Truncation (`text-overflow: ellipsis`) is allowed only in `.lu-bay-val`, where
   the cell floor is fixed. Everywhere else, wrap.
+- **Identifiers reflow, they do not overflow.** `<code>` carries every device
+  name, SAS address, serial and URL in this plugin, and a session host is a
+  40-character hash with no break opportunity in it — the Export/API card
+  rendered one straight out through its right edge. `overflow-wrap: anywhere`
+  on `<code>`, never `word-break: break-all`, which would also chop ordinary
+  words mid-letter. `anywhere` additionally lets a container's min-content
+  width shrink, which `break-word` does not — the Settings page's columns
+  layout needs that before it will narrow a card at all.
 
 ---
 
@@ -220,13 +228,12 @@ names the rule from above that it violates.
 
 | # | Item | Why |
 | --- | --- | --- |
-| **P2-A** | `min-height: 24px` on `.lu-bay-chip` and the in-table `.lu-refresh-btn` | WCAG 2.2 AA target size for pointer targets. The compact table button is ~22px. |
+| **P2-A** | `min-height: 24px` on the small controls | **DONE.** Three sat a pixel or two under WCAG 2.2's 24px pointer floor: the in-table `.lu-refresh-btn` (~23px), `.lu-bay-chip` (~23px), and `.lu-bay-loc` (~19px — the widest of them and the shortest; width was never the problem). Stated as `min-height` rather than bought with padding, so the type inside can change later without silently dropping back under. `.lu-bay-chip` needed `inline-flex` for the floor to apply at all — it is a `<span>`, which takes its height from the line box. |
 | **P2-B** | Sortable tables (`aria-sort` + click-to-sort on `.lu-table th`) | **DONE.** Every header is a `<button>` inside its `<th>` — a click handler on the `th` itself would be mouse-only, since a `th` is not focusable. `aria-sort` goes on the `th`, which is what a screen reader reads the sort state off. One `luTable()` renders all nine tables, so this landed in one place. Comparison is `localeCompare(…, {numeric: true})`: digit-run collation puts "9.095 TB" before "12.733 TB", "0/2" before "0/10", and `/dev/sdb` before `/dev/sdc` — one comparator instead of a parser per column type. Sort does not survive a tab refresh; the fragment is replaced. |
 | **P2-C** | Empty and error states per tab | `.lu-loading` and `.lu-error` exist; several tabs render a blank card when a tool is absent. State *why* (e.g. "storcli not installed") with the recovery path. |
 | **P2-D** | Stale-data indicator on every polled tab | `.lu-phy-stale` proves the pattern. A panel that silently shows a five-minute-old temperature at 2am is worse than one that says so. |
-| **P2-E** | `.lu-table tbody tr:hover` uses a raw `rgba(245,166,35,.05)` | Should be `color-mix(in srgb, var(--accent) 5%, transparent)` so it tracks the token. |
-| **P2-G** | `title=` is the only carrier for several explanations (`render/phy.php`, `view.php`) | Mouse-only supplementary help. The visible text beside it is sufficient, so this is polish, not a floor — but a touch or keyboard user never sees the reasoning. Move the load-bearing sentences into a `.lu-ind-hint`-style sub-line or the column header. |
-| **P2-F** | Chart.js colours are not themed | The Performance tab's charts should read `--accent`/`--good` off the computed style rather than carrying their own palette. |
+| **P2-E** | `.lu-table tbody tr:hover` used a raw accent literal | **DONE, and it was not alone.** The row highlight was an rgba triplet of `--accent`, and four inline `style=""` attributes (`render/table.php`, `settings.php` ×3) carried the hex. None would have moved with the token. All now read `var(--accent)`, and a test pins the colour to one declaration. **One exception remains, listed rather than skipped so it stays visible:** `hbaviewer.js`'s Chart.js series palette, because Chart.js takes colour values rather than CSS. That is P2-F — when it lands, delete the exception rather than widening it. |
+| **P2-F** | Chart.js colours were not themed | **DONE.** The seven Performance series hues moved into `tokens.css`; `hbaviewer.js` reads them with `getComputedStyle` once per build. Chart.js takes colour *values*, not CSS, so this is the one place in the plugin that must copy a colour out of the stylesheet — but `tokens.css` is now the only place one is *written*. Deliberately **not** wired to `--good`/`--crit`, though three match by value: those mean status, and latency is not "critical". A single neutral fallback, not seven literals — grey charts are the right visible symptom of a stylesheet that failed to load. This removed the last exception from the accent check. |
 
 ## P3 — Deferred (needs its own brainstorm)
 
