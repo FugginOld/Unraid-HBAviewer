@@ -59,6 +59,35 @@ describe present disks. The second shows what `sdX` currently means. Compare the
 `device=` of any section whose label is appearing wrongly against the disk that
 name resolves to now.
 
+## Finding (2026-08-22, from the reporting box)
+
+**Both candidates are refuted for the drives in the report.** Raven's
+`disks.ini` holds five sections and no others:
+
+| Section | `device` | `status` | Becomes |
+|---|---|---|---|
+| `parity` | `""` | `DISK_NP` | *skipped* — the empty-device guard |
+| `parity2` | `""` | `DISK_NP` | *skipped* |
+| `cache` | `sdj` | `DISK_OK` | `/dev/sdj => "Cache"` |
+| `cache2` | `sdk` | `DISK_OK` | `/dev/sdk => "Cache2"` |
+| `flash` | `sdl` | `DISK_OK` | `/dev/sdl => "Flash"` |
+
+There are no `disk1..diskN` sections — the array is empty. The roles map on this
+box can therefore produce exactly three labels, for `sdj`, `sdk` and `sdl`. The
+nine HBA drives are `sda`–`sdi` and **cannot receive a label from it**; they must
+already be rendering the em dash.
+
+So there is no stale section (candidate A) and no `sdX` collision (candidate B).
+Whatever the reporter saw, `unraid_disk_roles()` is not the source. Part 1 is
+**re-opened pending an answer to one question: which drive showed which label.**
+If it was `Cache`/`Cache2` on the SSDs, that is correct behaviour and Part 1
+closes as not-a-defect.
+
+What survives regardless: keying the map on `/dev/sdX` is still fragile for the
+reason the spec gave, and `status` turns out to be present and populated
+(`DISK_NP` vs `DISK_OK`), so a membership check is available if one is ever
+wanted. Neither is worth doing on this evidence alone.
+
 ## Part 2 — the feature
 
 A drive on the HBA that is a **mounted unassigned device** should say so.
@@ -69,7 +98,18 @@ gives it, `media1`, `media9`, which is what the Main page shows.
 
 The reporter's box is the strongest possible case for this: **every** HBA drive
 there is an unassigned device, so the entire Unraid column is em dashes and the
-column is dead weight on the screen it was added for.
+column is dead weight on the screen it was added for. Its actual map, which is
+the fixture Task 2 should use verbatim:
+
+```
+sda => media1   sdb => media2   sdc => media8
+sdd => media6   sde => media7   sdf => media4
+sdg => media5   sdh => media9   sdi => media3
+```
+
+Note the numbering does not follow the device order — `sdc` is `media8` and
+`sdi` is `media3`. A fixture with `sdN => mediaN` would pass an implementation
+that ignored the mount point and derived the label from the device name.
 
 **Source of truth: `/proc/mounts`, not the Unassigned Devices plugin.** UD keeps
 its own state, and reading another plugin's files couples HBAviewer to a
@@ -92,6 +132,13 @@ Two details the implementation must not skip:
 - **`/mnt/disks/` is UD's convention, not a guarantee.** Restrict to that prefix
   and to nothing else: `/mnt/user`, `/mnt/cache` and the array mounts are not
   unassigned devices and must not be labelled as though they were.
+- **`/mnt/disks` is itself a mount.** The box's own `/proc/mounts` opens with
+  `tmpfs /mnt/disks tmpfs rw,...` — the directory UD mounts into is a tmpfs. A
+  prefix match written as `str_starts_with($mp, '/mnt/disks')` accepts it and
+  yields `['tmpfs' => 'disks']`. It has to be `/mnt/disks/` with the trailing
+  slash, and the device has to look like a device. This was not in the first
+  draft of this spec; it came out of reading the real file, which is the
+  argument for having read it.
 
 ## How the two labels coexist
 
