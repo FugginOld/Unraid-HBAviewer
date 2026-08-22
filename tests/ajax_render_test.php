@@ -1360,6 +1360,36 @@ foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
 }
 check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
 
+/* ── Button consolidation (design-system P1-B) ───────────────────────────────
+   There were two solid buttons, .lu-btn and .lu-fbtn, identical but for 1px of
+   type and a few px of padding -- and each carried its OWN hardcoded hover
+   hex. Two literals for one colour is a bug with a delay on it: change
+   --accent and one of them silently keeps the old hue. One class now, hover
+   derived from the token. */
+$chrome = (string) file_get_contents("$pluginDir/chrome.css");
+check('the solid button is defined once', substr_count($chrome, "
+.lu-btn {") === 1);
+$anyFbtn = [];
+foreach (glob("$pluginDir/{*.php,*.js,*.css,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    if (str_contains((string) file_get_contents($path), 'lu-fbtn')) { $anyFbtn[] = basename($path); }
+}
+check('the second solid button is gone', $anyFbtn === []);
+// The point of the consolidation: no page may re-declare .lu-btn's own
+// appearance. Arrangement (margins inside .lu-actions) is a page's business
+// and is deliberately still allowed.
+foreach (['settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    check("$page does not redefine the button", !preg_match('~^\.lu-btn[^{]*\{[^}]*background~m', $src));
+}
+// Settings renders standalone, so it has to link the sheet the button lives in
+// -- it did not before this, which is why it had a copy.
+check('settings.php links chrome.css',
+      str_contains((string) file_get_contents("$pluginDir/settings.php"), '/plugins/hbaviewer/chrome.css'));
+// The focus ring has to reach that page too. It was scoped to #lu-wrap alone,
+// which left every control on Settings without one.
+check('the focus ring covers the settings wrapper',
+      (bool) preg_match('~#lu-settings-wrap :focus-visible~', $chrome));
+
 /* ── Icon wiring (design-system P1-C) ────────────────────────────────────────
    The dingbats are gone: U+26A0 takes emoji presentation on Windows and
    Android, which renders it in the font's own colour and ignores whatever the

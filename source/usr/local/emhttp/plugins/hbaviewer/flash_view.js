@@ -94,7 +94,7 @@
                    all: the listing the operator is about to read covers the same
                    set the flash below will write. */
                 + '<div class="lu-fstep"><label class="step">Step 2 — verify the tool sees THIS card (controller '+lbl+' only)</label>'
-                +   '<button class="lu-fbtn" onclick="luFlashList(\''+ctl+'\')">Verify '+lbl+'</button>'
+                +   '<button class="lu-btn" onclick="luFlashList(\''+ctl+'\')">Verify '+lbl+'</button>'
                 +   '<pre id="flash-list-'+ctl+'" style="display:none"></pre></div>'
                 /* No heading here: luFlashDrop() renders 3a and 3b with their own
                    labels, because whether each is present is decided per file
@@ -106,7 +106,7 @@
                 + '<div class="lu-fstep'+lockCls+'"><label class="step">Step 4 — confirm &amp; flash</label>'
                 +   '<label class="lu-fack"><input type="checkbox" id="flash-ack-'+ctl+'"'+lockAttr+'> I understand a wrong image can permanently brick this controller.</label>'
                 +   'Type <strong>FLASH</strong>: <input type="text" id="flash-confirm-'+ctl+'" placeholder="FLASH"'+lockAttr+'> '
-                +   '<button class="lu-fbtn danger" onclick="luFlashGo(\''+ctl+'\')"'+lockAttr+'>Flash '+lbl+'</button></div>'
+                +   '<button class="lu-btn danger" onclick="luFlashGo(\''+ctl+'\')"'+lockAttr+'>Flash '+lbl+'</button></div>'
                 + '<pre id="flash-log-'+ctl+'" style="display:none"></pre>'
                 + '</div>';
             }).join('');
