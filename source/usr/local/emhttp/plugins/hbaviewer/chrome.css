@@ -52,6 +52,12 @@
     appearance: none; background: none; border: none; cursor: pointer;
     color: var(--faint); font-family: inherit; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
     padding: 11px 14px 12px; position: relative; white-space: nowrap; transition: color 0.15s; text-transform: none;
+    /* A <button> flex item shrinks below its own text -- the automatic minimum
+       size that protects a block does not apply to a form control. On a phone
+       the strip ran out of room and every label spilled past the border the
+       Unraid theme draws around it (issue #21). The container already scrolls;
+       these just have to refuse to shrink. */
+    flex: 0 0 auto;
 }
 .lu-tab-btn:hover  { color: var(--muted); }
 .lu-tab-btn.active { color: var(--accent); }
