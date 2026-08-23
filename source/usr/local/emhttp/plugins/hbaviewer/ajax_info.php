@@ -106,7 +106,8 @@ if ($type === 'smart_all') {
     // expensive thing here, and the person asked for it exactly when they press
     // Refresh (which unlinks the cache above) — not on a timer.
     $cached = smart_cache_read();
-    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles(), unraid_ud_mounts()); exit; }
+    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles(), unraid_ud_mounts(),
+                                                (int) (lsi_config_read()['TEMP_UNIT'] ?? 0)); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -146,9 +147,12 @@ if ($type === 'smart') {
 
     $color = smart_state_color(smart_state($s));
     $f = fn($v) => $v === '' || $v === null ? '?' : htmlspecialchars($v);
+    // The unit rides in the string now, so the format loses its own &deg;C --
+    // leaving it would print "131 F degC" once the setting is on.
+    $u = (int) (lsi_config_read()['TEMP_UNIT'] ?? 0);
     printf(
-        '<span style="color:%s;font-weight:700">%s</span> &middot; %s&deg;C &middot; %s def &middot; %s pend &middot; %sh',
-        $color, $f($s['health'] ?? ''), $f($s['temp'] ?? ''),
+        '<span style="color:%s;font-weight:700">%s</span> &middot; %s &middot; %s def &middot; %s pend &middot; %sh',
+        $color, $f($s['health'] ?? ''), $f(lsi_temp_str($s['temp'] ?? '', $u)),
         $f($s['defects'] ?? ''), $f($s['pending'] ?? ''), $f($s['power_on_hours'] ?? '')
     );
     exit;

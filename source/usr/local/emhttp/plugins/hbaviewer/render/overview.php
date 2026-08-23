@@ -7,20 +7,22 @@
    different instruments is a discrepancy nobody could explain.
    $i keys the gradient id, which must be unique across every gauge in the DOM
    (the Health tab lives in the same document and uses its own prefix). */
-function luTempTile(array $v, int $i): string {
+function luTempTile(array $v, int $i, int $unit = 0): string {
     // Critical renders as an inverted chip (white on solid fill) — #922b21
     // measures 1.94:1 as plain text on a dark card and is unreadable there.
     $tempChip = ($v['temp_band'] ?? '') === 'critical'
         ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
         : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
-    // The gauge reads 0-110C.
+    // The gauge reads 0-110C REGARDLESS of the display unit: the geometry stays
+    // in the sensor's own scale, and only the printed number and its suffix
+    // switch. Converting the fraction too would move every band boundary.
     $frac = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
     return '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
          . '<div class="lu-arc-wrap">'
          . lsi_gauge_svg('lu-grad-' . $i, $frac, $v['temp_grad'])
          . '<div class="lu-arc-readout">'
-         . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
-         . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
+         . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? lsi_temp_convert($v['temp'], $unit) : 'N/A') . '</span>'
+         . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;' . ($unit === 1 ? 'F' : 'C') : 'no sensor') . '</span></div></div>'
          . '<span class="lu-temp-band">' . $tempChip . '</span>'
          . '</div>';
 }
@@ -66,8 +68,9 @@ function luDieRows(array $v): string {
 /* Which band the badge is tuned to, and when the reading was taken. Both are
    properties of the poll rather than of a die, so a grouped card shows them
    once on the parent instead of repeating them under every IOC. */
-function luSensitivityRows(array $v, int $threshold): string {
-    return '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+function luSensitivityRows(array $v, int $threshold, int $unit = 0): string {
+    return '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label'])
+         . ' (' . lsi_temp_convert($threshold, $unit) . '&deg;' . ($unit === 1 ? 'F' : 'C') . '+)</span></p>'
          . '<p>Last read: <span>' . lsi_time() . '</span></p>';
 }
 
@@ -88,6 +91,8 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
+    // Display only: every comparison below stays in °C.
+    $unit      = (int) ($cfg['TEMP_UNIT'] ?? 0);
     $out = '';
     if (isset($c['error'])) {
         return '<div class="lu-card first"><div class="lu-error"><strong>Controller ' . $i . ':</strong> '
@@ -100,14 +105,14 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     [$gDark, $gLight] = $v['temp_grad'];
     $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
           . '<div class="lu-overview-row">'
-          . luTempTile($v, $i)
+          . luTempTile($v, $i, $unit)
           . '<div class="lu-meta">'
           // Identity, then this die's own rows, then the poll's -- the order
           // the page has always had. A grouped board splits these same three
           // groups across its parent and its sub-cards instead.
           . luIdentityRows($v, $driver, $fwClause)
           . luDieRows($v)
-          . luSensitivityRows($v, $threshold)
+          . luSensitivityRows($v, $threshold, $unit)
           . luBadgeRow($v['label'], $i)
           . '</div></div>';
     if ($showPcie && (($c['pcie_width'] ?? '') || ($c['pcie_speed'] ?? ''))) {
@@ -139,6 +144,8 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
+    // Display only: every comparison below stays in °C.
+    $unit      = (int) ($cfg['TEMP_UNIT'] ?? 0);
     // The FIRST MEMBER, which is not necessarily slot 0 of $ctls -- an unrelated
     // card can sort between two IOCs of one board (see this function's header).
     $first     = (int) $group[0];
@@ -159,7 +166,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
          // luDieRows is absent by design: drives and lsiutil port belong to a
          // die, and each sub-card below carries its own.
          . luIdentityRows($hv, $driver, $fwClause)
-         . luSensitivityRows($hv, $threshold)
+         . luSensitivityRows($hv, $threshold, $unit)
          // No $i: this badge is the worst-of rollup, not any one die's reading,
          // so it must not answer to a per-controller id the poller updates.
          . luBadgeRow(lsi_status_label($worst))
@@ -194,7 +201,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
         $out .= '<div class="lu-card-ioc" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
               . '<div class="lu-overview-row">'
-              . luTempTile($v, $i)
+              . luTempTile($v, $i, $unit)
               . '<div class="lu-meta">'
               . ($loc !== '' ? '<p>PCI Location: <span>' . htmlspecialchars($loc) . '</span></p>' : '')
               . luDieRows($v)
