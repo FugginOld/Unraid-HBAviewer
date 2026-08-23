@@ -1,5 +1,7 @@
 # Unraid Role Labels Implementation Plan
 
+> **Status: COMPLETE.** Part 2 released 2026.08.23. **Part 1 closed as not-a-defect** — the box’s `disks.ini` proved no array label could reach those drives, and the screenshots showed every cell already an em dash. Task 3a/3b were therefore never needed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The Unraid column tells the truth on a box whose HBA drives are unassigned devices — no array label on a disk that is not an array disk, and the UD mount label on one that is mounted.

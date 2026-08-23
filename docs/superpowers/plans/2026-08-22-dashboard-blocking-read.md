@@ -1,5 +1,7 @@
 # Dashboard Non-Blocking Read Implementation Plan
 
+> **Status: COMPLETE.** Released 2026.08.23. All three tasks. `docs/foreground-reads.md` is Task 3’s output.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The Unraid Dashboard page must never wait on a controller read. `dashboard.php` reads through `cached_read()` like every other consumer, and serves its last known good values while a detached producer refreshes them.
