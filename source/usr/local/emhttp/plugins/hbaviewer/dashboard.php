@@ -300,7 +300,11 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
     // anything. No model here — the subtitle names which card this tile is, and
     // it stays visible when collapsed.
     $parts = [];
-    foreach ($v['pcie'] as $item) {
+    /* On a grouped tile the address belongs to each section above, not to the
+       board -- the same rule the Overview's parent card follows, and now the
+       same function. An ungrouped tile keeps it: one function, one address,
+       and it is genuinely that card's. */
+    foreach (($grouped ? lsi_pcie_slot_items($v['pcie']) : $v['pcie']) as $item) {
         $parts[] = "<span class='lu-d-foot-item'>" . $item['label'] . ': <span>'
                  . htmlspecialchars($item['value']) . '</span></span>';
     }

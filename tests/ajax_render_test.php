@@ -1543,6 +1543,30 @@ check('and hbaviewer.js reads it by name',
 
 
 
+
+/* ── Slot facts vs function facts (reported 2026-08-23 by screenshot) ────────
+   The grouped tile's footer read "PCI Location: 84:00" while the two sections
+   above it correctly showed 84:00 and 86:00 -- a board-level row asserting one
+   function's address as the board's. The Overview had dropped it from the
+   parent card since the grouping landed; the tile had not, and both were
+   matching the label as a bare string in their own file. */
+$pcieItems = [
+    ['label' => 'PCIe Width',   'value' => 'x8'],
+    ['label' => 'PCI Location', 'value' => '84:00'],
+    ['label' => 'PCIe Speed',   'value' => 'Gen3 (8.0 GT/s)'],
+];
+$slot = lsi_pcie_slot_items($pcieItems);
+check('the per-function address is not a slot fact',
+      count($slot) === 2 && !in_array('84:00', array_column($slot, 'value'), true));
+check('the slot facts survive in order',
+      array_column($slot, 'label') === ['PCIe Width', 'PCIe Speed']);
+// Nothing to drop is not an error, and the keys must come back renumbered --
+// both callers foreach over the result.
+check('a row with no address is returned unchanged',
+      count(lsi_pcie_slot_items([['label' => 'PCIe Width', 'value' => 'x8']])) === 1);
+check('the result is a list, not a gapped array',
+      array_keys(lsi_pcie_slot_items($pcieItems)) === [0, 1]);
+
 /* ── The bay map's UNRAID field falls back too (reported 2026-08-23) ─────────
    "In Array map, there is no Unraid label on the disk tiles." Every cell read
    UNRAID with nothing after it, for the same reason the tables' column was all

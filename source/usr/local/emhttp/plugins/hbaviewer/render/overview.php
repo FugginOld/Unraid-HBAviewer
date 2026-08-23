@@ -207,11 +207,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     // it belongs to each function and is rendered per sub-card above.
     if ($showPcie && (($head['pcie_width'] ?? '') || ($head['pcie_speed'] ?? ''))) {
         $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
-        foreach ($hv['pcie'] as $item) {
-            // Matched on the label lsi_hba_view() assigns (view.php). Renaming it
-            // there would put the address back on the board — the item COUNT
-            // asserted in ajax_render_test.php is what catches that, not this line.
-            if ($item['label'] === 'PCI Location') continue;
+        foreach (lsi_pcie_slot_items($hv['pcie']) as $item) {
             $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
         }
         $out .= '</div>';
