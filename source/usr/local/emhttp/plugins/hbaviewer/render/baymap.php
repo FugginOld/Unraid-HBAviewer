@@ -113,7 +113,8 @@ function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
                           array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
                           ?int $smartAge = null, array $rebuildDevs = [], array $roles = [],
-                          array $addrByDev = [], array $locating = []): array {
+                          array $addrByDev = [], array $locating = [],
+                          array $udMounts = []): array {
     /* Serial is the join key the SMART collector already emits per drive; it is
        also the only identifier the STORCLI payload shares with it (storcli's WWN
        differs by a nibble from /dev's — see lsi_dev_by_serial).
@@ -177,7 +178,13 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 // What Unraid calls this disk — the name on its Main page, and
                 // the one identifier a person already knows before they look
                 // here. Empty for a drive the array does not use.
-                'role'   => $dev !== null ? ($roles[$dev] ?? '') : '',
+                /* Array role first, then the unassigned-device mount label --
+                   the same precedence, and the same reason, as lsi_role_cell()
+                   in the tables: the two are mutually exclusive in reality and
+                   the array's claim is the stronger one. Without the fallback
+                   every cell on a box with no array reads UNRAID with nothing
+                   after it, which is what was reported. */
+                'role'   => $dev !== null ? ($roles[$dev] ?? $udMounts[$dev] ?? '') : '',
                 // The SCSI address the locate blink reads, and whether it is
                 // blinking right now (plan 048). Empty address = no Locate
                 // button on this bay, rather than one that cannot work.

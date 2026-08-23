@@ -314,7 +314,7 @@ if ($type === 'baymap') {
         lsi_dev_by_serial(), bay_map_locked(), (int) lsi_config_read()['BAY_WARN_TEMP'],
         smart_cache_age(),
         unraid_rebuilding() ? unraid_parity_devs() : [], unraid_disk_roles(),
-        lsi_scsi_addr_by_dev(), locate_active()
+        lsi_scsi_addr_by_dev(), locate_active(), unraid_ud_mounts()
     // Whether an Undo is available. Merged here rather than threaded through
     // bay_map_assemble(), which is about drives and has no business knowing
     // about the store's backup file.

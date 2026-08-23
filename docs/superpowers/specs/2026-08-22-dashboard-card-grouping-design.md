@@ -60,21 +60,28 @@ in `tests/ajax_render_test.php`:
 | Per-IOC facts | Each IOC states its own PCI location | "each IOC states its own PCI location" |
 | Temperature | Both sensors shown — a dual-IOC board has two dies | "the real dual-IOC capture keeps both sensors" |
 
-The tile has far less room than a card, and that is the only genuinely new
-decision: an Overview card can afford a sub-section per IOC, a dashboard tile
-cannot. The temperature is the tile's headline number and there are two of them.
+The tile has less room than a card, and the first cut of this spec got the
+consequence wrong. It reasoned that a dashboard tile cannot afford a
+sub-section per IOC, so it should show the **higher** of the two temperatures
+and let the Overview remain the screen that shows both.
 
-Show the **higher** of the two, because the tile's job is "is anything wrong",
-and label the tile by the board rather than by a controller index. The cooler
-die is not information a dashboard needs; if the two disagree enough to matter,
-the higher one is the one that is going to trip a threshold, and it is the one
-the tile's status colour is already derived from. The Overview remains the
-screen that shows both.
+**Corrected 2026-08-23, on the reporter's judgement:** the tile shows both dies,
+the way the Overview's parent card does. "The dashboard tile should still show
+both controllers info just like the overview but as 1 dashboard tile since it
+is 1 HBA." That is right, and the original reasoning was answering the wrong
+question — the ask was never "which of the two numbers matters most", it was
+"stop claiming this is two cards". Hiding one die still misrepresents the
+board, just less obviously than two tiles did.
 
-This must be stated in the tile, not implied — a tile showing one temperature
-for a board with two sensors is misleading if it looks like the only sensor.
-The sub-line already says `Controller /cN`; for a group it says the board and
-its IOC count.
+So the tile mirrors the card's structure: the board's own facts once, then a
+labelled section per IOC carrying its own gauge, temperature band and die-level
+rows (PCI location, drive count, health). Board-level gauge is dropped when
+grouped — repeating the hottest die's reading above the per-die sections would
+show it twice and imply the board has a temperature of its own.
+
+The **header** still carries the hottest temperature and the worst status,
+because a collapsed tile shows only its header and those are the two facts
+worth seeing without opening it.
 
 ## Scope
 

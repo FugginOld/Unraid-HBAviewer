@@ -1542,6 +1542,31 @@ check('and hbaviewer.js reads it by name',
 
 
 
+
+/* ── The bay map's UNRAID field falls back too (reported 2026-08-23) ─────────
+   "In Array map, there is no Unraid label on the disk tiles." Every cell read
+   UNRAID with nothing after it, for the same reason the tables' column was all
+   em dashes: the box has no array, so the roles map is empty. */
+$bmUd = bay_map_assemble(
+    ['controllers' => [['drives' => [
+        ['slot' => '0/0', 'port' => '1', 'serial' => 'SER-A', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sda'],
+        ['slot' => '0/1', 'port' => '2', 'serial' => 'SER-B', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sdb'],
+    ]]]],
+    null, [], 2, 2, [], false, 45, null, [],
+    ['/dev/sdb' => 'Disk 1'],                      // sdb IS an array disk
+    [], [], ['/dev/sda' => 'media1', '/dev/sdb' => 'media9']
+);
+$byDev = [];
+foreach (array_merge($bmUd['placed'] ?? [], $bmUd['unassigned'] ?? []) as $e) {
+    $byDev[$e['dev'] ?? ''] = $e['role'] ?? '';
+}
+check('the bay map shows a mounted unassigned drive', ($byDev['/dev/sda'] ?? '') === 'media1');
+// Same precedence as the tables: a disk cannot be both, and the array's claim
+// is the stronger one.
+check('an array role still wins in the bay map', ($byDev['/dev/sdb'] ?? '') === 'Disk 1');
+
 /* ── One dashboard tile per CARD (reported 2026-08-22) ───────────────────────
    "If the HBA is a single card, dual controller card, the dashboard card
    should be the same as the overview card." The Overview has grouped since
