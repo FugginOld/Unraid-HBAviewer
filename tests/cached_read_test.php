@@ -121,6 +121,33 @@ $r = cached_read('ov', 60, 'produce',
                  ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
 check('an empty stale file is not served', $r['state'] === 'warming' && $r['body'] === '');
 
+
+/* ── stderr must not reach the payload ───────────────────────────────────────
+   The producer's output is json_decode'd by every consumer. It used to be
+   captured with 2>&1, so one line on stderr -- a shell notice, a storcli
+   message from a path that forgot its own redirect -- sat inside the cached
+   JSON and made it undecodable. The consumer then said "Backend unavailable"
+   about a producer that had succeeded. The PHY tab losing its Drives column
+   (issue #11) was this, and render/phy.php still carries the post-mortem.
+
+   The real launcher is used here, not the recording stub: the redirection IS
+   the thing under test, and a stub that never runs a shell cannot show where
+   the bytes went. */
+$reset();
+// Runs for real ($sync), because the REDIRECTION is what is under test and a
+// stub that never reaches a shell cannot show where the bytes went.
+cached_read('ov', 60, "printf '{\"ok\":1}'; printf 'warning-noise' >&2",
+            ['dir' => $dir, 'now' => $now, 'launch' => $sync]);
+$body = is_file($result) ? (string) file_get_contents($result) : '';
+check('the payload is valid JSON despite the producer writing to stderr',
+      json_decode($body, true) !== null);
+check('and carries none of the stderr text', !str_contains($body, 'warning-noise'));
+/* Kept, not discarded: the job is detached in production, so this file is the
+   only trace a failed producer leaves anywhere. */
+check('stderr is available beside the result',
+      is_file("$result.err") && str_contains((string) file_get_contents("$result.err"), 'warning-noise'));
+@unlink("$result.err");
+
 $reset(); @rmdir($dir);
 echo $fails === 0 ? "cached_read: all pass\n" : "cached_read: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

@@ -31,14 +31,31 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
         return ['state' => 'ready', 'body' => (string) file_get_contents($result)];
     }
 
-    // Stale/absent → launch ONE detached producer that captures stdout+stderr and
-    // swaps the result in atomically (tmp then rename) when done; the lock keeps a
-    // second concurrent request from launching a duplicate.
+    // Stale/absent → launch ONE detached producer, swapping the result in
+    // atomically (tmp then rename) when done; the lock keeps a second concurrent
+    // request from launching a duplicate.
+    //
+    // stderr goes to a SIDECAR, not into the payload. It used to be folded in
+    // with 2>&1, which meant one warning on stderr -- a shell notice, a storcli
+    // message from a path that forgot its own redirect -- landed inside the
+    // cached JSON and made it undecodable. The consumer then reported "Backend
+    // unavailable" about a producer that had actually succeeded. The Drives
+    // column vanishing on the PHY tab (issue #11) was this, and the comment
+    // there still records it.
+    //
+    // Kept rather than discarded: a producer that fails leaves the reason in
+    // <key>.err next to its result, which is the only trace of it anywhere --
+    // the job is detached, so nothing else sees its output.
     if (!is_file($lock) || ($now - filemtime($lock)) > $lockTtl) {
         @touch($lock);
         $tmp = "$result.tmp";
         $launch(
-            "$producer > " . escapeshellarg($tmp) . " 2>&1; "
+            /* Braced, so the redirections apply to the WHOLE producer. Appended
+               bare they bind to its LAST command only -- fine for the single
+               `bash <script>` every caller passes today, silently wrong for
+               anything compound, and the kind of thing that is discovered by
+               someone whose producer grew a second command. */
+            "{ $producer ; } > " . escapeshellarg($tmp) . " 2> " . escapeshellarg("$result.err") . "; "
           . "mv " . escapeshellarg($tmp) . " " . escapeshellarg($result) . "; "
           . "rm -f " . escapeshellarg($lock)
         );
