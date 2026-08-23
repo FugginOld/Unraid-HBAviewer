@@ -5,6 +5,7 @@
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
+require_once __DIR__ . '/cached_read.php';
 $pluginname = 'HBAviewer';
 $SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
@@ -12,21 +13,40 @@ $cfg       = lsi_config_read();
 $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
 
-// get_hba_info.sh self-caches (60s), so this stays cheap on every tile refresh.
-// Increased timeout to 60s for slow storcli systems; script has 60s cache so usually faster
-$data = null;
-if (file_exists($SCRIPT)) {
-    $raw = shell_exec('timeout 60 bash ' . escapeshellarg($SCRIPT) . ' 2>/dev/null') ?? '';
-    $data = $raw ? json_decode($raw, true) : null;
-}
+/* Through cached_read(), NEVER shell_exec. This file renders inside Unraid's
+   OWN Dashboard page: a synchronous hardware read here holds a php-fpm worker
+   for however long the controller takes to answer, and takes the rest of the
+   webGui down with it. It used to be `timeout 60 bash $SCRIPT` in the
+   foreground, which was defended by get_hba_info.sh's own 60s cache -- true
+   while the cache is warm, and silent about the one request a minute that
+   finds it cold. Reported 2026-08-22 as a ~10s freeze of the whole server.
 
-if (!is_array($data)) {
+   Same 'overview' key as ajax_info.php on purpose: same script, same TTL, same
+   data. Two keys would mean two detached producers reading one controller a
+   minute apart for nothing.
+
+   serve_stale, because a tile cannot poll -- Unraid owns its refresh. Values
+   from the last minute are what a dashboard tile is for; the alternative was
+   freezing the box to avoid them. */
+$r    = cached_read('overview', 60, 'bash ' . escapeshellarg($SCRIPT), ['serve_stale' => true]);
+$raw  = $r['body'];
+$data = $raw !== '' ? json_decode($raw, true) : null;
+
+/* Three states, where this used to have two and block to avoid the third.
+   A cold start is NOT 'Backend unavailable': nothing is broken, the first read
+   is simply still running, and saying otherwise sends people to look for a
+   fault that is not there. That message keeps the case it means -- a result
+   arrived and will not parse. */
+$warming = !is_array($data) && $r['state'] === 'warming';
+if ($warming) {
+    $error = null;
+} elseif (!is_array($data)) {
     $error = 'Backend unavailable';
 } else {
     $error = $data['error'] ?? null;
 }
-$controllers = $error ? [] : lsi_controllers($data);
-if (!$error && !$controllers) $error = 'Backend unavailable';
+$controllers = ($error || $warming) ? [] : lsi_controllers($data);
+if (!$error && !$warming && !$controllers) $error = 'Backend unavailable';
 
 $ts = lsi_time();
 
@@ -123,6 +143,26 @@ CSS;
 // and never matches the key against anything, so a single .page can emit as many
 // tiles as there are controllers — each independently positionable and collapsible.
 $tiles = [];
+
+if ($warming) {
+    /* A cold start still gets a tile. Without one the plugin simply vanishes
+       from the dashboard until the first read lands, which reads as "the
+       plugin is broken" rather than "it is starting" -- and it is the state
+       every reboot passes through, so it is the first thing a new user sees.
+       No fabricated zeroes: there is no temperature yet, and printing 0 C
+       would be a lie the tile has no way to retract. */
+    $tiles[] = [
+        'key'    => "{$pluginname}_warm",
+        'id'     => 'tblHBAviewerWarm',
+        'tc'     => lsi_status_color('ok'),
+        'main'   => 'HBAviewer',
+        'sub'    => 'Starting',
+        'pill'   => '',
+        'health' => '',
+        'foot'   => '',
+        'body'   => "<span style='color:var(--d-text)'>Reading controller information\u2026</span>",
+    ];
+}
 
 if ($error) {
     $tiles[] = [

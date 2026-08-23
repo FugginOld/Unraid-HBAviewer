@@ -64,6 +64,63 @@ check('swap wrote result',   is_file($result) && file_get_contents($result) === 
 check('swap left no .tmp',    !is_file("$result.tmp"));
 check('swap cleared lock',    !is_file($lock));
 
+
+/* ── serve_stale (the dashboard tile) ────────────────────────────────────────
+   The Overview polls: it shows a spinner, asks again in 4s, and an empty body
+   is the right answer to "not ready". The dashboard tile cannot poll -- Unraid
+   renders it server-side and owns the refresh -- so its choice is between
+   last-minute values and blocking the whole webGui to avoid them. It takes the
+   values. This option is what lets one reader do that without changing the
+   other's contract. */
+
+// 6. stale + serve_stale → the old body, and the producer STILL launches.
+$reset(); $calls = 0;
+file_put_contents($result, 'OLD');
+touch($result, $now - 300);
+$r = cached_read('ov', 60, 'produce',
+                 ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
+check('stale serves the old body', $r['state'] === 'stale' && $r['body'] === 'OLD');
+// Serving stale is standing in for a refresh, not deciding one is unnecessary.
+// Without this the tile would show the same values until something else
+// happened to warm the cache.
+check('stale still launches the producer', $calls === 1);
+
+// 7. no file at all + serve_stale → warming, empty. A cold start has nothing to
+// serve, and the caller must handle that rather than be handed '' as if it were
+// data.
+$reset(); $calls = 0;
+$r = cached_read('ov', 60, 'produce',
+                 ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
+check('cold start warms even with serve_stale', $r['state'] === 'warming' && $r['body'] === '');
+
+// 8. stale WITHOUT the option → unchanged. Asserted from the outside so a later
+// refactor cannot quietly hand the Overview a stale body and break its poll.
+$reset(); $calls = 0;
+file_put_contents($result, 'OLD');
+touch($result, $now - 300);
+$r = cached_read('ov', 60, 'produce', ['dir' => $dir, 'now' => $now, 'launch' => $record]);
+check('without the option a stale result is still withheld',
+      $r['state'] === 'warming' && $r['body'] === '');
+
+// 9. fresh + serve_stale → ready, not stale. The option must not demote a good
+// read.
+$reset(); $calls = 0;
+file_put_contents($result, 'CACHED');
+touch($result, $now - 10);
+$r = cached_read('ov', 60, 'produce',
+                 ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
+check('fresh is still ready with serve_stale', $r['state'] === 'ready' && $r['body'] === 'CACHED');
+check('fresh with serve_stale still does not launch', $calls === 0);
+
+// 10. an EMPTY stale file is not served, same rule the fresh path has: never
+// hand back a truncated producer run.
+$reset(); $calls = 0;
+file_put_contents($result, '');
+touch($result, $now - 300);
+$r = cached_read('ov', 60, 'produce',
+                 ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
+check('an empty stale file is not served', $r['state'] === 'warming' && $r['body'] === '');
+
 $reset(); @rmdir($dir);
 echo $fails === 0 ? "cached_read: all pass\n" : "cached_read: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
