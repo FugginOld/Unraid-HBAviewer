@@ -85,8 +85,32 @@ The `.js` files existing as `.js` at all: they spent a year inside two `.php`
 files where nothing analysed them. The absent plugin-side CSRF check, which
 is marked do-not-re-attempt for a reason.
 
+**On the cron and verification paths.** `TRACK_HISTORY` being its own switch
+rather than a rider on `ENABLE_NOTIFY` — one feature hidden behind another's
+toggle is not a saved setting, it is two unrelated conditions nobody
+discovering the plugin would connect (`7d6e8f2`). The notify branch in
+`notify_check.php` ending in `return` and not `exit(0)`: the exit sat above
+the history sample, so any box whose overview read hiccupped stopped
+collecting trend data silently, with the setting still ticked. The content
+`diff -r` of the extracted package against the installed tree in
+`install-verify.sh`, which runs *before* every check below it — a package
+checksum is not the shorter equivalent, because makepkg is not
+byte-reproducible across machines and the same commit built twice gives two
+sums. That script reported PASS twice against a stale tarball before this
+landed (`05a4578`).
+
 Anything named in **Where the sharp edges are** is on this list whether or not
 it is repeated here.
+
+## Documented boundaries
+
+Read the comment before proposing the change; these explain intent but no
+failure has shipped behind them.
+
+`renderHealthTables()` appends to the health ring — the same store the cron
+sampler feeds. The ring growing after `install-verify.sh` runs therefore
+proves nothing about the cron, which is the wrong conclusion most available
+while debugging it.
 
 ## Arbitration
 

@@ -135,5 +135,39 @@ check('flash_rc is reset inside the loop body',
 check('and not hoisted above the loop',
       $posFor !== false && !str_contains(substr($flashSh, 0, $posFor), 'flash_rc='));
 
+/* ── The two switches stay two switches ─────────────────────────────────────
+   TRACK_HISTORY hidden behind ENABLE_NOTIFY is the collapse the policy names;
+   it has to exist as its own key to be its own switch. */
+$cfgPhp = (string) file_get_contents("$plugin/config.php");
+check('TRACK_HISTORY is a config key of its own',
+      (bool) preg_match("~'TRACK_HISTORY'\s*=>~", $cfgPhp)
+      && (bool) preg_match("~'ENABLE_NOTIFY'\s*=>~", $cfgPhp));
+
+/* ── The notify branch returns, it does not exit ────────────────────────────
+   Position again, not presence: the only exit(0) allowed is the gate at the
+   top, before either feature runs. One below it skips the history sample.
+
+   Tokenised, not grepped: the comment on the line the policy is about SAYS
+   "rather than exit(0)", and a text search reads that as the bug it warns
+   against. */
+$notify = (string) file_get_contents("$plugin/scripts/notify_check.php");
+$exits  = [];
+foreach (token_get_all($notify) as $t) {
+    if (is_array($t) && $t[0] === T_EXIT) $exits[] = $t[2];   // line numbers
+}
+check('the both-off gate is still there',
+      (bool) preg_match('~if \(!\$doNotify && !\$doHistory\) exit\(0\);~', $notify));
+// Exactly one: the gate. A second is one below it, skipping the history sample.
+check('and it is the only exit in the file', count($exits) === 1);
+
+/* ── install-verify proves WHICH build it verified ──────────────────────────
+   A content diff of the extracted package against the installed tree, and it
+   has to come before the checks that report on that tree. */
+$iv       = (string) file_get_contents(__DIR__ . '/../docs/install-verify.sh');
+$posDiff  = strpos($iv, 'diff -r "$VERIFYTMP/usr/local/emhttp/plugins/hbaviewer" "$PLUGIN"');
+check('install-verify diffs the package against the installed tree', $posDiff !== false);
+check('and does so before it renders anything from that tree',
+      $posDiff !== false && $posDiff < strpos($iv, 'renderHealthTables'));
+
 echo $fails === 0 ? "review_policy: all pass\n" : "review_policy: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
