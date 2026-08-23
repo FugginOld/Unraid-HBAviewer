@@ -1541,6 +1541,68 @@ check('and hbaviewer.js reads it by name',
       substr_count((string) file_get_contents("$pluginDir/hbaviewer.js"), "pal('--chart-") === 7);
 
 
+
+/* ── One dashboard tile per CARD (reported 2026-08-22) ───────────────────────
+   "If the HBA is a single card, dual controller card, the dashboard card
+   should be the same as the overview card." The Overview has grouped since
+   plan 2026-08-10; the tile emitted one per controller, so one board in one
+   slot reported as two cards. */
+// Keyed through fw_normalize(), which is how lsi_ioc_counts() builds the real
+// map -- 'SAS9300-16i' normalises to '930016i', and hardcoding that spelling
+// here would pin the normaliser rather than the grouping this is testing.
+$iocTwo = [fw_normalize('SAS9300-16i') => 2];
+$dual = [
+    ['status' => 'ok',    'temp' => 52, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'alert', 'temp' => 47, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$reps = lsi_group_reps($dual, $iocTwo);
+check('a dual-IOC board is one tile', count($reps) === 1);
+/* The hotter die is FIRST here and the alert is on the SECOND, so an
+   implementation that takes "the last member" for either would pass one of
+   these two checks and fail the other. */
+check('the tile reads the hotter die', $reps[0]['rep'] === 0);
+check('and the worse status, which is the other one',
+      lsi_worst_status(array_map(fn($m) => $dual[$m]['status'], $reps[0]['members'])) === 'alert');
+
+// ...and with the hotter die second, to kill a hardcoded index.
+$dualB = [
+    ['status' => 'alert', 'temp' => 41, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'ok',    'temp' => 55, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$repsB = lsi_group_reps($dualB, $iocTwo);
+check('the hotter die is found wherever it sits', $repsB[0]['rep'] === 1);
+/* Unraid persists dashboard layout per tile key. Keying on the representative
+   would move a user's tile across the dashboard when the other die got hotter. */
+check('the key stays the first member even then', $repsB[0]['key'] === 0);
+
+/* Two GENUINELY separate cards must stay two tiles. Risers and PCIe switches
+   put separate cards behind one root port, so lsi_group_cards() requires the
+   board to be one the index says has that many IOCs -- this is the guard, from
+   the outside. */
+$twoCards = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-b'],
+];
+check('two separate cards stay two tiles', count(lsi_group_reps($twoCards, $iocTwo)) === 2);
+/* An unrecognised board stays split even in one slot -- absence from the index
+   must never merge anything. */
+$unknown = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+];
+check('an unindexed board is never merged', count(lsi_group_reps($unknown, $iocTwo)) === 2);
+
+/* The single-card case, which is almost every box: its key must be BYTE
+   IDENTICAL to the one it has today, or every user's dashboard layout resets
+   on upgrade for a change that does not affect them. The literal is pinned on
+   purpose -- computing it the way the code does would not catch a change to
+   both. */
+$one  = [['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a']];
+$repsOne = lsi_group_reps($one, $iocTwo);
+check('a single card is one tile', count($repsOne) === 1);
+check('and keeps the tile key it already had',
+      "HBAviewer_c{$repsOne[0]['key']}" === 'HBAviewer_c0');
+
 /* ── The dashboard tile never blocks (reported 2026-08-22) ───────────────────
    dashboard.php renders inside Unraid's OWN Dashboard page. A synchronous
    hardware read there holds a php-fpm worker for the controller's read time

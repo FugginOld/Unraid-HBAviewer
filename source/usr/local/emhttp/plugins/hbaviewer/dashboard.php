@@ -6,6 +6,8 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
 require_once __DIR__ . '/cached_read.php';
+require_once __DIR__ . '/card_group.php';
+require_once __DIR__ . '/firmware_index.php';
 $pluginname = 'HBAviewer';
 $SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
@@ -178,10 +180,41 @@ if ($error) {
     ];
 }
 
-foreach ($controllers as $i => $c) {
+/* One tile per CARD, not per controller. A SAS9300-16i is one board carrying
+   two SAS3008 IOCs, and this loop used to emit a tile for each -- two tiles
+   saying "HBAviewer", differing only by /c0 and /c1, for one card in one slot.
+   The Overview, the firmware page and the per-controller tabs have all grouped
+   through lsi_group_cards() since plan 2026-08-10; the tile is the consumer
+   that was never updated.
+
+   The merge guard is that function's and is deliberately strict: shared PCI
+   root port AND a board the firmware index says carries that many IOCs, count
+   matching exactly. Risers and PCIe switches put genuinely separate cards
+   behind one root port, and merging those would be a worse bug than the split
+   this fixes -- appearing only on hardware nobody here owns.
+
+   Keyed on the group's FIRST MEMBER index, which for every ungrouped card is
+   the index it already had. Unraid persists dashboard layout per tile key, so
+   a key change resets where the user put the tile and whether they collapsed
+   it. Only a box that genuinely has a dual-IOC board sees one, and there the
+   two old tiles are becoming one anyway. */
+foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
+    $g = $grp['members'];
+    /* Built from the HOTTEST member, so every temperature-derived field -- the
+       band, the gauge gradient, the pill's colour and its label -- agrees with
+       the number on screen. Taking the max temperature while building the view
+       from a different member would show one die's number under another die's
+       band, which is worse than either alone.
+       A tile has room for one temperature and a dual-IOC board has two dies.
+       The higher one is what a dashboard is for: it is the one that will trip
+       a threshold, and it is what the status colour already derives from. The
+       Overview remains the screen that shows both. */
+    $i       = $grp['rep'];
+    $c       = $controllers[$i];
+    $grouped = count($g) > 1;
     $t = [
-        'key'    => "{$pluginname}_c{$i}",
-        'id'     => "tblHBAviewer{$i}",
+        'key'    => "{$pluginname}_c{$grp['key']}",
+        'id'     => "tblHBAviewer{$grp['key']}",
         'tc'     => lsi_status_color('alert'),
         'main'   => 'HBAviewer',
         'sub'    => "Controller /c{$i}",
@@ -225,8 +258,20 @@ foreach ($controllers as $i => $c) {
     // Title stays the plugin name; the subtitle identifies which card this tile is.
     // $portLabel is already "Controller /cN" on storcli cards and
     // "ioc0 (lsiutil -pN)" on lsiutil ones — both are the right thing to show.
+    /* Worst-of across the group, not the hottest member's own status: the die
+       running cooler can still be the one reporting an alert. Same rule and
+       the same function the Overview's parent card uses. */
+    if ($grouped) {
+        $col = lsi_worst_status(array_map(
+            fn($m) => (string) ($controllers[$m]['status'] ?? 'ok'), $g));
+        $badge = lsi_status_label($col);
+    }
     $t['tc']  = $col;
-    $t['sub'] = $model . ' - ' . $portLabel;
+    /* A tile showing ONE temperature for a board with two sensors has to say
+       so, or the number reads as the only sensor there is. */
+    $t['sub'] = $grouped
+        ? $model . ' - ' . count($g) . ' controllers'
+        : $model . ' - ' . $portLabel;
 
     $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'

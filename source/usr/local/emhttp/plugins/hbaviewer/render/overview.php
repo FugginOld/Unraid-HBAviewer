@@ -147,13 +147,10 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $fwClause  = fw_overview_clause($hv['firmware_verdict'] ?? []);
     // Worst-of, so the parent says something true about the board: a card whose
     // second IOC is overheating must not show a green badge because its first
-    // one is fine.
-    $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
-    $worst = 'ok';
-    foreach ($group as $i) {
-        $s = (string) ($ctls[$i]['status'] ?? 'ok');
-        if (($rank[$s] ?? 0) > ($rank[$worst] ?? 0)) { $worst = $s; }
-    }
+    // one is fine. The ordering lives in view.php beside lsi_status_color(),
+    // because the dashboard tile needs the same answer.
+    $worst = lsi_worst_status(array_map(
+        fn($i) => (string) ($ctls[$i]['status'] ?? 'ok'), $group));
 
     $out = '<div class="lu-card first lu-card-parent" data-status="' . htmlspecialchars($worst) . '"'
          . ' style="--sc:' . lsi_status_color($worst) . '">'

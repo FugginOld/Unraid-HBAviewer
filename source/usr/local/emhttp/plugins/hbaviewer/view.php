@@ -7,6 +7,28 @@
 
 require_once __DIR__ . '/firmware_index.php';
 
+/* Worst-of across a set of controller statuses, so a card whose second IOC is
+   overheating cannot show a green badge because its first one is fine.
+
+   Here rather than inline at the call site because there are two call sites
+   now -- the Overview's grouped card and the dashboard tile -- and a severity
+   ordering duplicated across two files is the exact shape of drift this plugin
+   has already paid for twice (the token block, the button hover). An unknown
+   status ranks 0: it must not silently outrank a real alert.
+
+   This vocabulary (ok/warn/alert) is the CONTROLLER's. health.php's
+   health_rank() orders a different one (ok/watch/warning/critical) for the
+   five health indicators. They are not interchangeable and neither should
+   learn the other's words. */
+function lsi_worst_status(array $statuses): string {
+    $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
+    $worst = 'ok';
+    foreach ($statuses as $s) {
+        if (($rank[(string) $s] ?? 0) > ($rank[$worst] ?? 0)) $worst = (string) $s;
+    }
+    return $worst;
+}
+
 function lsi_status_color(string $s): string {
     return match ($s) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
 }
