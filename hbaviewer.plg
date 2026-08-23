@@ -13,6 +13,35 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.23.2###
+**Added**
+- Tabs with nothing to show now say why. The Event Log in particular: it used
+  to print "No log entries" even when entries WERE archived on /boot but had
+  been written by a different backend, so a box that switched backend was told
+  its history was gone. It now says how many are held and why they cannot be
+  displayed.
+- The Overview says when a controller read did not finish, instead of showing
+  "Reading controller information..." for as long as the tab stays open. A card
+  or tool that stops responding now looks like a failure rather than like a
+  slow plugin.
+
+**Fixed**
+- A background read that wrote anything to stderr -- a shell notice, a storcli
+  message -- could corrupt its own cached result and surface as "Backend
+  unavailable" even though the read had succeeded. stderr is kept separately
+  now.
+- **HBA 9500 owners:** the bundled firmware index listed 28.00.00.00 as newest
+  for the 9500-8i and recorded the board as having no legacy option ROM. A real
+  card reported firmware 31.00.00.00 and a BIOS of 09.27.00.00_14.00.00.00, so
+  both were wrong. A 9500-8i on current firmware now reads as current instead
+  of "newer than index". The 9500-16i is unchanged -- no 16i has been read
+  here, and this index only records what has actually been seen.
+
+**Internal**
+- Every plan in `docs/superpowers/` now states whether it shipped, ARCHITECTURE.md
+  covers the files added over the last week, and the release procedure documents
+  the trap that `main` moves on its own when a release patches the plugin file.
+
 ###2026.08.23.1###
 **Fixed**
 - The dashboard tile's cold-start message printed `Reading controller
