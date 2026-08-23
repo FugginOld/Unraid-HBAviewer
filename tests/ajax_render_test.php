@@ -1462,6 +1462,29 @@ check('the chart palette lives only in tokens.css',
 check('and hbaviewer.js reads it by name',
       substr_count((string) file_get_contents("$pluginDir/hbaviewer.js"), "pal('--chart-") === 7);
 
+
+/* ── The dashboard tile never blocks (reported 2026-08-22) ───────────────────
+   dashboard.php renders inside Unraid's OWN Dashboard page. A synchronous
+   hardware read there holds a php-fpm worker for the controller's read time
+   and takes the whole webGui with it -- reported as a ~10s freeze, once a
+   minute, which is exactly how often get_hba_info.sh's 60s self-cache expires.
+
+   The blocking is a property of the REQUEST and no unit test can observe it,
+   so what is pinned here is that the call which does it is gone and that the
+   file goes through the reader every other consumer uses. */
+$dashSrc = (string) file_get_contents("$pluginDir/dashboard.php");
+check('the dashboard tile never reads hardware in the foreground',
+      !preg_match('~(shell_exec|proc_open|passthru|\bsystem)\s*\(~', $dashSrc));
+check('the dashboard tile reads through cached_read', str_contains($dashSrc, "cached_read('overview'"));
+// serve_stale is the half that makes the above survivable: without it a tile
+// that cannot poll would show nothing for a whole minute out of every minute.
+check('the dashboard tile serves stale values rather than none',
+      str_contains($dashSrc, "'serve_stale' => true"));
+// Same key as the Overview: same script, same TTL, same data. Two keys would
+// run two detached producers against one controller a minute apart.
+check('the tile shares the overview cache key',
+      substr_count((string) file_get_contents("$pluginDir/ajax_info.php"), "cached_read('overview'") === 1);
+
 /* ── No stray control characters in hand-edited source ───────────────────────
    The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
    written through a tool whose "91" is an OCTAL escape, so  became a
