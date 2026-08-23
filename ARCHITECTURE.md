@@ -276,6 +276,11 @@ to test a branch, and it evaporates on reboot by design.
 Three documents state rules the code follows, so they do not have to be
 re-derived from the code each time:
 
+- **`docs/review-policy.md`** — which agent review tool's advice governs
+  which layer, and the paths where a "simplify this" finding is a defect in
+  the review rather than in the code. Written because three tools with
+  different biases were run across this repo and their findings had to be
+  re-adjudicated from scratch each time.
 - **`design-system/MASTER.md`** — the UI's rules, extracted from `chrome.css`
   and the renderers rather than invented: theme-variable tokens, `auto-fit`
   grids, tabular numerals, colour-as-signal, reduced-motion-preserves-signal.
