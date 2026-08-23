@@ -487,5 +487,59 @@ check('host_link: card known, slot silent claims only the card',
       str_contains($cardOnly['reason'], 'the full width this card reports')
       && !str_contains($cardOnly['reason'], 'slot'));
 
+
+/* ── The ring's write must be atomic (2026-08-23) ────────────────────────────
+   It was a bare file_put_contents, which was safe only while the tab render
+   was effectively the only writer. The cron now writes too, and the failure
+   mode is nasty and silent: health_store_read() ends in `?: []`, so a torn
+   file decodes to nothing, is read as an EMPTY ring, and health_ingest()
+   treats it as a fresh start. A cron write landing mid-render would discard
+   the whole accumulated history rather than one sample -- occasionally, with
+   nothing reported anywhere. */
+$hdir = sys_get_temp_dir() . '/hbav_ring_' . getmypid();
+@mkdir($hdir, 0777, true);
+$hfile = health_store_path(0, $hdir);
+array_map('unlink', glob("$hdir/*") ?: []);
+
+health_store_write($hfile, [['t' => 1, 'uptime' => 100, 'phys' => []]]);
+check('the ring round-trips', count(health_store_read($hfile)) === 1);
+// The temp file must not survive: a directory filling with .tmp files is its
+// own bug, and on /tmp nobody would ever look.
+check('no temp file is left behind', glob("$hdir/*.tmp") === []);
+
+/* The property that matters: a reader never sees a partial file. Asserted by
+   the mechanism rather than by racing -- rename() is atomic within a
+   filesystem, so what has to be true is that the write goes to a temp path in
+   the SAME directory and is renamed over. A same-directory temp is what keeps
+   it off a second filesystem, where rename degrades to copy. */
+$src = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/health.php');
+check('the ring write renames rather than truncating in place',
+      str_contains($src, 'rename($tmp, $file)') && !preg_match('~file_put_contents\(\$file,~', $src));
+
+// A ring already on disk survives a rewrite -- the append path is the one the
+// cron and the tab share, and losing history here is the whole risk.
+health_store_write($hfile, health_ingest(health_store_read($hfile),
+                                         ['t' => 2, 'uptime' => 200, 'phys' => []]));
+check('a second write appends rather than replacing', count(health_store_read($hfile)) === 2);
+array_map('unlink', glob("$hdir/*") ?: []);
+@rmdir($hdir);
+
+/* ── The cron feeds the ring, and only when it is already awake ──────────────
+   Text checks, because the cron entrypoint runs hardware and cannot be called
+   from here. What has to hold is the two decisions the spec makes. */
+$cron = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/notify_check.php');
+check('the cron samples health into the ring',
+      str_contains($cron, 'get_hba_health.sh') && str_contains($cron, 'health_ingest('));
+/* One append rule, not two: the cron must go through health_ingest(), which
+   carries the reboot and counter-reset detection. A hand-rolled append here
+   would be a second rule to keep correct. */
+check('it appends through the shared rule, not its own',
+      !preg_match('~\$ring\s*\[\]\s*=~', $cron));
+/* Inside the ENABLE_NOTIFY guard on purpose: this file's contract is that a
+   disabled feature does not poll silicon every ten minutes. Sampling above the
+   guard would start a hardware read on every install that asked for nothing. */
+check('it stays behind the notify guard',
+      strpos($cron, "ENABLE_NOTIFY") < strpos($cron, 'get_hba_health.sh'));
+
 echo $fails === 0 ? "health: all pass\n" : "health: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
