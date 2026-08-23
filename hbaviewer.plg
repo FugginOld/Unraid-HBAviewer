@@ -13,6 +13,65 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.23###
+**The dashboard tile could freeze the whole webGui.** It read the controller
+synchronously while Unraid rendered its own Dashboard page, so once a minute --
+when the reader's 60-second cache expired -- a PHP worker was held for as long
+as the card took to answer and everything else queued behind it. Reported as
+~10 seconds of an unresponsive server, once a minute, on every install that had
+the tile. It reads through the plugin's existing non-blocking cache now and can
+never wait on hardware again; a test fails if that call is ever put back.
+
+**Added**
+- **Temperature unit** (Settings): °C or °F, default °C. Contributed by
+  [Josh Mans](https://github.com/joshmans) as PR #22. Every sensor, stored
+  value and threshold comparison stays in Celsius -- only the printed number
+  changes.
+- **Sortable tables.** Every column header on Drives, SMART, PHY and the Event
+  Log sorts, ascending then descending, by click or keyboard. Capacities sort
+  by real size, so 9.095 TB comes before 12.733 TB.
+- **Unassigned drives are named.** A drive mounted by the Unassigned Devices
+  plugin shows its mount label (`media1`, `media9`) in the Unraid column and on
+  the Array Map, instead of an em dash. On a box with no array that column was
+  previously empty on every row.
+- **One HBA is one dashboard tile.** A dual-IOC board (SAS9300-16i and
+  similar) reported as two tiles; it now shows as one, with a section per
+  controller carrying its own temperature, address, drive count and health --
+  matching what the Overview tab has always shown.
+
+**Fixed**
+- Drives whose serial contains a space -- several HGST SAS models do -- showed
+  no `/dev` name on the Drives tab and no name in the Array Map tray, while
+  SMART named them correctly. Four of nine drives on the reporting box.
+- Long session URLs on the Settings page ran out through the right edge of the
+  Export/API card.
+- The dashboard tile showed one controller's PCI address as though it belonged
+  to the board.
+
+**Accessibility**
+The plugin had no visible focus ring anywhere, and two inputs actively removed
+the browser's. Bay cells and tray chips were plain `div`s with click handlers,
+so the Array Map could not be operated by keyboard at all -- and emptying a bay
+was double-click only, with no keyboard equivalent. The tab strip announced
+itself to a screen reader as ten unrelated buttons.
+
+- Focus rings on everything the keyboard can reach.
+- The Array Map is fully keyboard-operable: Enter picks up and places a drive,
+  Delete empties a bay, and focus stays where you were after the grid redraws.
+- The tab strip is a proper tab list with arrow-key movement.
+- Small controls meet the 24px pointer-target minimum.
+- The two warning/gear glyphs are now SVG. As text they took *emoji*
+  presentation on Windows and Android, which meant the warning sign beside the
+  firmware flasher was rendered in the font's own colour and could not be made
+  to look like a warning.
+
+**Internal**
+Design rules the CSS already followed are written down in
+`design-system/MASTER.md`, and the colour tokens, the button, and the icon
+sprite each have one home instead of two or three copies that had already
+drifted apart. `docs/foreground-reads.md` records which code may block a
+request, which is the rule whose absence caused the freeze above.
+
 ###2026.08.17###
 SAS4 / 9600-series (`mpi3mr`) cards are now read instead of being named and
 refused. Ported from techanonymous's `Unraid-HBAviewer-sas4` fork (MIT,
