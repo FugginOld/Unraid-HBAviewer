@@ -368,6 +368,40 @@ the forcing function for the changelog Unraid actually displays to users.
 
 Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
 
+## Testing a branch on real hardware
+
+```bash
+# on the box, from a CLEAN fetch -- the rm -rf matters, a stale checkout
+# rebuilds the wrong commit and installs it without complaint
+cd /tmp && rm -rf hbav-build && mkdir hbav-build && cd hbav-build
+curl -fsSL https://github.com/FugginOld/Unraid-HBAviewer/archive/refs/heads/<branch>.tar.gz   | tar xz --strip-components=1
+bash build.sh
+cp releases/hbaviewer.txz /tmp/hbaviewer.txz
+bash docs/install-verify.sh
+```
+
+**Do not compare the package's md5 against one built elsewhere.** `makepkg` is
+not byte-reproducible across machines — it bakes in timestamps and directory
+permissions, and prompts about the latter mid-run — so the same commit built on
+two boxes gives two checksums. Comparing them proves nothing and, on
+2026-08-23, sent an afternoon chasing a mismatch that was never evidence of
+anything. `install-verify.sh` diffs the extracted package against the installed
+tree instead, which is the check that actually holds.
+
+The md5 IS meaningful in two places: against the CI-published release asset,
+and between two builds on the same machine.
+
+**`upgradepkg` always says "Skipping package hbaviewer (already installed)".**
+Nothing versions the package name, so the installed and incoming packages are
+both plain `hbaviewer`. It is not what installs the files — the `.plg`'s second
+block wipes the plugin directory and extracts the tarball, and that is what
+`install-verify.sh` reproduces.
+
+**To verify a change reached the box, grep the installed file for it.** Not the
+tarball, not a checksum, and not a side effect: the health ring, for example,
+is appended to by `install-verify.sh`'s own health-renderer check, so its mtime
+moving says nothing about whether the cron sampler is running.
+
 ## Where the sharp edges are
 
 - **Two backends, different keys.** The storcli drives payload has no `phy`
