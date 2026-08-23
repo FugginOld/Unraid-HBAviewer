@@ -28,7 +28,8 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
 
     // Fresh, non-empty result → serve it. (-s not -f: never serve a truncated file.)
     if (is_file($result) && filesize($result) > 0 && ($now - filemtime($result)) < $ttl) {
-        return ['state' => 'ready', 'body' => (string) file_get_contents($result)];
+        // 'stalled' on every return, so a caller can read it without isset().
+        return ['state' => 'ready', 'body' => (string) file_get_contents($result), 'stalled' => false];
     }
 
     // Stale/absent → launch ONE detached producer, swapping the result in
@@ -46,7 +47,19 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
     // Kept rather than discarded: a producer that fails leaves the reason in
     // <key>.err next to its result, which is the only trace of it anywhere --
     // the job is detached, so nothing else sees its output.
-    if (!is_file($lock) || ($now - filemtime($lock)) > $lockTtl) {
+    /* A lock older than $lockTtl means the producer that took it never came
+       back: it cleans the lock up itself on the way out. The relaunch below
+       already recovers from that -- what was missing is anyone SAYING so.
+       Without it a box whose storcli hangs on every attempt shows "reading
+       controller information" forever, with the plugin looking merely slow
+       rather than repeatedly failing.
+
+       Deliberately NOT called "the producer died": $lockTtl is 120s and a very
+       slow controller could still be working. What is certain is that the last
+       attempt did not finish inside that window, so that is what callers are
+       told, and <key>.err holds whatever it managed to say. */
+    $stalled = is_file($lock) && ($now - filemtime($lock)) > $lockTtl;
+    if (!is_file($lock) || $stalled) {
         @touch($lock);
         $tmp = "$result.tmp";
         $launch(
@@ -67,7 +80,7 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
        The filesize guard is the same rule the fresh path has one screen up --
        a truncated producer run is not data at whatever age. */
     if (!empty($opts['serve_stale']) && is_file($result) && filesize($result) > 0) {
-        return ['state' => 'stale', 'body' => (string) file_get_contents($result)];
+        return ['state' => 'stale', 'body' => (string) file_get_contents($result), 'stalled' => $stalled];
     }
-    return ['state' => 'warming', 'body' => ''];
+    return ['state' => 'warming', 'body' => '', 'stalled' => $stalled];
 }
