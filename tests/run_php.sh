@@ -10,7 +10,7 @@ TESTS="config_test.php view_test.php event_archive_test.php cached_read_test.php
 flash_php_test.php ajax_render_test.php health_test.php notify_test.php
 bundle_php_test.php bay_map_test.php locate_test.php phy_baseline_test.php
 export_test.php plg_test.php firmware_index_test.php card_group_test.php
-controller_schema_test.php"
+controller_schema_test.php review_policy_test.php"
 
 CMD=""
 for t in $TESTS; do CMD="${CMD:+$CMD && }php tests/$t"; done
