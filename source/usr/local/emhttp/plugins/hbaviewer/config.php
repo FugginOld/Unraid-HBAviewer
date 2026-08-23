@@ -92,6 +92,10 @@ const LSI_SCHEMA = [
        which is what #13 explicitly asked for. */
     'PCIE_EXPECT_WIDTH' => [0, 0, 32],   // lanes; 0 = detect from the slot
     'PCIE_EXPECT_GEN'   => [0, 0, 6],    // PCIe generation; 0 = detect
+    // Display only. Every temperature is still READ, STORED, and COMPARED
+    // against ALERT_THRESHOLD / BAY_WARN_TEMP in °C — this only changes what
+    // the UI prints. 0 = °C (default), 1 = °F.
+    'TEMP_UNIT' => [0, 0, 1],
 ];
 
 function lsi_clamp(string $key, $val): int {
@@ -138,4 +142,31 @@ function lsi_config_write(array $raw, ?string $path = null): void {
    A merge open-coded at each call site is a merge the next call site forgets. */
 function lsi_config_update(array $changes, ?string $path = null): void {
     lsi_config_write($changes + lsi_config_read($path), $path);
+}
+
+/* ── Temperature display (°C/°F) ─────────────────────────────────
+ * Every sensor, threshold and comparison in this plugin stays in °C — only
+ * the printed string changes. Keeping the unit conversion in one place means
+ * every page prints the same rounding for the same reading instead of each
+ * call site rolling its own (int) cast or round().
+ *
+ * $unit: pass $cfg['TEMP_UNIT'] (0 = °C, 1 = °F). $c: a Celsius reading, or
+ * '' / null for "no data", which is passed through unchanged so callers keep
+ * their existing "—" / "no data" handling. */
+function lsi_temp_convert($c, int $unit) {
+    if ($c === '' || $c === null || !is_numeric($c)) return $c;
+    return $unit === 1 ? round(((float) $c) * 9 / 5 + 32) : round((float) $c);
+}
+
+/* Same conversion, formatted with its unit suffix ready to print — the form
+   almost every call site actually wants.
+
+   NOT lsi_temp_label(), which is what this was called when it arrived: $v of
+   lsi_hba_view() already carries a 'temp_label', and that is the BAND name
+   ("NORMAL", "WARNING"), not a formatted reading. Two things called "temp
+   label" meaning different things in one codebase is a trap for whoever reads
+   the second one first. */
+function lsi_temp_str($c, int $unit): string {
+    if ($c === '' || $c === null || !is_numeric($c)) return '';
+    return lsi_temp_convert($c, $unit) . ($unit === 1 ? '°F' : '°C');
 }

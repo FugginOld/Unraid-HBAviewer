@@ -34,6 +34,7 @@ if ($enableFlash) {
 }
 ?>
 
+<link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
 <link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 <style>
 /* ── Firmware/BIOS flash tab ─────────────────────────────────────────────── */
@@ -73,16 +74,19 @@ if ($enableFlash) {
 .lu-flock { color: var(--warn-text); font-size: 12px; margin: 14px 0 0; }
 .lu-fc input[type=file] { color: var(--muted); font-size: 12px; }
 .lu-fc input[type=text] { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 9px; font-size: 13px; width: 120px; font-family: var(--mono); }
-.lu-fc input[type=text]:focus { outline: none; border-color: var(--accent); }
+/* Ring restored — see the same note in settings.php. This field names the
+   firmware file that is about to be written to a controller; it is the last
+   place in the plugin to leave a keyboard user guessing where they are. */
+.lu-fc input[type=text]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 .lu-fc pre { background: #0d0d0d; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--muted); font-size: 11px; font-family: var(--mono); line-height: 1.4; max-height: 280px; overflow: auto; padding: 10px; margin: 8px 0 0; white-space: pre-wrap; }
-.lu-fbtn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 12px; font-weight: 700; padding: 7px 16px; cursor: pointer; }
-.lu-fbtn:hover { background: #d9901a; }
-.lu-fbtn.danger { background: var(--crit); color: #fff; }
-.lu-fbtn.danger:hover { background: #c0392b; }
+/* The buttons on this page are .lu-btn from chrome.css, which this page
+   already links. It used to keep its own near-identical copy of that rule. */
 .lu-fack { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; margin: 8px 0; }
 </style>
 
 <div id="lu-wrap">
+
+<?php require __DIR__ . '/icons.php'; ?>
 
 <div class="lu-tab-toolbar">
   <div class="lu-bay-head">
@@ -105,7 +109,7 @@ if ($enableFlash) {
   <button class="lu-tab-btn" type="button"
           onclick="location.href='/Tools/HBAviewer_Monitor'">&#8592; Back to HBAviewer</button>
   <button class="lu-tab-btn lu-tab-right" type="button"
-          onclick="location.href='/Settings/HBAviewer_Settings'">&#9881; Settings</button>
+          onclick="location.href='/Settings/HBAviewer_Settings'"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-settings"/></svg> Settings</button>
 </div>
 
 <?php if (LSI_FLASH_LOCKED): ?>
@@ -114,7 +118,7 @@ if ($enableFlash) {
        page gone learns nothing, while a page that explains itself does. -->
   <div class="lu-card first">
     <div class="lu-danger">
-      <strong>&#9888; Firmware/BIOS flashing is disabled in this release.</strong>
+      <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware/BIOS flashing is disabled in this release.</strong>
       <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
     </div>
     <p class="lu-muted" style="margin:0">
@@ -136,7 +140,7 @@ if ($enableFlash) {
 <div id="tab-flash">
   <div class="lu-card first">
     <div class="lu-flash-warn">
-      <strong>&#9888; Firmware / BIOS flashing.</strong> A wrong or mismatched image
+      <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware / BIOS flashing.</strong> A wrong or mismatched image
       will <strong>permanently brick</strong> your controller. Verify the image
       matches your exact card and chip. The array must be stopped. Proceed entirely
       at your own risk.

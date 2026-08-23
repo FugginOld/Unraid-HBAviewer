@@ -53,25 +53,18 @@ drv_lsiutil() {
     require_binary || return 1
     # One entry per card, in lsi_ports order, so the index join in ajax_info.php
     # lines up with the Overview's controllers[] (issue #18).
-    local MAP p bus dev nports first=1
-    MAP=$(lsi_port_map)
-    nports=$(echo "$MAP" | wc -l | tr -d ' ')
-    while read -r p bus dev; do
-        [ "$first" = 1 ] || printf ','
-        first=0
-        _drv_lsiutil_one "$p" "$(lsi_host_for "$bus" "$dev" "$nports")" "$nports"
-    done <<< "$MAP"
+    lsi_each_card _drv_lsiutil_one
 }
 
-_drv_lsiutil_one() {   # $1 = port   $2 = this card's scsi host ("" if unjoined)   $3 = port count
-    local TMPOS TMPSAS hnum="$2"
+_drv_lsiutil_one() {   # $1 port  $2 banner  $3 board  $4 hnum  $5 pdir  $6 nports
+    local TMPOS TMPSAS hnum="$4"
     TMPOS=$(mktemp); TMPSAS=$(mktemp)
     # Sysfs is swept box-wide below, and an empty $hnum leaves that sweep
     # unfiltered — correct on a one-card box, where every disk found IS this
     # card's and the historic expectations pin exactly that. On a multi-card box
     # it would give this card its neighbours' disks, so an unjoined card there
     # reports none instead.
-    if [ -z "$hnum" ] && [ "$3" != "1" ]; then
+    if [ -z "$hnum" ] && [ "$6" != "1" ]; then
         bash "$DIR/parse/drives_join.sh" /dev/null /dev/null
         rm -f "$TMPOS" "$TMPSAS"
         return

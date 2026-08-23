@@ -1,4 +1,4 @@
-/* ── Design tokens: original HBAviewer palette in the new component format ── */
+/* Component styles. The tokens they read live in tokens.css. */
 /* One width for every tab. This was `fit-content` so the panel could hug the
    active tab's contents and Overview would not sit in dead space — but hidden
    tabs contribute nothing to max-content, so the frame resized on every tab
@@ -9,29 +9,8 @@
    would only be right on one box's controller data. The cost is the dead space
    either side of Overview that fit-content was avoiding, which is the trade
    asked for: a steady frame beats a snug one. */
+/* Tokens for this wrapper live in tokens.css. */
 #lu-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the ~40 call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --accent-2:#88aaff; --track: var(--border-color, #2a2a2a);
-    --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,monospace;
     font-family: inherit; width: 100%; max-width: 1560px; margin: 20px auto;
     color: var(--text);
     background:
@@ -44,6 +23,27 @@
        sets box-sizing, so this must not depend on Unraid's reset. Scoped to the
        wrapper — children keep whatever they had. */
     box-sizing: border-box;
+}
+
+/* ── Focus ────────────────────────────────────────────────────────────────
+   One ring for everything the keyboard can reach, stated once rather than per
+   control — there was none at all before this, and Unraid's own themes do not
+   supply one for a plugin's markup.
+
+   :focus-visible, not :focus, so clicking a tab or a bay does not leave a ring
+   sitting on it; the keyboard is the only thing this is for.
+
+   outline rather than box-shadow: it follows border-radius, it is NOT clipped
+   by .lu-bay-cell's overflow:hidden, and it survives Windows high-contrast,
+   where a box-shadow is dropped entirely.
+
+   offset is positive so the ring sits OUTSIDE the element. .lu-bay-chip.sel
+   already draws an accent outline at offset -2px, and a focused selected chip
+   has to be distinguishable from a merely selected one — inside vs outside is
+   that difference. */
+#lu-wrap :focus-visible, #lu-settings-wrap :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 /* ── Tabs (underline) ────────────────────────────────────────────────────── */
@@ -236,10 +236,54 @@
 .lu-tscroll { overflow-x: auto; }
 .lu-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .lu-table th {
-    text-align: left; padding: 8px 12px; color: var(--faint);
+    /* The padding moved to the button inside (see .lu-sort): a control that
+       fills its header cell is a ~30px target, where a control wrapped tight
+       around 10.5px text is under the 24px pointer floor. Visually identical --
+       the same 8/12 is still there, one element in. */
+    text-align: left; padding: 0; position: relative; color: var(--faint);
     font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
     border-bottom: 1px solid var(--border); white-space: nowrap;
 }
+/* The header IS the sort control. It inherits every type property from the th
+   so the table looks exactly as it did before it could be sorted -- the only
+   thing announcing it is the cursor, the hover, and the arrow once a column is
+   active. A header row of obviously-buttons would read as a toolbar. */
+.lu-table th .lu-sort {
+    appearance: none; background: none; border: none; cursor: pointer;
+    font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+    padding: 8px 20px 8px 12px; width: 100%; text-align: inherit; white-space: nowrap;
+    transition: color .15s;
+}
+.lu-table th .lu-sort:hover { color: var(--accent); }
+/* The active column keeps the accent so the sorted column stays obvious after
+   the pointer has moved away. The arrow is generated content on the TH, not on
+   the button, so it cannot be selected into a copied support ticket -- the
+   Events tab's Copy button lifts innerText out of this table. */
+.lu-table th[aria-sort="ascending"]  .lu-sort,
+.lu-table th[aria-sort="descending"] .lu-sort { color: var(--accent); }
+/* The arrow is generated content on the TH, not on the button, so it stays out
+   of innerText -- the Events tab's Copy button lifts innerText out of this
+   table for support tickets.
+   ABSOLUTE, inside a position:relative th. It was an inline ::after, which put
+   it after a button that is width:100% -- so it rendered past the cell's right
+   edge, outside the focus ring and on top of the next column's header. The gap
+   it sits in is reserved by .lu-sort's padding-right and is there whether or
+   not the column is sorted, so sorting does not shift the label. */
+.lu-table th[aria-sort="ascending"]::after,
+.lu-table th[aria-sort="descending"]::after {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    color: var(--accent); font-size: 9px; line-height: 1; pointer-events: none;
+}
+/* Solid triangles, not the thin arrows this started with: a stroked glyph at
+   this size is a few hairlines of accent against a dark header and reads as
+   dust. A filled shape carries the same information in ink you cannot miss,
+   which is the whole job of the mark.
+   U+25B2/U+25BC specifically, and NOT U+25B6 and friends: these two have no
+   emoji presentation, so they take var(--accent) on every platform. That is
+   the same test the firmware verdict glyphs in view.php pass and the two
+   dingbats P1-C removed did not. */
+.lu-table th[aria-sort="ascending"]::after  { content: "\25B2"; }
+.lu-table th[aria-sort="descending"]::after { content: "\25BC"; }
 /* line-height is STATED, not inherited. Cells here stack up to three lines (the
    counter, the since-baseline rate, the recent rate), and inheriting the
    webGui's body line-height spent about a third of each row on leading. 1.4 is
@@ -248,12 +292,39 @@
 /* A button inside a row sets that row's height on its own. The Drives tab has a
    Locate button in every row and the SMART tab has none, which is the whole
    reason one looked taller than the other — the cells were already identical.
-   Compact only inside a table; the toolbar buttons keep their size, and this
-   stays ~22px tall so it is still a comfortable click target. */
-.lu-table .lu-refresh-btn { padding: 3px 10px; font-size: 10.5px; line-height: 1.4; }
+   Compact only inside a table; the toolbar buttons keep their size.
+   min-height, not more padding: 3px + 10.5px/1.4 + the border landed at ~23px,
+   which is under WCAG 2.2's 24px pointer floor by one pixel nobody would ever
+   notice and every pointer would. Stating the floor means the type inside can
+   change later without silently dropping back under it. Rows grow ~1px. */
+.lu-table .lu-refresh-btn {
+    padding: 3px 10px; font-size: 10.5px; line-height: 1.4;
+    min-height: 24px;
+}
 .lu-table tr:last-child td { border-bottom: none; }
-.lu-table tbody tr:hover td { background: rgba(245,166,35,.05); }
+/* Was the accent written out by hand as an rgba triplet, which is the same
+   drift P1-B took out of the buttons: change --accent and the row highlight
+   keeps the old hue. */
+.lu-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .lu-table code { color: var(--accent-2); font-size: 12px; font-family: var(--mono); }
+
+/* ── Long tokens ──────────────────────────────────────────────
+   An identifier is one unbreakable run to a browser. The Export/API card puts
+   a session URL in a fixed-width card, and a myunraid.net session host is a
+   40-character hash followed by a path -- no spaces, and once the hyphens run
+   out there is no break the browser will take on its own. It rendered straight
+   out through the card's right edge.
+
+   overflow-wrap:anywhere, NOT word-break:break-all -- break-all also chops
+   ordinary words mid-letter wherever it applies. `anywhere` breaks only what
+   would otherwise overflow, and unlike break-word it lets the container's
+   min-content width shrink, which is what the Settings page's columns layout
+   needs before it will narrow a card at all.
+
+   Scoped to <code>, which is where this plugin puts every device name, SAS
+   address, URL and serial. Short ones are unaffected: there is nothing to
+   break when it already fits. */
+#lu-wrap code, #lu-settings-wrap code { overflow-wrap: anywhere; }
 
 /* ── Link + error badges ─────────────────────────────────────────────────── */
 .lu-link-up   { color: var(--good); font-weight: 700; font-size: 11px; letter-spacing: 0.03em; }
@@ -286,6 +357,32 @@
     font-size: 11px; font-weight: 600; padding: 5px 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em; transition: border-color .15s, color .15s;
 }
 .lu-refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* The solid button. There were two of these, one on the Settings page and one
+   on the flash page, identical but for 1px of type and a few px of
+   padding, and each carried its OWN hardcoded hover hex. Two literals for one
+   colour is the shape of a bug waiting to happen: change --accent and one of
+   them keeps the old hue.
+   So: one class, and the hover is DERIVED. color-mix toward black darkens the
+   accent by the same feel the literal did, and now it cannot drift from it.
+   The flash page's buttons grow slightly (12px/7-16 -> 13px/9-24). That is the
+   trade for one button, and it moves them further past the 24px pointer-target
+   floor rather than nearer it.
+
+   Ghost (.lu-refresh-btn) and solid (.lu-btn) are the two roles this plugin
+   has: refresh/toolbar actions, and the one committing action on a page. There
+   is no third. */
+.lu-btn {
+    background: var(--accent); border: none; border-radius: 6px; color: #111;
+    font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer;
+    font-family: inherit; letter-spacing: 0.03em; transition: background .15s;
+}
+.lu-btn:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
+/* Destructive actions are the crit colour and nothing else changes -- same
+   size, same shape, so the difference reads as meaning rather than as a
+   different kind of control. */
+.lu-btn.danger { background: var(--crit); color: #fff; }
+.lu-btn.danger:hover { background: color-mix(in srgb, var(--crit) 85%, #000); }
 
 /* ── HBA Health tab (plan 020: five sub-indicators + a worst-of rollup) ───── */
 /* One column per controller instead of a stack, the same move #flash-content
@@ -481,7 +578,12 @@
 .lu-bay-val.dim { opacity: .8; }
 
 .lu-bay-tray { display: flex; flex-wrap: wrap; gap: 6px; }
+/* inline-flex so min-height actually sizes it: this is a <span>, and a span
+   takes its height from the line box, which 11px text and 5px of padding put
+   at ~23px -- a pixel under the 24px pointer floor. Centring keeps the label
+   where it already sat, so nothing moves. */
 .lu-bay-chip {
+    display: inline-flex; align-items: center; min-height: 24px;
     border: 1px solid var(--border-soft); border-radius: 6px; padding: 5px 9px;
     font-size: 11px; font-family: var(--mono); cursor: pointer; background: var(--surface-2);
 }
@@ -509,7 +611,9 @@
    about which drive is being pointed at. Motion is the whole signal here, so
    under prefers-reduced-motion it becomes a steady outline rather than nothing
    — the same trade the rebuild stripe makes. */
-.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; }
+/* The widest of the three and the shortest: full-width, but 9.5px text in 3px
+   of padding is ~19px tall. Width was never the problem. */
+.lu-bay-loc { width: 100%; margin-top: 9px; padding: 3px 0; font-size: 9.5px; min-height: 24px; }
 /* The button blinks while the drive does, so the screen and the rack are
    telling you the same thing. Motion is the signal, so reduced-motion keeps a
    steady highlight rather than dropping to nothing. */

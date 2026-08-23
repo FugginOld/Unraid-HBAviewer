@@ -34,26 +34,27 @@ foreach (glob('/sys/class/scsi_host/host*/') ?: [] as $h) {
            . ($fw !== '' ? ", fw $fw" : '') . ')';
 }
 $hw_detail = $hw ? implode(' · ', $hw) : 'no mpt2sas/mpt3sas/mpi3mr hosts found';
-
-// Two independent lookups: a box with a 9600 typically has BOTH tools installed
-// (the dkaser plugin symlinks storcli and storcli2 alike), and the classic one
-// simply enumerates nothing there. Presence of one says nothing about the other,
-// so a single lookup would tell a 9600 owner they have "storcli" and never
-// mention the tool their card actually needs.
-$find_tool = function (array $names): string {
-    foreach ($names as $n) {
-        foreach (['/usr/local/sbin/', '/usr/local/bin/', '/usr/sbin/'] as $d) {
-            if (is_executable($d . $n)) return $d . $n;
-        }
-    }
-    if (is_executable('/opt/MegaRAID/storcli2/storcli2') && in_array('storcli2', $names, true)) {
-        return '/opt/MegaRAID/storcli2/storcli2';
-    }
-    $w = trim((string) shell_exec('command -v ' . implode(' ', $names) . ' 2>/dev/null'));
-    return $w !== '' ? (string) strtok($w, "\n") : '';
-};
-$storcli  = $find_tool(['storcli', 'storcli64']);
-$storcli2 = $find_tool(['storcli2']);
+// One implementation of this lookup, and it lives in the shell. This page used
+// to carry its own four-path list against lib.sh's eight, already missing
+// /usr/local/bin/storcli* -- two copies of one question that had drifted apart.
+// Sourcing lib.sh runs nothing: its top level only assigns variables and
+// defines functions. shell_exec is not new here; the old fallback used it too.
+//
+// storcli_candidates rather than find_storcli, because a box with a 9600
+// typically has BOTH tools installed (the dkaser plugin ships storcli and
+// storcli2 alike) and the classic one simply enumerates nothing there.
+// find_storcli returns the first hit only, which would tell a 9600 owner they
+// have "storcli" and never mention the tool their card actually needs. One
+// shell call still answers both questions -- the list is already deduplicated
+// and ordered, so the first name of each kind is the one the backend will use.
+$cands = trim((string) shell_exec(
+    'bash -c ". ' . __DIR__ . '/scripts/lib.sh 2>/dev/null; storcli_candidates" 2>/dev/null'
+));
+$storcli = $storcli2 = '';
+foreach (preg_split('/\R/', $cands, -1, PREG_SPLIT_NO_EMPTY) ?: [] as $p) {
+    if (basename($p) === 'storcli2') { if ($storcli2 === '') $storcli2 = $p; }
+    elseif ($storcli === '')         { $storcli  = $p; }
+}
 
 if ($has_sas4 && $storcli2 === '') {
     $backend_label = 'StorCLI2 — NOT INSTALLED';
@@ -90,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
     // the grid back to 6x4 — every time somebody toggled a tab here.
     lsi_config_update([
         'HBA_PORT'        => $_POST['port']      ?? 1,
-        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 80,
+        'ALERT_THRESHOLD' => $_POST['threshold'] ?? 76,
         'SHOW_PCIE'       => isset($_POST['show_pcie'])   ? 1 : 0,
         'SHOW_PHY'        => isset($_POST['show_phy'])    ? 1 : 0,
         'SHOW_DRIVES'     => isset($_POST['show_drives']) ? 1 : 0,
@@ -106,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
         'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
         'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
+        'TEMP_UNIT'         => ($_POST['temp_unit'] ?? 'c') === 'f' ? 1 : 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -114,30 +116,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
 function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 ?>
 
+<link rel="stylesheet" href="/plugins/hbaviewer/tokens.css?v=<?= (int) @filemtime(__DIR__ . '/tokens.css') ?>">
+<link rel="stylesheet" href="/plugins/hbaviewer/chrome.css?v=<?= (int) @filemtime(__DIR__ . '/chrome.css') ?>">
 <style>
-/* Original HBAviewer palette in the new component format. Matches the Monitor. */
+/* Component styles for the Settings page. Tokens come from tokens.css above,
+   which is the same file the Monitor links -- that shared file is what keeps
+   this page matching it. */
 #lu-settings-wrap {
-    /* Chrome tokens follow Unraid's theme variables (confirmed present on
-       white/black/gray/azure — see plan 021); each keeps its original literal
-       as the CSS fallback so a missing variable renders exactly as before. */
-    --bg:        var(--background-color, #161616);
-    --surface:   var(--shade-bg-color, #1c1c1c);
-    /* One step further from --surface than the page is — darker on dark themes,
-       lighter on light ones. No single Unraid variable expresses that, so nudge
-       --surface 8% toward the text colour, which points the right way in both. */
-    --surface-2: color-mix(in srgb, var(--shade-bg-color, #232323) 92%, var(--text-color, #dddddd) 8%);
-    --border:      var(--border-color, #333333);
-    --border-soft: var(--border-color, #2a2a2a);
-    /* ponytail: one text colour; --muted/--faint kept as aliases so the call sites stay untouched */
-    --text: var(--text-color, #dddddd); --muted: var(--text-color, #dddddd); --faint: var(--text-color, #dddddd);
-    --accent:#f5a623; --good:#2ecc71; --warn:#f39c12; --crit:#e74c3c;
-    /* Body-text variants of the status colours. The raw --good/--warn/--crit are
-       tuned as fills and badges; as TEXT they measure 1.5-2.2:1 on a light theme's
-       card. Mixing 50% toward --text-color lands 4.6-10.2:1 in every theme. */
-    --crit-text: color-mix(in srgb, var(--crit) 50%, var(--text-color, #dddddd));
-    --good-text: color-mix(in srgb, var(--good) 50%, var(--text-color, #dddddd));
-    --warn-text: color-mix(in srgb, var(--warn) 50%, var(--text-color, #dddddd));
-    --mono: ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
     /* 1000px so the two-column grid below gets ~468px per column — near the 532px
        a section had when the page was one 580px column. It also caps the grid at
        two tracks: a third would need 1112px of content box. */
@@ -171,7 +156,11 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-s-label small { display: block; font-size: 11px; color: var(--faint); margin-top: 3px; line-height: 1.4; }
 .lu-s-control { flex: 1; }
 .lu-s-control input[type=number] { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 7px 10px; font-size: 14px; font-family: var(--mono); }
-.lu-s-control input[type=number]:focus { outline: none; border-color: var(--accent); }
+/* Was `outline: none` with only a border-colour change. A 1px border tint is
+   not a focus indicator — on the white theme it is the only thing separating a
+   focused field from an unfocused one, and it is the same accent the field
+   already sits next to. Ring restored, matching chrome.css's. */
+.lu-s-control input[type=number]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent); }
 /* A card the maintainer has switched off. Greyed by opacity rather than by
    recolouring: the danger notice inside it keeps its own colour relationships,
    and its text stays selectable and readable by a screen reader. The heading
@@ -188,21 +177,24 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
 .lu-notice { background: color-mix(in srgb, var(--good) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); border-radius: 8px; color: var(--good-text); font-size: 12px; padding: 9px 14px; margin-bottom: 14px; }
 .lu-danger { background: color-mix(in srgb, var(--crit) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--crit) 36%, transparent); border-radius: 8px; color: var(--crit-text); font-size: 12px; line-height: 1.5; padding: 10px 14px; margin-bottom: 14px; }
 .lu-danger strong { color: var(--crit-text); }
-.lu-btn { background: var(--accent); border: none; border-radius: 6px; color: #111; font-size: 13px; font-weight: 700; padding: 9px 24px; cursor: pointer; letter-spacing: 0.03em; margin-right: 10px; }
-.lu-btn:hover { background: #d9901a; }
-/* The action row. Save and Open Monitor stay left where the eye lands after
+/* .lu-btn itself is chrome.css's, linked above -- what stays here is only how
+   this page ARRANGES them, which is not part of what a button is.
+   The action row. Save and Open Monitor stay left where the eye lands after
    filling a form; the firmware button is pushed to the far right by
    margin-left:auto, away from the two buttons someone presses routinely. */
 .lu-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 0; }
+.lu-actions .lu-btn { margin-right: 10px; }
 /* Red, and the only red button on the page. It leads to the one screen here
-   that writes to hardware, so it must not read as a peer of Save. */
-.lu-btn.danger { background: var(--crit); color: #fff; margin-right: 0; margin-left: auto; }
-.lu-btn.danger:hover { background: #c0392b; }
+   that writes to hardware, so it must not read as a peer of Save. The colour
+   comes from .lu-btn.danger; only its place in the row is decided here. */
+.lu-actions .lu-btn.danger { margin-right: 0; margin-left: auto; }
 .lu-link { font-size: 12px; color: var(--accent); text-decoration: none; }
 .lu-link:hover { text-decoration: underline; }
 </style>
 
 <div id="lu-settings-wrap">
+
+<?php require __DIR__ . '/icons.php'; ?>
 
   <?php if ($saved): ?>
   <div class="lu-notice">Settings saved.</div>
@@ -221,7 +213,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>How HBAviewer reads controller information.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:#f5a623;font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
+          <span style="color:var(--accent);font-weight:600"><?= htmlspecialchars($backend_label) ?></span>
           <small style="display:block;color:var(--text);margin-top:3px;line-height:1.4"><?= htmlspecialchars($backend_note) ?></small>
         </div>
       </div>
@@ -252,7 +244,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
           <small>SAS4 / 9600 only. Needs Broadcom's full StorCLI2.</small>
         </div>
         <div class="lu-s-control" style="padding-top:8px">
-          <span style="color:<?= $full_sc2 ? '#7ac943' : '#f5a623' ?>;font-weight:600">
+          <span style="color:<?= $full_sc2 ? '#7ac943' : 'var(--accent)' ?>;font-weight:600">
             <?= $full_sc2 ? 'Full StorCLI2 installed' : 'Full StorCLI2 not installed' ?>
           </span>
           <small style="display:block;color:var(--text);margin-top:3px;line-height:1.5">
@@ -274,7 +266,7 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
                    it paints across the neighbouring column. The paths and the
                    command below are all longer than the column is wide. */ ?>
           <details style="margin-top:8px;max-width:100%">
-            <summary style="cursor:pointer;color:#f5a623">
+            <summary style="cursor:pointer;color:var(--accent)">
               How to install the full StorCLI2 (once per server)
             </summary>
             <div style="margin-top:8px;line-height:1.6;max-width:100%;overflow-wrap:anywhere">
@@ -347,16 +339,45 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       </div>
       <?php endif; ?>
 
+      <?php
+      /* Band floors are STORED in °C and the schema is unchanged -- only the
+         printed label switches, so a box that flips the unit keeps the band it
+         had. Hoisted above the row because the help text below needs it too. */
+      $u    = (int) ($cfg['TEMP_UNIT'] ?? 0);
+      $usym = $u === 1 ? '°F' : '°C';
+      ?>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Temperature Unit
+          <small>Every sensor is still read, stored and compared against Badge
+                 Sensitivity in &deg;C &mdash; this only changes what is printed.</small>
+        </div>
+        <div class="lu-s-control">
+          <select name="temp_unit">
+            <option value="c" <?= $u === 0 ? 'selected' : '' ?>>&deg;C (Celsius)</option>
+            <option value="f" <?= $u === 1 ? 'selected' : '' ?>>&deg;F (Fahrenheit)</option>
+          </select>
+        </div>
+      </div>
+
       <div class="lu-s-row">
         <div class="lu-s-label">
           Badge Sensitivity
-          <small>Temperature colours are fixed (Normal &le;65, Elevated 66&ndash;75, Warning 76&ndash;85, Alert 86&ndash;95, Critical &gt;95 &deg;C). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem &mdash; and, when Notifications are enabled below, the point at which HBAviewer notifies you.</small>
+          <small>Temperature colours are fixed (Normal &le;<?= lsi_temp_convert(65, $u) ?>,
+                 Elevated <?= lsi_temp_convert(66, $u) ?>&ndash;<?= lsi_temp_convert(75, $u) ?>,
+                 Warning <?= lsi_temp_convert(76, $u) ?>&ndash;<?= lsi_temp_convert(85, $u) ?>,
+                 Alert <?= lsi_temp_convert(86, $u) ?>&ndash;<?= lsi_temp_convert(95, $u) ?>,
+                 Critical &gt;<?= lsi_temp_convert(95, $u) ?> <?= $usym ?>). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem &mdash; and, when Notifications are enabled below, the point at which HBAviewer notifies you.</small>
         </div>
         <div class="lu-s-control">
           <select name="threshold">
 <?php
-$bands = [66 => 'Elevated (66 °C and above)', 76 => 'Warning (76 °C and above)',
-          86 => 'Alert (86 °C and above)',    96 => 'Critical (above 95 °C)'];
+$bands = [
+    66 => 'Elevated (' . lsi_temp_convert(66, $u) . ' ' . $usym . ' and above)',
+    76 => 'Warning ('  . lsi_temp_convert(76, $u) . ' ' . $usym . ' and above)',
+    86 => 'Alert ('    . lsi_temp_convert(86, $u) . ' ' . $usym . ' and above)',
+    96 => 'Critical (above ' . lsi_temp_convert(95, $u) . ' ' . $usym . ')',
+];
 // Select the band containing the stored value, so a legacy 80 shows "Warning".
 $curr = (int) $cfg['ALERT_THRESHOLD'];
 $sel  = 96; foreach (array_keys($bands) as $floor) { if ($curr < $floor) { break; } $sel = $floor; }
@@ -467,12 +488,12 @@ foreach ($bands as $floor => $label) {
       <h3>Advanced — Firmware Flashing</h3>
       <?php if (LSI_FLASH_LOCKED): ?>
       <div class="lu-danger">
-        <strong>&#9888; Disabled in this release.</strong>
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Disabled in this release.</strong>
         <p style="margin:8px 0 0"><?= htmlspecialchars(LSI_FLASH_LOCK_NOTE) ?></p>
       </div>
       <?php else: ?>
       <div class="lu-danger">
-        <strong>&#9888; Danger:</strong> Flashing HBA firmware/BIOS can permanently
+        <strong><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Danger:</strong> Flashing HBA firmware/BIOS can permanently
         <strong>brick</strong> your controller if the wrong image is used. The array
         must be <strong>stopped</strong> before flashing. The flash tools
         (sas2flash / sas3flash) are not bundled — you supply the model-correct image
@@ -508,7 +529,7 @@ foreach ($bands as $floor => $label) {
                the URL root: Menu="HBAviewer" hangs the page off HBAviewer.page,
                and that is a Tools page. Pinned in flash_php_test.php. */ ?>
       <?php if (!LSI_FLASH_LOCKED && (int)$cfg['ENABLE_FLASH'] === 1): ?>
-      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block">&#9888; Firmware/BIOS Update</a>
+      <a class="lu-btn danger" href="/Tools/HBAviewer_Flash" style="text-decoration:none;display:inline-block"><svg class="lu-i" aria-hidden="true"><use href="#lu-i-warn"/></svg> Firmware/BIOS Update</a>
       <?php endif; ?>
     </div>
 

@@ -166,7 +166,9 @@ hba_subvendor()   { printf '0x1000'; }
 hba_card_id()     { basename "$1"; }   # the PCI slot, which is what groups IOCs
 DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
 ALERT=80
-eval "$(sed -n '/^ov_lsiutil()/,/^}/p' "$DIR/get_hba_info.sh")"
+eval "$(sed -n '/^ov_lsiutil()/,/^}/p' "$DIR/get_hba_info.sh"
+        sed -n '/^_ov_one()/,/^}/p'    "$DIR/get_hba_info.sh"
+        sed -n '/^lsi_each_card()/,/^}/p' "$SRC")"
 OUT=$(ov_lsiutil)
 eq "loop: three controllers" "3" "$(grep -o '"temp"' <<< "$OUT" | wc -l | tr -d ' ')"
 eq "loop: each port its own temperature" "53 61 59" \
@@ -196,8 +198,9 @@ eval "$_host_for_pci_real"
 # temperature. _drive_count is stubbed to echo the host number it was handed,
 # which is how a card silently reading its neighbour's sysfs becomes visible.
 HSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_health.sh"
-eval "$(sed -n '/^health_lsiutil()/,/^}/p' "$HSRC"; sed -n '/^_health_lsiutil_one()/,/^}/p' "$HSRC")"
-lsi_port_map()    { printf '1 129 0\n2 130 0\n3 131 0\n'; }   # the 3-card box
+eval "$(sed -n '/^health_lsiutil()/,/^}/p'      "$HSRC"
+        sed -n '/^_health_lsiutil_one()/,/^}/p' "$HSRC"
+        sed -n '/^lsi_each_card()/,/^}/p'       "$SRC")"
 band_of()         { printf 'normal'; }
 _drive_count()    { printf '%s' "${1:-none}"; }
 _phys_json()      { printf '[]'; }
@@ -209,6 +212,7 @@ NOW=1000 UPTIME=500
 sed '0,/ioc1/s/\(ioc1.*\)14000700/\111000000/' fixtures/lsiutil_multi/3card/banner.txt > "$STUBDIR/banner_mixed.txt"
 hba_query() {
     case "$1" in
+        -b)  cat fixtures/lsiutil_multi/3card/board.txt ;;
         -p*) cat "$STUBDIR/ioc_p${1#-p}.txt" ;;
         *)   cat "$STUBDIR/banner_mixed.txt" ;;
     esac
@@ -222,24 +226,102 @@ eq "health: each card its own temperature" "53 61 59" \
 eq "health: each card its own scsi host" "1 2 3" \
    "$(grep -oE '"drives":[0-9]+' <<< "$HOUT" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
 
+# The host-0 fallback is for a ONE-card box, where every disk found IS this
+# card's. On a multi-card box an unjoined card must stay unjoined -- reporting
+# host 0's drive count and PHYs as this card's is the exact confusion issue #18
+# was filed about, and the drives side pins the same rule ("card 3 is unjoined
+# and emits nothing"). Health had no equivalent: deleting the [ "$6" = "1" ]
+# condition, so the fallback fired on any card count, left every assertion
+# above green. _drive_count's stub prints the host it was handed, or "none" for
+# an empty one, so host 0 leaking through reads as 0 rather than none.
+# lsi_host_for is overridden inside the substitution only: the drives block
+# below builds its own join and must not inherit a broken one.
+HUNJOINED=$(lsi_host_for() { :; }; health_lsiutil)
+eq "health: unjoined cards on a multi-card box do not fall back to host 0" "none none none" \
+   "$(grep -oE '"drives":[a-z0-9]+' <<< "$HUNJOINED" | cut -d: -f2 | tr '\n' ' ' | sed 's/ $//')"
+
 # ── drv_lsiutil gives each card only its own drives ─────────────────────────
 # Stage 3's sweep is box-wide; without the per-card filter card 1 lists card 2's
 # disks and the Drives tab shows every disk under every card.
 DSRC="../source/usr/local/emhttp/plugins/hbaviewer/scripts/get_attached_drives.sh"
 DIR="../source/usr/local/emhttp/plugins/hbaviewer/scripts"
-eval "$(sed -n '/^drv_lsiutil()/,/^}/p' "$DSRC"; sed -n '/^_drv_lsiutil_one()/,/^}/p' "$DSRC")"
-lsi_port_map() { printf '1 129 0\n2 130 0\n'; }
+eval "$(sed -n '/^drv_lsiutil()/,/^}/p'      "$DSRC"
+        sed -n '/^_drv_lsiutil_one()/,/^}/p' "$DSRC"
+        sed -n '/^lsi_each_card()/,/^}/p'    "$SRC")"
 require_binary() { :; }
 SCSI="$ROOT/drv/scsi_host"
 for h in 1 2; do
     mkdir -p "$SCSI/host$h/device/port-$h:0/end_device-$h:0/target$h:0:0/$h:0:0:0/block/sd$h"
     printf 'mpt2sas' > "$SCSI/host$h/proc_name"
 done
-hba_query() { :; }   # empty -a 42,0 reply -> Stage 3 fallback, the box-wide one
+hba_query() {
+    case "$1" in
+        -b)  cat fixtures/lsiutil_multi/3card/board.txt ;;
+        -p*) : ;;   # empty -a 42,0 reply -> Stage 3 fallback, the box-wide one
+        *)   cat fixtures/lsiutil_multi/3card/banner.txt ;;
+    esac
+}
 DOUT=$( (SYS_SAS_DEVICE="$ROOT/drv/none" SYS_SCSI_HOST="$SCSI" drv_lsiutil) 2>/dev/null )
 ctrl() { awk -F'\\},\\{' -v n="$1" '{print $n}' <<< "$DOUT" | grep -oE '/dev/sd[0-9]' | tr '\n' ' ' | sed 's/ $//'; }
 eq "drives: card 1 lists only host1's disk" "/dev/sd1" "$(ctrl 1)"
 eq "drives: card 2 lists only host2's disk" "/dev/sd2" "$(ctrl 2)"
+# Card 3 has no host under this block's SYS_SCSI_HOST, so its PCI join fails.
+# On a multi-card box that must emit NOTHING rather than sweeping sysfs
+# box-wide and handing this card every disk in the machine.
+eq "drives: card 3 is unjoined and emits nothing" "" "$(ctrl 3)"
+
+# ── lsi_each_card ───────────────────────────────────────────────────────────
+# The per-card read: banner and board captured once, ports enumerated, each
+# port joined to its own host, callback called per card, output comma-joined.
+# Stubs are defined through eval so shellcheck does not see a definition below
+# the call sites the real functions serve above (SC2218).
+eval "$(sed -n '/^lsi_each_card()/,/^}/p' "$SRC")"
+eval 'hba_query() {
+    case "$1" in
+        -b) cat fixtures/lsiutil_multi/3card/board.txt ;;
+        *)  cat fixtures/lsiutil_multi/3card/banner.txt ;;
+    esac
+}'
+eval '_pci_dir_of_host() {
+    case "$1" in
+        1) printf "/sys/devices/pci0000:80/0000:80:01.0/0000:81:00.0" ;;
+        2) printf "/sys/devices/pci0000:80/0000:80:03.0/0000:82:00.0" ;;
+        3) printf "/sys/devices/pci0000:80/0000:80:03.2/0000:83:00.0" ;;
+    esac
+}'
+# Reads the CONTENT of the two files it is handed, so a swapped BANNER/BOARD
+# argument pair fails here rather than surfacing as a misparse in parse/hba.sh
+# five tasks later. Both files are equally "one unique path per run", so the
+# name alone cannot tell them apart.
+_probe_card() { printf "p=%s hnum=%s pdir=%s n=%s banner=%s board=%s bkind=%s dkind=%s" \
+    "$1" "$4" "$5" "$6" "$(basename "$2")" "$(basename "$3")" \
+    "$(grep -q 'Chip Vendor' "$2" && echo banner || echo WRONG)" \
+    "$(grep -q 'Board Assembly' "$3" && echo board || echo WRONG)"; }
+
+EACH=$(lsi_each_card _probe_card)
+eq "each: one entry per card"      "3"   "$(grep -o 'p=' <<<"$EACH" | wc -l | tr -d ' ')"
+eq "each: comma-joined"            "2"   "$(grep -o ',p=' <<<"$EACH" | wc -l | tr -d ' ')"
+eq "each: ports in banner order"   "1 2 3" \
+   "$(grep -oE 'p=[0-9]+' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: each card its own host"  "1 2 3" \
+   "$(grep -oE 'hnum=[0-9]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: each card its own pci dir" "0000:81:00.0 0000:82:00.0 0000:83:00.0" \
+   "$(grep -oE 'pdir=[^ ]*' <<<"$EACH" | cut -d= -f2 | xargs -n1 basename | tr '\n' ' ' | sed 's/ $//')"
+eq "each: port count passed through" "3 3 3" \
+   "$(grep -oE 'n=[0-9]+' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+# The banner and the board table list every port in one call, so they are
+# captured ONCE and handed to every card -- health read the banner twice per
+# request before this existed.
+# [^, ] not [^ ]: cards are joined with a bare comma, and board= is the last
+# field of a record, so a space-only class runs straight into the next card.
+eq "each: same banner file for every card" "1" \
+   "$(grep -oE 'banner=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
+eq "each: same board file for every card"  "1" \
+   "$(grep -oE 'board=[^, ]*' <<<"$EACH" | sort -u | wc -l | tr -d ' ')"
+eq "each: the banner position holds the banner" "banner banner banner" \
+   "$(grep -oE 'bkind=[^, ]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
+eq "each: the board position holds the board"   "board board board" \
+   "$(grep -oE 'dkind=[^, ]*' <<<"$EACH" | cut -d= -f2 | tr '\n' ' ' | sed 's/ $//')"
 
 echo
 [ $fail -eq 0 ] && { echo "multiport: all pass"; exit 0; }

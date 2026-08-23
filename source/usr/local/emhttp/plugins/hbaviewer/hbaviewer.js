@@ -4,11 +4,42 @@
     var smartTimer;
     var loaded = {};
 
+    /* ── Temperature display (°C/°F) ────────────────────────────────
+       Every reading this file handles arrives from the collector in °C; these
+       two only affect what gets printed, mirroring lsi_temp_convert() and
+       lsi_temp_str() on the PHP side. luTempUnit is set by hbaviewer.php from
+       TEMP_UNIT.
+
+       Read through a getter rather than captured into a var at load time: this
+       IIFE runs while the page is still parsing, and reading the global once at
+       the top makes the answer depend on whether hbaviewer.php happened to emit
+       its <script> before this file. Cheap, and it cannot be got wrong. */
+    function luUnit() { return (typeof luTempUnit !== 'undefined') ? luTempUnit : 0; }
+    function luConvTemp(c) {
+        if (c === null || c === undefined || c === '' || isNaN(c)) return c;
+        return luUnit() === 1 ? Math.round(c * 9 / 5 + 32) : Math.round(c);
+    }
+    function luTempStr(c) {
+        if (c === null || c === undefined || c === '') return null;
+        return luConvTemp(c) + '°' + (luUnit() === 1 ? 'F' : 'C');
+    }
+
     /* ── Tab switching ────────────────────────────────────────────────────── */
     window.luTab = function (name) {
         if (window.luMetricsStop) luMetricsStop();   // pause perf polling on any switch
         document.querySelectorAll('.lu-tab-btn').forEach(function (b) {
-            b.classList.toggle('active', b.dataset.tab === name);
+            var on = b.dataset.tab === name;
+            b.classList.toggle('active', on);
+            /* The class is what the eye reads; these two are what a screen
+               reader and the Tab key read, and they have to say the same thing.
+               A ROVING tabindex: exactly one tab is in the page's tab order, so
+               Tab leaves the strip in one press instead of walking ten buttons,
+               and the arrow keys (luTabKey) move within it. Guarded on role
+               because the strip also holds the two navigators, which are
+               role=link and must keep their own place in the order. */
+            if (b.getAttribute('role') !== 'tab') return;
+            b.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) b.removeAttribute('tabindex'); else b.setAttribute('tabindex', '-1');
         });
         document.querySelectorAll('.lu-tab-pane').forEach(function (p) {
             p.classList.toggle('active', p.id === 'tab-' + name);
@@ -24,6 +55,79 @@
             luReloadTab(name);
         }
     };
+
+    /* Arrow-key movement along the strip, which is what role=tablist promises a
+       screen-reader user it will get. Delegated from .lu-tabs so the two PHP
+       conditionals that hide optional tabs cannot leave a handler bound to a
+       button that is not there.
+       Only role=tab participates: Left/Right must skip the Firmware and
+       Settings navigators at the end, or an arrow press leaves the page.
+       Activation follows focus, matching the mouse — switching a pane here is
+       free, so the manual-activation variant would only cost a second press. */
+    window.luTabKey = function (e) {
+        var step = {ArrowRight: 1, ArrowLeft: -1, Home: 'first', End: 'last'}[e.key];
+        if (step === undefined) return;
+        var tabs = [].slice.call(e.currentTarget.querySelectorAll('[role="tab"]'));
+        var i = tabs.indexOf(document.activeElement);
+        if (i < 0) return;                       // focus is on a navigator, not a tab
+        var next = step === 'first' ? 0
+                 : step === 'last'  ? tabs.length - 1
+                 : (i + step + tabs.length) % tabs.length;   // wraps, per the ARIA pattern
+        e.preventDefault();                      // Home/End would otherwise scroll the page
+        tabs[next].focus();
+        luTab(tabs[next].dataset.tab);
+    };
+
+    /* ── Sort a table by one of its columns ─────────────────────────────
+       Drives and SMART are lists you scan for the WORST row -- the hottest
+       drive, the one with reallocated sectors -- and until now the only order
+       available was the one the controller happened to report.
+
+       Client-side and text-based. The alternative is a data-sort attribute per
+       cell carrying the raw value, which would be more precise and would mean
+       threading it through all nine luTable() callers; the cells already hold
+       the number as text, and reading it back is the smaller change by a wide
+       margin.
+
+       localeCompare with numeric:true rather than parseFloat, and that choice
+       is load-bearing: it reads digit RUNS, so "9.095 TB" sorts before
+       "12.733 TB" (a plain string compare puts 12 first), "0/2" before "0/10",
+       and /dev/sdb before /dev/sdc -- one comparator for capacities, slot
+       pairs, temperatures, error counts and device names, not one parser each.
+
+       ponytail: a column mixing TB and TiB would sort by the number rather than
+       the real size. That needs two backends feeding one table, and a table is
+       one controller. Parse the unit if that ever stops being true. */
+    window.luSort = function (btn) {
+        var th   = btn.parentNode;
+        var head = th.parentNode;
+        var idx  = [].indexOf.call(head.children, th);
+        var tbl  = th.closest('table');
+        var body = tbl && tbl.tBodies[0];
+        if (!body || idx < 0) return;
+
+        // A third press does NOT restore the original order: the rows were
+        // reordered in place, so there is no "original" left to go back to.
+        // Ascending/descending only, and the arrow always says which.
+        var asc = th.getAttribute('aria-sort') !== 'ascending';
+        [].forEach.call(head.children, function (o) { o.setAttribute('aria-sort', 'none'); });
+        th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+
+        // A row without this column -- the colspan'd "No entries" line -- is
+        // not comparable, so it is not sorted. It keeps its place at the end
+        // rather than vanishing, which is what re-appending only the sorted
+        // rows would do to it.
+        var all  = [].slice.call(body.rows);
+        var rows = all.filter(function (r) { return r.cells.length > idx; });
+        var wide = all.filter(function (r) { return r.cells.length <= idx; });
+
+        var key = function (r) { return (r.cells[idx].textContent || '').trim(); };
+        rows.sort(function (a, b) {
+            return (asc ? 1 : -1) * key(a).localeCompare(key(b), undefined, {numeric: true});
+        });
+        rows.concat(wide).forEach(function (r) { body.appendChild(r); });
+    };
+
 
     /* ── Load / reload a tab's content via AJAX ───────────────────────────── */
     window.luReloadTab = function (name) {
@@ -260,9 +364,13 @@
            locked, because none of those gestures do anything then. */
         var hint = document.getElementById('bay-hint');
         if (hint) {
+            // The keyboard path is named here rather than left to be discovered:
+            // a control that only works if you already know it exists is not
+            // much better than one that does not work.
             hint.textContent = d.locked ? ''
                 : 'Drag a drive into a bay, or click one then a bay. '
-                + 'Drag it back to the tray — or double-click it — to empty the bay.';
+                + 'Drag it back to the tray — or double-click it — to empty the bay. '
+                + 'By keyboard: Enter to pick up and place, Delete to empty.';
         }
         if (!d.locked) {
             // change, not input: `input` fires on every keystroke, so clearing
@@ -372,6 +480,21 @@
         var d = luBay.data;
         var grid = document.getElementById('bay-grid');
         if (!grid) return;
+        /* Keyboard focus has to survive the repaint. Every cell and chip below
+           is a brand-new node, so the element the user was standing on when
+           they pressed Enter is thrown away mid-action and the browser drops
+           focus to the top of the document — one press in, the keyboard path
+           is over. Remember the COORDINATES rather than the node (the node is
+           the thing that will not exist), and re-focus whatever lands on them.
+           A bay stays a bay across a repaint even when the drive in it moved,
+           which is what a keyboard user expects: put a drive down, and you are
+           still standing at the bay you put it in. */
+        var af = document.activeElement, want = null, land = null;
+        if (af && af.dataset) {
+            want = af.dataset.trayKey !== undefined ? {tray: af.dataset.trayKey}
+                 : af.dataset.row !== undefined ? {row: af.dataset.row, col: af.dataset.col}
+                 : null;
+        }
         grid.parentNode.classList.toggle('lu-bay-locked', !!d.locked);
         /* Emptying a bay is delegated to the GRID, which survives a repaint.
            A per-cell ondblclick cannot work here and shipped broken in
@@ -388,6 +511,28 @@
             var hit = e.target.closest('.lu-bay-cell[data-bay-key]');
             if (!hit) return;
             luBayCommit(hit.dataset.bayKey, null, null);
+        };
+        /* The keyboard's half of the map, delegated for the same reason the two
+           handlers either side of it are: luBayPaint() replaces every cell.
+
+           Every write this view can perform now has a keyboard path — Enter or
+           Space picks a drive up and puts it down (WCAG 2.2's single-pointer
+           alternative to the drag, which click-then-click already gave the
+           mouse), and Delete empties a bay, which was double-click only and so
+           had no keyboard equivalent at all.
+
+           Space is prevented before it scrolls the page out from under the
+           bay the user is standing on. */
+        grid.onkeydown = function (e) {
+            var cell = e.target.closest && e.target.closest('.lu-bay-cell');
+            if (!cell || luBay.data.locked) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (cell.onclick) cell.onclick({detail: 1, target: cell});
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') && cell.dataset.bayKey) {
+                e.preventDefault();
+                luBayCommit(cell.dataset.bayKey, null, null);
+            }
         };
         /* Drag and drop, delegated to the grid for the same reason dblclick is:
            luBayPaint() replaces every cell, so a handler bound to a cell is
@@ -477,7 +622,9 @@
                     var tp = document.createElement('span');
                     tp.className = 'lu-bay-temp';
                     // No reading is said, never left to read as a temperature.
-                    tp.textContent = drv.temp === null ? 'no data' : drv.temp + '°C';
+                    // luTempStr only changes what is PRINTED -- drv.temp itself
+                    // stays °C for the luBayHeat comparison against warn_temp below.
+                    tp.textContent = drv.temp === null ? 'no data' : luTempStr(drv.temp);
                     var heat = luBayHeat(drv.temp, d.warn_temp);
                     if (heat) tp.style.color = heat;
                     cap.appendChild(cv); cap.appendChild(cu); cap.appendChild(tp);
@@ -533,6 +680,22 @@
 
                 if (!d.locked) {
                     cell.onclick = luBayCellClick(r, c, drv);
+                    /* The cell is a div with an onclick, which the keyboard
+                       cannot reach at all — this is what makes it a control.
+                       The name is spelled out rather than left to the cell's
+                       own text, which reads as an unpunctuated run of every
+                       field in the card ("sdb OK 8 TB 38 UNRAID Disk 1 PORT
+                       Port 4 MODEL..."). Bay first, because the bay is the
+                       coordinate the user is navigating by. */
+                    cell.setAttribute('role', 'button');
+                    cell.tabIndex = 0;
+                    cell.setAttribute('aria-label', drv
+                        ? 'Bay ' + slot + ', ' + (drv.dev || drv.serial || 'drive')
+                          + (drv.role ? ', ' + drv.role : '')
+                        : 'Bay ' + slot + ', empty');
+                    // Picking a drive up is a toggle, and pressed is how a
+                    // button says so.
+                    if (drv) cell.setAttribute('aria-pressed', luBay.sel === drv.key ? 'true' : 'false');
                     // The key rides on the element; the grid's delegated
                     // dblclick reads it. A handler here could never fire.
                     if (drv) cell.dataset.bayKey = drv.key;
@@ -541,6 +704,7 @@
                     // closure over r and c the way cell.onclick does.
                     cell.dataset.row = r;
                     cell.dataset.col = c;
+                    if (want && +want.row === r && +want.col === c) land = cell;
                     if (drv) cell.draggable = true;
                 }
                 grid.appendChild(cell);
@@ -563,6 +727,12 @@
                 chip.onclick = function () { luBay.sel = (luBay.sel === u.key) ? null : u.key; luBayPaint(); };
                 chip.draggable = true;
                 chip.dataset.trayKey = u.key;
+                // Same reason as the cells: a <span> with an onclick is not a
+                // control until it says so and the keyboard can land on it.
+                chip.setAttribute('role', 'button');
+                chip.tabIndex = 0;
+                chip.setAttribute('aria-pressed', luBay.sel === u.key ? 'true' : 'false');
+                if (want && want.tray === u.key) land = chip;
             }
             tray.appendChild(chip);
         });
@@ -571,6 +741,15 @@
            the drag equivalent of double-clicking it. Assigned after the chips
            because tray.innerHTML above replaces its contents, not the element,
            so these survive as properties on the same node. */
+        // The tray's half of the keyboard path. Only Enter/Space: a chip is
+        // already unassigned, so there is nothing here for Delete to do.
+        tray.onkeydown = function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var chip = e.target.closest && e.target.closest('.lu-bay-chip[data-tray-key]');
+            if (!chip || !chip.onclick) return;
+            e.preventDefault();
+            chip.onclick();
+        };
         tray.ondragstart = function (e) {
             var chip = e.target.closest('.lu-bay-chip[data-tray-key]');
             if (luBay.data.locked || !chip) { e.preventDefault(); return; }
@@ -596,6 +775,13 @@
             luBayCommit(key, null, null);
         };
         tray.ondragend = luBayDragEnd;
+
+        // A drive that moved from the tray into a bay leaves no chip to return
+        // to, so `land` is null and focus stays where the browser put it. That
+        // is the one case worth a fallback, but the bay it went into is not
+        // reachable from here without guessing which one, and guessing wrong
+        // would move a keyboard user somewhere they did not ask to be.
+        if (land && land.focus) land.focus();
     }
 
     /* Move a drive in the LOCAL model, so the grid redraws on the spot instead
@@ -878,13 +1064,27 @@
     }
     function perfBuild(ctls) {
         var host = document.getElementById('perf-content'); host.innerHTML = ''; perfCharts = {};
+        /* Chart.js takes colour VALUES, not CSS, so the palette is read out of
+           the stylesheet rather than referenced from it -- this is the one
+           place in the plugin that has to copy a colour out of CSS, and doing
+           it here means tokens.css is still the only place one is WRITTEN.
+           Read once per build rather than per chart: getComputedStyle forces
+           style resolution, and there are six charts per controller. */
+        var css = getComputedStyle(document.getElementById('lu-wrap') || document.body);
+        var pal = function (name) {
+            // One neutral fallback, not six: if the custom property is missing
+            // the stylesheet did not load, and six literals here would be six
+            // more copies to drift. Grey charts are a visible symptom of a
+            // real problem, which is the right failure.
+            return (css.getPropertyValue(name) || '').trim() || '#888888';
+        };
         var defs = [
-            { key:'thr',  title:'Throughput MB/s', series:['#3aa0ff','#f5a623'] },  // read, write
-            { key:'iops', title:'IOPS',            series:['#2ecc71'] },
-            { key:'util', title:'% Util',          series:['#9b59b6'] },
-            { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
-            { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
-            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
+            { key:'thr',  title:'Throughput MB/s', series:[pal('--chart-read'), pal('--chart-write')] },
+            { key:'iops', title:'IOPS',            series:[pal('--chart-iops')] },
+            { key:'util', title:'% Util',          series:[pal('--chart-util')] },
+            { key:'lat',  title:'Latency ms',      series:[pal('--chart-lat')] },
+            { key:'phy',  title:'PHY err/s',       series:[pal('--chart-phy')] },
+            { key:'temp', title:'Temp ' + (luUnit() === 1 ? '°F' : '°C'), series:[pal('--chart-temp')] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl lu-card first';
@@ -950,7 +1150,13 @@
                                  phyRate == null ? '–' : phyRate.toFixed(1));
                     }
                     var temp = (c.temp == null) ? null : c.temp;
-                    perfPush(cells.temp, [temp == null ? NaN : temp], temp == null ? '–' : temp + '°');
+                    /* The plotted VALUE converts too, not just the axis title.
+                       The PR this came from switched the title alone, which put
+                       a °F label on a °C curve -- a chart that is wrong rather
+                       than merely unconverted. */
+                    var tempDisp = temp == null ? null : luConvTemp(temp);
+                    perfPush(cells.temp, [tempDisp == null ? NaN : tempDisp],
+                             tempDisp == null ? '–' : tempDisp + '°');
                 });
             }
         }

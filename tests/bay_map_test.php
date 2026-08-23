@@ -286,5 +286,7 @@ check('the store primitive itself is not lock-aware', isset(bay_map_read($path)[
 array_map('unlink', glob("$dir/*") ?: []);
 @rmdir($dir);
 
+
+
 echo $fails === 0 ? "bay_map: all pass\n" : "bay_map: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

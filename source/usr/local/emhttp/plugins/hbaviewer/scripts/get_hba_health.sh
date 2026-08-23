@@ -84,8 +84,11 @@ _drive_count() {   # $1 = controller host index
     printf '%d' "$n"
 }
 
-UPTIME=$(cut -d. -f1 /proc/uptime 2>/dev/null); UPTIME="${UPTIME:-0}"
-NOW=$(date +%s)
+# Overridable so the composer has a byte-stable output to pin. Without this the
+# health tab is the one composer with no golden, because a wall clock and an
+# uptime cannot appear in an expectation file. Production passes neither.
+UPTIME="${LSI_UPTIME:-$(cut -d. -f1 /proc/uptime 2>/dev/null)}"; UPTIME="${UPTIME:-0}"
+NOW="${LSI_NOW:-$(date +%s)}"
 
 # PCIe link state from a sysfs PCI device dir. Bash is dynamically scoped, so
 # these land on the CALLER's locals (width/maxwidth/speed/maxspeed/slotwidth/
@@ -199,27 +202,15 @@ health_storcli2() {   # $1 = controller index
 health_lsiutil() {
     require_binary || return 1
     # The dashboard tile reads this, and on a multi-card box it read card 1's
-    # temperature for every card — the symptom issue #18 was filed about. One
-    # entry per port now, in lsi_ports order, so the index join in ajax_info.php
-    # lines up with the Overview's controllers[].
-    local MAP BANNER p bus dev nports first=1
-    MAP=$(lsi_port_map)
-    nports=$(echo "$MAP" | wc -l | tr -d ' ')
-    BANNER=$(mktemp)                        # lists every port; captured once
-    trap 'rm -f "$BANNER"' EXIT
-    printf '0\n' | hba_query 2>/dev/null > "$BANNER"
-    while read -r p bus dev; do
-        [ "$first" = 1 ] || printf ','
-        first=0
-        _health_lsiutil_one "$p" "$bus" "$dev" "$nports" "$BANNER"
-    done <<< "$MAP"
+    # temperature for every card -- the symptom issue #18 was filed about.
+    lsi_each_card _health_lsiutil_one
 }
 
-_health_lsiutil_one() {   # $1 = port  $2 = bus  $3 = device  $4 = port count  $5 = banner file
+_health_lsiutil_one() {   # $1 port  $2 banner  $3 board  $4 hnum  $5 pdir  $6 nports
     local IOC BANNER temp_hex temp fw_raw fw band readok=true
     local width_hex speed_hex hnum
     local width=0 maxwidth=0 speed="" maxspeed="" slotwidth=0 slotspeed=""
-    IOC=$(mktemp); BANNER="$5"
+    IOC=$(mktemp); BANNER="$2"
     hba_query -p"$1" -a 25,2,0,0 2>/dev/null > "$IOC"
 
     temp_hex=$(grep "IOCTemperature:" "$IOC" | grep -oE '0x[0-9A-Fa-f]+' | head -1)
@@ -258,14 +249,12 @@ _health_lsiutil_one() {   # $1 = port  $2 = bus  $3 = device  $4 = port count  $
         esac
     fi
 
-    # This port's own card, joined through its PCI bus/device — the drive count
-    # and the PHY counters below are per-card, and handing every card host 1's
-    # would be the same bug in a different field.
-    hnum=$(lsi_host_for "$2" "$3" "$4")
-    # One card and no join: keep the historic host-0 default, so single-card
-    # output stays byte-identical. More than one card, and empty means empty —
-    # zero drives and no PHYs beats another card's.
-    [ -z "$hnum" ] && [ "$4" = "1" ] && hnum=0
+    # This port's own card, already joined by lsi_each_card. One card and no
+    # join: keep the historic host-0 default, which the goldens pin. More than
+    # one card, and empty means empty -- zero drives and no PHYs beats another
+    # card's.
+    hnum="$4"
+    [ -z "$hnum" ] && [ "$6" = "1" ] && hnum=0
 
     # Same six link fields as the storcli path, from the same sysfs files —
     # only the route to the device dir differs, since there is no storcli line

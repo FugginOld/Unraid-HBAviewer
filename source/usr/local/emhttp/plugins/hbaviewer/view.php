@@ -7,6 +7,44 @@
 
 require_once __DIR__ . '/firmware_index.php';
 
+/* Worst-of across a set of controller statuses, so a card whose second IOC is
+   overheating cannot show a green badge because its first one is fine.
+
+   Here rather than inline at the call site because there are two call sites
+   now -- the Overview's grouped card and the dashboard tile -- and a severity
+   ordering duplicated across two files is the exact shape of drift this plugin
+   has already paid for twice (the token block, the button hover). An unknown
+   status ranks 0: it must not silently outrank a real alert.
+
+   This vocabulary (ok/warn/alert) is the CONTROLLER's. health.php's
+   health_rank() orders a different one (ok/watch/warning/critical) for the
+   five health indicators. They are not interchangeable and neither should
+   learn the other's words. */
+/* The PCIe items that describe the SLOT, not the function.
+
+   Width, speed and power mode belong to the slot and both IOCs of a dual-IOC
+   board report them identically. PCI Location does not: each function has its
+   own -- 84:00 and 86:00 on a 9300-16i -- so a board-level row showing one of
+   them, labelled as the board's, is a wrong address on the page.
+
+   One home because there are two consumers now, the Overview's parent card and
+   the dashboard tile, and both were matching the label as a bare string. The
+   label is assigned by lsi_hba_view() below; renaming it there without changing
+   this would put the address back on the board, which is what the item-count
+   assertions in ajax_render_test.php exist to catch. */
+function lsi_pcie_slot_items(array $pcie): array {
+    return array_values(array_filter($pcie, fn($i) => ($i['label'] ?? '') !== 'PCI Location'));
+}
+
+function lsi_worst_status(array $statuses): string {
+    $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
+    $worst = 'ok';
+    foreach ($statuses as $s) {
+        if (($rank[(string) $s] ?? 0) > ($rank[$worst] ?? 0)) $worst = (string) $s;
+    }
+    return $worst;
+}
+
 function lsi_status_color(string $s): string {
     return match ($s) { 'alert' => '#e74c3c', 'warn' => '#f39c12', default => '#2ecc71' };
 }

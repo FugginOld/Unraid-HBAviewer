@@ -14,6 +14,28 @@ wrapper. Add a backend, or a per-tab read, in one place. PHP reads the explicit
 values now; `lsi_backend_shape()` folds `storcli2` to the same shape as
 `storcli` so the renderers stay one set.
 
+## overview controller record — declared in `tests/controller_schema_test.php`
+The record the three overview parsers each build independently (`parse/hba.sh`,
+`parse/storcli_overview.sh`, `parse/storcli2_overview.sh`). Every consumer reads
+it with `?? ''` or `?? 'unknown'`, so a field one backend forgets renders blank
+instead of failing — which is why the shape is declared as data and pinned by a
+test rather than left to prose.
+
+| Group | Fields | Backends |
+|---|---|---|
+| **Core** — safe to read with no fallback | `temp` `model` `firmware` `mode` `board_name` `port_name` `pci_location` `pcie_width` `pcie_speed` `power_mode` `alert_threshold` `temp_band` `cfg_band` `status` | all three |
+| Backend-specific, correct | `fw_old`, `port` (optional) | lsiutil only |
+| Backend-specific, correct | `bios`, `drive_count` | storcli, storcli2 |
+| **Known gap** | `card_id`, `subvendor_id`, `topology` | lsiutil, storcli — **absent on storcli2** |
+
+The gap costs nothing today: `card_id` is what `lsi_group_cards` buckets on, and
+grouping only merges a bucket whose size equals the board's declared
+`ioc_count`, which exactly one board sets above 1 (`SAS9300-16i`) — no 9600 is
+in the firmware index at all. Add a dual-IOC SAS4 board and it renders as two
+half-cards. Closing it means threading `card_id` in as another positional
+argument, since the storcli2 filters stay pure (positional only, no environment
+reads) while storcli's parser takes it from `LSI_CARD_ID`.
+
 ## StorCLI2 installer — `scripts/install_storcli2.sh`
 Installs Broadcom's proprietary FULL StorCLI2 (needed only for the firmware
 Event Log tab on a SAS4 / 9600 card — the Lite build the dkaser/unraid-storcli
@@ -30,8 +52,8 @@ to this repo; see `README.md` Credits for what was ported.
 Persists the firmware event ring-buffer to `/boot` so history survives reboots
 and ring-buffer wrap. `event_merge(history, current) -> [kept, changed]` is pure
 (dedup by `seq|time`, cap at `EVENT_ARCHIVE_CAP`); `event_store_{path,read,write}`
-is the injectable store. `ajax_info.php` `type=events` is a thin read→merge→write
-caller.
+is the injectable store. `render/events.php` (`type=events`) is a thin
+read→merge→write caller.
 
 ## performance snapshot — `scripts/get_metrics.sh` (+ `parse/diskstats.sh`)
 The INSTANT path behind the Performance tab. `get_metrics.sh` emits raw
@@ -43,7 +65,7 @@ from deltas itself — the server stays stateless. ponytail: controller index =
 position among the SAS scsi_hosts (host order), so the drivemap is instant sysfs
 (no cache), the same host-order the PHY rollup assumes.
 
-## drive bay map — `bay_map.php` (+ `bay_map_assemble()` in `ajax_info.php`)
+## drive bay map — `bay_map.php` (+ `bay_map_assemble()` in `render/baymap.php`)
 Where each drive physically sits in the chassis. `bay_map_{read,write,set}` is
 the `/boot` store, `bay_map_prune_to_dims()` returns the drives a shrunken grid
 displaces (they go back to the tray, never silently dropped), `bay_map_key()`

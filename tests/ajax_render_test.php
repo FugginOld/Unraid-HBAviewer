@@ -21,6 +21,30 @@ register_shutdown_function(function () use (&$completed) {
 require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php';
 
 $fails = 0;
+/* "Is this column present", asked without pinning the header's markup. These
+   checks used to match '<th>Name</th>' literally, and P2-B -- which wrapped
+   every header in a sort button -- failed seventeen of them at once while
+   every column was exactly where it had always been. What they mean is the
+   column, not the tag around it. */
+function hasCol(string $html, string $name): bool {
+    return (bool) preg_match('~<th(?:\s[^>]*)?>(?:<[^>]+>)*\s*' . preg_quote($name, '~') . '\s*<~', $html);
+}
+/* "Is column $a to the left of column $b", and BOTH have to be there.
+   These were three strpos() comparisons on literal '<th>Name</th>' markup, and
+   they had a second problem beyond the markup: a missing column makes strpos()
+   return false, false coerces to 0, and `false < 12` is TRUE -- so the check
+   passed most loudly exactly when the column it names had disappeared. Asking
+   for both positions explicitly is what closes that. */
+function colBefore(string $html, string $a, string $b): bool {
+    if (!hasCol($html, $a) || !hasCol($html, $b)) return false;
+    $pa = colPos($html, $a);
+    $pb = colPos($html, $b);
+    return $pa !== null && $pb !== null && $pa < $pb;
+}
+function colPos(string $html, string $name): ?int {
+    $re = '~<th(?:\s[^>]*)?>(?:<[^>]+>)*\s*' . preg_quote($name, '~') . '\s*<~';
+    return preg_match($re, $html, $m, PREG_OFFSET_CAPTURE) ? (int) $m[0][1] : null;
+}
 function check(string $name, bool $ok): void {
     global $fails;
     echo ($ok ? "PASS  " : "FAIL  ") . $name . "\n";
@@ -39,8 +63,8 @@ $phyStorcli = ['backend' => 'storcli', 'controllers' => [['phys' => [
     ['phy'=>1,'link'=>'down','speed'=>'unknown','sas_addr'=>'','inv'=>3,'disp'=>1,'sync'=>0,'reset'=>0],
 ]]]];
 $h = renderPhyTables($phyStorcli);
-check('phy storcli has speed col',   str_contains($h, '<th>Speed</th>'));
-check('phy storcli has sas col',     str_contains($h, '<th>Attached SAS Address</th>'));
+check('phy storcli has speed col',   hasCol($h, 'Speed'));
+check('phy storcli has sas col',     hasCol($h, 'Attached SAS Address'));
 check('phy storcli link up badge',   str_contains($h, 'lu-link-up'));
 check('phy storcli link down badge', str_contains($h, 'lu-link-down'));
 check('phy storcli flags errors',    str_contains($h, 'lu-err-val'));
@@ -50,8 +74,8 @@ $phyLsi = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
     ['phy'=>0,'link'=>'up','inv'=>1,'disp'=>2,'sync'=>3,'reset'=>4],
 ]]]];
 $h = renderPhyTables($phyLsi);
-check('phy lsiutil omits speed col', !str_contains($h, '<th>Speed</th>'));
-check('phy lsiutil has counters',    str_contains($h, '<th>Invalid DWords</th>'));
+check('phy lsiutil omits speed col', !hasCol($h, 'Speed'));
+check('phy lsiutil has counters',    hasCol($h, 'Invalid DWords'));
 
 /* ── PHY Device column (issue #11) ────────────────────────────────────────────
    Same join as the Drives tab, one hop further: PHY -> drive (sas_addr prefix on
@@ -66,16 +90,16 @@ $h = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
     ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
     ['phy'=>1,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA999999999','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
 ]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg']);
-check('phy storcli has device col',   str_contains($h, '<th>Device</th>'));
+check('phy storcli has device col',   hasCol($h, 'Device'));
 check('phy storcli device resolves',  str_contains($h, '<code>/dev/sdg</code>'));
 check('phy storcli device follows phy col',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Link</th>'));
+      colBefore($h, 'Device', 'Link'));
 // PHY 1 matches no drive (a VirtualSES PHY is the real-world case) — em dash,
 // never the drive that happens to sit on the neighbouring PHY.
 check('phy storcli unmatched device is em dash', substr_count($h, '<code>/dev/sdg</code>') === 1);
 // No drives cached yet: the table still renders, every Device cell blank.
 $h = renderPhyTables($phyStorcli);
-check('phy device col renders without drives', str_contains($h, '<th>Device</th>') && !str_contains($h, '/dev/'));
+check('phy device col renders without drives', hasCol($h, 'Device') && !str_contains($h, '/dev/'));
 
 $h = renderPhyTables($phyLsi, [], null, null,
     ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]]);
@@ -91,6 +115,67 @@ check('phy multi heads controllers', str_contains(
 check('phy single omits head', !str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]]]]), 'Controller /c0'));
 
+/* The backend field is the ONLY input that picks columns. CONTEXT.md says so.
+   These are characterization checks, not regression ones: the key-sniff they
+   replaced could only fire when `backend` was absent entirely, which no live
+   payload is -- hba_each stamps both paths and the {"error":…} payload returns
+   before any renderer runs. First pair: a stated backend decides even when the
+   keys look like the other one. Second pair: with NO backend at all, the
+   renderers now fall to the lsiutil table rather than guessing from keys. */
+$sniffBait = ['backend' => 'lsiutil', 'controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+$sniffOut = renderPhyTables($sniffBait);
+check('phy: stated backend wins over storcli-looking keys',
+    str_contains($sniffOut, 'Invalid DWords') && !str_contains($sniffOut, 'Attached SAS Address'));
+
+$drvBait = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+// 'Encl:Slot' is the storcli drives header and 'Bus:Tgt' the lsiutil one --
+// those are the discriminators. ('Enclosure' is NOT: it appears only in a PHY
+// topology summary, so asserting on it passes on both branches and tests
+// nothing.) Asserting both directions proves which table rendered, not merely
+// which one did not.
+$drvOut = renderDrivesTables($drvBait);
+check('drives: stated backend wins over storcli-looking keys',
+    str_contains($drvOut, 'Bus:Tgt') && !str_contains($drvOut, 'Encl:Slot'));
+
+// No backend stated: no guessing. These two FAIL before the deletion and pass
+// after, which is the only behavioural difference the change makes.
+$noBackendPhy = ['controllers' => [['phys' => [
+    ['phy' => 0, 'link' => 'up', 'speed' => '12.0 Gbps', 'sas_addr' => 'AABB',
+     'inv' => 0, 'disp' => 0, 'sync' => 0, 'reset' => 0],
+]]]];
+$noBackendPhyOut = renderPhyTables($noBackendPhy);
+check('phy: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendPhyOut, 'Invalid DWords') && !str_contains($noBackendPhyOut, 'Attached SAS Address'));
+
+$noBackendDrv = ['controllers' => [['drives' => [
+    ['slot' => '0', 'model' => 'X', 'serial' => 'S', 'state' => 'JBOD',
+     'sas_address' => 'AABB', 'size' => '1 TB', 'link' => '12.0Gb/s', 'firmware' => 'A'],
+]]]];
+$noBackendDrvOut = renderDrivesTables($noBackendDrv);
+check('drives: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendDrvOut, 'Bus:Tgt') && !str_contains($noBackendDrvOut, 'Encl:Slot'));
+
+// 'Qualifier' is the lsiutil events header and 'Code' the storcli one -- the
+// entries below are storcli-shaped (seq/time/code/description) but the
+// payload carries no 'backend' key, so an unstamped payload must not sniff
+// the entry shape into rendering the storcli table.
+$evSniffDir = sys_get_temp_dir() . '/hbav_events_sniff_' . getmypid();
+@mkdir($evSniffDir, 0755, true);
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
+$noBackendEv = ['controllers' => [['entries' => [
+    ['seq' => '1', 'time' => '2026-07-01 10:00:00', 'code' => '0x0113', 'description' => 'Drive inserted'],
+]]]];
+$noBackendEvOut = renderEventsTables($noBackendEv, $evSniffDir);
+check('events: an unstamped payload does not sniff its way to storcli columns',
+    str_contains($noBackendEvOut, 'Qualifier') && !str_contains($noBackendEvOut, 'Code'));
+array_map('unlink', glob("$evSniffDir/*.json") ?: []);
+@rmdir($evSniffDir);
 // A storcli2 payload must reach the storcli tables. Before lsi_backend_shape
 // existed it fell through to the lsiutil branch, because the field matched
 // neither 'storcli' nor ''.
@@ -369,7 +454,7 @@ $drvStorcli = ['backend' => 'storcli', 'controllers' => [[
                   'size'=>'7.276 TB','sas_address'=>'5000c500a1b2c3d4','link'=>'12.0Gb/s','firmware'=>'SN02']],
 ]]];
 $h = renderDrivesTables($drvStorcli);
-check('drives storcli col set',    str_contains($h, '<th>Encl:Slot</th>') && str_contains($h, '<th>Firmware</th>'));
+check('drives storcli col set',    hasCol($h, 'Encl:Slot') && hasCol($h, 'Firmware'));
 check('drives enclosure summary',  str_contains($h, 'VirtualSES') && str_contains($h, 'direct-attach'));
 check('drives smart button',       str_contains($h, 'luSmart(this') && str_contains($h, 'ZA1ABCDE'));
 check('drives uppercases sas',     str_contains($h, '5000C500A1B2C3D4'));
@@ -419,7 +504,7 @@ $drvLsi = ['backend' => 'lsiutil', 'controllers' => [['drives' => [
     ['bus'=>'0','target'=>'3','phy'=>'2','sas_address'=>'5000c500a1b2c3d4','os_name'=>'/dev/sdb'],
 ]]]];
 $h = renderDrivesTables($drvLsi);
-check('drives lsiutil col set', str_contains($h, '<th>Bus:Tgt</th>') && str_contains($h, '<th>Device</th>'));
+check('drives lsiutil col set', hasCol($h, 'Bus:Tgt') && hasCol($h, 'Device'));
 check('drives lsiutil no smart btn', !str_contains($h, 'luSmart(this'));
 
 /* ── Device column (issue #11): encl:slot and bus:target line up with nothing
@@ -430,7 +515,7 @@ check('drives lsiutil no smart btn', !str_contains($h, 'luSmart(this'));
    injected here, so nothing in this suite shells out to lsblk. */
 check('drives lsiutil device is os_name, no map needed', str_contains($h, '<code>/dev/sdb</code>'));
 check('drives device column leads the row',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Bus:Tgt</th>'));
+      colBefore($h, 'Device', 'Bus:Tgt'));
 
 $h = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg']);
 check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>'));
@@ -438,10 +523,10 @@ check('drives storcli device by serial', str_contains($h, '<code>/dev/sdg</code>
 /* The Unraid column: the same slot name on all four surfaces, so a row here can
    be matched against Main without tracking /dev/sdX by eye. */
 $hRole = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
-check('drives table has an Unraid column',  str_contains($hRole, '<th>Unraid</th>'));
+check('drives table has an Unraid column',  hasCol($hRole, 'Unraid'));
 check('drives table names the slot',        str_contains($hRole, '<td>Disk 1</td>'));
 check('drives lsiutil has an Unraid column',
-      str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<th>Unraid</th>'));
+      hasCol(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), 'Unraid'));
 check('drives lsiutil names the slot',
       str_contains(renderDrivesTables($drvLsi, [], ['/dev/sdb' => 'Parity']), '<td>Parity</td>'));
 // A drive the array does not use gets an em dash, never a blank cell that reads
@@ -449,22 +534,54 @@ check('drives lsiutil names the slot',
 check('an unassigned drive shows an em dash',
       substr_count(renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], []), '<span class="lu-muted">—</span>') > 0);
 
+/* ── The column falls back to the mount label ────────────────────────────────
+   On a box with no array every one of these cells was an em dash, which is
+   accurate and useless: the drives DO have a name their owner knows, the one
+   the Main page shows. */
+$udMap = ['/dev/sda' => 'media1', '/dev/sdc' => 'media8'];
+$rlMap = ['/dev/sda' => 'Disk 1'];
+
+check('an array role still wins',
+      lsi_role_cell('/dev/sda', $rlMap, $udMap) === 'Disk 1');
+check('a mounted unassigned drive shows its label',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'media8'));
+check('a drive in neither is still an em dash',
+      str_contains(lsi_role_cell('/dev/sdz', [], $udMap), '—'));
+check('a drive with no name at all is still an em dash',
+      str_contains(lsi_role_cell(null, [], $udMap), '—'));
+/* "media9" and "Disk 1" are not the same kind of fact -- one is a slot in the
+   array, the other is where somebody mounted a disk the array knows nothing
+   about. Equal weight would say the column means one thing when it means two. */
+check('the mount label is weaker than an array role',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'lu-muted')
+      && !str_contains(lsi_role_cell('/dev/sda', $rlMap, $udMap), 'lu-muted'));
+check('the label is escaped',
+      str_contains(lsi_role_cell('/dev/sdx', [], ['/dev/sdx' => '<b>x</b>']), '&lt;b&gt;'));
+/* Called from four tables; all four have to agree, and three of them reach it
+   through a different closure. */
+$udDrv = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], [], [], [], ['/dev/sdg' => 'media5']);
+check('the drives table carries the mount label', str_contains($udDrv, 'media5'));
+$udSmart = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sdg', 'model' => 'X', 'serial' => 'S', 'smart' => ['health' => 'PASSED']],
+]], null, [], ['/dev/sdg' => 'media5']);
+check('the SMART table carries the mount label', str_contains($udSmart, 'media5'));
+
 $hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
                                null, ['/dev/sdp' => 'Parity']);
-check('SMART table has an Unraid column', str_contains($hSmartRole, '<th>Unraid</th>'));
+check('SMART table has an Unraid column', hasCol($hSmartRole, 'Unraid'));
 check('SMART table names the slot',       str_contains($hSmartRole, '<td>Parity</td>'));
 
 $hPhyRole = renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[
     ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>0,'disp'=>0,'sync'=>0,'reset'=>0],
 ]]]], [], null, null, $phyDrv, ['ZA1ABCDE' => '/dev/sdg'], ['/dev/sdg' => 'Disk 1']);
-check('PHY table has an Unraid column', str_contains($hPhyRole, '<th>Unraid</th>'));
+check('PHY table has an Unraid column', hasCol($hPhyRole, 'Unraid'));
 check('PHY table names the slot',       str_contains($hPhyRole, '<td>Disk 1</td>'));
 check('PHY lsiutil table has an Unraid column',
       str_contains(renderPhyTables($phyLsi, [], null, null,
           ['controllers' => [['drives' => [['phy'=>'0','os_name'=>'/dev/sdb']]]]], [], ['/dev/sdb' => 'Parity']),
           '<td>Parity</td>'));
 check('drives storcli device leads the row',
-      strpos($h, '<th>Device</th>') < strpos($h, '<th>Encl:Slot</th>'));
+      colBefore($h, 'Device', 'Encl:Slot'));
 // Serials come off lsblk in whatever case the drive reports; the map is keyed
 // uppercase and the lookup must not care.
 check('drives storcli device serial match is case-insensitive',
@@ -658,7 +775,13 @@ check('baymap unplaceable drive still appears, with a null key',
    that guard), and no constant in the file is used before its declaration. */
 check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
 
+// ajax_info.php's dispatch/fetch requires every render/*.php file at load time
+// (see the CLI-seam comment above), so the same "declared before it's used"
+// guarantee has to scan those too, or a render file is a blind spot for it.
 $aj = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+foreach (glob(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/render/*.php') as $renderFile) {
+    $aj .= "\n" . file_get_contents($renderFile);
+}
 preg_match_all('/^const\s+([A-Z_][A-Z0-9_]*)/m', $aj, $mc, PREG_OFFSET_CAPTURE);
 foreach ($mc[1] as [$cname, $declAt]) {
     check("const $cname is not used before it is declared", strpos($aj, $cname) >= $declAt);
@@ -708,6 +831,52 @@ check('the second parity is Parity 2',
       (unraid_disk_roles($disks2)['/dev/sdq'] ?? '') === 'Parity 2');
 check('a drive outside the array has no role', !isset($roles['/dev/sdzz']));
 check('a missing disks.ini has no roles', unraid_disk_roles("$iniDir/nope.ini") === []);
+
+/* ── Unassigned-device mount labels (reported 2026-08-22) ────────────────────
+   The fixture is Raven's real /proc/mounts, tmpfs line and all. Its numbering
+   deliberately does NOT follow device order -- sdc is media8, sdi is media3 --
+   because a fixture of sdN => mediaN would pass an implementation that derived
+   the label from the device name and never read the mount point. */
+$mounts = "tmpfs /mnt/disks tmpfs rw,relatime,size=1024k,inode64 0 0\n"
+        . "/dev/sda1 /mnt/disks/media1 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdc1 /mnt/disks/media8 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdi1 /mnt/disks/media3 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/nvme0n1p1 /mnt/disks/fast xfs rw,relatime 0 0\n"
+        . "/dev/sdz /mnt/disks/whole xfs rw,relatime 0 0\n"
+        // A sibling directory that merely STARTS with the prefix. This is what
+        // the trailing slash guards -- the tmpfs line above is caught by the
+        // /dev/ test instead, so without this the slash would be untested.
+        . "/dev/sdy /mnt/disksbackup/thing xfs rw,relatime 0 0
+"
+        . "/dev/md1p1 /mnt/disk1 xfs rw,relatime 0 0\n"
+        . "/dev/sdj1 /mnt/cache btrfs rw,relatime 0 0\n"
+        . "shfs /mnt/user fuse.shfs rw,relatime 0 0\n"
+        . "/dev/sdl1 /boot vfat rw,relatime 0 0\n";
+$fx  = sys_get_temp_dir() . '/hbav_mounts_' . getmypid();
+file_put_contents($fx, $mounts);
+$ud  = unraid_ud_mounts($fx);
+
+check('a partition maps to its drive',       ($ud['/dev/sda'] ?? '') === 'media1');
+check('the label is the mount point, not the device number',
+      ($ud['/dev/sdc'] ?? '') === 'media8' && ($ud['/dev/sdi'] ?? '') === 'media3');
+/* rtrim('0123456789') is right for sdh1 and cuts nvme0n1p1 back to a device
+   that does not exist. */
+check('an nvme partition maps to its namespace, not past it',
+      ($ud['/dev/nvme0n1'] ?? '') === 'fast' && !isset($ud['/dev/nvme0n']));
+check('a whole-disk mount keeps its name',   ($ud['/dev/sdz'] ?? '') === 'whole');
+/* The directory UD mounts INTO is itself a tmpfs, and it is the FIRST line of
+   the real file. A prefix test written without the trailing slash files it
+   under the label "disks". */
+check('the /mnt/disks tmpfs is not a drive', !isset($ud['tmpfs']) && !in_array('disks', $ud, true));
+check('array, pool, share and boot mounts are excluded',
+      !isset($ud['/dev/md1']) && !isset($ud['/dev/sdj']) && !isset($ud['/dev/sdl'])
+      && !in_array('user', $ud, true));
+check('a sibling directory of /mnt/disks is not one',
+      !isset($ud['/dev/sdy']) && !in_array('thing', $ud, true));
+check('exactly the five unassigned devices are mapped', count($ud) === 5);
+check('a missing /proc/mounts is empty, not fatal', unraid_ud_mounts($fx . '_nope') === []);
+@unlink($fx);
+
 /* Double digits must not sort or read as "Disk 1" — the whole point is telling
    two disks apart at a glance. */
 check('disk10 is Disk 10',
@@ -793,6 +962,47 @@ check('smart_state nodata is uncoloured', smart_state_color('nodata') === '');
 check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
 check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
 check('drive_dev_name null when unmatched', drive_dev_name(['serial'=>'NOPE'], ['X'=>'/dev/sdq']) === null);
+
+/* ── Compound serials (reported 2026-08-22) ─────────────────────────────────
+   The lsblk fixture is Raven's real output. Four of its nine drives report a
+   serial WITH A SPACE IN IT, and the map was built by taking field 1 of the
+   split line -- so those four were filed under the first half of their own
+   serial, every lookup missed, and the Drives tab showed "-" in the Device
+   column for drives it was listing. SMART named them, because it joins by a
+   different path; that disagreement between two tabs is what the report was. */
+$lsblk = "sda   ZA220HHM0000C746GTXQ\n"
+       . "sdb   ZA2208180000C74967DA\n"
+       . "sdc   VJGRBK9X\n"
+       . "sdf   001848RG2JHN JEHG2JHN\n"
+       . "sdh   001536PY083V 2EGY083V\n"
+       . "sdl   9000028F24B41875\n"
+       . "sdz\n";                                  // present, no serial column
+$bySerial = lsi_dev_by_serial($lsblk);
+
+check('a single-token serial still resolves',
+      drive_dev_name(['serial' => 'VJGRBK9X'], $bySerial) === '/dev/sdc');
+// The bug itself.
+check('a serial containing a space resolves',
+      drive_dev_name(['serial' => '001848RG2JHN JEHG2JHN'], $bySerial) === '/dev/sdf');
+check('and so does the other one',
+      drive_dev_name(['serial' => '001536PY083V 2EGY083V'], $bySerial) === '/dev/sdh');
+/* storcli and lsblk disagree about how much whitespace sits in the middle --
+   the reporter's two screenshots show two spaces on one tab and one on the
+   other. Both spellings must land on the same key, or this is fixed for the
+   tab that happens to match the map's spacing and still broken for the other. */
+check('extra whitespace in the middle still resolves',
+      drive_dev_name(['serial' => '001848RG2JHN  JEHG2JHN'], $bySerial) === '/dev/sdf');
+check('leading and trailing whitespace still resolves',
+      drive_dev_name(['serial' => '  VJGRBK9X '], $bySerial) === '/dev/sdc');
+check('case still does not matter',
+      drive_dev_name(['serial' => '001848rg2jhn jehg2jhn'], $bySerial) === '/dev/sdf');
+// Half a compound serial is not that drive. Filing it under the first token is
+// exactly what the bug did, so this is the assertion that keeps it gone.
+check('half a compound serial resolves to nothing',
+      drive_dev_name(['serial' => '001848RG2JHN'], $bySerial) === null);
+check('a device with no serial creates no entry', !in_array('/dev/sdz', $bySerial, true));
+check('an unknown serial is still null',
+      drive_dev_name(['serial' => 'NOPE'], $bySerial) === null);
 check('drives empty', str_contains(
     renderDrivesTables(['backend'=>'storcli','controllers'=>[[]]]), 'No drives detected.'));
 
@@ -806,7 +1016,7 @@ $evStorcli = ['backend' => 'storcli', 'controllers' => [['entries' => [
     ['seq'=>'12','time'=>'2026-07-01 10:05:00','code'=>'0x0114','description'=>'Drive removed'],
 ]]]];
 $h = renderEventsTables($evStorcli, $dir);
-check('events storcli col set', str_contains($h, '<th>Description</th>'));
+check('events storcli col set', hasCol($h, 'Description'));
 check('events wrote archive',   is_file("$dir/events_c0.json"));
 check('events newest first',    strpos($h, 'Drive removed') < strpos($h, 'Drive inserted'));
 check('events counts entries',  str_contains($h, '2 entries'));
@@ -828,7 +1038,7 @@ $evLsi = ['backend' => 'lsiutil', 'controllers' => [['entries' => [
     ['seq'=>'7','qualifier'=>'0x02','data'=>'00 11 22','timestamp'=>'0x0001d4c0'],
 ]]]];
 $h = renderEventsTables($evLsi, $dirLsi);
-check('events lsiutil col set', str_contains($h, '<th>Qualifier</th>') && !str_contains($h, '<th>Description</th>'));
+check('events lsiutil col set', hasCol($h, 'Qualifier') && !hasCol($h, 'Description'));
 
 array_map('unlink', glob("$dirLsi/*.json") ?: []);
 @rmdir($dirLsi);
@@ -916,6 +1126,35 @@ check('luTable cells are html',  str_contains($t, '<code>x</code>'));
 check('luTable is wrapped in a horizontal scroller',
       str_starts_with($t, '<div class="lu-tscroll"><table') && str_ends_with($t, '</table></div>'));
 
+/* The card shell four renderers used to repeat verbatim. The error branch is
+   the load-bearing part: an errored controller must still get its own card and
+   the card must be CLOSED, or it renders as bare text floating between its
+   neighbours' cards. luCtlHead appears only when there is more than one
+   controller -- a single-controller box gets no heading, which is what every
+   existing single-controller expectation pins. */
+check('card: one card per controller', function_exists('luCardPerController')
+    && substr_count(luCardPerController([[], []], fn($i, $c) => 'X'), 'lu-card first') === 2);
+check('card: body output lands inside the card',
+    str_contains(luCardPerController([['phys' => []]], fn($i, $c) => 'BODYMARK'), 'BODYMARK'));
+check('card: single controller gets no heading',
+    !str_contains(luCardPerController([[]], fn($i, $c) => ''), 'Controller /c'));
+check('card: two controllers get headings',
+    substr_count(luCardPerController([[], []], fn($i, $c) => ''), 'Controller /c') === 2);
+check('card: an errored controller still gets a closed card',
+    luCardPerController([['error' => 'no response']], fn($i, $c) => 'NEVER')
+        === '<div class="lu-card first" data-ctl="0"><p class="lu-muted">no response</p></div>');
+check('card: the body is not called for an errored controller',
+    !str_contains(luCardPerController([['error' => 'x']], fn($i, $c) => 'NEVER'), 'NEVER'));
+check('card: error text is escaped',
+    str_contains(luCardPerController([['error' => '<b>x']], fn($i, $c) => ''), '&lt;b&gt;x'));
+// A malformed controllers[] entry -- a composer bug, a truncated read -- must
+// cost one blank card, not the whole tab. Before the closure conversion these
+// were foreach bodies with no type constraint; the typed closures made a null
+// entry fatal.
+check('card: a null controller entry degrades instead of throwing',
+    luCardPerController([null], fn(int $i, array $c) => 'BODY')
+        === '<div class="lu-card first" data-ctl="0">BODY</div>');
+
 /* ── Hostile-ish hardware strings must not reach the page as markup ────────
    Every value below arrives from HBA firmware, storcli text, or sysfs. None of
    it is attacker-controlled in any realistic scenario — but a drive model
@@ -994,7 +1233,7 @@ restore_error_handler();
 check('mixed archive: no PHP warning',   $warned === false);
 check('mixed archive: storcli row shown', str_contains($h, 'Drive inserted'));
 check('mixed archive: lsiutil rows hidden', !str_contains($h, 'deadbeef'));
-check('mixed archive: storcli columns',  str_contains($h, '<th>Description</th>'));
+check('mixed archive: storcli columns',  hasCol($h, 'Description'));
 check('mixed archive: counts visible only', str_contains($h, '1 entries'));
 check('mixed archive: reports hidden',   str_contains($h, '2 from a previous backend not shown'));
 
@@ -1063,7 +1302,12 @@ preg_match_all('~<use href="#(lu-i-[a-z]+)"/>~', $h, $mIco);
 check('health rows emit five icons', $mIco[1] === ['lu-i-thermal', 'lu-i-link', 'lu-i-topology', 'lu-i-hostlink', 'lu-i-controller']);
 
 $shell = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
-preg_match_all('~<symbol id="(lu-i-[a-z]+)"~', $shell, $mSym);
+// The sprite moved out of the shell in P1-C: settings.php and flash_view.php
+// need it too, and inlining it three times is how the dingbats survived on
+// those pages in the first place. Symbols come from icons.php now; the shell
+// only requires it.
+preg_match_all('~<symbol id="(lu-i-[a-z]+)"~',
+    (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/icons.php'), $mSym);
 check('every icon resolves to a defined symbol', $mIco[1] && !array_diff($mIco[1], $mSym[1]));
 /* The hint line is only readable as a sub-line if it is styled; unstyled it
    inherits the row's 12.5px flex and lands next to the value. The rules moved
@@ -1219,8 +1463,374 @@ check('smart stays uncarded', !str_contains(renderSmartTable(['drives' => [
 /* The shell must no longer wrap these four panes in a card — the renderers own
    that now, and a leftover wrapper would nest every card inside another. */
 foreach (['health', 'phy', 'drives', 'events'] as $tab) {
+    // `[^>]*` after the class: the pane also carries role=tabpanel and
+    // aria-labelledby now. What this asserts is that NOTHING SITS BETWEEN the
+    // pane and its toolbar, so the open tag's own attributes are none of its
+    // business — pinning them made it fail on an accessibility attribute that
+    // wraps nothing.
     check("shell: tab-$tab pane has no card wrapper",
-          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*">\s*<div class="lu-tab-toolbar">~', $shell));
+          (bool) preg_match('~<div id="tab-' . $tab . '" class="lu-tab-pane[^"]*"[^>]*>\s*<div class="lu-tab-toolbar">~', $shell));
+}
+
+/* ── Token wiring (design-system P1-A) ───────────────────────────────────────
+   The token block used to be copy-pasted into settings.php, and the two copies
+   drifted: settings.php's --mono had quietly lost "JetBrains Mono". It lives in
+   tokens.css now, which means a page that reads a token but forgets the <link>
+   renders with every colour falling back to its literal -- readable enough on a
+   dark theme to survive a glance, and wrong on the other three.
+   So: anything that READS a shared token must LINK the file, and nothing may
+   declare one outside it. Text checks on purpose -- there is no CSS engine
+   here, and the failure being guarded against is a missing line, not a
+   cascade. */
+$pluginDir = __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer';
+foreach (['hbaviewer.php', 'settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    // The lookahead keeps --text-color and --border-color out of it: those are
+    // UNRAID's variables, which need no link from us. Matching one of those
+    // would let this check pass on a page that reads no shared token at all.
+    check("$page reads shared tokens", (bool) preg_match('~var\\(--(bg|surface|surface-2|border|border-soft|text|muted|faint|accent|good|warn|crit|mono)(?![-\\w])~', $src));
+    check("$page links tokens.css",    str_contains($src, '/plugins/hbaviewer/tokens.css'));
+}
+/* The point of the extraction, stated as an assertion: exactly one file in the
+   plugin declares these. dashboard.php is deliberately not in scope -- it is
+   injected into Unraid's own dashboard page, carries its own --d-* set, and
+   shares one token with these three, so it declares none of the names below. */
+$declarers = [];
+foreach (glob("$pluginDir/*.{css,php}", GLOB_BRACE) ?: [] as $path) {
+    if (preg_match('~(?:^|[{;])\s*--(surface-2|border-soft|good-text|mono)\s*:~m', (string) file_get_contents($path))) {
+        $declarers[] = basename($path);
+    }
+}
+check('exactly one file declares the shared tokens', $declarers === ['tokens.css']);
+
+/* ── The accent is declared once (design-system P1-A/P2-E) ───────────────────
+   tokens.css owns --accent. Every other spelling of that colour is a copy
+   that will not move when the token does -- the row-hover highlight was an
+   rgba triplet of it, and four inline style="" attributes were the hex. None
+   of them would have changed with the token, and nothing would have said so.
+
+   hbaviewer.js used to be a listed exception here, for the Chart.js series
+   palette -- Chart.js takes colour VALUES, not CSS. P2-F moved that palette
+   into tokens.css and reads it back with getComputedStyle, so the exception
+   is gone rather than widened, and there are none left. */
+$accent = '#f5a6' . '23';          // spelled in halves so this check cannot match itself
+$copies = [];
+foreach (glob("$pluginDir/{*.css,*.php,*.js,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    $base = basename($path);
+    if ($base === 'tokens.css' || $base === 'chart.umd.min.js') continue;
+    $src = (string) file_get_contents($path);
+    if (stripos($src, $accent) !== false || str_contains($src, '245,166,35')) { $copies[] = $base; }
+}
+check('the accent colour is written down in exactly one place', $copies === []);
+
+/* Chart.js is the one consumer that must COPY a colour out of CSS rather than
+   reference it, which is exactly the position the accent was in before P2-E.
+   So: the series palette is declared in tokens.css and nowhere else, and the
+   JS reads it by name. A literal creeping back into hbaviewer.js is the whole
+   failure mode this guards.
+
+   Scoped to hbaviewer.js, not swept across the plugin: view.php's status map
+   spells #e67e22 for 'warning', which is the same VALUE as --chart-phy and has
+   nothing to do with it. A sweep would tie two unrelated palettes together and
+   fail the next time either moved -- the risk being guarded is a literal in
+   the chart defs, and that is where it lives. */
+$perf = (string) file_get_contents("$pluginDir/hbaviewer.js");
+check('the chart palette lives only in tokens.css',
+      !preg_match('~#(3aa0ff|9b59b6|e67e22|1abc9c|f5a623|2ecc71|e74c3c)~i', $perf));
+check('and hbaviewer.js reads it by name',
+      substr_count((string) file_get_contents("$pluginDir/hbaviewer.js"), "pal('--chart-") === 7);
+
+
+
+
+
+
+/* ── Temperature display unit (PR #22, rebased) ──────────────────────────────
+   Contributed as a Celsius/Fahrenheit toggle. The invariant that makes it safe
+   is that NOTHING but the printed string changes: sensors, storage, thresholds
+   and every band comparison stay in °C. These pin both halves -- the conversion
+   itself, and the fact that each surface actually honours it, because the
+   original arrived against a tree where four of these renderers still lived in
+   ajax_info.php and a straight merge would have left them printing °C. */
+check('celsius is the default and rounds',        lsi_temp_convert(55, 0) === 55.0);
+check('fahrenheit converts',                      lsi_temp_convert(55, 1) === 131.0);
+check('the freezing point is not special-cased',  lsi_temp_convert(0, 1) === 32.0);
+check('a negative reading converts',              lsi_temp_convert(-10, 1) === 14.0);
+// Rounding, not truncation: 37.6C is 99.68F, and (int) would print 99.
+check('conversion rounds rather than truncates',  lsi_temp_convert(37.6, 1) === 100.0);
+// "No reading" must survive as itself so callers keep their em dash handling.
+check('an empty reading passes through',          lsi_temp_convert('', 1) === '');
+check('a null reading passes through',            lsi_temp_convert(null, 1) === null);
+check('a non-numeric reading passes through',     lsi_temp_convert('n/a', 1) === 'n/a');
+check('the formatted string carries its unit',
+      lsi_temp_str(55, 0) === '55°C' && lsi_temp_str(55, 1) === '131°F');
+check('the formatted string is empty for no reading', lsi_temp_str('', 1) === '');
+
+/* Each surface, because the conversion helper being right proves nothing about
+   whether a given renderer calls it. One assertion per file that prints a
+   temperature. */
+$fCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 1, 'TEMP_UNIT' => 1];
+$cCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 1, 'TEMP_UNIT' => 0];
+$oneCtl = ['status' => 'ok', 'temp' => 55, 'model' => 'SAS3008', 'board_name' => 'SAS9300-8i',
+           'firmware' => '16.00.12.00'];
+
+$ovF = renderControllerCard($oneCtl, 0, $fCfg, '');
+check('the overview gauge prints fahrenheit', str_contains($ovF, '>131<') && str_contains($ovF, '&deg;F'));
+check('the overview badge sensitivity converts too', str_contains($ovF, '169&deg;F+'));
+$ovC = renderControllerCard($oneCtl, 0, $cCfg, '');
+check('and celsius is unchanged', str_contains($ovC, '>55<') && str_contains($ovC, '&deg;C')
+      && str_contains($ovC, '76&deg;C+'));
+
+$smF = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sda', 'model' => 'M', 'serial' => 'S', 'smart' => ['health' => 'PASSED', 'temp' => '38']],
+]], null, [], [], 1);
+check('the SMART table prints fahrenheit', str_contains($smF, '100°F'));
+check('and does not double up the unit',    !str_contains($smF, '°F&deg;C'));
+
+/* The gauge GEOMETRY must not convert: the arc is a fraction of a 0-110 °C
+   scale, and converting the fraction would move every band boundary. Same
+   sensor, same arc, whichever unit is displayed. */
+$arcF = preg_match('~stroke-dashoffset="([\d.]+)~', $ovF, $mF) ? $mF[1] : 'F?';
+$arcC = preg_match('~stroke-dashoffset="([\d.]+)~', $ovC, $mC) ? $mC[1] : 'C?';
+check('the gauge arc is identical in both units', $arcF === $arcC && $arcF !== 'F?');
+
+/* ── Slot facts vs function facts (reported 2026-08-23 by screenshot) ────────
+   The grouped tile's footer read "PCI Location: 84:00" while the two sections
+   above it correctly showed 84:00 and 86:00 -- a board-level row asserting one
+   function's address as the board's. The Overview had dropped it from the
+   parent card since the grouping landed; the tile had not, and both were
+   matching the label as a bare string in their own file. */
+$pcieItems = [
+    ['label' => 'PCIe Width',   'value' => 'x8'],
+    ['label' => 'PCI Location', 'value' => '84:00'],
+    ['label' => 'PCIe Speed',   'value' => 'Gen3 (8.0 GT/s)'],
+];
+$slot = lsi_pcie_slot_items($pcieItems);
+check('the per-function address is not a slot fact',
+      count($slot) === 2 && !in_array('84:00', array_column($slot, 'value'), true));
+check('the slot facts survive in order',
+      array_column($slot, 'label') === ['PCIe Width', 'PCIe Speed']);
+// Nothing to drop is not an error, and the keys must come back renumbered --
+// both callers foreach over the result.
+check('a row with no address is returned unchanged',
+      count(lsi_pcie_slot_items([['label' => 'PCIe Width', 'value' => 'x8']])) === 1);
+check('the result is a list, not a gapped array',
+      array_keys(lsi_pcie_slot_items($pcieItems)) === [0, 1]);
+
+/* ── The bay map's UNRAID field falls back too (reported 2026-08-23) ─────────
+   "In Array map, there is no Unraid label on the disk tiles." Every cell read
+   UNRAID with nothing after it, for the same reason the tables' column was all
+   em dashes: the box has no array, so the roles map is empty. */
+$bmUd = bay_map_assemble(
+    ['controllers' => [['drives' => [
+        ['slot' => '0/0', 'port' => '1', 'serial' => 'SER-A', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sda'],
+        ['slot' => '0/1', 'port' => '2', 'serial' => 'SER-B', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sdb'],
+    ]]]],
+    null, [], 2, 2, [], false, 45, null, [],
+    ['/dev/sdb' => 'Disk 1'],                      // sdb IS an array disk
+    [], [], ['/dev/sda' => 'media1', '/dev/sdb' => 'media9']
+);
+$byDev = [];
+foreach (array_merge($bmUd['placed'] ?? [], $bmUd['unassigned'] ?? []) as $e) {
+    $byDev[$e['dev'] ?? ''] = $e['role'] ?? '';
+}
+check('the bay map shows a mounted unassigned drive', ($byDev['/dev/sda'] ?? '') === 'media1');
+// Same precedence as the tables: a disk cannot be both, and the array's claim
+// is the stronger one.
+check('an array role still wins in the bay map', ($byDev['/dev/sdb'] ?? '') === 'Disk 1');
+
+/* ── One dashboard tile per CARD (reported 2026-08-22) ───────────────────────
+   "If the HBA is a single card, dual controller card, the dashboard card
+   should be the same as the overview card." The Overview has grouped since
+   plan 2026-08-10; the tile emitted one per controller, so one board in one
+   slot reported as two cards. */
+// Keyed through fw_normalize(), which is how lsi_ioc_counts() builds the real
+// map -- 'SAS9300-16i' normalises to '930016i', and hardcoding that spelling
+// here would pin the normaliser rather than the grouping this is testing.
+$iocTwo = [fw_normalize('SAS9300-16i') => 2];
+$dual = [
+    ['status' => 'ok',    'temp' => 52, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'alert', 'temp' => 47, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$reps = lsi_group_reps($dual, $iocTwo);
+check('a dual-IOC board is one tile', count($reps) === 1);
+/* The hotter die is FIRST here and the alert is on the SECOND, so an
+   implementation that takes "the last member" for either would pass one of
+   these two checks and fail the other. */
+check('the tile reads the hotter die', $reps[0]['rep'] === 0);
+check('and the worse status, which is the other one',
+      lsi_worst_status(array_map(fn($m) => $dual[$m]['status'], $reps[0]['members'])) === 'alert');
+
+// ...and with the hotter die second, to kill a hardcoded index.
+$dualB = [
+    ['status' => 'alert', 'temp' => 41, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'ok',    'temp' => 55, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$repsB = lsi_group_reps($dualB, $iocTwo);
+check('the hotter die is found wherever it sits', $repsB[0]['rep'] === 1);
+/* Unraid persists dashboard layout per tile key. Keying on the representative
+   would move a user's tile across the dashboard when the other die got hotter. */
+check('the key stays the first member even then', $repsB[0]['key'] === 0);
+
+/* Two GENUINELY separate cards must stay two tiles. Risers and PCIe switches
+   put separate cards behind one root port, so lsi_group_cards() requires the
+   board to be one the index says has that many IOCs -- this is the guard, from
+   the outside. */
+$twoCards = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-b'],
+];
+check('two separate cards stay two tiles', count(lsi_group_reps($twoCards, $iocTwo)) === 2);
+/* An unrecognised board stays split even in one slot -- absence from the index
+   must never merge anything. */
+$unknown = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+];
+check('an unindexed board is never merged', count(lsi_group_reps($unknown, $iocTwo)) === 2);
+
+/* The single-card case, which is almost every box: its key must be BYTE
+   IDENTICAL to the one it has today, or every user's dashboard layout resets
+   on upgrade for a change that does not affect them. The literal is pinned on
+   purpose -- computing it the way the code does would not catch a change to
+   both. */
+$one  = [['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a']];
+$repsOne = lsi_group_reps($one, $iocTwo);
+check('a single card is one tile', count($repsOne) === 1);
+check('and keeps the tile key it already had',
+      "HBAviewer_c{$repsOne[0]['key']}" === 'HBAviewer_c0');
+
+/* ── The dashboard tile never blocks (reported 2026-08-22) ───────────────────
+   dashboard.php renders inside Unraid's OWN Dashboard page. A synchronous
+   hardware read there holds a php-fpm worker for the controller's read time
+   and takes the whole webGui with it -- reported as a ~10s freeze, once a
+   minute, which is exactly how often get_hba_info.sh's 60s self-cache expires.
+
+   The blocking is a property of the REQUEST and no unit test can observe it,
+   so what is pinned here is that the call which does it is gone and that the
+   file goes through the reader every other consumer uses. */
+$dashSrc = (string) file_get_contents("$pluginDir/dashboard.php");
+check('the dashboard tile never reads hardware in the foreground',
+      !preg_match('~(shell_exec|proc_open|passthru|\bsystem)\s*\(~', $dashSrc));
+check('the dashboard tile reads through cached_read', str_contains($dashSrc, "cached_read('overview'"));
+// serve_stale is the half that makes the above survivable: without it a tile
+// that cannot poll would show nothing for a whole minute out of every minute.
+check('the dashboard tile serves stale values rather than none',
+      str_contains($dashSrc, "'serve_stale' => true"));
+// Same key as the Overview: same script, same TTL, same data. Two keys would
+// run two detached producers against one controller a minute apart.
+check('the tile shares the overview cache key',
+      substr_count((string) file_get_contents("$pluginDir/ajax_info.php"), "cached_read('overview'") === 1);
+
+/* ── No stray control characters in hand-edited source ───────────────────────
+   The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
+   written through a tool whose "91" is an OCTAL escape, so  became a
+   control character and 91 stayed as text. On screen that is a small glyph and
+   a digit sitting next to the header -- visible, but only if someone looks,
+   and invisible in a diff, in a review, and to every other check here.
+   Tab and newline are the only control characters these files may contain. */
+foreach (glob("$pluginDir/{*.css,*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    $src = (string) file_get_contents($path);
+    check('no control characters in ' . basename($path),
+          !preg_match('~[ --]~', $src));
+}
+// hbaviewer.js by name rather than by glob: chart.umd.min.js is vendored and
+// is not ours to police.
+check('no control characters in hbaviewer.js',
+      !preg_match('~[ --]~', (string) file_get_contents("$pluginDir/hbaviewer.js")));
+
+/* ── Sortable table headers (design-system P2-B) ─────────────────────────────
+   The server's half of the sort. luSort()'s behaviour is pinned in
+   sort_js_test.js; what has to be true HERE is that the control it drives
+   actually reaches the page, on every table, keyboard-reachable.
+   A plain <th> with a click handler would look identical and be mouse-only,
+   which is the failure this checks for. */
+$tbl = luTable(['Device', 'Temp'], [['/dev/sdb', '38'], ['/dev/sdc', '31']]);
+check('every header carries the sort control', substr_count($tbl, '<button type="button" class="lu-sort"') === 2);
+check('every header starts unsorted', substr_count($tbl, '<th aria-sort="none">') === 2);
+// aria-sort belongs on the column, not on the control inside it -- a screen
+// reader reads the sort state off the header cell.
+check('the sort state is on the th, not the button', !preg_match('~<button[^>]*aria-sort~', $tbl));
+check('header text is still escaped',
+      str_contains(luTable(['<b>x</b>'], []), '&lt;b&gt;x&lt;/b&gt;'));
+
+/* ── Button consolidation (design-system P1-B) ───────────────────────────────
+   There were two solid buttons, .lu-btn and .lu-fbtn, identical but for 1px of
+   type and a few px of padding -- and each carried its OWN hardcoded hover
+   hex. Two literals for one colour is a bug with a delay on it: change
+   --accent and one of them silently keeps the old hue. One class now, hover
+   derived from the token. */
+$chrome = (string) file_get_contents("$pluginDir/chrome.css");
+check('the solid button is defined once', substr_count($chrome, "
+.lu-btn {") === 1);
+$anyFbtn = [];
+foreach (glob("$pluginDir/{*.php,*.js,*.css,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    if (str_contains((string) file_get_contents($path), 'lu-fbtn')) { $anyFbtn[] = basename($path); }
+}
+check('the second solid button is gone', $anyFbtn === []);
+// The point of the consolidation: no page may re-declare .lu-btn's own
+// appearance. Arrangement (margins inside .lu-actions) is a page's business
+// and is deliberately still allowed.
+foreach (['settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    check("$page does not redefine the button", !preg_match('~^\.lu-btn[^{]*\{[^}]*background~m', $src));
+}
+// Settings renders standalone, so it has to link the sheet the button lives in
+// -- it did not before this, which is why it had a copy.
+check('settings.php links chrome.css',
+      str_contains((string) file_get_contents("$pluginDir/settings.php"), '/plugins/hbaviewer/chrome.css'));
+// The focus ring has to reach that page too. It was scoped to #lu-wrap alone,
+// which left every control on Settings without one.
+check('the focus ring covers the settings wrapper',
+      (bool) preg_match('~#lu-settings-wrap :focus-visible~', $chrome));
+
+/* ── Icon wiring (design-system P1-C) ────────────────────────────────────────
+   The dingbats are gone: U+26A0 takes emoji presentation on Windows and
+   Android, which renders it in the font's own colour and ignores whatever the
+   surrounding element set -- a danger marker that could not be made to look
+   like one. They are sprite refs now, which fail in a quieter way: a <use>
+   pointing at an id nothing defines renders NOTHING AT ALL, no gap, no
+   fallback glyph, so a typo removes a warning sign from a firmware flasher and
+   the page still looks fine.
+   Hence both halves: every id referenced exists, and every page that
+   references one pulls the sprite in. */
+$refs = [];
+foreach (glob("$pluginDir/{*.php,render/*.php,*.js}", GLOB_BRACE) ?: [] as $path) {
+    $src = (string) file_get_contents($path);
+    if (preg_match_all('~#lu-i-([a-z-]+)~', $src, $m)) {
+        foreach ($m[1] as $id) { $refs[$id][] = basename($path); }
+    }
+}
+$sprite = (string) file_get_contents("$pluginDir/icons.php");
+preg_match_all('~id="lu-i-([a-z-]+)"~', $sprite, $dm);
+$defined = $dm[1];
+check('every icon referenced is defined in the sprite',
+      $refs !== [] && array_diff(array_keys($refs), $defined) === []);
+// health.php's row loop builds ids from data, so it is expected to reference
+// icons no page names literally -- the reverse check would fail on those and
+// is deliberately not made.
+
+/* A fragment (render/*.php) is injected into a page that already carries the
+   sprite; a top-level PAGE has to pull it in itself. settings.php is the one
+   this protects: it renders on its own, and before P1-C it had no sprite,
+   which is exactly why it was still using entities. */
+foreach (['hbaviewer.php', 'settings.php', 'flash_view.php'] as $page) {
+    $src = (string) file_get_contents("$pluginDir/$page");
+    if (!str_contains($src, '#lu-i-')) continue;
+    check("$page pulls in the icon sprite", str_contains($src, "require __DIR__ . '/icons.php'"));
+}
+
+// The entities these replaced, gone for good. Written as codepoints so this
+// check cannot be satisfied by the very characters it is banning.
+$banned = ['&#' . '9888;' => 'warning sign', '&#' . '9881;' => 'gear'];
+foreach ($banned as $ent => $what) {
+    $hits = [];
+    foreach (glob("$pluginDir/{*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+        if (str_contains((string) file_get_contents($path), $ent)) { $hits[] = basename($path); }
+    }
+    check("no $what dingbat entity survives", $hits === []);
 }
 
 array_map('unlink', glob("$cdir/*.json") ?: []);

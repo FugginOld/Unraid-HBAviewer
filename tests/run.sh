@@ -22,10 +22,27 @@ php_run() {
         -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests php:8.2-cli php "$@"
 }
 
+# Goldens UPDATE=1 must refuse to touch. These two record what the Overview
+# emitted BEFORE the dual-IOC branch (rendered at acb52d68); that provenance
+# cannot be recovered from the repo once overwritten, and a golden rebuilt by
+# the code it exists to police proves nothing. The rule used to live only in a
+# comment beside them, which is worth exactly as much as the reader's attention
+# -- and it now sits above a block of three checks, only one of which is
+# regenerable. Enforce it here instead, where UPDATE=1 has to go through it.
+PROVENANCE_GOLDENS=" overview_single.html overview_single_pcie.html "
+
 check() {  # name  expected_file  command...
     local name=$1 exp=$2; shift 2
     local got; got=$("$@")
-    if [ "${UPDATE:-}" = "1" ]; then printf '%s' "$got" > "expected/$exp"; echo "WROTE $name"; return; fi
+    if [ "${UPDATE:-}" = "1" ]; then
+        case "$PROVENANCE_GOLDENS" in
+            *" $exp "*)
+                echo "KEPT  $name (provenance golden -- UPDATE=1 will not overwrite it;"
+                echo "      re-render from acb52d68, or delete it and say why)"
+                return ;;
+        esac
+        printf '%s' "$got" > "expected/$exp"; echo "WROTE $name"; return
+    fi
     if [ "$got" = "$(cat "expected/$exp")" ]; then
         echo "PASS  $name"
     else
@@ -114,8 +131,23 @@ check phy-over-floor  phy_over_floor.json  bash -c "bash '$P/storcli_overview.sh
 if command -v php >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
     check overview-single-html      overview_single.html      php_run render_overview.php expected/storcli_overview.json
     check overview-single-pcie-html overview_single_pcie.html php_run render_overview.php expected/storcli_overview_pcie.json
+    # The grouped card, byte-for-byte. Everything else that pins it counts
+    # substrings -- one lu-card-parent, two lu-card-ioc, a Model row somewhere
+    # after the parent -- so a renderer that emitted every right row in the
+    # wrong ORDER passed the whole suite. This is the golden that notices.
+    #
+    # Unlike the two above, this one IS regenerable: it records what the
+    # grouped renderer emits today, not a shape from before a branch that can
+    # no longer be rendered. Regenerate it deliberately when the card changes.
+    # Its input, expected/storcli_dual.json, is itself a golden -- and one this
+    # file regenerates ~200 lines BELOW here. So under UPDATE=1 this HTML is
+    # rebuilt from the PREVIOUS storcli_dual.json and the two end up one
+    # generation apart: a single pass leaves this check failing, a second pass
+    # converges it. If you change what storcli_dual.json contains, run UPDATE=1
+    # twice and diff, or this golden silently records the old input.
+    check overview-dual-grouped-html overview_dual_grouped.html php_run render_overview.php expected/storcli_dual.json
 else
-    echo "SKIP  overview-single-html / overview-single-pcie-html (no php and no docker)"
+    echo "SKIP  overview-single-html / overview-single-pcie-html / overview-dual-grouped-html (no php and no docker)"
 fi
 
 check storcli-phy      storcli_phy.json     bash "$P/storcli_phy.sh" fixtures/storcli/sysfs_phy.txt < fixtures/storcli/phy_c0.txt
@@ -294,12 +326,28 @@ export STUB_FIX="$PWD/fixtures/storcli" STORCLI="$PWD/stub/storcli" LSI_CACHE=/d
        SYS_PCI_ROOT="$SYSPCI" SYS_SAS_DEVICE="$SYSDEV" SYS_SAS_EXPANDER="$SYSEXP" SYS_SAS_PHY="$SYSPHY"
 
 # get_hba_info backend routing: storcli present -> storcli backend; else lsiutil
+# These three pin backend ROUTING, not thresholds — but they set no cfg, so
+# their alert_threshold field used to record whatever the shell default was.
+# Stating it here decouples them: the default itself is pinned once, in
+# tests/config_test.php, and changing it no longer moves three routing goldens.
+# LSI_CFG_PATH is pinned too: config.sh sources the cfg file AFTER reading the
+# environment, so a real /boot/config/plugins/hbaviewer/hbaviewer.cfg would win
+# over ALERT_THRESHOLD (and over HBA_PORT, which these goldens also pin) — the
+# nonexistent path is what lets the env prefix through at all.
+#
+# 86, not 76. 76 is also config.sh's built-in default, so a golden recorded
+# under it reads the same whether the environment was honoured or ignored
+# entirely — the decoupling this comment claims was unverifiable while the
+# number agreed with the fallback. 86 is a legal threshold that disagrees, and
+# it moves the 77 °C controller in storcli_multi from warn/warning to
+# ok/elevated, so these goldens now fail if the env stops being read.
+ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-storcli    storcli_multi.json   bash "$P/../get_hba_info.sh"
 # Two SAS3008 IOCs both reporting board name SAS9300-16i, both resolving (via
 # SYSDUAL above) to the same root port -> the same card_id. The only check in
 # this suite that would catch the composer emitting DIFFERENT card_ids for a
 # genuine dual-IOC board -- everything else pins the split (distinct-slot) case.
-STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" \
+STUB_FIX="$PWD/fixtures/storcli_dual" SYS_PCI_ROOT="$SYSDUAL" ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-storcli-dual storcli_dual.json bash "$P/../get_hba_info.sh"
 STORCLI=/nonexistent LSIUTIL=/nonexistent \
 check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
@@ -309,8 +357,14 @@ check route-fallback   route_no_backend.json bash "$P/../get_hba_info.sh"
 # real storcli is installed on the machine running the suite.
 # STUB_FIX is overridden: the exported value points at fixtures/storcli for the
 # checks above, and the lsiutil captures live one level up in fixtures/.
-STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" ALERT_THRESHOLD=86 LSI_CFG_PATH=/nonexistent \
 check route-lsiutil    lsiutil_overview.json bash "$P/../get_hba_info.sh"
+# The health composer, all the way through. It had no golden until its clock
+# became injectable: a wall clock and an uptime cannot live in an expectation.
+# LSI_NOW/LSI_UPTIME are test-only; production passes neither.
+LSI_NOW=1000 LSI_UPTIME=500 \
+STORCLI= LSIUTIL="$PWD/stub/lsiutil" SYS_SCSI_HOST="$LCARD/host3/scsi_host" STUB_FIX="$PWD/fixtures" \
+check health-lsiutil   health_lsiutil.json   bash "$P/../get_hba_health.sh"
 # Controller generation comes from proc_name, never from /sys/module — the merged
 # mpt3sas driver reports proc_name=mpt2sas for SAS2 cards (issue #3). host9 is a
 # non-SAS host that must be ignored by the filter.
@@ -457,6 +511,34 @@ else
 fi
 
 echo
+echo "=== bay map JS write-path tests ==="
+# Same local-then-docker fallback as the flash_view.js block above, and for the
+# same reason: Unraid has no node. The bay map is the one store that cannot be
+# regenerated, so its write paths are pinned by running them.
+if command -v node >/dev/null 2>&1; then
+    node baymap_js_test.js; baymap_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm \
+        -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests \
+        node:20-alpine node baymap_js_test.js; baymap_js_fail=$?
+else
+    echo "SKIP  bay map JS runtime tests (no node, no docker)"; baymap_js_fail=0
+fi
+
+echo
+echo "=== table sort JS tests ==="
+# Same local-then-docker fallback as the two JS blocks above. Sorting is the
+# first thing on these tabs that reorders what the operator is reading, and a
+# comparator that looks sorted without being sorted is invisible on screen.
+if command -v node >/dev/null 2>&1; then
+    node sort_js_test.js; sort_js_fail=$?
+elif command -v docker >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 docker run --rm         -v "$(cd .. && { pwd -W 2>/dev/null || pwd; }):/app" -w /app/tests         node:20-alpine node sort_js_test.js; sort_js_fail=$?
+else
+    echo "SKIP  table sort JS tests (no node, no docker)"; sort_js_fail=0
+fi
+
+echo
 echo "=== bundle anonymisation tests ==="
 bash anon_test.sh; anon_fail=$?
 
@@ -501,7 +583,24 @@ echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
 echo
-if [ $fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+echo "=== golden hygiene ==="
+# check() writes goldens with printf '%s' (no trailing newline) but compares
+# with $(cat), which strips one -- so a golden that carries a trailing newline
+# passes forever and then silently loses that byte the next time anyone runs
+# UPDATE=1, dragging unrelated one-byte diffs into their commit. Keeping every
+# golden newline-free is what makes UPDATE=1 idempotent.
+nl_fail=0
+for g in expected/*; do
+    [ -f "$g" ] && [ -s "$g" ] || continue
+    if [ "$(tail -c1 "$g" | wc -l)" -ne 0 ]; then
+        echo "FAIL  $g ends with a newline; UPDATE=1 would strip it"
+        nl_fail=1
+    fi
+done
+[ $nl_fail -eq 0 ] && echo "PASS  no golden carries a trailing newline"
+
+echo
+if [ $fail -eq 0 ] && [ $nl_fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $sort_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

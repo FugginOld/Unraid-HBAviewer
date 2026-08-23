@@ -13,8 +13,8 @@
   "pcie_width": "x8",
   "pcie_speed": "Gen3 (8.0 GT/s)",
   "power_mode": "Full",
-  "alert_threshold": 80,
+  "alert_threshold": 86,
   "temp_band": "normal",
-  "cfg_band": "warning",
+  "cfg_band": "alert",
   "status": "ok"
 }]}
