@@ -50,7 +50,12 @@ function smart_state_color(string $state): string {
 function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = [], array $udMounts = [],
                           int $unit = 0): string {
     $drives = $data['drives'] ?? [];
-    if (!$drives) return '<p class="lu-muted">No drives found.</p>';
+    /* This renders only from a cache that EXISTS (ajax_info.php checks), so
+       the collector has run and found nothing -- which is worth saying, because
+       an empty table otherwise reads as "still collecting". */
+    if (!$drives) {
+        return '<p class="lu-muted">No drives found — the background collector ran and saw no drives on the HBA.</p>';
+    }
     $age = $ageSecs === null ? '' :
         '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">Collected ' . htmlspecialchars(lsi_age_str($ageSecs))
         . ' ago &middot; kept until you press Refresh</p>';

@@ -28,17 +28,47 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
 
     // Fresh, non-empty result → serve it. (-s not -f: never serve a truncated file.)
     if (is_file($result) && filesize($result) > 0 && ($now - filemtime($result)) < $ttl) {
-        return ['state' => 'ready', 'body' => (string) file_get_contents($result)];
+        // 'stalled' on every return, so a caller can read it without isset().
+        return ['state' => 'ready', 'body' => (string) file_get_contents($result), 'stalled' => false];
     }
 
-    // Stale/absent → launch ONE detached producer that captures stdout+stderr and
-    // swaps the result in atomically (tmp then rename) when done; the lock keeps a
-    // second concurrent request from launching a duplicate.
-    if (!is_file($lock) || ($now - filemtime($lock)) > $lockTtl) {
+    // Stale/absent → launch ONE detached producer, swapping the result in
+    // atomically (tmp then rename) when done; the lock keeps a second concurrent
+    // request from launching a duplicate.
+    //
+    // stderr goes to a SIDECAR, not into the payload. It used to be folded in
+    // with 2>&1, which meant one warning on stderr -- a shell notice, a storcli
+    // message from a path that forgot its own redirect -- landed inside the
+    // cached JSON and made it undecodable. The consumer then reported "Backend
+    // unavailable" about a producer that had actually succeeded. The Drives
+    // column vanishing on the PHY tab (issue #11) was this, and the comment
+    // there still records it.
+    //
+    // Kept rather than discarded: a producer that fails leaves the reason in
+    // <key>.err next to its result, which is the only trace of it anywhere --
+    // the job is detached, so nothing else sees its output.
+    /* A lock older than $lockTtl means the producer that took it never came
+       back: it cleans the lock up itself on the way out. The relaunch below
+       already recovers from that -- what was missing is anyone SAYING so.
+       Without it a box whose storcli hangs on every attempt shows "reading
+       controller information" forever, with the plugin looking merely slow
+       rather than repeatedly failing.
+
+       Deliberately NOT called "the producer died": $lockTtl is 120s and a very
+       slow controller could still be working. What is certain is that the last
+       attempt did not finish inside that window, so that is what callers are
+       told, and <key>.err holds whatever it managed to say. */
+    $stalled = is_file($lock) && ($now - filemtime($lock)) > $lockTtl;
+    if (!is_file($lock) || $stalled) {
         @touch($lock);
         $tmp = "$result.tmp";
         $launch(
-            "$producer > " . escapeshellarg($tmp) . " 2>&1; "
+            /* Braced, so the redirections apply to the WHOLE producer. Appended
+               bare they bind to its LAST command only -- fine for the single
+               `bash <script>` every caller passes today, silently wrong for
+               anything compound, and the kind of thing that is discovered by
+               someone whose producer grew a second command. */
+            "{ $producer ; } > " . escapeshellarg($tmp) . " 2> " . escapeshellarg("$result.err") . "; "
           . "mv " . escapeshellarg($tmp) . " " . escapeshellarg($result) . "; "
           . "rm -f " . escapeshellarg($lock)
         );
@@ -50,7 +80,7 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
        The filesize guard is the same rule the fresh path has one screen up --
        a truncated producer run is not data at whatever age. */
     if (!empty($opts['serve_stale']) && is_file($result) && filesize($result) > 0) {
-        return ['state' => 'stale', 'body' => (string) file_get_contents($result)];
+        return ['state' => 'stale', 'body' => (string) file_get_contents($result), 'stalled' => $stalled];
     }
-    return ['state' => 'warming', 'body' => ''];
+    return ['state' => 'warming', 'body' => '', 'stalled' => $stalled];
 }

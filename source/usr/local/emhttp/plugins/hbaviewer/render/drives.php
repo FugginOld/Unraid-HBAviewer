@@ -119,7 +119,12 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
         }
 
         $drives = $ctl['drives'] ?? [];
-        if (empty($drives)) { $out .= '<p class="lu-muted">No drives detected.</p>'; return $out; }
+        /* An HBA with nothing plugged into it is a legitimate state, so this
+             says what was observed rather than implying a fault. */
+        if (empty($drives)) {
+            $out .= '<p class="lu-muted">No drives detected — this controller reported no attached devices.</p>';
+            return $out;
+        }
 
         // Leading column on both backends: encl:slot and bus:target are the
         // controller's own addressing and line up with nothing on Unraid's Main

@@ -121,6 +121,74 @@ $r = cached_read('ov', 60, 'produce',
                  ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
 check('an empty stale file is not served', $r['state'] === 'warming' && $r['body'] === '');
 
+
+/* ── stderr must not reach the payload ───────────────────────────────────────
+   The producer's output is json_decode'd by every consumer. It used to be
+   captured with 2>&1, so one line on stderr -- a shell notice, a storcli
+   message from a path that forgot its own redirect -- sat inside the cached
+   JSON and made it undecodable. The consumer then said "Backend unavailable"
+   about a producer that had succeeded. The PHY tab losing its Drives column
+   (issue #11) was this, and render/phy.php still carries the post-mortem.
+
+   The real launcher is used here, not the recording stub: the redirection IS
+   the thing under test, and a stub that never runs a shell cannot show where
+   the bytes went. */
+$reset();
+// Runs for real ($sync), because the REDIRECTION is what is under test and a
+// stub that never reaches a shell cannot show where the bytes went.
+cached_read('ov', 60, "printf '{\"ok\":1}'; printf 'warning-noise' >&2",
+            ['dir' => $dir, 'now' => $now, 'launch' => $sync]);
+$body = is_file($result) ? (string) file_get_contents($result) : '';
+check('the payload is valid JSON despite the producer writing to stderr',
+      json_decode($body, true) !== null);
+check('and carries none of the stderr text', !str_contains($body, 'warning-noise'));
+/* Kept, not discarded: the job is detached in production, so this file is the
+   only trace a failed producer leaves anywhere. */
+check('stderr is available beside the result',
+      is_file("$result.err") && str_contains((string) file_get_contents("$result.err"), 'warning-noise'));
+@unlink("$result.err");
+
+
+/* ── A producer that never came back ─────────────────────────────────────────
+   The relaunch on an expired lock already recovered from this; what was
+   missing was anyone saying so. Without it, a box whose controller read hangs
+   on every attempt shows "reading controller information" for as long as the
+   tab is open, and the plugin looks slow rather than repeatedly failing.
+
+   Called `stalled`, not `died`: $lockTtl is 120s and a very slow controller
+   could still be working. What is certain is that the last attempt did not
+   finish inside the window. */
+$reset(); $calls = 0;
+@touch($lock, $now - 300);                       // a lock nobody released
+$r = cached_read('ov', 60, 'produce', ['dir' => $dir, 'now' => $now, 'launch' => $record]);
+check('an expired lock is reported as stalled', $r['stalled'] === true);
+check('and the producer is relaunched anyway',  $calls === 1);
+
+// A lock inside its window is a producer still working. Saying "stalled" there
+// would fire on every genuinely slow first read, which is the noise that makes
+// an indicator worth ignoring.
+$reset(); $calls = 0;
+@touch($lock, $now - 5);
+$r = cached_read('ov', 60, 'produce', ['dir' => $dir, 'now' => $now, 'launch' => $record]);
+check('a young lock is not stalled', $r['stalled'] === false);
+check('and single-flight still holds', $calls === 0);
+
+// Present on every return, so a caller can read it without isset().
+$reset(); $calls = 0;
+file_put_contents($result, 'CACHED'); touch($result, $now - 10);
+$r = cached_read('ov', 60, 'produce', ['dir' => $dir, 'now' => $now, 'launch' => $record]);
+check('a ready result carries the key too', array_key_exists('stalled', $r) && $r['stalled'] === false);
+
+// ...including the stale path the dashboard tile uses: a tile serving
+// last-minute values while the producer keeps failing is exactly the case
+// worth knowing about.
+$reset(); $calls = 0;
+file_put_contents($result, 'OLD'); touch($result, $now - 300);
+@touch($lock, $now - 300);
+$r = cached_read('ov', 60, 'produce',
+                 ['dir' => $dir, 'now' => $now, 'launch' => $record, 'serve_stale' => true]);
+check('a stale body still reports the stall', $r['state'] === 'stale' && $r['stalled'] === true);
+
 $reset(); @rmdir($dir);
 echo $fails === 0 ? "cached_read: all pass\n" : "cached_read: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

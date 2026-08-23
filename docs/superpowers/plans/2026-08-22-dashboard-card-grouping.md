@@ -1,5 +1,7 @@
 # Dashboard Card Grouping Implementation Plan
 
+> **Status: COMPLETE.** Released 2026.08.23. Task 2 needed no change: the reporting box’s SAS9300-16i was already indexed with `ioc_count: 2`, which the diagnostic confirmed rather than fixed.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A dual-IOC board produces **one** dashboard tile, as it already produces one Overview card. The dashboard becomes the fourth consumer of `lsi_group_cards()` rather than the one screen that disagrees with the other three.

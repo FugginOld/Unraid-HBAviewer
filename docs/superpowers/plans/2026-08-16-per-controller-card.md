@@ -1,5 +1,7 @@
 # Per-Controller Card Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `luCardPerController()` in `render/table.php`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Own the per-controller card loop once instead of four times, then split `ajax_info.php`'s 1,502 lines into per-tab renderer files, leaving it as dispatch and fetch.

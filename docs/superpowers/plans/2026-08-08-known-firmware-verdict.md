@@ -1,5 +1,7 @@
 # Known-Firmware Verdict Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `firmware_index.php` + `data/known-firmware.json`; verdicts render on the Overview and the firmware page.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Tell a user whether the HBA in their server is running current IT firmware, from an index bundled with the plugin.

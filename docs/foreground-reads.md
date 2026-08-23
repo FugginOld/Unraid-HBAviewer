@@ -55,7 +55,21 @@ the cached body, launches a detached producer, and returns immediately.
 | `render/drives.php:23` | `lsblk` — bounded, no hardware |
 | `phy_baseline.php:140` | re-reads counters after a baseline reset |
 
-**Known and not yet addressed:** the tab endpoints above still read hardware
+**Investigated 2026-08-23, deliberately left alone.** Putting these behind
+`cached_read()` was tried once and reverted — `render/phy.php` carries the
+post-mortem. A cache only pays off for repeated access inside its TTL, and
+these tabs load on a click: the TTL had always expired by the next visit, so
+every visit got the empty `warming` answer, re-launched the producer, and the
+data never appeared (issue #11). The Overview works on that path only because
+it POLLS, which keeps its own cache warm. Converting the list tabs would make
+them slower and no safer.
+
+What was actually wrong on that path is fixed instead: the producer's stderr
+was folded into the payload, so one warning made the cached JSON undecodable —
+the mechanism behind half of issue #11, and still live for the two consumers
+that do use `cached_read`.
+
+**So this stands as accepted risk:** the tab endpoints still read hardware
 synchronously. That is a smaller problem than the dashboard was — it blocks
 only the request the plugin's own JS made, and only while someone has the
 Monitor open — but it is the same shape, and it still holds a php-fpm worker

@@ -7,6 +7,14 @@
 > stored per row but earned per field, and provenance is undated. All three bit
 > while writing `docs/hba-firmware-reference.md`.
 >
+> **New evidence, 2026-08-23.** The first real HBA 9500 read here proved the
+> `null` finding on live data rather than on paper. `HBA 9500-8i` carried
+> `"bios": null` meaning *believed absent* — the note said so and asked for
+> confirmation — and storcli reported an option ROM. Its sibling `HBA 9500-16i`
+> still carries `"bios": null`, and that one means *unknown*: no 16i has been
+> read. Two rows, same literal, opposite meanings, and only a prose note tells
+> them apart. That is precisely the ambiguity this proposal exists to remove.
+>
 > **Before this is picked up again, three corrections.** The draft JSON was
 > reconstructed from the generated markdown rather than from the real file, and
 > it diverges:

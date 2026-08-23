@@ -54,7 +54,7 @@ jobs:
           # This will handover control about PR rejection to the GitHub side
           max-allowed-issues: 2147483647
 
-      # Silence the three style tools, for real this time.
+      # Silence the style tools, for real this time.
       #
       # .codacy.yml's `engines:` block does not work here and we have the proof:
       # 6602b30 disabled phpcs, csslint and stylelint, and eleven commits later
@@ -66,8 +66,12 @@ jobs:
       #
       # EMPTY each run's results; do NOT drop the run. GitHub closes an existing
       # alert when a later analysis FOR THE SAME CATEGORY no longer reports it.
-      # Delete the run object and the tool simply stops appearing, so the 3,137
-      # alerts already open would stay open forever with nothing to close them.
+      # Delete the run object and the tool simply stops appearing, so the alerts
+      # already open would stay open forever with nothing to close them.
+      #
+      # That is also why this workflow still exists rather than being deleted:
+      # removing it IS deleting the run, for every tool at once, and would strand
+      # all 413 open alerts permanently. One quiet run first, then it can go.
       # Reporting zero results is what retires them.
       - name: Drop style-only tool results from the SARIF
         run: |
@@ -79,7 +83,24 @@ jobs:
           python3 - <<'PY'
           import json
 
-          MUTE = ('phpcs', 'csslint', 'stylelint')
+          # Every tool Codacy runs here, because none of them is telling this
+          # repository anything it does not already ask a better-configured tool
+          # for. .github/workflows/php.yml runs php -l, bash -n, node --check,
+          # shellcheck WITH THIS PROJECT'S OWN EXCLUSIONS, actionlint, PHPStan
+          # level 3 and the full suite on every push. Codacy's shellcheck uses
+          # different exclusions and so re-reports SC1090/SC2034/SC2207/SC1007,
+          # which php.yml deliberately turns off -- re-litigating a decision
+          # already made. The rest is style opinion this codebase does not share
+          # ($i/$c/$v are deliberate, and PHPMD's ShortVariable alone was 140
+          # alerts).
+          #
+          # None of it has ever produced a finding with a security severity, and
+          # 413 alerts that are all noise is how a real one arrives invisible.
+          # CodeQL is what covers security here; it runs separately and is quiet,
+          # which is the right answer for this codebase.
+          MUTE = ('phpcs', 'csslint', 'stylelint',
+                  'phpmd', 'jshint', 'shellcheck',
+                  'pylint', 'pylintpython3', 'prospector', 'jackson')
 
           with open('results.sarif') as fh:
               sarif = json.load(fh)

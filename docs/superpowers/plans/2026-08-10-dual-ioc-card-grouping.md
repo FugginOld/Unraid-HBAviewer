@@ -1,5 +1,7 @@
 # Dual-IOC Card Grouping Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `card_group.php`; four consumers now — Overview, firmware page, per-controller tabs, and the dashboard tile as of 2026.08.23.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Show a SAS9300-16i as one card with two controller sub-cards, instead of two unrelated HBAs.

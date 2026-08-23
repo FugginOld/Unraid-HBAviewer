@@ -106,7 +106,7 @@ installs it; Unraid's Slackware base ships it.
 | `ajax_info.php` | The main dispatch and hardware fetch. `?type=overview\|overview_html\|health\|phy\|drives\|baymap\|events\|smart\|smart_all\|metrics` → JSON or an HTML fragment, by calling the composer scripts and handing the result to a `render/*.php` function. Read-only. |
 | `render/table.php`, `render/overview.php`, `render/phy.php`, `render/drives.php`, `render/events.php`, `render/smart.php`, `render/health.php`, `render/baymap.php` | The renderers behind each tab — one file per surface (PHY, Drives, Event Log, SMART, Health, Overview, the drive bay map) plus `table.php`'s shared card/table helpers. `ajax_info.php` `require_once`s all eight before its CLI guard, so the test runner gets every render function without touching a controller. |
 | `view.php` | Presentation helpers shared by the Monitor, the dashboard tile and the AJAX refresh — `lsi_controllers()`, `lsi_hba_view()`, colours, bands. |
-| `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}`. |
+| `cached_read.php` | Freshness + single-flight lock + atomic swap, returning `{state: ready\|warming, body}` — or `stale` with the last good body when the caller passes `serve_stale`, which the dashboard tile does because it is rendered server-side and cannot poll. The producer's stderr goes to a `<key>.err` sidecar, never into the payload. |
 | `card_group.php` | Which controllers are one physical CARD. A SAS9300-16i is one board carrying two SAS3008 IOCs — two PCI functions, two indices, two temperature sensors — and only the display should say "one card". `lsi_group_cards()` buckets by PCI root port **and** board name and merges only when the count matches the index's `ioc_count` exactly, because a riser can put two genuinely separate cards behind one root port. Everything unrecognised stays split. Consumed by the Overview (`renderOverviewCards`) and by the firmware page's JSON, which is what makes a dual-IOC board verify and flash as one card. |
 | `health.php` | The five indicators, the rolling sample ring, the rollup. |
 | `phy_baseline.php` | The `/boot` baseline store, delta and rate maths, reset detection. |
@@ -118,7 +118,9 @@ installs it; Unraid's Slackware base ships it.
 | `flash.php` | **The only mutating path.** See below. |
 | `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
-| `chrome.css` | The shared look — design tokens, cards, tables, tabs. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
+| `chrome.css` | The shared look — cards, tables, tabs, buttons, the focus ring. Linked by the Monitor and the firmware page; pure CSS with no PHP, which is what lets it be a static file rather than an include. |
+| `tokens.css` | The colour and type tokens, declared once for `#lu-wrap, #lu-settings-wrap`. Linked by every page that reads one; a test enforces both halves of that. Split out of `chrome.css` because the Settings page kept its own copy and the two had already drifted. |
+| `icons.php` | The SVG sprite, `require`d by the three top-level pages. Inline rather than an external `<use href>`, which fails silently in enough contexts to be the wrong trade for a warning sign on a flasher. |
 | `flash_view.php`, `HBAviewer_Flash.page` | The firmware page: markup and its own CSS. A page rather than a tab, `Cond`-gated on `ENABLE_FLASH` so the route does not exist when flashing is off. Declares `Menu="HBAviewer"`, so it is a standalone page under Tools alongside the Monitor — the same shape `HBAviewer_Monitor.page` uses. **Not** `Menu="Utilities"` (planted a second icon in Settings → Utilities that bypassed the danger notice) and **not** `Menu="HBAviewer_Settings"` (Unraid stacks the children of an `xmenu` parent onto one page, so the whole flash page rendered inline below the settings form). `Menu=` also decides the URL root, so `/Tools/HBAviewer_Flash` is hardcoded in two places — the Monitor's tab and the Settings button. All three are pinned together in `flash_php_test.php`. |
 | `flash_view.js` | The firmware page's behaviour — the four-step wizard and the flash poll. Everything here is keyed by `c.ctl`, the controller number(s) the card covers (`"0,1"` on a dual-IOC board), never by the array index: `?type=overview` returns one entry per CARD, and a card's position in that array is not a controller number. |
 
@@ -269,6 +271,24 @@ Everything under `/usr/local/emhttp/plugins/hbaviewer/` is **tmpfs** — a reboo
 reinstalls it from the `.txz` on flash. Patching files in place is a valid way
 to test a branch, and it evaporates on reboot by design.
 
+## The written rules
+
+Three documents state rules the code follows, so they do not have to be
+re-derived from the code each time:
+
+- **`design-system/MASTER.md`** — the UI's rules, extracted from `chrome.css`
+  and the renderers rather than invented: theme-variable tokens, `auto-fit`
+  grids, tabular numerals, colour-as-signal, reduced-motion-preserves-signal.
+  It also ranks the places the code did not follow them, with each item marked
+  DONE or open. Where it and the code disagree, the code is the bug.
+- **`docs/foreground-reads.md`** — which call sites may block a request and
+  which may not. Written after a synchronous hardware read inside Unraid's own
+  Dashboard page froze the whole webGui: the defect was the absence of that
+  rule, not one bad line.
+- **`docs/superpowers/`** — `specs/` hold the design reasoning for a change,
+  including where an earlier reading of it turned out to be wrong; `plans/` are
+  the task-by-task instructions, each carrying a status header.
+
 ## Testing
 
 ```bash
@@ -313,9 +333,33 @@ linguist counted it as PHP, PHPStan saw inert markup and jshint never opened it
 
 Date-versioned, cut from `main`:
 
-1. Merge `dev` → `main`.
-2. Add a `###YYYY.MM.DD###` block to `<CHANGES>` in `hbaviewer.plg`, commit, push.
-3. `git tag YYYY.MM.DD && git push --tags`.
+```bash
+git fetch origin                       # step 0, and it is not optional -- see below
+git checkout main && git merge --ff-only origin/main
+git merge --no-ff dev
+# add a ###YYYY.MM.DD### block to <CHANGES> in hbaviewer.plg
+git commit -am "Changelog for YYYY.MM.DD" && git push origin main
+git tag YYYY.MM.DD && git push origin YYYY.MM.DD
+```
+
+**`main` moves without you.** The release workflow patches `version` / `md5` /
+`pkgURL` in `hbaviewer.plg` and pushes that commit to `main` itself, so any
+local checkout of `main` is one commit stale from the moment the previous
+release finished. Merging `dev` into a stale `main` produces a merge that looks
+clean and drops CI's patch commit — caught once on 2026-08-23, before pushing,
+by comparing against `origin/main`. Fetch first, every time.
+
+For the same reason, **do not keep a long-lived `main` worktree.** One existed
+and was exactly one release behind whenever it was next used. Make one per
+release and remove it after:
+
+```bash
+git worktree add /tmp/hbamain main    # ...release..., then:
+git worktree remove /tmp/hbamain
+```
+
+After the release, merge `main` back into `dev` so the two agree again —
+otherwise the next release starts from the same divergence.
 
 The tag must point at `main`'s tip. The workflow then runs the tests, builds the
 `.txz`, patches the `version` / `md5` / `pkgURL` entities in `hbaviewer.plg` on
