@@ -1724,6 +1724,25 @@ check('the dashboard tile serves stale values rather than none',
 check('the tile shares the overview cache key',
       substr_count((string) file_get_contents("$pluginDir/ajax_info.php"), "cached_read('overview'") === 1);
 
+
+/* ── No literal \uXXXX in PHP output (shipped in 2026.08.23) ─────────────────
+   A user saw the dashboard tile print "Reading controller information\u2026"
+   during its cold start. PHP does not read \uXXXX as an escape -- it wants
+   \u{2026} with braces -- so a JS/Python-style escape written into a
+   double-quoted PHP string reaches the screen as six literal characters.
+
+   It passed php -l, passed the whole suite, and passed review, because it is
+   only wrong at the point a human reads it. That is exactly the shape of the
+   control-character bug below, and it gets the same treatment: banned outright
+   in the files that print. \u{...} with braces is real PHP and stays allowed. */
+$badEscape = [];
+foreach (glob("$pluginDir/{*.php,render/*.php}", GLOB_BRACE) ?: [] as $path) {
+    if (preg_match('~\\\\u[0-9a-fA-F]{4}~', (string) file_get_contents($path))) {
+        $badEscape[] = basename($path);
+    }
+}
+check('no PHP file carries a JS-style \u escape', $badEscape === []);
+
 /* ── No stray control characters in hand-edited source ───────────────────────
    The sort arrow shipped as a literal 0x11 byte followed by "91": the CSS was
    written through a tool whose "91" is an OCTAL escape, so  became a
