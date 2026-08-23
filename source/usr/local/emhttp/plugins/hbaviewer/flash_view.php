@@ -52,7 +52,9 @@ if ($enableFlash) {
    collapses to a single column by itself, so this needs no media query.
    align-items:start because a controller that errored renders a two-line card,
    and stretching it to match a full one just makes a tall empty box. */
-#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+/* min(420px, 100%): see the note at .lu-ov-grid in chrome.css. A bare 420px
+   floor makes the single collapsed column wider than a phone viewport. */
+#flash-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; align-items: start; }
 #flash-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 /* Each controller box is a .lu-card now, so its border, radius, padding, margin
    and background all come from there — .lu-fc keeps only the rules .lu-card has

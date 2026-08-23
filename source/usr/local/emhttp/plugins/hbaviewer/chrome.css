@@ -107,10 +107,19 @@
    auto-fit, not auto-fill: it COLLAPSES the empty tracks, so two controllers
    take half the frame each instead of sitting in two of three columns with the
    third left empty. That distinction is the whole reason this fills.
-   The 420px floor is where .lu-pcie-row starts wrapping, and it doubles as the
-   responsive rule — a narrow window collapses to one column with no media
-   query, exactly as the other two tabs do. */
-.lu-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; align-items: start; }
+   The 420px floor is where .lu-pcie-row starts wrapping.
+
+   It is wrapped in min(420px, 100%), and the bare 420px it replaced is worth
+   understanding because the comment here used to call that floor "the
+   responsive rule -- a narrow window collapses to one column with no media
+   query". Half true, and the wrong half is the one that shipped: auto-fit does
+   collapse to ONE column on a phone, but a bare minimum still makes that single
+   track 420px wide. On a ~393px viewport the card was therefore wider than the
+   screen, and the whole PAGE scrolled sideways to reach its right-hand half
+   (issue #21). min() lets the track yield below its preferred size when there
+   is less room than that, which is what the old comment believed was already
+   happening. Multi-column behaviour above 420px is unchanged. */
+.lu-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; align-items: start; }
 .lu-ov-grid .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 /* A dual-IOC board: one card, one sub-card per controller. Separated by a rule
    and an indent rather than boxed again -- nesting a full card inside a card
@@ -430,7 +439,8 @@
    single column. Both without a media query.
    align-items:start so a controller that errored, which renders a two-line
    card, does not stretch into a tall empty box beside a full one. */
-#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; align-items: start; }
+/* min(), for the reason spelled out at .lu-ov-grid -- same bug, same shape. */
+#health-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(440px, 100%), 1fr)); gap: 16px; align-items: start; }
 #health-content .lu-card { margin-bottom: 0; }   /* gap owns the spacing now */
 .lu-health-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
 .lu-health-title { font-size: 12.5px; color: var(--text); font-weight: 600; }
