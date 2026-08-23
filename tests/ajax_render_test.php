@@ -534,6 +534,38 @@ check('drives lsiutil names the slot',
 check('an unassigned drive shows an em dash',
       substr_count(renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], []), '<span class="lu-muted">—</span>') > 0);
 
+/* ── The column falls back to the mount label ────────────────────────────────
+   On a box with no array every one of these cells was an em dash, which is
+   accurate and useless: the drives DO have a name their owner knows, the one
+   the Main page shows. */
+$udMap = ['/dev/sda' => 'media1', '/dev/sdc' => 'media8'];
+$rlMap = ['/dev/sda' => 'Disk 1'];
+
+check('an array role still wins',
+      lsi_role_cell('/dev/sda', $rlMap, $udMap) === 'Disk 1');
+check('a mounted unassigned drive shows its label',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'media8'));
+check('a drive in neither is still an em dash',
+      str_contains(lsi_role_cell('/dev/sdz', [], $udMap), '—'));
+check('a drive with no name at all is still an em dash',
+      str_contains(lsi_role_cell(null, [], $udMap), '—'));
+/* "media9" and "Disk 1" are not the same kind of fact -- one is a slot in the
+   array, the other is where somebody mounted a disk the array knows nothing
+   about. Equal weight would say the column means one thing when it means two. */
+check('the mount label is weaker than an array role',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'lu-muted')
+      && !str_contains(lsi_role_cell('/dev/sda', $rlMap, $udMap), 'lu-muted'));
+check('the label is escaped',
+      str_contains(lsi_role_cell('/dev/sdx', [], ['/dev/sdx' => '<b>x</b>']), '&lt;b&gt;'));
+/* Called from four tables; all four have to agree, and three of them reach it
+   through a different closure. */
+$udDrv = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], [], [], [], ['/dev/sdg' => 'media5']);
+check('the drives table carries the mount label', str_contains($udDrv, 'media5'));
+$udSmart = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sdg', 'model' => 'X', 'serial' => 'S', 'smart' => ['health' => 'PASSED']],
+]], null, [], ['/dev/sdg' => 'media5']);
+check('the SMART table carries the mount label', str_contains($udSmart, 'media5'));
+
 $hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
                                null, ['/dev/sdp' => 'Parity']);
 check('SMART table has an Unraid column', hasCol($hSmartRole, 'Unraid'));
@@ -799,6 +831,52 @@ check('the second parity is Parity 2',
       (unraid_disk_roles($disks2)['/dev/sdq'] ?? '') === 'Parity 2');
 check('a drive outside the array has no role', !isset($roles['/dev/sdzz']));
 check('a missing disks.ini has no roles', unraid_disk_roles("$iniDir/nope.ini") === []);
+
+/* ── Unassigned-device mount labels (reported 2026-08-22) ────────────────────
+   The fixture is Raven's real /proc/mounts, tmpfs line and all. Its numbering
+   deliberately does NOT follow device order -- sdc is media8, sdi is media3 --
+   because a fixture of sdN => mediaN would pass an implementation that derived
+   the label from the device name and never read the mount point. */
+$mounts = "tmpfs /mnt/disks tmpfs rw,relatime,size=1024k,inode64 0 0\n"
+        . "/dev/sda1 /mnt/disks/media1 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdc1 /mnt/disks/media8 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdi1 /mnt/disks/media3 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/nvme0n1p1 /mnt/disks/fast xfs rw,relatime 0 0\n"
+        . "/dev/sdz /mnt/disks/whole xfs rw,relatime 0 0\n"
+        // A sibling directory that merely STARTS with the prefix. This is what
+        // the trailing slash guards -- the tmpfs line above is caught by the
+        // /dev/ test instead, so without this the slash would be untested.
+        . "/dev/sdy /mnt/disksbackup/thing xfs rw,relatime 0 0
+"
+        . "/dev/md1p1 /mnt/disk1 xfs rw,relatime 0 0\n"
+        . "/dev/sdj1 /mnt/cache btrfs rw,relatime 0 0\n"
+        . "shfs /mnt/user fuse.shfs rw,relatime 0 0\n"
+        . "/dev/sdl1 /boot vfat rw,relatime 0 0\n";
+$fx  = sys_get_temp_dir() . '/hbav_mounts_' . getmypid();
+file_put_contents($fx, $mounts);
+$ud  = unraid_ud_mounts($fx);
+
+check('a partition maps to its drive',       ($ud['/dev/sda'] ?? '') === 'media1');
+check('the label is the mount point, not the device number',
+      ($ud['/dev/sdc'] ?? '') === 'media8' && ($ud['/dev/sdi'] ?? '') === 'media3');
+/* rtrim('0123456789') is right for sdh1 and cuts nvme0n1p1 back to a device
+   that does not exist. */
+check('an nvme partition maps to its namespace, not past it',
+      ($ud['/dev/nvme0n1'] ?? '') === 'fast' && !isset($ud['/dev/nvme0n']));
+check('a whole-disk mount keeps its name',   ($ud['/dev/sdz'] ?? '') === 'whole');
+/* The directory UD mounts INTO is itself a tmpfs, and it is the FIRST line of
+   the real file. A prefix test written without the trailing slash files it
+   under the label "disks". */
+check('the /mnt/disks tmpfs is not a drive', !isset($ud['tmpfs']) && !in_array('disks', $ud, true));
+check('array, pool, share and boot mounts are excluded',
+      !isset($ud['/dev/md1']) && !isset($ud['/dev/sdj']) && !isset($ud['/dev/sdl'])
+      && !in_array('user', $ud, true));
+check('a sibling directory of /mnt/disks is not one',
+      !isset($ud['/dev/sdy']) && !in_array('thing', $ud, true));
+check('exactly the five unassigned devices are mapped', count($ud) === 5);
+check('a missing /proc/mounts is empty, not fatal', unraid_ud_mounts($fx . '_nope') === []);
+@unlink($fx);
+
 /* Double digits must not sort or read as "Disk 1" — the whole point is telling
    two disks apart at a glance. */
 check('disk10 is Disk 10',

@@ -64,22 +64,37 @@ function lsi_scsi_addr_by_dev(string $sysBlock = '/sys/block'): array {
     return $map;
 }
 
-/* The Unraid slot cell for a table: "Parity", "Disk 1", or an em dash for a
-   drive the array does not use. One renderer so the four tables that show it
-   cannot drift apart in spelling or in what they do with a miss. */
-function lsi_role_cell(?string $dev, array $roles): string {
-    $r = $dev !== null ? ($roles[$dev] ?? '') : '';
-    return $r !== '' ? htmlspecialchars($r) : '<span class="lu-muted">—</span>';
+/* The Unraid slot cell for a table: "Parity", "Disk 1", a mounted unassigned
+   device's label, or an em dash for a drive Unraid is not using at all. One
+   renderer so the four tables that show it cannot drift apart in spelling or in
+   what they do with a miss.
+
+   Array role first. The two are mutually exclusive in reality -- a disk cannot
+   be an array member AND an unassigned device -- so a drive answering to both
+   means the two sources disagree, and the array's claim is the stronger one.
+
+   The UD label is rendered muted, because "media9" and "Disk 1" are not the
+   same kind of fact: one is a slot in the array, the other is where somebody
+   mounted a disk the array does not know about. Same weight would imply the
+   column means one thing when it means two. */
+function lsi_role_cell(?string $dev, array $roles, array $udMounts = []): string {
+    if ($dev === null) return '<span class="lu-muted">—</span>';
+    $r = $roles[$dev] ?? '';
+    if ($r !== '') return htmlspecialchars($r);
+    $u = $udMounts[$dev] ?? '';
+    if ($u !== '') return '<span class="lu-muted">' . htmlspecialchars($u) . '</span>';
+    return '<span class="lu-muted">—</span>';
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 function renderDrivesTables(array $data, array $devBySerial = [], array $roles = [],
-                            array $addrByDev = [], array $locating = []): string {
+                            array $addrByDev = [], array $locating = [],
+                            array $udMounts = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     // Shape, not tool name: StorCLI2 (SAS4 / 9600) feeds these tables the same
     // record shape as the classic storcli backend, so one renderer serves both.
     $storcli = lsi_backend_shape($data['backend'] ?? '') === 'storcli';
-    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $devBySerial, $roles, $addrByDev, $locating): string {
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $devBySerial, $roles, $addrByDev, $locating, $udMounts): string {
         $out = '';
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         // storcli_drives.sh emits "eid/slot" when a drive carries an enclosure ID and a
@@ -151,7 +166,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     $devCell($d),
-                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
+                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles, $udMounts),
                     htmlspecialchars($d['slot']),
                     ($d['port'] ?? '') !== '' ? htmlspecialchars($d['port']) : '<span class="lu-muted">—</span>',
                     htmlspecialchars($d['model']),
@@ -176,7 +191,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                 $phy = isset($d['phy']) && $d['phy'] !== '' ? 'PHY ' . htmlspecialchars((string) $d['phy'])              : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     $devCell($d),
-                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles),
+                    lsi_role_cell(drive_dev_name($d, $devBySerial), $roles, $udMounts),
                     // ?? like sas_address and phy above: routing is by the backend
                     // field alone now, so a record whose shape disagrees with its
                     // label lands here missing keys rather than being sniffed away.

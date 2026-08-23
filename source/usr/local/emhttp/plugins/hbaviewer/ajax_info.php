@@ -106,7 +106,7 @@ if ($type === 'smart_all') {
     // expensive thing here, and the person asked for it exactly when they press
     // Refresh (which unlinks the cache above) — not on a timer.
     $cached = smart_cache_read();
-    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles()); exit; }
+    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles(), unraid_ud_mounts()); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -291,13 +291,13 @@ if ($type === 'phy') {
     $ddec  = json_decode((string) shell_exec(
         'bash ' . escapeshellarg("$scripts/get_attached_drives.sh") . ' 2>/dev/null'), true);
     $ddata = is_array($ddec) ? $ddec : [];
-    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial(), unraid_disk_roles());
+    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial(), unraid_disk_roles(), unraid_ud_mounts());
     exit;
 }
 
 if ($type === 'drives') {
     echo renderDrivesTables($data, lsi_dev_by_serial(), unraid_disk_roles(),
-                            lsi_scsi_addr_by_dev(), locate_active());
+                            lsi_scsi_addr_by_dev(), locate_active(), unraid_ud_mounts());
     exit;
 }
 
