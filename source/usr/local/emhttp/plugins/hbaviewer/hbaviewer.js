@@ -4,6 +4,26 @@
     var smartTimer;
     var loaded = {};
 
+    /* ── Temperature display (°C/°F) ────────────────────────────────
+       Every reading this file handles arrives from the collector in °C; these
+       two only affect what gets printed, mirroring lsi_temp_convert() and
+       lsi_temp_str() on the PHP side. luTempUnit is set by hbaviewer.php from
+       TEMP_UNIT.
+
+       Read through a getter rather than captured into a var at load time: this
+       IIFE runs while the page is still parsing, and reading the global once at
+       the top makes the answer depend on whether hbaviewer.php happened to emit
+       its <script> before this file. Cheap, and it cannot be got wrong. */
+    function luUnit() { return (typeof luTempUnit !== 'undefined') ? luTempUnit : 0; }
+    function luConvTemp(c) {
+        if (c === null || c === undefined || c === '' || isNaN(c)) return c;
+        return luUnit() === 1 ? Math.round(c * 9 / 5 + 32) : Math.round(c);
+    }
+    function luTempStr(c) {
+        if (c === null || c === undefined || c === '') return null;
+        return luConvTemp(c) + '°' + (luUnit() === 1 ? 'F' : 'C');
+    }
+
     /* ── Tab switching ────────────────────────────────────────────────────── */
     window.luTab = function (name) {
         if (window.luMetricsStop) luMetricsStop();   // pause perf polling on any switch
@@ -602,7 +622,9 @@
                     var tp = document.createElement('span');
                     tp.className = 'lu-bay-temp';
                     // No reading is said, never left to read as a temperature.
-                    tp.textContent = drv.temp === null ? 'no data' : drv.temp + '°C';
+                    // luTempStr only changes what is PRINTED -- drv.temp itself
+                    // stays °C for the luBayHeat comparison against warn_temp below.
+                    tp.textContent = drv.temp === null ? 'no data' : luTempStr(drv.temp);
                     var heat = luBayHeat(drv.temp, d.warn_temp);
                     if (heat) tp.style.color = heat;
                     cap.appendChild(cv); cap.appendChild(cu); cap.appendChild(tp);
@@ -1062,7 +1084,7 @@
             { key:'util', title:'% Util',          series:[pal('--chart-util')] },
             { key:'lat',  title:'Latency ms',      series:[pal('--chart-lat')] },
             { key:'phy',  title:'PHY err/s',       series:[pal('--chart-phy')] },
-            { key:'temp', title:'Temp °C',         series:[pal('--chart-temp')] }
+            { key:'temp', title:'Temp ' + (luUnit() === 1 ? '°F' : '°C'), series:[pal('--chart-temp')] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl lu-card first';
@@ -1128,7 +1150,13 @@
                                  phyRate == null ? '–' : phyRate.toFixed(1));
                     }
                     var temp = (c.temp == null) ? null : c.temp;
-                    perfPush(cells.temp, [temp == null ? NaN : temp], temp == null ? '–' : temp + '°');
+                    /* The plotted VALUE converts too, not just the axis title.
+                       The PR this came from switched the title alone, which put
+                       a °F label on a °C curve -- a chart that is wrong rather
+                       than merely unconverted. */
+                    var tempDisp = temp == null ? null : luConvTemp(temp);
+                    perfPush(cells.temp, [tempDisp == null ? NaN : tempDisp],
+                             tempDisp == null ? '–' : tempDisp + '°');
                 });
             }
         }

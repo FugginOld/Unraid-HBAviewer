@@ -1544,6 +1544,56 @@ check('and hbaviewer.js reads it by name',
 
 
 
+
+/* ── Temperature display unit (PR #22, rebased) ──────────────────────────────
+   Contributed as a Celsius/Fahrenheit toggle. The invariant that makes it safe
+   is that NOTHING but the printed string changes: sensors, storage, thresholds
+   and every band comparison stay in °C. These pin both halves -- the conversion
+   itself, and the fact that each surface actually honours it, because the
+   original arrived against a tree where four of these renderers still lived in
+   ajax_info.php and a straight merge would have left them printing °C. */
+check('celsius is the default and rounds',        lsi_temp_convert(55, 0) === 55.0);
+check('fahrenheit converts',                      lsi_temp_convert(55, 1) === 131.0);
+check('the freezing point is not special-cased',  lsi_temp_convert(0, 1) === 32.0);
+check('a negative reading converts',              lsi_temp_convert(-10, 1) === 14.0);
+// Rounding, not truncation: 37.6C is 99.68F, and (int) would print 99.
+check('conversion rounds rather than truncates',  lsi_temp_convert(37.6, 1) === 100.0);
+// "No reading" must survive as itself so callers keep their em dash handling.
+check('an empty reading passes through',          lsi_temp_convert('', 1) === '');
+check('a null reading passes through',            lsi_temp_convert(null, 1) === null);
+check('a non-numeric reading passes through',     lsi_temp_convert('n/a', 1) === 'n/a');
+check('the formatted string carries its unit',
+      lsi_temp_str(55, 0) === '55°C' && lsi_temp_str(55, 1) === '131°F');
+check('the formatted string is empty for no reading', lsi_temp_str('', 1) === '');
+
+/* Each surface, because the conversion helper being right proves nothing about
+   whether a given renderer calls it. One assertion per file that prints a
+   temperature. */
+$fCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 1, 'TEMP_UNIT' => 1];
+$cCfg = ['HBA_PORT' => 1, 'ALERT_THRESHOLD' => 76, 'SHOW_PCIE' => 1, 'TEMP_UNIT' => 0];
+$oneCtl = ['status' => 'ok', 'temp' => 55, 'model' => 'SAS3008', 'board_name' => 'SAS9300-8i',
+           'firmware' => '16.00.12.00'];
+
+$ovF = renderControllerCard($oneCtl, 0, $fCfg, '');
+check('the overview gauge prints fahrenheit', str_contains($ovF, '>131<') && str_contains($ovF, '&deg;F'));
+check('the overview badge sensitivity converts too', str_contains($ovF, '169&deg;F+'));
+$ovC = renderControllerCard($oneCtl, 0, $cCfg, '');
+check('and celsius is unchanged', str_contains($ovC, '>55<') && str_contains($ovC, '&deg;C')
+      && str_contains($ovC, '76&deg;C+'));
+
+$smF = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sda', 'model' => 'M', 'serial' => 'S', 'smart' => ['health' => 'PASSED', 'temp' => '38']],
+]], null, [], [], 1);
+check('the SMART table prints fahrenheit', str_contains($smF, '100°F'));
+check('and does not double up the unit',    !str_contains($smF, '°F&deg;C'));
+
+/* The gauge GEOMETRY must not convert: the arc is a fraction of a 0-110 °C
+   scale, and converting the fraction would move every band boundary. Same
+   sensor, same arc, whichever unit is displayed. */
+$arcF = preg_match('~stroke-dashoffset="([\d.]+)~', $ovF, $mF) ? $mF[1] : 'F?';
+$arcC = preg_match('~stroke-dashoffset="([\d.]+)~', $ovC, $mC) ? $mC[1] : 'C?';
+check('the gauge arc is identical in both units', $arcF === $arcC && $arcF !== 'F?');
+
 /* ── Slot facts vs function facts (reported 2026-08-23 by screenshot) ────────
    The grouped tile's footer read "PCI Location: 84:00" while the two sections
    above it correctly showed 84:00 and 86:00 -- a board-level row asserting one

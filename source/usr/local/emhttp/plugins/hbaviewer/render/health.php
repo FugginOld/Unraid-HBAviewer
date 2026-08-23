@@ -17,8 +17,10 @@ function luHealthCtlMeta(int $i): array {
 /* $cfg is injected so this stays testable without /boot; the caller passes the
    live config. Only host_link reads it (the expected-PCIe-link settings). */
 function renderHealthTables(array $data, array $cfg = []): string {
+    // Display only — every band edge below is compared in °C.
+    $unit = (int) ($cfg['TEMP_UNIT'] ?? 0);
     $ctls = $data['controllers'] ?? [$data];
-    return luCardPerController($ctls, function (int $i, array $ctl) use ($cfg): string {
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($cfg, $unit): string {
         $out = '';
         // The only place that touches the /tmp ring — see health.php's header.
         $file  = health_store_path($i);
@@ -70,7 +72,7 @@ function renderHealthTables(array $data, array $cfg = []): string {
             $out .= '<div class="lu-band-meter"><div class="lu-band-track">'
                   . '<span class="lu-band-seg s0"></span><span class="lu-band-seg s1"></span>'
                   . '<span class="lu-band-seg s2"></span><span class="lu-band-seg s3"></span><span class="lu-band-seg s4"></span>'
-                  . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars((string) $temp) . '&deg;C"></span>'
+                  . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars(lsi_temp_str($temp, $unit)) . '"></span>'
                   . '</div><div class="lu-band-labels">'
                   . '<span style="left:0%">0</span><span style="left:59.09%">65</span>'
                   . '<span style="left:68.18%">75</span><span style="left:77.27%">85</span>'

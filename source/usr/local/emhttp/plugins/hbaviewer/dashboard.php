@@ -14,6 +14,9 @@ $SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 $cfg       = lsi_config_read();
 $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
+// Display only — $threshold stays °C for the band matching everywhere else.
+$unit      = (int) ($cfg['TEMP_UNIT'] ?? 0);
+$unitSym   = $unit === 1 ? '°F' : '°C';
 
 /* Through cached_read(), NEVER shell_exec. This file renders inside Unraid's
    OWN Dashboard page: a synchronous hardware read here holds a php-fpm worker
@@ -282,9 +285,9 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
         ? $model . ' - ' . count($g) . ' controllers'
         : $model . ' - ' . $portLabel;
 
-    $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
+    $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : lsi_temp_convert((int) $v['temp'], $unit);
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'
-               . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;C') . '</span>';
+               . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;' . ($unit === 1 ? 'F' : 'C')) . '</span>';
 
     // Health pill lives in the tile header beside the gear, visible whether the
     // tile is expanded or collapsed — it is the one thing worth seeing without
@@ -313,7 +316,10 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
     // Same 0-110C scale and the same renderer as the Overview tab's gauge.
     // The gradient id carries the controller index because a box with two HBAs
     // emits two tiles onto ONE dashboard page.
-    $gauge = lsi_gauge_svg("lu-dgrad-{$i}", $temp / 110, [$gDark, $gLight]);
+    /* Gauge geometry stays on the 0-110 °C scale; only the printed number
+       switches. Converting the fraction would move every band boundary. */
+    $gauge    = lsi_gauge_svg("lu-dgrad-{$i}", $temp / 110, [$gDark, $gLight]);
+    $tempDisp = lsi_temp_convert($temp, $unit);
     $tileLight = lsi_tile_is_light() ? ' light' : '';
 
     /* A grouped board shows BOTH dies, the way the Overview's parent card does:
@@ -334,7 +340,8 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
             $mv = lsi_hba_view($mc, $port, $m);
             [$mD, $mL] = $mv['temp_grad'];
             $mTemp = (int) ($mc['temp'] ?? 0);
-            $mGauge = lsi_gauge_svg("lu-dgrad-{$m}", $mTemp / 110, [$mD, $mL]);
+            $mGauge    = lsi_gauge_svg("lu-dgrad-{$m}", $mTemp / 110, [$mD, $mL]);
+            $mTempDisp = lsi_temp_convert($mTemp, $unit);
             $mCrit  = ($mv['temp_band'] ?? '') === 'critical';
             $mChip  = $mCrit
                 ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
@@ -352,8 +359,8 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
             <div class='lu-arc-wrap'>
               {$mGauge}
               <div class='lu-arc-readout'>
-                <span class='v'>{$mTemp}</span>
-                <span class='u'>°C</span>
+                <span class='v'>{$mTempDisp}</span>
+                <span class='u'>{$unitSym}</span>
               </div>
             </div>
             <span class='lu-d-temp-band'>{$mChip}</span>
@@ -379,8 +386,8 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
           <div class='lu-arc-wrap'>
             {$gauge}
             <div class='lu-arc-readout'>
-              <span class='v'>{$temp}</span>
-              <span class='u'>°C</span>
+              <span class='v'>{$tempDisp}</span>
+              <span class='u'>{$unitSym}</span>
             </div>
           </div>
           <span class='lu-d-temp-band'>{$tempChip}</span>
@@ -400,7 +407,7 @@ foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
              grouped tile carries them per IOC below rather than once up here --
              the same split luDieRows makes on the Overview. */
           . ($drives && !$grouped ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
-          . "<p>Badge Sensitivity: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
+          . "<p>Badge Sensitivity: <span>{$cfgBandLabel} (" . lsi_temp_convert($threshold, $unit) . "{$unitSym}+)</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>{$ioc}
