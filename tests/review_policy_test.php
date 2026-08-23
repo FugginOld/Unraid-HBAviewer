@@ -169,5 +169,71 @@ check('install-verify diffs the package against the installed tree', $posDiff !=
 check('and does so before it renders anything from that tree',
       $posDiff !== false && $posDiff < strpos($iv, 'renderHealthTables'));
 
+/* ── The personality is the signal, /sys/module is the display string ───────
+   The policy used to attach this property to hba_driver(), which has it
+   backwards -- and existence checks stayed green while the sentence was wrong,
+   which is why these are behavioural.
+
+   hba_personalities() reads proc_name per scsi_host: the merged mpt3sas driver
+   registers SAS2 cards under the mpt2sas personality, so issue #3's SAS9207-8i
+   has no mpt2sas module at all yet reports proc_name=mpt2sas. Keying backend
+   selection on /sys/module re-derives that bug. */
+$libFns = static function (string $src, string $fn): string {
+    /* One shell function body. lib.sh writes these two ways -- a block closing
+       with } in column 1, and a one-liner closing on its own line -- and the
+       selectors below are the one-liner kind, so brace-to-brace alone returned
+       an empty body for every one of them and three checks failed open. */
+    $at = strpos($src, "\n$fn() {");
+    if ($at === false) return '';
+    $at++;                                          // past the newline
+    $eol  = strpos($src, "\n", $at);
+    $line = $eol === false ? substr($src, $at) : substr($src, $at, $eol - $at);
+    if (str_contains(substr($line, (int) strpos($line, '{') + 1), '}')) return $line;
+    $end = strpos($src, "\n}", $at);
+    return $end === false ? '' : substr($src, $at, $end - $at);
+};
+$personalities = $libFns($libSh, 'hba_personalities');
+check('hba_personalities() exists', $personalities !== '');
+check('...and reads the personality, not the module',
+      str_contains($personalities, 'proc_name') && !str_contains($personalities, '/sys/module'));
+
+/* The inverse half, and the one the wrong sentence would have let through:
+   hba_driver() reads /sys/module ON PURPOSE, because it produces the payload's
+   `driver` display string -- the loaded module and its version. It is correct
+   there and wrong anywhere a backend decision is made. */
+$driver = $libFns($libSh, 'hba_driver');
+check('hba_driver() is the module-keyed display string',
+      str_contains($driver, '/sys/module') && !str_contains($driver, 'proc_name'));
+
+/* Backend selection keys on the personality. Named individually rather than
+   scanned for, so a NEW selector added on /sys/module is not silently blessed
+   by a loop that only knows about the three that exist today. */
+foreach (['hba_has_sas2', 'hba_has_sas3', 'hba_has_sas4'] as $sel) {
+    $body = $libFns($libSh, $sel);
+    check("$sel() keys on hba_personalities, not hba_driver",
+          $body !== '' && str_contains($body, 'hba_personalities') && !str_contains($body, 'hba_driver'));
+}
+
+/* ── The storcli2 overview gap stays recorded ───────────────────────────────
+   Delegated, not duplicated: controller_schema_test.php owns the schema and
+   asserts the gap against it. What THIS file checks is that the delegation is
+   still real -- that the other test still names all three fields -- because
+   the policy's sentence about them is only true while something enforces it.
+   Deleting that loop there would otherwise leave the document asserting a
+   guard that no longer runs, which is the exact failure this file exists for. */
+$schemaTest = (string) file_get_contents(__DIR__ . '/controller_schema_test.php');
+preg_match('~foreach \(\[([^\]]*)\] as \$gap\)~', $schemaTest, $m);
+$gapList = $m[1] ?? '';
+foreach (['card_id', 'subvendor_id', 'topology'] as $gap) {
+    check("controller_schema_test still asserts the storcli2 $gap gap",
+          str_contains($gapList, "'$gap'"));
+}
+// ...and the parser itself, which is what the policy actually points a reviewer
+// at. The emit is one line; a field cannot appear without appearing here.
+$s2ov = (string) file_get_contents("$plugin/scripts/parse/storcli2_overview.sh");
+foreach (['card_id', 'subvendor_id', 'topology'] as $gap) {
+    check("storcli2_overview.sh still does not emit $gap", !str_contains($s2ov, "\"$gap\""));
+}
+
 echo $fails === 0 ? "review_policy: all pass\n" : "review_policy: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

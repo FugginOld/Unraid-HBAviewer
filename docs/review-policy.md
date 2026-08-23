@@ -59,12 +59,28 @@ client-side state as the control has inverted the safety model, whatever
 else it says.
 
 **On the read paths.** `hba_is_sas_proc` as the single place the personality
-list lives. `hba_driver()` being keyed on personality rather than module.
+list lives. Backend selection and the SAS2-vs-SAS3 signal coming from the
+driver *personality* and never from `/sys/module/*` — that is
+`hba_personalities()` (`lib.sh:225`), whose own comment carries the evidence:
+the merged mpt3sas driver registers SAS2 cards under the mpt2sas personality,
+so issue #3's SAS9207-8i has no mpt2sas module at all yet reports
+`proc_name=mpt2sas`. A reviewer reaching for `/sys/module` because it looks
+like the same fact re-derives that bug. `hba_driver()` is *not* that function
+and must not be pressed into the role: it reads `/sys/module/mpt{2,3}sas/version`
+on purpose, because what it produces is the payload's `driver` display string
+— the loaded module and its version, which is what the user is being shown.
 `use_storcli` probing rather than trusting a filename. The four parallel
-`storcli2_*` parsers — their payload shape is identical to the `storcli` ones
-*deliberately*, and merging them is the most attractive-looking wrong edit in
-this repo; only `storcli_events.sh` is shared, and only because exactly one
-key differs. The 15-digit prefix comparison in the SAS join and its
+`storcli2_*` parsers, and one set of PHP renderers serving both tools through
+`lsi_backend_shape()` — that folding is what the shape claim is *for*, and it
+is not a claim of field-for-field identity. Three known divergences, all
+deliberate: `storcli2_overview.sh` omits `card_id`, `subvendor_id` and
+`topology` (only the lsiutil branch derives those from sysfs, and
+`controller_schema_test.php:93-95` and `:187` assert they stay absent —
+closing the gap is a threading change, not a parser edit), and
+`storcli2_phy.sh` adds `conn`, which classic storcli has no equivalent for.
+Merging the parsers remains the most attractive-looking wrong edit in this
+repo; only `storcli_events.sh` is shared, and only because exactly one key
+differs. The 15-digit prefix comparison in the SAS join and its
 fail-closed behaviour on a non-unique prefix. `expander` in the drives
 payload and its folding into `bay_map_key()`. `min(card, slot)` for PCIe
 width. `-s` rather than `-f` in `cached_read()`.
@@ -77,8 +93,16 @@ ranking them zero means "measured and clean". `"phy":null` from the
 Performance poll on a SAS4 eHBA card. Session gating on `export.php` in
 either format. Anonymisation in the diagnostic bundle.
 
-**On structure that looks like noise.** Consts declared above the dispatch
-guard — this shipped once and blanked the SMART tab. The inline `<script>`
+**On structure that looks like noise.** Two const rules, and only two: a const
+the CLI test runner needs must be declared *above* the dispatch guard, and no
+const may be used before its own declaration. A `function` is hoisted; a
+top-level `const` is an ordinary statement that exists only once execution
+reaches it, which is how `SMART_CACHE_PATH` declared beside its callers
+blanked the SMART tab while every test passed. `ajax_render_test.php:776` and
+`:785-787` assert exactly those two properties. Not a rule that every const
+belongs at the top: `SMART_PROGRESS_TTL` (`ajax_info.php:83`) sits below the
+guard deliberately, is reached only by the served path, and is not a
+violation. The inline `<script>`
 block above the `<script src>` in `hbaviewer.php` and `flash_view.php`, and
 `$csrfToken` being read unconditionally rather than inside a feature flag.
 The `.js` files existing as `.js` at all: they spent a year inside two `.php`
