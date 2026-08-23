@@ -14,19 +14,27 @@ $plugin = __DIR__ . '/..';
 require_once "$plugin/config.php";
 
 $cfg = lsi_config_read();
-if (empty($cfg['ENABLE_NOTIFY'])) exit(0);
+/* Two independent opt-ins, either of which gives this file work to do. Both
+   default off, because the contract above is that a disabled feature does not
+   poll silicon every ten minutes -- and with neither ticked, this is still one
+   small file read and an exit. */
+$doNotify  = !empty($cfg['ENABLE_NOTIFY']);
+$doHistory = !empty($cfg['TRACK_HISTORY']);
+if (!$doNotify && !$doHistory) exit(0);
 
 require_once "$plugin/view.php";     // lsi_controllers(): the one payload-shape rule
 require_once "$plugin/notify.php";
 
-// Same composer the Overview uses — no PHP/HTTP round trip, no second read path.
-$json = shell_exec('bash ' . escapeshellarg(__DIR__ . '/get_hba_info.sh') . ' 2>/dev/null');
-$data = json_decode((string) $json, true);
-// Backend produced nothing parseable: stay quiet. Treating an unreadable poll as
-// a status would notify on a transient the user cannot act on.
-if (!is_array($data)) exit(0);
-
-lsi_notify_run(lsi_controllers($data));
+if ($doNotify) {
+    // Same composer the Overview uses — no PHP/HTTP round trip, no second read path.
+    $json = shell_exec('bash ' . escapeshellarg(__DIR__ . '/get_hba_info.sh') . ' 2>/dev/null');
+    $data = json_decode((string) $json, true);
+    // Backend produced nothing parseable: stay quiet. Treating an unreadable poll
+    // as a status would notify on a transient the user cannot act on. `return`
+    // rather than exit(0): this must not skip the history sample below, which is
+    // a separate feature reading a separate composer.
+    if (is_array($data)) lsi_notify_run(lsi_controllers($data));
+}
 
 /* ── Feed the health ring ────────────────────────────────────────────────────
  * The ring behind the Health tab's link-integrity indicator is appended to ONE
@@ -41,12 +49,13 @@ lsi_notify_run(lsi_controllers($data));
  * hour: HEALTH_RING_CAP of 240 becomes 40 hours of continuous history, always
  * wider than the minimum-clear window after the first half hour.
  *
- * Deliberately INSIDE the ENABLE_NOTIFY guard above. This file's contract is
- * that a disabled feature does not poll silicon every ten minutes, and taking
- * the ring outside that guard would start a hardware read on every install that
- * wants nothing. The trade: trend history for the people who asked to be told
- * about health changes, which is the population that wants it. Decoupling the
- * two would need a setting of its own.
+ * Behind TRACK_HISTORY, its own switch. It was briefly a rider on
+ * ENABLE_NOTIFY -- the file's contract is that a disabled feature does not
+ * poll silicon every ten minutes, and that guard was already here. But the
+ * two are different features, and testing it on real hardware made the cost
+ * obvious: a health-history feature that only runs once you find and tick a
+ * NOTIFICATIONS toggle is one nobody discovers. Same contract, honoured with
+ * a switch of its own.
  *
  * Second composer call, not a reuse: the ring's sample is get_hba_health.sh's
  * shape (phys, uptime, counters), which get_hba_info.sh does not carry.
@@ -54,6 +63,7 @@ lsi_notify_run(lsi_controllers($data));
  * Ingested through the SAME health_ingest() the tab uses -- one append rule,
  * including its reboot and counter-reset detection. A second rule here would be
  * a second thing to keep correct. */
+if ($doHistory) {
 require_once "$plugin/health.php";
 
 $hraw = shell_exec('bash ' . escapeshellarg(__DIR__ . '/get_hba_health.sh') . ' 2>/dev/null');
@@ -64,4 +74,5 @@ if (is_array($hdec)) {
         $file = health_store_path((int) $i);
         health_store_write($file, health_ingest(health_store_read($file), $ctl));
     }
+}
 }

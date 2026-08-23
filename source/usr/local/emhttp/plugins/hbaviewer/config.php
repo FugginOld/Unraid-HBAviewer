@@ -67,6 +67,12 @@ const LSI_SCHEMA = [
     'SHOW_PERF'       => [1,  0, 1],   // Performance (real-time graphs) tab
     'ENABLE_FLASH'    => [0,  0, 1],   // advanced: unlocks the Firmware/BIOS tab
     'ENABLE_NOTIFY'   => [0,  0, 1],   // opt-in: cron notifies on health status changes
+    // opt-in: the same 10-minute cron samples link-error counters into the
+    // health ring. Its OWN switch, not a rider on ENABLE_NOTIFY -- these are
+    // two features, and hiding one behind the other's toggle meant nobody
+    // would find it. Off by default for the reason notify_check.php states:
+    // a disabled feature must not poll silicon every ten minutes.
+    'TRACK_HISTORY'   => [0,  0, 1],
     // Drive bay map grid (plan 047). Deliberately NOT on the Settings page:
     // these are edited in the map view itself, where you can see the grid
     // change. bay_map.php owns the setter; this is only where they persist.

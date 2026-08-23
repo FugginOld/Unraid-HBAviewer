@@ -80,6 +80,20 @@ having it.
 - The 10-minute cron samples health and ingests it into the ring.
 - The ring stays in `/tmp`. Nothing touches flash.
 
+**Correction, same day, from testing it on hardware.** Phase 1 first put the
+sampler *inside* the existing `ENABLE_NOTIFY` guard, reasoning that the guard
+already enforced "a disabled feature must not poll silicon" and that trend
+history could ride along with it. Watching the maintainer try to verify the
+feature showed the cost: two unrelated-looking conditions had to be true, and
+the second was a **notifications** toggle that says nothing about link-error
+history. A feature nobody can find is a feature nobody has.
+
+It has its own opt-in now, `TRACK_HISTORY`, off by default. The contract is
+unchanged — with neither switch set the cron still exits before reading any
+hardware — and one more consequence fell out of separating them: a failed
+notify read used to `exit(0)`, which would have silently skipped the history
+sample on any box whose overview read hiccupped.
+
 **Phase 2, deliberately deferred to the maintainer:** whether any of this
 survives a reboot. That is a flash-write policy question, and the answer is a
 judgement about wear vs. value that belongs to whoever fields the support
