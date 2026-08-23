@@ -58,6 +58,32 @@ rm -rf "$PLUGIN"
 tar -xJf "$PKG" -C /
 chmod +x "$PLUGIN/hbaviewer.x86_64"
 chmod +x "$PLUGIN"/scripts/*.sh
+
+# Prove the tree on disk IS the package we were handed, before anything below
+# reports on it.
+#
+# Everything after this point -- the syntax checks, the renderers -- passes just
+# as happily against the code that was already installed. On 2026-08-23 a stale
+# tarball was verified this way and reported PASS, twice, while the change under
+# test was not on the box at all: the checks were true, they were just true about
+# the wrong code. A verifier that cannot tell you WHICH build it verified is
+# telling you nothing.
+#
+# Content diff, not md5 of the package: makepkg is not byte-reproducible across
+# machines (it bakes in timestamps and directory permissions), so comparing
+# package checksums between the build host and here proves nothing. What matters
+# is that the FILES match.
+echo
+echo "=== is the installed tree the package we just extracted? ==="
+VERIFYTMP=$(mktemp -d) || exit 2
+tar -xJf "$PKG" -C "$VERIFYTMP"
+if diff -r "$VERIFYTMP/usr/local/emhttp/plugins/hbaviewer" "$PLUGIN" >/dev/null 2>&1; then
+    note OK "installed tree matches the package byte for byte"
+else
+    note FAIL "installed tree DIFFERS from the package -- nothing below is about this build"
+    diff -rq "$VERIFYTMP/usr/local/emhttp/plugins/hbaviewer" "$PLUGIN" 2>&1 | head -8 | sed 's/^/       /'
+fi
+rm -rf "$VERIFYTMP"
 mkdir -p /usr/local/emhttp/plugins/HBAviewer
 cp -f "$PLUGIN/icon.png" /usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
 
@@ -101,6 +127,10 @@ $read = function ($s) use ($S) {
 $ov = $read("get_hba_info");
 $tabs = [
     "overview" => fn() => renderOverviewCards($ov, lsi_config_read()),
+    // NOTE: this one WRITES. renderHealthTables() appends a sample to the
+    // health ring in /tmp, the same store the 10-minute cron feeds. So the
+    // ring growing after this script runs says nothing about whether the
+    // cron sampler works -- grep the installed notify_check.php for that.
     "health"   => fn() => renderHealthTables($read("get_hba_health"), lsi_config_read()),
     "phy"      => fn() => renderPhyTables($read("get_phy_health")),
     "drives"   => fn() => renderDrivesTables($read("get_attached_drives")),

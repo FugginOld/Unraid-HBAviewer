@@ -535,11 +535,29 @@ check('the cron samples health into the ring',
    would be a second rule to keep correct. */
 check('it appends through the shared rule, not its own',
       !preg_match('~\$ring\s*\[\]\s*=~', $cron));
-/* Inside the ENABLE_NOTIFY guard on purpose: this file's contract is that a
-   disabled feature does not poll silicon every ten minutes. Sampling above the
-   guard would start a hardware read on every install that asked for nothing. */
-check('it stays behind the notify guard',
-      strpos($cron, "ENABLE_NOTIFY") < strpos($cron, 'get_hba_health.sh'));
+/* Its OWN opt-in, not a rider on notifications. It was briefly gated on
+   ENABLE_NOTIFY, which honoured the "a disabled feature must not poll silicon"
+   contract by hiding a health-history feature behind a NOTIFICATIONS toggle --
+   nobody would find it, and testing on hardware showed exactly that. */
+check('history has its own switch', str_contains($cron, 'TRACK_HISTORY'));
+check('and is not gated on notifications',
+      (bool) preg_match('~if\s*\(\s*\$doHistory\s*\)~', $cron));
+/* The contract still holds: with neither opt-in set, the file exits before it
+   reads any hardware. */
+check('neither opt-in means no hardware read',
+      (bool) preg_match('~if\s*\(!\$doNotify\s*&&\s*!\$doHistory\)\s*exit\(0\);~', $cron));
+/* A failed NOTIFY read must not skip the history sample -- they are separate
+   features reading separate composers, and an early exit(0) in the notify block
+   would silently disable trend on any box whose overview read hiccupped. */
+check('a failed notify read does not abort the sample',
+      !preg_match('~if \(!is_array\(\$data\)\) exit\(0\);~', $cron));
+
+$schema = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/config.php');
+check('TRACK_HISTORY is a clamped 0/1 setting, off by default',
+      (bool) preg_match("~'TRACK_HISTORY'\s*=>\s*\[0,\s*0,\s*1\]~", $schema));
+$set = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/settings.php');
+check('the setting is reachable from the Settings page',
+      str_contains($set, "name=\"track_history\"") && str_contains($set, "'TRACK_HISTORY'"));
 
 echo $fails === 0 ? "health: all pass\n" : "health: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
