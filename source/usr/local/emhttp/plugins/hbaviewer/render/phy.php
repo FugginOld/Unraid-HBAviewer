@@ -170,14 +170,14 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
    the decoded `drives` payload (the same shape $data carries), added last and
    defaulting to empty so every existing caller still renders exactly what it
    rendered before this plan. */
-function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = []): string {
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = [], array $udMounts = []): string {
     $ctls    = $data['controllers'] ?? [$data];
     // Shape, not tool name: StorCLI2 (SAS4 / 9600) feeds these tables the same
     // record shape as the classic storcli backend, so one renderer serves both.
     $storcli = lsi_backend_shape($data['backend'] ?? '') === 'storcli';
     $now   ??= time();
     $uptime ??= phy_baseline_uptime();
-    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $now, $uptime, $drives, $devBySerial, $roles, $baselines): string {
+    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $now, $uptime, $drives, $devBySerial, $roles, $baselines, $udMounts): string {
         $out = '';
         $phys = $ctl['phys'] ?? [];
         if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; return $out; }
@@ -190,9 +190,9 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
             $n = $d !== null ? drive_dev_name($d, $devBySerial) : null;
             return $n !== null ? '<code>' . htmlspecialchars($n) . '</code>' : '<span class="lu-muted">—</span>';
         };
-        $roleCell = function (array $p) use ($ctlDrives, $devBySerial, $roles): string {
+        $roleCell = function (array $p) use ($ctlDrives, $devBySerial, $roles, $udMounts): string {
             $d = phy_drive($ctlDrives, $p);
-            return lsi_role_cell($d !== null ? drive_dev_name($d, $devBySerial) : null, $roles);
+            return lsi_role_cell($d !== null ? drive_dev_name($d, $devBySerial) : null, $roles, $udMounts);
         };
 
         // The Health tab's ring for THIS controller (read-only — see

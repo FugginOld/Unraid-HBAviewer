@@ -534,6 +534,38 @@ check('drives lsiutil names the slot',
 check('an unassigned drive shows an em dash',
       substr_count(renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], []), '<span class="lu-muted">—</span>') > 0);
 
+/* ── The column falls back to the mount label ────────────────────────────────
+   On a box with no array every one of these cells was an em dash, which is
+   accurate and useless: the drives DO have a name their owner knows, the one
+   the Main page shows. */
+$udMap = ['/dev/sda' => 'media1', '/dev/sdc' => 'media8'];
+$rlMap = ['/dev/sda' => 'Disk 1'];
+
+check('an array role still wins',
+      lsi_role_cell('/dev/sda', $rlMap, $udMap) === 'Disk 1');
+check('a mounted unassigned drive shows its label',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'media8'));
+check('a drive in neither is still an em dash',
+      str_contains(lsi_role_cell('/dev/sdz', [], $udMap), '—'));
+check('a drive with no name at all is still an em dash',
+      str_contains(lsi_role_cell(null, [], $udMap), '—'));
+/* "media9" and "Disk 1" are not the same kind of fact -- one is a slot in the
+   array, the other is where somebody mounted a disk the array knows nothing
+   about. Equal weight would say the column means one thing when it means two. */
+check('the mount label is weaker than an array role',
+      str_contains(lsi_role_cell('/dev/sdc', [], $udMap), 'lu-muted')
+      && !str_contains(lsi_role_cell('/dev/sda', $rlMap, $udMap), 'lu-muted'));
+check('the label is escaped',
+      str_contains(lsi_role_cell('/dev/sdx', [], ['/dev/sdx' => '<b>x</b>']), '&lt;b&gt;'));
+/* Called from four tables; all four have to agree, and three of them reach it
+   through a different closure. */
+$udDrv = renderDrivesTables($drvStorcli, ['ZA1ABCDE' => '/dev/sdg'], [], [], [], ['/dev/sdg' => 'media5']);
+check('the drives table carries the mount label', str_contains($udDrv, 'media5'));
+$udSmart = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sdg', 'model' => 'X', 'serial' => 'S', 'smart' => ['health' => 'PASSED']],
+]], null, [], ['/dev/sdg' => 'media5']);
+check('the SMART table carries the mount label', str_contains($udSmart, 'media5'));
+
 $hSmartRole = renderSmartTable(['drives'=>[['dev'=>'/dev/sdp','serial'=>'X','model'=>'M','smart'=>['health'=>'PASSED']]]],
                                null, ['/dev/sdp' => 'Parity']);
 check('SMART table has an Unraid column', hasCol($hSmartRole, 'Unraid'));
@@ -799,6 +831,52 @@ check('the second parity is Parity 2',
       (unraid_disk_roles($disks2)['/dev/sdq'] ?? '') === 'Parity 2');
 check('a drive outside the array has no role', !isset($roles['/dev/sdzz']));
 check('a missing disks.ini has no roles', unraid_disk_roles("$iniDir/nope.ini") === []);
+
+/* ── Unassigned-device mount labels (reported 2026-08-22) ────────────────────
+   The fixture is Raven's real /proc/mounts, tmpfs line and all. Its numbering
+   deliberately does NOT follow device order -- sdc is media8, sdi is media3 --
+   because a fixture of sdN => mediaN would pass an implementation that derived
+   the label from the device name and never read the mount point. */
+$mounts = "tmpfs /mnt/disks tmpfs rw,relatime,size=1024k,inode64 0 0\n"
+        . "/dev/sda1 /mnt/disks/media1 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdc1 /mnt/disks/media8 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/sdi1 /mnt/disks/media3 xfs rw,relatime,inode64 0 0\n"
+        . "/dev/nvme0n1p1 /mnt/disks/fast xfs rw,relatime 0 0\n"
+        . "/dev/sdz /mnt/disks/whole xfs rw,relatime 0 0\n"
+        // A sibling directory that merely STARTS with the prefix. This is what
+        // the trailing slash guards -- the tmpfs line above is caught by the
+        // /dev/ test instead, so without this the slash would be untested.
+        . "/dev/sdy /mnt/disksbackup/thing xfs rw,relatime 0 0
+"
+        . "/dev/md1p1 /mnt/disk1 xfs rw,relatime 0 0\n"
+        . "/dev/sdj1 /mnt/cache btrfs rw,relatime 0 0\n"
+        . "shfs /mnt/user fuse.shfs rw,relatime 0 0\n"
+        . "/dev/sdl1 /boot vfat rw,relatime 0 0\n";
+$fx  = sys_get_temp_dir() . '/hbav_mounts_' . getmypid();
+file_put_contents($fx, $mounts);
+$ud  = unraid_ud_mounts($fx);
+
+check('a partition maps to its drive',       ($ud['/dev/sda'] ?? '') === 'media1');
+check('the label is the mount point, not the device number',
+      ($ud['/dev/sdc'] ?? '') === 'media8' && ($ud['/dev/sdi'] ?? '') === 'media3');
+/* rtrim('0123456789') is right for sdh1 and cuts nvme0n1p1 back to a device
+   that does not exist. */
+check('an nvme partition maps to its namespace, not past it',
+      ($ud['/dev/nvme0n1'] ?? '') === 'fast' && !isset($ud['/dev/nvme0n']));
+check('a whole-disk mount keeps its name',   ($ud['/dev/sdz'] ?? '') === 'whole');
+/* The directory UD mounts INTO is itself a tmpfs, and it is the FIRST line of
+   the real file. A prefix test written without the trailing slash files it
+   under the label "disks". */
+check('the /mnt/disks tmpfs is not a drive', !isset($ud['tmpfs']) && !in_array('disks', $ud, true));
+check('array, pool, share and boot mounts are excluded',
+      !isset($ud['/dev/md1']) && !isset($ud['/dev/sdj']) && !isset($ud['/dev/sdl'])
+      && !in_array('user', $ud, true));
+check('a sibling directory of /mnt/disks is not one',
+      !isset($ud['/dev/sdy']) && !in_array('thing', $ud, true));
+check('exactly the five unassigned devices are mapped', count($ud) === 5);
+check('a missing /proc/mounts is empty, not fatal', unraid_ud_mounts($fx . '_nope') === []);
+@unlink($fx);
+
 /* Double digits must not sort or read as "Disk 1" — the whole point is telling
    two disks apart at a glance. */
 check('disk10 is Disk 10',
@@ -1462,6 +1540,117 @@ check('the chart palette lives only in tokens.css',
 check('and hbaviewer.js reads it by name',
       substr_count((string) file_get_contents("$pluginDir/hbaviewer.js"), "pal('--chart-") === 7);
 
+
+
+
+
+/* ── Slot facts vs function facts (reported 2026-08-23 by screenshot) ────────
+   The grouped tile's footer read "PCI Location: 84:00" while the two sections
+   above it correctly showed 84:00 and 86:00 -- a board-level row asserting one
+   function's address as the board's. The Overview had dropped it from the
+   parent card since the grouping landed; the tile had not, and both were
+   matching the label as a bare string in their own file. */
+$pcieItems = [
+    ['label' => 'PCIe Width',   'value' => 'x8'],
+    ['label' => 'PCI Location', 'value' => '84:00'],
+    ['label' => 'PCIe Speed',   'value' => 'Gen3 (8.0 GT/s)'],
+];
+$slot = lsi_pcie_slot_items($pcieItems);
+check('the per-function address is not a slot fact',
+      count($slot) === 2 && !in_array('84:00', array_column($slot, 'value'), true));
+check('the slot facts survive in order',
+      array_column($slot, 'label') === ['PCIe Width', 'PCIe Speed']);
+// Nothing to drop is not an error, and the keys must come back renumbered --
+// both callers foreach over the result.
+check('a row with no address is returned unchanged',
+      count(lsi_pcie_slot_items([['label' => 'PCIe Width', 'value' => 'x8']])) === 1);
+check('the result is a list, not a gapped array',
+      array_keys(lsi_pcie_slot_items($pcieItems)) === [0, 1]);
+
+/* ── The bay map's UNRAID field falls back too (reported 2026-08-23) ─────────
+   "In Array map, there is no Unraid label on the disk tiles." Every cell read
+   UNRAID with nothing after it, for the same reason the tables' column was all
+   em dashes: the box has no array, so the roles map is empty. */
+$bmUd = bay_map_assemble(
+    ['controllers' => [['drives' => [
+        ['slot' => '0/0', 'port' => '1', 'serial' => 'SER-A', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sda'],
+        ['slot' => '0/1', 'port' => '2', 'serial' => 'SER-B', 'model' => 'M', 'size' => '8 TB',
+         'os_name' => '/dev/sdb'],
+    ]]]],
+    null, [], 2, 2, [], false, 45, null, [],
+    ['/dev/sdb' => 'Disk 1'],                      // sdb IS an array disk
+    [], [], ['/dev/sda' => 'media1', '/dev/sdb' => 'media9']
+);
+$byDev = [];
+foreach (array_merge($bmUd['placed'] ?? [], $bmUd['unassigned'] ?? []) as $e) {
+    $byDev[$e['dev'] ?? ''] = $e['role'] ?? '';
+}
+check('the bay map shows a mounted unassigned drive', ($byDev['/dev/sda'] ?? '') === 'media1');
+// Same precedence as the tables: a disk cannot be both, and the array's claim
+// is the stronger one.
+check('an array role still wins in the bay map', ($byDev['/dev/sdb'] ?? '') === 'Disk 1');
+
+/* ── One dashboard tile per CARD (reported 2026-08-22) ───────────────────────
+   "If the HBA is a single card, dual controller card, the dashboard card
+   should be the same as the overview card." The Overview has grouped since
+   plan 2026-08-10; the tile emitted one per controller, so one board in one
+   slot reported as two cards. */
+// Keyed through fw_normalize(), which is how lsi_ioc_counts() builds the real
+// map -- 'SAS9300-16i' normalises to '930016i', and hardcoding that spelling
+// here would pin the normaliser rather than the grouping this is testing.
+$iocTwo = [fw_normalize('SAS9300-16i') => 2];
+$dual = [
+    ['status' => 'ok',    'temp' => 52, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'alert', 'temp' => 47, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$reps = lsi_group_reps($dual, $iocTwo);
+check('a dual-IOC board is one tile', count($reps) === 1);
+/* The hotter die is FIRST here and the alert is on the SECOND, so an
+   implementation that takes "the last member" for either would pass one of
+   these two checks and fail the other. */
+check('the tile reads the hotter die', $reps[0]['rep'] === 0);
+check('and the worse status, which is the other one',
+      lsi_worst_status(array_map(fn($m) => $dual[$m]['status'], $reps[0]['members'])) === 'alert');
+
+// ...and with the hotter die second, to kill a hardcoded index.
+$dualB = [
+    ['status' => 'alert', 'temp' => 41, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+    ['status' => 'ok',    'temp' => 55, 'board_name' => 'SAS9300-16i', 'card_id' => 'slot-a'],
+];
+$repsB = lsi_group_reps($dualB, $iocTwo);
+check('the hotter die is found wherever it sits', $repsB[0]['rep'] === 1);
+/* Unraid persists dashboard layout per tile key. Keying on the representative
+   would move a user's tile across the dashboard when the other die got hotter. */
+check('the key stays the first member even then', $repsB[0]['key'] === 0);
+
+/* Two GENUINELY separate cards must stay two tiles. Risers and PCIe switches
+   put separate cards behind one root port, so lsi_group_cards() requires the
+   board to be one the index says has that many IOCs -- this is the guard, from
+   the outside. */
+$twoCards = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-b'],
+];
+check('two separate cards stay two tiles', count(lsi_group_reps($twoCards, $iocTwo)) === 2);
+/* An unrecognised board stays split even in one slot -- absence from the index
+   must never merge anything. */
+$unknown = [
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+    ['status' => 'ok', 'temp' => 40, 'board_name' => 'MysteryHBA', 'card_id' => 'slot-a'],
+];
+check('an unindexed board is never merged', count(lsi_group_reps($unknown, $iocTwo)) === 2);
+
+/* The single-card case, which is almost every box: its key must be BYTE
+   IDENTICAL to the one it has today, or every user's dashboard layout resets
+   on upgrade for a change that does not affect them. The literal is pinned on
+   purpose -- computing it the way the code does would not catch a change to
+   both. */
+$one  = [['status' => 'ok', 'temp' => 40, 'board_name' => 'SAS9207-8i', 'card_id' => 'slot-a']];
+$repsOne = lsi_group_reps($one, $iocTwo);
+check('a single card is one tile', count($repsOne) === 1);
+check('and keeps the tile key it already had',
+      "HBAviewer_c{$repsOne[0]['key']}" === 'HBAviewer_c0');
 
 /* ── The dashboard tile never blocks (reported 2026-08-22) ───────────────────
    dashboard.php renders inside Unraid's OWN Dashboard page. A synchronous

@@ -47,7 +47,7 @@ function smart_state_color(string $state): string {
    that collection is; it is printed above the table because the cache is now
    kept until someone refreshes it, and an unlabelled table of week-old
    temperatures reads exactly like a live one. */
-function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []): string {
+function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = [], array $udMounts = []): string {
     $drives = $data['drives'] ?? [];
     if (!$drives) return '<p class="lu-muted">No drives found.</p>';
     $age = $ageSecs === null ? '' :
@@ -65,7 +65,7 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []):
         $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;
         $rows[] = [
             '<code>' . htmlspecialchars($d['dev'] ?? '') . '</code>',
-            lsi_role_cell($d['dev'] ?? null, $roles),
+            lsi_role_cell($d['dev'] ?? null, $roles, $udMounts),
             htmlspecialchars($d['model'] ?? ''),
             ($s['transport'] ?? '') !== '' ? htmlspecialchars(strtoupper($s['transport'])) : $dash,
             '<code>' . htmlspecialchars($d['serial'] ?? '') . '</code>',

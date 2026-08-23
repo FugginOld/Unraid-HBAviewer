@@ -6,6 +6,8 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/view.php';
 require_once __DIR__ . '/cached_read.php';
+require_once __DIR__ . '/card_group.php';
+require_once __DIR__ . '/firmware_index.php';
 $pluginname = 'HBAviewer';
 $SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 
@@ -136,6 +138,15 @@ echo <<<CSS
 }
 .lu-d-tile .lu-d-foot-item { white-space:nowrap; }
 .lu-d-tile .lu-d-foot-row span { color:var(--d-text); font-weight:500; }
+/* A grouped board's per-die sections. Divided by a rule and an indent rather
+   than boxed again -- a card inside a card reads as two cards, which is the
+   split this whole feature exists to stop. Same treatment chrome.css gives
+   .lu-card-ioc on the Overview, so the two screens describe one board the
+   same way. */
+.lu-d-tile .lu-d-ioc { border-top:1px solid var(--d-border); padding:10px 0 0 12px; margin-top:10px; }
+.lu-d-tile .lu-d-ioc + .lu-d-ioc { border-top:none; }
+.lu-d-tile .lu-d-ioc-label { display:block; margin-bottom:6px; font-size:10.5px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--d-text); opacity:.7; }
 </style>
 CSS;
 
@@ -178,10 +189,41 @@ if ($error) {
     ];
 }
 
-foreach ($controllers as $i => $c) {
+/* One tile per CARD, not per controller. A SAS9300-16i is one board carrying
+   two SAS3008 IOCs, and this loop used to emit a tile for each -- two tiles
+   saying "HBAviewer", differing only by /c0 and /c1, for one card in one slot.
+   The Overview, the firmware page and the per-controller tabs have all grouped
+   through lsi_group_cards() since plan 2026-08-10; the tile is the consumer
+   that was never updated.
+
+   The merge guard is that function's and is deliberately strict: shared PCI
+   root port AND a board the firmware index says carries that many IOCs, count
+   matching exactly. Risers and PCIe switches put genuinely separate cards
+   behind one root port, and merging those would be a worse bug than the split
+   this fixes -- appearing only on hardware nobody here owns.
+
+   Keyed on the group's FIRST MEMBER index, which for every ungrouped card is
+   the index it already had. Unraid persists dashboard layout per tile key, so
+   a key change resets where the user put the tile and whether they collapsed
+   it. Only a box that genuinely has a dual-IOC board sees one, and there the
+   two old tiles are becoming one anyway. */
+foreach (lsi_group_reps($controllers, lsi_ioc_counts(fw_load())) as $grp) {
+    $g = $grp['members'];
+    /* Built from the HOTTEST member, so every temperature-derived field -- the
+       band, the gauge gradient, the pill's colour and its label -- agrees with
+       the number on screen. Taking the max temperature while building the view
+       from a different member would show one die's number under another die's
+       band, which is worse than either alone.
+       A tile has room for one temperature and a dual-IOC board has two dies.
+       The higher one is what a dashboard is for: it is the one that will trip
+       a threshold, and it is what the status colour already derives from. The
+       Overview remains the screen that shows both. */
+    $i       = $grp['rep'];
+    $c       = $controllers[$i];
+    $grouped = count($g) > 1;
     $t = [
-        'key'    => "{$pluginname}_c{$i}",
-        'id'     => "tblHBAviewer{$i}",
+        'key'    => "{$pluginname}_c{$grp['key']}",
+        'id'     => "tblHBAviewer{$grp['key']}",
         'tc'     => lsi_status_color('alert'),
         'main'   => 'HBAviewer',
         'sub'    => "Controller /c{$i}",
@@ -225,8 +267,20 @@ foreach ($controllers as $i => $c) {
     // Title stays the plugin name; the subtitle identifies which card this tile is.
     // $portLabel is already "Controller /cN" on storcli cards and
     // "ioc0 (lsiutil -pN)" on lsiutil ones — both are the right thing to show.
+    /* Worst-of across the group, not the hottest member's own status: the die
+       running cooler can still be the one reporting an alert. Same rule and
+       the same function the Overview's parent card uses. */
+    if ($grouped) {
+        $col = lsi_worst_status(array_map(
+            fn($m) => (string) ($controllers[$m]['status'] ?? 'ok'), $g));
+        $badge = lsi_status_label($col);
+    }
     $t['tc']  = $col;
-    $t['sub'] = $model . ' - ' . $portLabel;
+    /* A tile showing ONE temperature for a board with two sensors has to say
+       so, or the number reads as the only sensor there is. */
+    $t['sub'] = $grouped
+        ? $model . ' - ' . count($g) . ' controllers'
+        : $model . ' - ' . $portLabel;
 
     $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'
@@ -246,7 +300,11 @@ foreach ($controllers as $i => $c) {
     // anything. No model here — the subtitle names which card this tile is, and
     // it stays visible when collapsed.
     $parts = [];
-    foreach ($v['pcie'] as $item) {
+    /* On a grouped tile the address belongs to each section above, not to the
+       board -- the same rule the Overview's parent card follows, and now the
+       same function. An ungrouped tile keeps it: one function, one address,
+       and it is genuinely that card's. */
+    foreach (($grouped ? lsi_pcie_slot_items($v['pcie']) : $v['pcie']) as $item) {
         $parts[] = "<span class='lu-d-foot-item'>" . $item['label'] . ': <span>'
                  . htmlspecialchars($item['value']) . '</span></span>';
     }
@@ -258,9 +316,65 @@ foreach ($controllers as $i => $c) {
     $gauge = lsi_gauge_svg("lu-dgrad-{$i}", $temp / 110, [$gDark, $gLight]);
     $tileLight = lsi_tile_is_light() ? ' light' : '';
 
-    $t['body'] = "
-    <div class='lu-d-ctl'>
-      <div class='lu-d-overview'>
+    /* A grouped board shows BOTH dies, the way the Overview's parent card does:
+       the board's own facts once, then a labelled section per IOC carrying its
+       own gauge, temperature and die-level rows. An earlier cut of this showed
+       only the hotter die -- one number for a board with two sensors, which
+       hides exactly the case the grouping exists to describe.
+       Board fields come from the first member; per-die fields from each. */
+    $ioc = '';
+    if ($grouped) {
+        foreach ($g as $m) {
+            $mc = $controllers[$m];
+            if (isset($mc['error'])) {
+                $ioc .= "<div class='lu-d-ioc'><span class='lu-d-ioc-label'>Controller /c{$m}</span>"
+                      . "<span style='color:var(--crit-text)'>" . htmlspecialchars($mc['error']) . "</span></div>";
+                continue;
+            }
+            $mv = lsi_hba_view($mc, $port, $m);
+            [$mD, $mL] = $mv['temp_grad'];
+            $mTemp = (int) ($mc['temp'] ?? 0);
+            $mGauge = lsi_gauge_svg("lu-dgrad-{$m}", $mTemp / 110, [$mD, $mL]);
+            $mCrit  = ($mv['temp_band'] ?? '') === 'critical';
+            $mChip  = $mCrit
+                ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
+                : htmlspecialchars($mv['temp_label']);
+            // PCI Location is per FUNCTION, not per slot: the two IOCs of a
+            // 9300-16i answer to different addresses, and that address is how a
+            // die is correlated with lspci and `storcli /cN`.
+            $mLoc = htmlspecialchars((string) ($mc['pci_location'] ?? ''));
+            $mDrv = htmlspecialchars($mv['drives'] ?? '');
+            $ioc .= "
+      <div class='lu-d-ioc' style='--td:{$mD};--tl:{$mL}'>
+        <span class='lu-d-ioc-label'>Controller /c{$m}</span>
+        <div class='lu-d-overview'>
+          <div class='lu-d-gauge{$tileLight}' style='--td:{$mD};--tl:{$mL}'>
+            <div class='lu-arc-wrap'>
+              {$mGauge}
+              <div class='lu-arc-readout'>
+                <span class='v'>{$mTemp}</span>
+                <span class='u'>°C</span>
+              </div>
+            </div>
+            <span class='lu-d-temp-band'>{$mChip}</span>
+          </div>
+          <div class='lu-d-meta'>"
+          . ($mLoc !== '' ? "<p>PCI Location: <span>{$mLoc}</span></p>" : '')
+          . ($mDrv !== '' ? "<p>Drives: <span>{$mDrv} connected</span></p>" : '')
+          . "<p>HBA Health: <span class='lu-d-health' style='--sc:{$mv['color']}'>" . $mv['label'] . "</span></p>
+          </div>
+        </div>
+      </div>";
+        }
+    }
+
+    /* No board-level gauge on a grouped tile: each die has its own below, and
+       repeating the hottest one up here would show the same reading twice and
+       imply the board has a temperature of its own. */
+    /* No board-level gauge on a grouped tile: each die has its own below, and
+       repeating the hottest one up here would show the same reading twice and
+       imply the board has a temperature of its own. */
+    $boardGauge = $grouped ? '' : "
         <div class='lu-d-gauge{$tileLight}' style='--td:{$gDark};--tl:{$gLight}'>
           <div class='lu-arc-wrap'>
             {$gauge}
@@ -270,7 +384,11 @@ foreach ($controllers as $i => $c) {
             </div>
           </div>
           <span class='lu-d-temp-band'>{$tempChip}</span>
-        </div>
+        </div>";
+
+    $t['body'] = "
+    <div class='lu-d-ctl'>
+      <div class='lu-d-overview'>{$boardGauge}
         <div class='lu-d-meta'>
           <p>Model: <span>{$model}</span></p>"
           . ($chip     ? "<p>Chip: <span>{$chip}</span></p>"         : '')
@@ -278,11 +396,14 @@ foreach ($controllers as $i => $c) {
           . ($bios     ? "<p>BIOS: <span>{$bios}</span></p>"         : '')
           . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
-          . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
+          /* Drives and the lsiutil port belong to a DIE, not to the board, so a
+             grouped tile carries them per IOC below rather than once up here --
+             the same split luDieRows makes on the Overview. */
+          . ($drives && !$grouped ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
           . "<p>Badge Sensitivity: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
-      </div>
+      </div>{$ioc}
     </div>"
     . $t['foot'];
 

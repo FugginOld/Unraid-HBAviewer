@@ -71,3 +71,27 @@ function lsi_group_cards(array $ctls, array $iocCounts): array {
     usort($groups, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
     return $groups;
 }
+
+/* Groups, each with the member whose reading should stand for it.
+
+   A card gets ONE tile on the dashboard and a dual-IOC board has two dies, so
+   something has to choose which temperature is shown. The hottest: it is the
+   one that will trip a threshold, and it is what the status colour derives
+   from. Building the whole view from that member -- rather than taking the max
+   number and the band from somewhere else -- is what keeps the gauge, the
+   band, the pill colour and the number all describing the same die.
+
+   `key` is the FIRST member's index, always, even when the representative is
+   the second. Unraid persists dashboard layout per tile key; keying on the
+   representative would move a user's tile when the other die got hotter. */
+function lsi_group_reps(array $ctls, array $iocCounts): array {
+    $out = [];
+    foreach (lsi_group_cards($ctls, $iocCounts) as $g) {
+        $rep = $g[0];
+        foreach ($g as $m) {
+            if ((int) ($ctls[$m]['temp'] ?? 0) > (int) ($ctls[$rep]['temp'] ?? 0)) $rep = $m;
+        }
+        $out[] = ['members' => $g, 'key' => $g[0], 'rep' => $rep];
+    }
+    return $out;
+}

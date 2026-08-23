@@ -9,7 +9,7 @@ Two asks, one of which is a defect and one of which is a feature. They are in
 one document because they are the same column and the second is only worth
 building once the first is understood.
 
-## Part 1 — the defect. NOT YET DIAGNOSED.
+## Part 1 — the defect. CLOSED, NOT A DEFECT (see Finding).
 
 **This spec does not know the cause, and the plan's first task is to find out
 rather than to fix.** Writing it the other way round is how this repo's
@@ -180,3 +180,17 @@ Part 1's verification depends on its diagnosis and cannot be written until then.
 Whatever it turns out to be, it needs a test that fails against the box's real
 `disks.ini` shape — a fixture invented from the fix's own assumptions would pass
 regardless.
+
+
+## Outcome (2026-08-23)
+
+Part 1 closed as not-a-defect: the reporter's own screenshots show every Unraid
+cell on Drives and SMART as an em dash, exactly as the `disks.ini` reading
+predicted. Nothing was mislabelled.
+
+Part 2 implemented. One correction to this spec came out of building it: the
+trailing slash on `/mnt/disks/` does **not** exclude the `tmpfs /mnt/disks`
+line — the `/dev/*` device test does that. The slash guards a *sibling*
+directory, `/mnt/disksbackup`, and a mutation proved the original test suite
+did not cover that at all. Both the code comment and the tests now say what is
+actually true.

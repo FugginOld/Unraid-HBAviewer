@@ -147,13 +147,10 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $fwClause  = fw_overview_clause($hv['firmware_verdict'] ?? []);
     // Worst-of, so the parent says something true about the board: a card whose
     // second IOC is overheating must not show a green badge because its first
-    // one is fine.
-    $rank  = ['ok' => 0, 'warn' => 1, 'alert' => 2];
-    $worst = 'ok';
-    foreach ($group as $i) {
-        $s = (string) ($ctls[$i]['status'] ?? 'ok');
-        if (($rank[$s] ?? 0) > ($rank[$worst] ?? 0)) { $worst = $s; }
-    }
+    // one is fine. The ordering lives in view.php beside lsi_status_color(),
+    // because the dashboard tile needs the same answer.
+    $worst = lsi_worst_status(array_map(
+        fn($i) => (string) ($ctls[$i]['status'] ?? 'ok'), $group));
 
     $out = '<div class="lu-card first lu-card-parent" data-status="' . htmlspecialchars($worst) . '"'
          . ' style="--sc:' . lsi_status_color($worst) . '">'
@@ -210,11 +207,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     // it belongs to each function and is rendered per sub-card above.
     if ($showPcie && (($head['pcie_width'] ?? '') || ($head['pcie_speed'] ?? ''))) {
         $out .= '<hr class="lu-divider"><div class="lu-pcie-row">';
-        foreach ($hv['pcie'] as $item) {
-            // Matched on the label lsi_hba_view() assigns (view.php). Renaming it
-            // there would put the address back on the board — the item COUNT
-            // asserted in ajax_render_test.php is what catches that, not this line.
-            if ($item['label'] === 'PCI Location') continue;
+        foreach (lsi_pcie_slot_items($hv['pcie']) as $item) {
             $out .= '<div class="lu-pcie-item">' . $item['label'] . ': <span>' . htmlspecialchars($item['value']) . '</span></div>';
         }
         $out .= '</div>';

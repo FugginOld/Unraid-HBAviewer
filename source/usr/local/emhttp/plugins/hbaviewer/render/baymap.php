@@ -42,6 +42,51 @@ function unraid_disk_roles(string $disksIni = UNRAID_DISKINI): array {
     return $roles;
 }
 
+/* Which mounted UNASSIGNED device each drive is: "/dev/sdh" => "media9".
+   The Unraid column showed an em dash for every drive on a box with no array,
+   which was accurate and useless -- the drives do have a name their owner
+   recognises, the one the Main page's Unassigned Devices list shows.
+
+   /proc/mounts, NOT the Unassigned Devices plugin's own state. UD keeps its
+   files where it likes and may move them; /proc/mounts is the kernel's and
+   answers the actual question -- "is this drive mounted as an unassigned
+   device" -- with no dependency on another plugin at all. Not mounted means
+   nothing to show, and the em dash is then right.
+
+   The mount point's basename is the label. Its device is a PARTITION and the
+   column names drives, so the suffix comes off. */
+function unraid_ud_mounts(string $procMounts = '/proc/mounts'): array {
+    if (!is_file($procMounts)) return [];
+    $out = [];
+    foreach (explode("\n", (string) @file_get_contents($procMounts)) as $line) {
+        $f = preg_split('/\s+/', trim($line), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        if (count($f) < 2) continue;
+        [$dev, $mp] = $f;
+        /* Two guards, and they catch different things.
+           The device must be a /dev/* node: /proc/mounts opens with
+           `tmpfs /mnt/disks tmpfs ...`, because the directory UD mounts INTO
+           is itself a mount, and "tmpfs" is not a drive.
+           The trailing slash on the prefix is what keeps a SIBLING directory
+           out -- /mnt/disksbackup starts with /mnt/disks and is not it. */
+        if (!str_starts_with($mp, '/mnt/disks/') || !str_starts_with($dev, '/dev/')) continue;
+        $label = basename($mp);
+        if ($label === '') continue;
+        $out[ud_base_device($dev)] = $label;
+    }
+    return $out;
+}
+
+/* "/dev/sdh1" => "/dev/sdh", "/dev/nvme0n1p1" => "/dev/nvme0n1".
+   Not rtrim(0..9): that is right for sdh1 and wrong for nvme0n1p1, which it
+   would cut back to /dev/nvme0n -- a device that does not exist. The two
+   families spell a partition differently and the rule has to know both. */
+function ud_base_device(string $dev): string {
+    $name = substr($dev, strlen('/dev/'));
+    if (preg_match('/^((?:nvme\d+n\d+|mmcblk\d+))p\d+$/', $name, $m)) return '/dev/' . $m[1];
+    if (preg_match('/^([a-z]+)\d+$/', $name, $m))                     return '/dev/' . $m[1];
+    return $dev;   // whole-disk mount, or a shape we do not recognise
+}
+
 /* Parity is just the slots whose label says so — one reader for disks.ini, not
    two that could disagree about which device is parity. */
 function unraid_parity_devs(string $disksIni = UNRAID_DISKINI): array {
@@ -68,7 +113,8 @@ function unraid_rebuilding(string $varini = UNRAID_VARINI): bool {
 function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $rows, int $cols,
                           array $devBySerial = [], bool $locked = false, int $warnTemp = 45,
                           ?int $smartAge = null, array $rebuildDevs = [], array $roles = [],
-                          array $addrByDev = [], array $locating = []): array {
+                          array $addrByDev = [], array $locating = [],
+                          array $udMounts = []): array {
     /* Serial is the join key the SMART collector already emits per drive; it is
        also the only identifier the STORCLI payload shares with it (storcli's WWN
        differs by a nibble from /dev's — see lsi_dev_by_serial).
@@ -132,7 +178,13 @@ function bay_map_assemble(array $drivesData, ?array $smart, array $map, int $row
                 // What Unraid calls this disk — the name on its Main page, and
                 // the one identifier a person already knows before they look
                 // here. Empty for a drive the array does not use.
-                'role'   => $dev !== null ? ($roles[$dev] ?? '') : '',
+                /* Array role first, then the unassigned-device mount label --
+                   the same precedence, and the same reason, as lsi_role_cell()
+                   in the tables: the two are mutually exclusive in reality and
+                   the array's claim is the stronger one. Without the fallback
+                   every cell on a box with no array reads UNRAID with nothing
+                   after it, which is what was reported. */
+                'role'   => $dev !== null ? ($roles[$dev] ?? $udMounts[$dev] ?? '') : '',
                 // The SCSI address the locate blink reads, and whether it is
                 // blinking right now (plan 048). Empty address = no Locate
                 // button on this bay, rather than one that cannot work.
