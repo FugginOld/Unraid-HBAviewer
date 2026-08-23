@@ -1,5 +1,7 @@
 # Bay map JS write-path tests — Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `tests/baymap_js_test.js`, since extended with the keyboard write paths.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Put the bay map's client-side write paths under runtime test, so the code that mutates the one unregenerable store cannot silently change what it posts.

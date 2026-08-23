@@ -1,5 +1,7 @@
 # One Backend Fact, One Default Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `lsi_backend_shape()` is the single backend question.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the PHP side read the `backend` field and nothing else, route storcli discovery through the shell's one implementation, and collapse `ALERT_THRESHOLD`'s four default declarations to one.

@@ -1,5 +1,7 @@
 # Per-Card Read Implementation Plan
 
+> **Status: COMPLETE.** Shipped. `lsi_each_card` in `scripts/lib.sh`; the five composers each keep only their own query.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the five hand-assembled per-card loops in the lsiutil tab composers with one `lsi_each_card` module, so each composer declares only the hardware query it differs by.
