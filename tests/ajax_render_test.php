@@ -109,7 +109,7 @@ check('phy lsiutil device from os_name', str_contains($h, '<code>/dev/sdb</code>
 check('phy controller error row', str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['error'=>'no response']]]), 'no response'));
 check('phy empty phys', str_contains(
-    renderPhyTables(['backend'=>'storcli','controllers'=>[[]]]), 'No PHY data.'));
+    renderPhyTables(['backend'=>'storcli','controllers'=>[[]]]), 'No PHY data'));
 check('phy multi heads controllers', str_contains(
     renderPhyTables(['backend'=>'storcli','controllers'=>[['phys'=>[]],['phys'=>[]]]]), 'Controller /c1'));
 check('phy single omits head', !str_contains(
@@ -1004,7 +1004,7 @@ check('a device with no serial creates no entry', !in_array('/dev/sdz', $bySeria
 check('an unknown serial is still null',
       drive_dev_name(['serial' => 'NOPE'], $bySerial) === null);
 check('drives empty', str_contains(
-    renderDrivesTables(['backend'=>'storcli','controllers'=>[[]]]), 'No drives detected.'));
+    renderDrivesTables(['backend'=>'storcli','controllers'=>[[]]]), 'No drives detected'));
 
 /* ── Events: archive dir is injectable, merge dedups, newest first ────────── */
 $dir = sys_get_temp_dir() . '/hbav_events_' . getmypid();
@@ -1090,7 +1090,7 @@ check('smart healthy green',  str_contains($h, '#2ecc71'));
 check('smart defects amber',  str_contains($h, '#f39c12'));
 check('smart standby row',    str_contains($h, 'standby'));
 check('smart formats hours',  str_contains($h, '12,345h'));
-check('smart empty message',  str_contains(renderSmartTable([]), 'No drives found.'));
+check('smart empty message',  str_contains(renderSmartTable([]), 'No drives found'));
 check('smart header drops Grown Defects', !str_contains($h, 'Grown Defects'));
 
 /* transport: the label the plan exists for — SATA drives must not be shown
@@ -1435,11 +1435,11 @@ foreach ($tabs as $tab => [$two, $errored, $none]) {
 // The renderers' own empty branches also `continue` — same leak risk, different line.
 check('phy: no-PHY controller still carded', (function () use ($cards, $ctlIds, $balanced, $phyC) {
     $h = renderPhyTables(['backend'=>'storcli','controllers'=>[$phyC(), []]]);
-    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No PHY data.');
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No PHY data');
 })());
 check('drives: driveless controller still carded', (function () use ($cards, $ctlIds, $balanced, $drvC) {
     $h = renderDrivesTables(['backend'=>'storcli','controllers'=>[$drvC(), []]]);
-    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No drives detected.');
+    return $cards($h) === 2 && $ctlIds($h) === ['0','1'] && $balanced($h) && str_contains($h, 'No drives detected');
 })());
 // Its own archive dir: $cdir already holds c1 entries from the two-controller
 // case above, and event_merge would replay them, so the controller would not be
@@ -1544,6 +1544,51 @@ check('and hbaviewer.js reads it by name',
 
 
 
+
+
+/* ── Empty states say something (design-system P2-C) ─────────────────────────
+   Four tabs answered "no data" with two or three words. The Event Log's was
+   worse than terse: it said "No log entries" even when the /boot archive HELD
+   entries that this backend's renderer cannot format, so a box that switched
+   backend was told its history was gone. The archive surviving a backend
+   change is the entire reason it exists. */
+$evDir = sys_get_temp_dir() . '/hbav_empty_' . getmypid();
+@mkdir($evDir, 0755, true);
+array_map('unlink', glob("$evDir/*.json") ?: []);
+
+// A genuinely empty log: no archive, nothing hidden.
+$evNone = renderEventsTables(['backend' => 'storcli', 'controllers' => [['entries' => []]]], $evDir);
+check('an empty firmware log says it is normal',
+      str_contains($evNone, 'No log entries') && str_contains($evNone, 'normal state'));
+check('and does not invent a hidden archive', !str_contains($evNone, 'archived on /boot'));
+
+/* Now an archive written by the OTHER backend: nothing is displayable, but the
+   entries exist. The old copy claimed there were none. */
+array_map('unlink', glob("$evDir/*.json") ?: []);
+file_put_contents("$evDir/events_c0.json", json_encode([
+    ['seq' => '1', 'time' => 't', 'code' => 'C0', 'desc' => 'd', 'backend' => 'storcli'],
+    ['seq' => '2', 'time' => 't', 'code' => 'C1', 'desc' => 'd', 'backend' => 'storcli'],
+]));
+$evHidden = renderEventsTables(['backend' => 'lsiutil', 'controllers' => [['entries' => []]]], $evDir);
+check('a backend switch does not report the archive as empty',
+      !str_contains($evHidden, 'No log entries.'));
+check('it says how many entries are held and why they are not shown',
+      str_contains($evHidden, '2 earlier entries are')
+      && str_contains($evHidden, 'different backend'));
+array_map('unlink', glob("$evDir/*.json") ?: []);
+@rmdir($evDir);
+
+// The other three state what was observed without claiming a cause they cannot
+// know -- a controller with no links and a backend that reports none look
+// identical from the renderer.
+check('the drives empty state names what reported nothing',
+      str_contains(renderDrivesTables(['backend' => 'storcli', 'controllers' => [[]]]),
+                   'reported no attached devices'));
+check('the PHY empty state claims no cause',
+      str_contains(renderPhyTables(['backend' => 'storcli', 'controllers' => [[]]]),
+                   'reported no link information'));
+check('the SMART empty state says the collector already ran',
+      str_contains(renderSmartTable(['drives' => []]), 'collector ran'));
 
 /* ── Temperature display unit (PR #22, rebased) ──────────────────────────────
    Contributed as a Celsius/Fahrenheit toggle. The invariant that makes it safe
