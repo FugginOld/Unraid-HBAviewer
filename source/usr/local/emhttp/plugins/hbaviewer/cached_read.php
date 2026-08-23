@@ -7,6 +7,11 @@
  * foreground request NEVER blocks on the producer — a cold storcli scan can
  * exceed the web timeout — so it returns {state: ready|warming} and the JS polls.
  *
+ * A caller that cannot poll — the Unraid dashboard tile, which is rendered
+ * server-side inside someone else's page — passes serve_stale and gets
+ * {state: stale} with the last good body instead of an empty warming answer.
+ * The rule above is unchanged by that: it still does not wait.
+ *
  * Clock and launcher are injectable so the staleness/lock/swap policy is
  * testable in-process (fake clock + temp dir), the first coverage of this glue.
  */
@@ -37,6 +42,15 @@ function cached_read(string $key, int $ttl, string $producer, array $opts = []):
           . "mv " . escapeshellarg($tmp) . " " . escapeshellarg($result) . "; "
           . "rm -f " . escapeshellarg($lock)
         );
+    }
+    /* A caller that cannot poll takes the stale body rather than nothing.
+       AFTER the launch above, deliberately: serving stale stands in for a
+       refresh, it does not decide one is unnecessary, so the producer has
+       already been started by the time we get here.
+       The filesize guard is the same rule the fresh path has one screen up --
+       a truncated producer run is not data at whatever age. */
+    if (!empty($opts['serve_stale']) && is_file($result) && filesize($result) > 0) {
+        return ['state' => 'stale', 'body' => (string) file_get_contents($result)];
     }
     return ['state' => 'warming', 'body' => ''];
 }
