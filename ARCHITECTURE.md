@@ -333,9 +333,33 @@ linguist counted it as PHP, PHPStan saw inert markup and jshint never opened it
 
 Date-versioned, cut from `main`:
 
-1. Merge `dev` → `main`.
-2. Add a `###YYYY.MM.DD###` block to `<CHANGES>` in `hbaviewer.plg`, commit, push.
-3. `git tag YYYY.MM.DD && git push --tags`.
+```bash
+git fetch origin                       # step 0, and it is not optional -- see below
+git checkout main && git merge --ff-only origin/main
+git merge --no-ff dev
+# add a ###YYYY.MM.DD### block to <CHANGES> in hbaviewer.plg
+git commit -am "Changelog for YYYY.MM.DD" && git push origin main
+git tag YYYY.MM.DD && git push origin YYYY.MM.DD
+```
+
+**`main` moves without you.** The release workflow patches `version` / `md5` /
+`pkgURL` in `hbaviewer.plg` and pushes that commit to `main` itself, so any
+local checkout of `main` is one commit stale from the moment the previous
+release finished. Merging `dev` into a stale `main` produces a merge that looks
+clean and drops CI's patch commit — caught once on 2026-08-23, before pushing,
+by comparing against `origin/main`. Fetch first, every time.
+
+For the same reason, **do not keep a long-lived `main` worktree.** One existed
+and was exactly one release behind whenever it was next used. Make one per
+release and remove it after:
+
+```bash
+git worktree add /tmp/hbamain main    # ...release..., then:
+git worktree remove /tmp/hbamain
+```
+
+After the release, merge `main` back into `dev` so the two agree again —
+otherwise the next release starts from the same divergence.
 
 The tag must point at `main`'s tip. The workflow then runs the tests, builds the
 `.txz`, patches the `version` / `md5` / `pkgURL` entities in `hbaviewer.plg` on

@@ -182,6 +182,15 @@ if ($type === 'overview_html') {
             echo '<div class="lu-error"><strong>Error:</strong> ' . htmlspecialchars(substr($raw, 0, 300)) . '</div>'; exit;
         }
     }
+    /* A read that has not come back within the lock's window is reported as
+       such. The poll below keeps retrying either way -- what changes is that a
+       box whose controller read hangs every time now says so instead of
+       looking merely slow for as long as anyone leaves the tab open. */
+    if (!empty($r['stalled'])) {
+        echo '<div class="lu-loading" data-overview="warming">The last controller read did not finish. '
+           . 'Retrying— if this persists, the controller or its tool is not responding.</div>';
+        exit;
+    }
     echo '<div class="lu-loading" data-overview="warming">Reading controller information… the first read can take up to a minute on slow controllers. This updates automatically.</div>';
     exit;
 }
