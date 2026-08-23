@@ -305,9 +305,11 @@ Two halves:
 - **Golden tests** feed a fixture to a parser and diff stdout against
   `tests/expected/`. A dropped or renamed JSON field fails here.
 - **PHP unit tests** (`tests/*_test.php`) exercise the pure functions.
-  Registered in **both** invocation lines of `tests/run_php.sh` — the local-`php`
-  line and the Docker fallback. Missing the second is how a test silently never
-  runs in CI.
+  Registered in the `TESTS` list in `tests/run_php.sh` — **one** place, which
+  builds the `$CMD` both the local-`php` branch and the Docker fallback run. A
+  test missing from that list silently never runs in CI. (This used to be two
+  separate invocation lines, and this paragraph went on saying so after they
+  were folded into one.)
 
 Conventions that exist because of specific past bugs:
 
