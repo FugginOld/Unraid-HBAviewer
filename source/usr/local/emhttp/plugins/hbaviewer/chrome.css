@@ -212,7 +212,14 @@
 .lu-arc-readout.count .val { font-size: 19px; }
 .lu-meta { flex: 1; min-width: 0; }
 .lu-meta p       { margin: 4px 0; font-size: 12.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px dashed var(--border-soft); padding-bottom: 3px; }
-.lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+/* overflow-wrap, not a breakpoint: .lu-meta carries min-width: 0, which removes
+   the automatic minimum and lets the column shrink BELOW its own min-content.
+   The unbreakable mono values -- serials, WWNs, "lsiutil ioc0 (lsiutil - p1)"
+   -- then spill out of it, and spilled inline text still counts toward the
+   page's scrollable width, which is why a phone could scroll sideways to find
+   an intact value sitting outside the card (issue #21). Letting them break is
+   what min-width: 0 was always assuming they could do. */
+.lu-meta p span  { color: var(--text); font-weight: 500; font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .lu-badge {
     display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
     padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
@@ -227,6 +234,22 @@
 .lu-meta p span.lu-badge {
     margin-top: 0; font-family: inherit; font-weight: 700; font-size: 11px;
     color: var(--sc, var(--good));
+}
+
+/* ── Phone ───────────────────────────────────────────────────────────────────
+   The only width breakpoint in this sheet, and 767px is not our number: the
+   Dynamix stylesheets draw their mobile line at 768, so this is the host's
+   boundary and the layout changes when the shell around it does. Anything else
+   that needs a phone rule belongs in THIS block rather than beside a second
+   number -- two breakpoints one pixel apart is how a sheet starts disagreeing
+   with itself.
+
+   The gauge is flex: 0 0 auto around a fixed 138px arc, so on a phone it took
+   its ~170px first and left the meta list whatever remained. Stacking hands
+   the list the full width instead. */
+@media (max-width: 767px) {
+    .lu-overview-row { flex-direction: column; align-items: center; gap: 14px; }
+    .lu-meta { width: 100%; }
 }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
