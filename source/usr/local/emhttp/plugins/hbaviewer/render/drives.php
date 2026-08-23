@@ -7,11 +7,31 @@
    Empty on a box without lsblk, which renders every Device cell as "—" rather
    than failing a tab. Callers pass the result in, so the render functions stay
    pure and the tests can inject a map. */
-function lsi_dev_by_serial(): array {
+/* One spelling of a serial, so the two sides of the join cannot disagree about
+   it. Both sides call this; that is the whole point of it existing.
+
+   Some SAS drives report a serial WITH A SPACE IN IT -- an HGST H7210A520SUN010T
+   returns "001848RG2JHN JEHG2JHN" -- and storcli and lsblk do not agree on how
+   much whitespace sits in the middle. Collapsing runs of it makes the two
+   spellings one key. */
+function lsi_serial_key(string $s): string {
+    return strtoupper(trim((string) preg_replace('/\s+/', ' ', $s)));
+}
+
+/* $raw is injectable so the parse can be tested; null means ask lsblk. */
+function lsi_dev_by_serial(?string $raw = null): array {
+    $raw ??= (string) shell_exec('lsblk -S -o NAME,SERIAL -n 2>/dev/null');
     $map = [];
-    foreach (explode("\n", (string) shell_exec('lsblk -S -o NAME,SERIAL -n 2>/dev/null')) as $line) {
+    foreach (explode("\n", $raw) as $line) {
         $f = preg_split('/\s+/', trim($line), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        if (count($f) >= 2 && $f[0] !== '') $map[strtoupper($f[1])] = '/dev/' . $f[0];
+        if (count($f) < 2 || $f[0] === '') continue;
+        /* EVERY field after the name, not just the first. This took only $f[1],
+           so a serial containing a space was truncated at it and the drive was
+           filed under half its own name. The lookup then always missed: four of
+           nine drives on the reporting box showed "-" for a device they were
+           plainly attached to, while SMART -- which joins by another path --
+           named all nine. */
+        $map[lsi_serial_key(implode(' ', array_slice($f, 1)))] = '/dev/' . $f[0];
     }
     return $map;
 }
@@ -22,7 +42,7 @@ function lsi_dev_by_serial(): array {
    a Device column that names the wrong disk is worse than one that says "—". */
 function drive_dev_name(array $d, array $devBySerial): ?string {
     if (!empty($d['os_name'])) return (string) $d['os_name'];
-    $sn = strtoupper(trim((string) ($d['serial'] ?? '')));
+    $sn = lsi_serial_key((string) ($d['serial'] ?? ''));
     return $sn !== '' ? ($devBySerial[$sn] ?? null) : null;
 }
 
