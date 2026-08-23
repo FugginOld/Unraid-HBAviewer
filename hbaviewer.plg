@@ -13,6 +13,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.23.1###
+**Fixed**
+- The dashboard tile's cold-start message printed `Reading controller
+  information\u2026` instead of an ellipsis. Cosmetic, but it showed on every
+  reboot until the first controller read completed. Thanks to the user who
+  reported it.
+
 ###2026.08.23###
 **The dashboard tile could freeze the whole webGui.** It read the controller
 synchronously while Unraid rendered its own Dashboard page, so once a minute --
