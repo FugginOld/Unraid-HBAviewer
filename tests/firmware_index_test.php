@@ -432,5 +432,43 @@ check('no refused chip is also an indexed board', $contradictions === []);
 if ($contradictions) echo "      " . implode(', ', $contradictions) . "
 ";
 
+
+/* ── HBA 9500-8i, from real hardware (bundle 2026-08-23) ─────────────────────
+   The first 9500 this repo has seen. Three things it settled, each pinned here
+   because all three were previously assumptions in the index rather than
+   observations:
+
+   1. The board runs P31. The index said P28, so a card on current firmware was
+      told "newer than index" -- correct handling of a stale index, but the
+      index was the thing that was wrong.
+   2. It HAS a legacy option ROM. The entry said `"bios": null` with a note
+      claiming that was expected rather than missing, and asked for
+      confirmation. storcli reports Bios Version = 09.27.00.00_14.00.00.00.
+   3. It is on mpt3sas and the storcli backend, not mpi3mr. */
+$fw9500 = fn(string $v) => fw_evaluate([
+    'board' => 'HBA 9500-8i', 'chip' => 'SAS3808', 'firmware' => $v,
+    'subvendor_id' => '0x1000', 'topology' => 'unknown',
+], fw_load());
+
+check('a 9500-8i on the observed firmware reads as current',
+      $fw9500('31.00.00.00')['status'] === 'current');
+// The exact version the index used to call newest. A card there is now behind,
+// which is the whole point of raising an observed floor.
+check('the version the index used to name is now behind',
+      $fw9500('28.00.00.00')['status'] === 'behind');
+$idx9500 = fw_load()['boards'][fw_normalize('HBA 9500-8i')] ?? [];
+check('the option ROM is recorded, not null',
+      ($idx9500['bios'] ?? null) === '09.27.00.00_14.00.00.00');
+/* The 16i is the same generation and very likely the same track. Likely is not
+   observed, and an index whose own contract calls observed-floor "seen on a
+   real card" must not promote a guess into one. */
+$idx16i = fw_load()['boards'][fw_normalize('HBA 9500-16i')] ?? [];
+// array_key_exists, not ??: null ?? 'x' is 'x', so the coalesce cannot tell
+// "the key is absent" from "the key is null" -- and null is the value under
+// test. The first draft of this check used ?? and failed against correct data.
+check('the unobserved 16i was not moved with it',
+      ($idx16i['latest_it'] ?? '') === '28.00.00.00'
+      && array_key_exists('bios', $idx16i) && $idx16i['bios'] === null);
+
 echo $fails === 0 ? "firmware_index: all pass\n" : "firmware_index: FAILURES\n";
 exit($fails === 0 ? 0 : 1);

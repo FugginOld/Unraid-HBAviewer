@@ -1,7 +1,7 @@
 {
   "_comment": "Known-latest IT firmware index for HBAviewer. Keyed by BOARD, not chipset -- one chip maps to multiple boards with incompatible images. 'confidence' is VERSION confidence -- how sure latest_it is the newest release -- not confidence about the chip's role; a board can be confirmed on version while its it_capable inference is only noted separately. Three tiers: 'confirmed' = version verified and its branch is terminal; 'observed-floor' = seen on a real card or community-reported, so it is a floor -- at that version is not proof of current, below it is stale; 'weak' = a single questionable source, display only, never drive an update-available claim from it alone. 'it_capable: false' means the part is RAID-on-Chip and has no IT firmware at any version; surface that as a distinct state, not as a failed lookup.",
   "schema_version": 1,
-  "updated": "2026-08-08",
+  "updated": "2026-08-23",
   "boards": {
     "SAS9211-8i": {
       "chip": "SAS2008",
@@ -173,13 +173,13 @@
       "generation": "sas3.5",
       "backend": "storcli",
       "it_capable": true,
-      "latest_it": "28.00.00.00",
-      "fw_package_build": "28.00.00.00",
-      "branch": "P28",
-      "bios": null,
+      "latest_it": "31.00.00.00",
+      "fw_package_build": "31.00.00.00",
+      "branch": "P31",
+      "bios": "09.27.00.00_14.00.00.00",
       "confidence": "observed-floor",
-      "source": "Broadcom retail package, community report",
-      "notes": "Believed to have no legacy option ROM; null BIOS is expected, not missing data. Confirm. Profile split (SAS/SATA vs Mixed NVMe) unconfirmed for this generation."
+      "source": "user diagnostic bundle 2026-08-23 (HBA 9500-8i, storcli 007.3404, Unraid 7.3.2)",
+      "notes": "The legacy option ROM DOES exist on this board: storcli reports Bios Version = 09.27.00.00_14.00.00.00, which contradicts the earlier belief that a null BIOS was expected here. The compound form is storcli's own -- it is not two fields joined by this plugin. That card also reported Package Stamp Mismatch = Yes with NVDATA 31.02.00.10 against firmware 31.00.00.00. Profile split (SAS/SATA vs Mixed NVMe) still unconfirmed for this generation."
     },
     "HBA 9500-16i": {
       "chip": "SAS3816",
@@ -192,7 +192,7 @@
       "bios": null,
       "confidence": "observed-floor",
       "source": "Broadcom retail package, community report",
-      "notes": "Believed to have no legacy option ROM; null BIOS is expected, not missing data. Confirm. Profile split unconfirmed for this generation."
+      "notes": "No hardware seen here; 28.00.00.00 is a community-reported floor and the 8i has since been observed at 31.00.00.00, so this is probably stale too -- probably is not observed, so it stands. The bios:null here is NOT the earlier claim that this generation has no option ROM: that was disproven on the 9500-8i. It means unknown, because no 16i has been read. Profile split unconfirmed."
     }
   },
   "no_it_firmware": {
@@ -235,6 +235,17 @@
       "confirmed_on": ["HBA 9400-16i"],
       "notes": "Ships in multiple ROM profiles (SAS/SATA-only, Mixed NVMe) at the same version number. A version match alone does not mean the correct image is installed. Not known to be terminal -- newer releases may exist."
     },
+    "P31": {
+      "generation": "sas3.5",
+      "firmware": "31.00.00.00",
+      "bios": "09.27.00.00_14.00.00.00",
+      "uefi_bsd": null,
+      "terminal": false,
+      "profile_aware": null,
+      "confirmed_on": [],
+      "observed_on": ["HBA 9500-8i"],
+      "notes": "Observed on a real 9500-8i on 2026-08-23. NOT recorded for the 9500-16i: same generation and very likely the same track, but likely is not observed, and this index does not promote a guess to a floor. Legacy option ROM is present, contrary to what P28 assumed."
+    },
     "P28": {
       "generation": "sas3.5",
       "firmware": "28.00.00.00",
@@ -243,8 +254,8 @@
       "terminal": false,
       "profile_aware": null,
       "confirmed_on": [],
-      "observed_on": ["HBA 9500-8i", "HBA 9500-16i"],
-      "notes": "Latest Broadcom retail package for SAS3808/3816. Legacy option ROM believed absent on this generation. Not known to be terminal."
+      "observed_on": ["HBA 9500-16i"],
+      "notes": "Superseded by P31 on the 9500-8i. Still the highest version observed on the 9500-16i, which has not been seen on real hardware here. The option ROM claim this entry used to make -- believed absent on this generation -- was wrong; see P31."
     },
     "P21": {
       "generation": "sas3.5",
