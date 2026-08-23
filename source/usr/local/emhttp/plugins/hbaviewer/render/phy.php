@@ -180,7 +180,13 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
     return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $now, $uptime, $drives, $devBySerial, $roles, $baselines, $udMounts): string {
         $out = '';
         $phys = $ctl['phys'] ?? [];
-        if (empty($phys)) { $out .= '<p class="lu-muted">No PHY data.</p>'; return $out; }
+        /* No claim about WHY: a backend that reports no link information and
+             a controller with no links look identical from here, and guessing
+             between them would put a cause on screen that may be wrong. */
+        if (empty($phys)) {
+            $out .= '<p class="lu-muted">No PHY data — this controller reported no link information.</p>';
+            return $out;
+        }
         // This controller's drives, for the Device column and the offenders list
         // below. Empty while the drives cache is still warming — every Device
         // cell then reads "—" and the tab renders exactly as it used to.

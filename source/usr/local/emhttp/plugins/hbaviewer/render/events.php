@@ -20,7 +20,20 @@ function renderEventsTables(array $data, string $dir = '/boot/config/plugins/hba
         // through the wrong renderer produces undefined-key warnings and blank rows.
         $entries = event_visible($archived, $data['backend'] ?? '');
         $hidden  = count($archived) - count($entries);
-        if (empty($entries)) { $out .= '<p class="lu-muted">No log entries.</p>'; return $out; }
+        /* "No log entries" is a lie when $hidden is non-zero: the archive HAS
+           entries, they were written by a different backend and this renderer
+           cannot format them. Saying nothing about them reads as data loss --
+           the whole point of archiving to /boot is that entries survive, and a
+           user who switched backend would conclude they had not. */
+        if (empty($entries)) {
+            $out .= '<p class="lu-muted">' . ($hidden > 0
+                ? 'No entries from this backend. ' . $hidden . ' earlier '
+                  . ($hidden === 1 ? 'entry is' : 'entries are')
+                  . ' archived on /boot but were written by a different backend, so they cannot be shown here.'
+                : 'No log entries. The firmware log on this controller is empty — the normal state for a healthy card.')
+                . '</p>';
+            return $out;
+        }
         $out .= '<p class="lu-muted" style="font-size:11px;margin:0 0 8px">'
               . count($entries) . ' entries &middot; archived to /boot (survives reboots &amp; ring-buffer wrap)'
               . ($hidden > 0 ? ' &middot; ' . $hidden . ' from a previous backend not shown' : '') . '</p>';
