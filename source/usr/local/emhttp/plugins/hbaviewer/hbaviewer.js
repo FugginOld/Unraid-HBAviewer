@@ -4,6 +4,22 @@
     var smartTimer;
     var loaded = {};
 
+    /* ── Temperature display (°C/°F) ─────────────────────────────────────────
+       Every reading this file handles arrives from the collector in °C — these
+       two only affect what gets printed, mirroring config.php's
+       lsi_temp_convert()/lsi_temp_label() on the PHP side. luTempUnit is set
+       by hbaviewer.php from the TEMP_UNIT setting; default to °C (0) if the
+       page shell hasn't defined it (e.g. this file loaded standalone in a test). */
+    var luUnit = (typeof luTempUnit !== 'undefined') ? luTempUnit : 0;
+    function luConvTemp(c) {
+        if (c === null || c === undefined || c === '' || isNaN(c)) return c;
+        return luUnit === 1 ? Math.round(c * 9 / 5 + 32) : Math.round(c);
+    }
+    function luTempStr(c) {
+        if (c === null || c === undefined || c === '') return null;
+        return luConvTemp(c) + '°' + (luUnit === 1 ? 'F' : 'C');
+    }
+
     /* ── Tab switching ────────────────────────────────────────────────────── */
     window.luTab = function (name) {
         if (window.luMetricsStop) luMetricsStop();   // pause perf polling on any switch
@@ -477,7 +493,9 @@
                     var tp = document.createElement('span');
                     tp.className = 'lu-bay-temp';
                     // No reading is said, never left to read as a temperature.
-                    tp.textContent = drv.temp === null ? 'no data' : drv.temp + '°C';
+                    // luTempStr only affects what's printed — drv.temp itself
+                    // stays °C for the heat-scale comparison against warn_temp below.
+                    tp.textContent = drv.temp === null ? 'no data' : luTempStr(drv.temp);
                     var heat = luBayHeat(drv.temp, d.warn_temp);
                     if (heat) tp.style.color = heat;
                     cap.appendChild(cv); cap.appendChild(cu); cap.appendChild(tp);
@@ -884,7 +902,7 @@
             { key:'util', title:'% Util',          series:['#9b59b6'] },
             { key:'lat',  title:'Latency ms',      series:['#e74c3c'] },
             { key:'phy',  title:'PHY err/s',       series:['#e67e22'] },
-            { key:'temp', title:'Temp °C',         series:['#1abc9c'] }
+            { key:'temp', title:'Temp ' + (luUnit === 1 ? '°F' : '°C'), series:['#1abc9c'] }
         ];
         ctls.forEach(function (c) {
             var box = document.createElement('div'); box.className = 'lu-perf-ctl lu-card first';
@@ -950,7 +968,10 @@
                                  phyRate == null ? '–' : phyRate.toFixed(1));
                     }
                     var temp = (c.temp == null) ? null : c.temp;
-                    perfPush(cells.temp, [temp == null ? NaN : temp], temp == null ? '–' : temp + '°');
+                    // c.temp arrives in °C from the collector; convert only what
+                    // this chart plots/prints, same as luTempStr elsewhere.
+                    var tempDisp = temp == null ? NaN : luConvTemp(temp);
+                    perfPush(cells.temp, [tempDisp], temp == null ? '–' : tempDisp + '°');
                 });
             }
         }

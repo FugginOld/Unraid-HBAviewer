@@ -96,7 +96,7 @@ if ($type === 'smart_all') {
     // expensive thing here, and the person asked for it exactly when they press
     // Refresh (which unlinks the cache above) — not on a timer.
     $cached = smart_cache_read();
-    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles()); exit; }
+    if ($cached !== null) { echo renderSmartTable($cached, smart_cache_age(), unraid_disk_roles(), (int) (lsi_config_read()['TEMP_UNIT'] ?? 0)); exit; }
     if (is_file($prog) && (time() - filemtime($prog)) < SMART_PROGRESS_TTL) {
         echo '<div class="lu-loading" data-smart="collecting">Collecting SMART… '
            . htmlspecialchars(trim((string) file_get_contents($prog)))
@@ -136,9 +136,10 @@ if ($type === 'smart') {
 
     $color = smart_state_color(smart_state($s));
     $f = fn($v) => $v === '' || $v === null ? '?' : htmlspecialchars($v);
+    $u = (int) (lsi_config_read()['TEMP_UNIT'] ?? 0);
     printf(
-        '<span style="color:%s;font-weight:700">%s</span> &middot; %s&deg;C &middot; %s def &middot; %s pend &middot; %sh',
-        $color, $f($s['health'] ?? ''), $f($s['temp'] ?? ''),
+        '<span style="color:%s;font-weight:700">%s</span> &middot; %s &middot; %s def &middot; %s pend &middot; %sh',
+        $color, $f($s['health'] ?? ''), $f(lsi_temp_label($s['temp'] ?? '', $u)),
         $f($s['defects'] ?? ''), $f($s['pending'] ?? ''), $f($s['power_on_hours'] ?? '')
     );
     exit;
@@ -330,7 +331,7 @@ function smart_state_color(string $state): string {
    that collection is; it is printed above the table because the cache is now
    kept until someone refreshes it, and an unlabelled table of week-old
    temperatures reads exactly like a live one. */
-function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []): string {
+function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = [], int $unit = 0): string {
     $drives = $data['drives'] ?? [];
     if (!$drives) return '<p class="lu-muted">No drives found.</p>';
     $age = $ageSecs === null ? '' :
@@ -353,7 +354,7 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []):
             ($s['transport'] ?? '') !== '' ? htmlspecialchars(strtoupper($s['transport'])) : $dash,
             '<code>' . htmlspecialchars($d['serial'] ?? '') . '</code>',
             $hb,
-            $cell($s['temp'] ?? '', '&deg;C'),
+            (($s['temp'] ?? '') !== '') ? htmlspecialchars(lsi_temp_label($s['temp'], $unit)) : $dash,
             $cell($s['defects'] ?? ''),
             $cell($s['pending'] ?? ''),
             ($s['power_on_hours'] ?? '') !== '' ? number_format((int) $s['power_on_hours']) . 'h' : $dash,
@@ -368,20 +369,21 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = []):
    different instruments is a discrepancy nobody could explain.
    $i keys the gradient id, which must be unique across every gauge in the DOM
    (the Health tab lives in the same document and uses its own prefix). */
-function luTempTile(array $v, int $i): string {
+function luTempTile(array $v, int $i, int $unit = 0): string {
     // Critical renders as an inverted chip (white on solid fill) — #922b21
     // measures 1.94:1 as plain text on a dark card and is unreadable there.
     $tempChip = ($v['temp_band'] ?? '') === 'critical'
         ? '<span style="background:' . lsi_temp_color('critical') . ';color:#fff;padding:2px 7px;border-radius:2px;font-weight:700">CRITICAL</span>'
         : htmlspecialchars($v['temp_label']);   // colour comes from the tile's --mark
-    // The gauge reads 0-110C.
+    // The gauge reads 0-110C regardless of display unit — geometry stays in
+    // the sensor's own scale; only the printed number/suffix below switch.
     $frac = $v['temp'] !== '' ? max(0.0, min(1.0, (float) $v['temp'] / 110)) : 0.0;
     return '<div class="lu-gauge lu-tile' . (lsi_tile_is_light() ? ' light' : '') . '" id="lu-circle-' . $i . '">'
          . '<div class="lu-arc-wrap">'
          . lsi_gauge_svg('lu-grad-' . $i, $frac, $v['temp_grad'])
          . '<div class="lu-arc-readout">'
-         . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? $v['temp'] : 'N/A') . '</span>'
-         . '<span class="unit">' . ($v['temp'] !== '' ? '&deg;C' : 'no sensor') . '</span></div></div>'
+         . '<span class="val" id="lu-val-' . $i . '">' . ($v['temp'] !== '' ? lsi_temp_convert($v['temp'], $unit) : 'N/A') . '</span>'
+         . '<span class="unit">' . ($v['temp'] !== '' ? ('&deg;' . ($unit === 1 ? 'F' : 'C')) : 'no sensor') . '</span></div></div>'
          . '<span class="lu-temp-band">' . $tempChip . '</span>'
          . '</div>';
 }
@@ -393,6 +395,8 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
+    $unit      = (int) ($cfg['TEMP_UNIT'] ?? 0);
+    $unitSym   = $unit === 1 ? 'F' : 'C';
     $out = '';
     if (isset($c['error'])) {
         return '<div class="lu-card first"><div class="lu-error"><strong>Controller ' . $i . ':</strong> '
@@ -405,7 +409,7 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
     [$gDark, $gLight] = $v['temp_grad'];
     $out .= '<div class="lu-card first" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
           . '<div class="lu-overview-row">'
-          . luTempTile($v, $i)
+          . luTempTile($v, $i, $unit)
           . '<div class="lu-meta">'
           . '<p>Model: <span>' . htmlspecialchars($v['model']) . '</span></p>'
           . '<p>Chip: <span>' . htmlspecialchars($v['chip']) . '</span></p>'
@@ -430,7 +434,7 @@ function renderControllerCard(array $c, int $i, array $cfg, string $driver): str
           . ($v['mode']   !== '' ? '<p>Mode: <span>' . htmlspecialchars($v['mode']) . '</span></p>' : '')
           . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
           . ($v['port_name'] !== '' ? '<p>lsiutil Port: <span>' . htmlspecialchars($v['port_label']) . '</span></p>' : '')
-          . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+          . '<p>Badge Sensitivity: <span>' . htmlspecialchars($v['cfg_band_label']) . ' (' . lsi_temp_convert($threshold, $unit) . '&deg;' . $unitSym . '+)</span></p>'
           . '<p>Last read: <span>' . lsi_time() . '</span></p>'
           . '<p>HBA Health: <span class="lu-badge" id="lu-badge-' . $i . '">' . $v['label'] . '</span></p>'
           . '</div></div>';
@@ -463,6 +467,8 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
     $port      = $cfg['HBA_PORT'];
     $threshold = $cfg['ALERT_THRESHOLD'];
     $showPcie  = $cfg['SHOW_PCIE'];
+    $unit      = (int) ($cfg['TEMP_UNIT'] ?? 0);
+    $unitSym   = $unit === 1 ? 'F' : 'C';
     // The FIRST MEMBER, which is not necessarily slot 0 of $ctls -- an unrelated
     // card can sort between two IOCs of one board (see this function's header).
     $first     = (int) $group[0];
@@ -492,7 +498,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
          . ($hv['bios'] !== '' ? '<p>BIOS: <span>' . htmlspecialchars($hv['bios']) . '</span></p>' : '')
          . ($driver     !== '' ? '<p>Driver: <span>' . htmlspecialchars($driver) . '</span></p>' : '')
          . ($hv['mode'] !== '' ? '<p>Mode: <span>' . htmlspecialchars($hv['mode']) . '</span></p>' : '')
-         . '<p>Badge Sensitivity: <span>' . htmlspecialchars($hv['cfg_band_label']) . ' (' . $threshold . '&deg;C+)</span></p>'
+         . '<p>Badge Sensitivity: <span>' . htmlspecialchars($hv['cfg_band_label']) . ' (' . lsi_temp_convert($threshold, $unit) . '&deg;' . $unitSym . '+)</span></p>'
          . '<p>Last read: <span>' . lsi_time() . '</span></p>'
          . '<p>HBA Health: <span class="lu-badge">' . lsi_status_label($worst) . '</span></p>'
          . '</div>';
@@ -526,7 +532,7 @@ function renderGroupedCard(array $ctls, array $group, array $cfg, string $driver
         $out .= '<div class="lu-card-ioc" style="--td:' . $gDark . ';--tl:' . $gLight . ';--sc:' . $v['color'] . '" data-ctl="' . $i . '">'
               . '<span class="lu-ioc-label">Controller ' . $i . '</span>'
               . '<div class="lu-overview-row">'
-              . luTempTile($v, $i)
+              . luTempTile($v, $i, $unit)
               . '<div class="lu-meta">'
               . ($loc !== '' ? '<p>PCI Location: <span>' . htmlspecialchars($loc) . '</span></p>' : '')
               . ($v['drives'] !== '' ? '<p>Drives: <span>' . htmlspecialchars($v['drives']) . ' connected</span></p>' : '')
@@ -1464,15 +1470,22 @@ function renderHealthTables(array $data, array $cfg = []): string {
         // hbaviewer.php; both encode the same band edges, just in different files.
         $temp = $ctl['temp'] ?? null;
         if ($temp !== null && $temp !== '') {
+            // Position and the 65/75/85/95 band cut-points stay in °C — they are
+            // the sensor's own scale, not something the user picks. Only the
+            // printed numbers (tooltip + axis labels) switch with TEMP_UNIT.
+            $u   = (int) ($cfg['TEMP_UNIT'] ?? 0);
             $pct = max(0, min(100, ((float) $temp / 110) * 100));
             $out .= '<div class="lu-band-meter"><div class="lu-band-track">'
                   . '<span class="lu-band-seg s0"></span><span class="lu-band-seg s1"></span>'
                   . '<span class="lu-band-seg s2"></span><span class="lu-band-seg s3"></span><span class="lu-band-seg s4"></span>'
-                  . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars((string) $temp) . '&deg;C"></span>'
+                  . '<span class="lu-band-marker" style="left:' . number_format($pct, 1) . '%" title="' . htmlspecialchars((string) lsi_temp_label($temp, $u)) . '"></span>'
                   . '</div><div class="lu-band-labels">'
-                  . '<span style="left:0%">0</span><span style="left:59.09%">65</span>'
-                  . '<span style="left:68.18%">75</span><span style="left:77.27%">85</span>'
-                  . '<span style="left:86.36%">95</span><span style="left:100%">110</span></div></div>';
+                  . '<span style="left:0%">'      . lsi_temp_convert(0,   $u) . '</span>'
+                  . '<span style="left:59.09%">'  . lsi_temp_convert(65,  $u) . '</span>'
+                  . '<span style="left:68.18%">'  . lsi_temp_convert(75,  $u) . '</span>'
+                  . '<span style="left:77.27%">'  . lsi_temp_convert(85,  $u) . '</span>'
+                  . '<span style="left:86.36%">'  . lsi_temp_convert(95,  $u) . '</span>'
+                  . '<span style="left:100%">'    . lsi_temp_convert(110, $u) . '</span></div></div>';
         }
         $out .= '</div>';
 

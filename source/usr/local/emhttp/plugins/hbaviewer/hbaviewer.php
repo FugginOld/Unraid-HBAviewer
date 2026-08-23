@@ -242,5 +242,12 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
        Renamed off `flashCsrf` so nothing here is named after code that no
        longer lives here. */
     var luCsrf = (typeof csrf_token !== 'undefined' && csrf_token) ? csrf_token : '<?= htmlspecialchars($csrfToken, ENT_QUOTES) ?>';
+
+    /* Display-only °C/°F choice (config.php TEMP_UNIT). Every reading this page
+       receives over AJAX (bay map drive temps, Performance-tab samples) still
+       arrives in °C from the collector — this global is only what the JS-side
+       renderers listed above print, mirroring how the PHP-rendered tabs already
+       switch via lsi_temp_convert()/lsi_temp_label(). */
+    var luTempUnit = <?= (int) $cfg['TEMP_UNIT'] ?>; // 0 = °C, 1 = °F
 </script>
 <script src="/plugins/hbaviewer/hbaviewer.js?v=<?= (int) @filemtime(__DIR__ . '/hbaviewer.js') ?>"></script>

@@ -11,6 +11,11 @@ $SCRIPT  = '/usr/local/emhttp/plugins/hbaviewer/scripts/get_hba_info.sh';
 $cfg       = lsi_config_read();
 $port      = $cfg['HBA_PORT'];
 $threshold = $cfg['ALERT_THRESHOLD'];
+// Display only — $threshold above stays °C for the band-matching logic
+// elsewhere; $unitSym / the *_disp values below are what gets printed.
+$unit      = (int) $cfg['TEMP_UNIT'];
+$unitSym   = $unit === 1 ? '°F' : '°C';
+$thresholdDisp = lsi_temp_convert($threshold, $unit);
 
 // get_hba_info.sh self-caches (60s), so this stays cheap on every tile refresh.
 // Increased timeout to 60s for slow storcli systems; script has 60s cache so usually faster
@@ -165,6 +170,9 @@ foreach ($controllers as $i => $c) {
     [$gDark, $gLight] = $v['temp_grad'];                 // temperature band -> gauge arc
     $tempCol   = lsi_temp_text($v['temp_band'] ?? '');   // ...and the header pill's text
     $temp      = (int)($c['temp'] ?? 0);
+    // Gauge geometry (arc fraction, 0-110C scale) stays in °C throughout —
+    // only the printed number/pill below switch units.
+    $tempDisp  = lsi_temp_convert($temp, $unit);
     $model     = htmlspecialchars($v['model']);
     $chip      = htmlspecialchars($v['chip']);
     $firmware  = htmlspecialchars($v['firmware']);
@@ -188,9 +196,9 @@ foreach ($controllers as $i => $c) {
     $t['tc']  = $col;
     $t['sub'] = $model . ' - ' . $portLabel;
 
-    $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : (int) $v['temp'];
+    $pillTemp  = ($v['temp'] === '' || $v['temp'] === null) ? '' : lsi_temp_convert((int) $v['temp'], $unit);
     $t['pill'] = '<span class="lu-d-pill" style="--tc:' . $tempCol . '">'
-               . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;C') . '</span>';
+               . ($pillTemp === '' ? 'N/A' : $pillTemp . '&deg;' . ($unit === 1 ? 'F' : 'C')) . '</span>';
 
     // Health pill lives in the tile header beside the gear, visible whether the
     // tile is expanded or collapsed — it is the one thing worth seeing without
@@ -225,8 +233,8 @@ foreach ($controllers as $i => $c) {
           <div class='lu-arc-wrap'>
             {$gauge}
             <div class='lu-arc-readout'>
-              <span class='v'>{$temp}</span>
-              <span class='u'>°C</span>
+              <span class='v'>{$tempDisp}</span>
+              <span class='u'>{$unitSym}</span>
             </div>
           </div>
           <span class='lu-d-temp-band'>{$tempChip}</span>
@@ -239,7 +247,7 @@ foreach ($controllers as $i => $c) {
           . ($v['port_name'] !== '' ? "<p>lsiutil Port: <span>{$portLabel}</span></p>" : '')
           . ($mode     ? "<p>Mode: <span>{$mode}</span></p>"         : '')
           . ($drives   ? "<p>Drives: <span>{$drives} connected</span></p>" : '')
-          . "<p>Badge Sensitivity: <span>{$cfgBandLabel} ({$threshold}°C+)</span></p>
+          . "<p>Badge Sensitivity: <span>{$cfgBandLabel} ({$thresholdDisp}{$unitSym}+)</span></p>
           <p>Last read: <span>{$ts}</span></p>
         </div>
       </div>

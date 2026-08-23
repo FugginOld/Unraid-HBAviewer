@@ -15,6 +15,7 @@
  */
 
 require_once __DIR__ . '/view.php';   // lsi_age_str(): the one "how old" formatter, reused for "how long"
+require_once __DIR__ . '/config.php'; // lsi_temp_label(): °C/°F display for the thermal indicator
 
 // One sample per Health-tab render, not a timer -- there is no cron or daemon
 // here, so the ring's span is however often someone actually opens the tab
@@ -247,11 +248,12 @@ function health_indicators(array $ring, array $rates, int $now, array $cfg = [])
     $band = $newest['temp_band'] ?? '';
     $thermalMap = ['normal' => 'ok', 'elevated' => 'watch', 'warning' => 'warning', 'alert' => 'critical', 'critical' => 'critical'];
     if (isset($thermalMap[$band])) {
-        $temp  = $newest['temp'] ?? '';
+        $temp     = $newest['temp'] ?? '';
+        $tempStr  = ($temp !== '' && $temp !== null) ? lsi_temp_label($temp, (int) ($cfg['TEMP_UNIT'] ?? 0)) : '';
         $thermal = [
             'state'  => $thermalMap[$band],
-            'reason' => ($temp !== '' && $temp !== null) ? "{$temp}°C — " . ucfirst($band) . " band" : ucfirst($band),
-            'value'  => ($temp !== '' && $temp !== null) ? "{$temp}°C" : '—',
+            'reason' => $tempStr !== '' ? "{$tempStr} — " . ucfirst($band) . " band" : ucfirst($band),
+            'value'  => $tempStr !== '' ? $tempStr : '—',
         ];
     } else {
         $thermal = ['state' => 'unknown', 'reason' => 'No temperature reading', 'value' => '—'];

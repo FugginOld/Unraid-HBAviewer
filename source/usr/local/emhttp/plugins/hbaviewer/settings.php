@@ -106,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
         'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
         'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
+        'TEMP_UNIT'         => ($_POST['temp_unit'] ?? 'c') === 'f' ? 1 : 0,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -350,13 +351,21 @@ function lu_checked(int $val): string { return $val ? 'checked' : ''; }
       <div class="lu-s-row">
         <div class="lu-s-label">
           Badge Sensitivity
-          <small>Temperature colours are fixed (Normal &le;65, Elevated 66&ndash;75, Warning 76&ndash;85, Alert 86&ndash;95, Critical &gt;95 &deg;C). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem &mdash; and, when Notifications are enabled below, the point at which HBAviewer notifies you.</small>
+          <small>Temperature colours are fixed (Normal &le;<?= lsi_temp_convert(65, (int)$cfg['TEMP_UNIT']) ?>, Elevated <?= lsi_temp_convert(66, (int)$cfg['TEMP_UNIT']) ?>&ndash;<?= lsi_temp_convert(75, (int)$cfg['TEMP_UNIT']) ?>, Warning <?= lsi_temp_convert(76, (int)$cfg['TEMP_UNIT']) ?>&ndash;<?= lsi_temp_convert(85, (int)$cfg['TEMP_UNIT']) ?>, Alert <?= lsi_temp_convert(86, (int)$cfg['TEMP_UNIT']) ?>&ndash;<?= lsi_temp_convert(95, (int)$cfg['TEMP_UNIT']) ?>, Critical &gt;<?= lsi_temp_convert(95, (int)$cfg['TEMP_UNIT']) ?> &deg;<?= ((int)$cfg['TEMP_UNIT'] === 1) ? 'F' : 'C' ?>). This chooses the first band at which the Overview badge and dashboard tile start reporting a problem &mdash; and, when Notifications are enabled below, the point at which HBAviewer notifies you.</small>
         </div>
         <div class="lu-s-control">
           <select name="threshold">
 <?php
-$bands = [66 => 'Elevated (66 °C and above)', 76 => 'Warning (76 °C and above)',
-          86 => 'Alert (86 °C and above)',    96 => 'Critical (above 95 °C)'];
+// Band floors are stored in °C (schema is unchanged) — only the printed
+// label switches with TEMP_UNIT, via lsi_temp_convert().
+$u = (int) $cfg['TEMP_UNIT'];
+$usym = $u === 1 ? '°F' : '°C';
+$bands = [
+    66 => 'Elevated (' . lsi_temp_convert(66, $u) . ' ' . $usym . ' and above)',
+    76 => 'Warning (' . lsi_temp_convert(76, $u) . ' ' . $usym . ' and above)',
+    86 => 'Alert (' . lsi_temp_convert(86, $u) . ' ' . $usym . ' and above)',
+    96 => 'Critical (above ' . lsi_temp_convert(95, $u) . ' ' . $usym . ')',
+];
 // Select the band containing the stored value, so a legacy 80 shows "Warning".
 $curr = (int) $cfg['ALERT_THRESHOLD'];
 $sel  = 96; foreach (array_keys($bands) as $floor) { if ($curr < $floor) { break; } $sel = $floor; }
@@ -365,6 +374,19 @@ foreach ($bands as $floor => $label) {
     printf('<option value="%d"%s>%s</option>', $floor, $floor === $sel ? ' selected' : '', htmlspecialchars($label));
 }
 ?>
+          </select>
+        </div>
+      </div>
+
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Temperature Unit
+          <small>Every sensor is still read, stored and compared against Badge Sensitivity in &deg;C &mdash; this only changes what the Overview, Dashboard tile, HBA Health, Bay Map and Performance graphs <em>print</em>.</small>
+        </div>
+        <div class="lu-s-control">
+          <select name="temp_unit">
+            <option value="c" <?= ((int)$cfg['TEMP_UNIT'] === 0) ? 'selected' : '' ?>>&deg;C (Celsius)</option>
+            <option value="f" <?= ((int)$cfg['TEMP_UNIT'] === 1) ? 'selected' : '' ?>>&deg;F (Fahrenheit)</option>
           </select>
         </div>
       </div>
