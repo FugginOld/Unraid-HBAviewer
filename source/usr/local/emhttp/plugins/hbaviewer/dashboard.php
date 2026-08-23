@@ -174,7 +174,7 @@ if ($warming) {
         'pill'   => '',
         'health' => '',
         'foot'   => '',
-        'body'   => "<span style='color:var(--d-text)'>Reading controller information\u2026</span>",
+        'body'   => "<span style='color:var(--d-text)'>Reading controller information…</span>",
     ];
 }
 
