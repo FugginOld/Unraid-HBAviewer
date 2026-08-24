@@ -40,9 +40,24 @@ function health_store_path(int $ctl, string $dir = '/tmp'): string {
 function health_store_read(string $file): array {
     return is_file($file) ? (json_decode((string) @file_get_contents($file), true) ?: []) : [];
 }
+/* Write to a temp file and rename over the target. rename() is atomic within a
+   filesystem, so a reader either sees the whole previous ring or the whole new
+   one -- never a half-written file.
+
+   This was a bare file_put_contents while the tab render was effectively the
+   only writer. It stops being safe the moment a second one exists, and it fails
+   in a way nothing would report: health_store_read() ends in `?: []`, so a torn
+   file decodes to nothing and is read as an EMPTY RING, which health_ingest()
+   treats as a fresh start. A cron write landing mid-render would not corrupt a
+   sample -- it would silently discard the whole accumulated history, now and
+   then, with no error anywhere. */
 function health_store_write(string $file, array $ring): void {
-    if (!is_dir(dirname($file))) @mkdir(dirname($file), 0755, true);
-    @file_put_contents($file, json_encode($ring));
+    $dir = dirname($file);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    // Same directory, so the rename cannot cross a filesystem and lose atomicity.
+    $tmp = $file . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode($ring)) === false) return;
+    if (!@rename($tmp, $file)) @unlink($tmp);
 }
 
 /* Append $sample to $ring, capped to HEALTH_RING_CAP. Drops the whole ring

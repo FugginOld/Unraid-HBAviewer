@@ -105,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
             ? (int) (lsi_config_read()['ENABLE_FLASH'] ?? 0)
             : (isset($_POST['enable_flash']) ? 1 : 0),
         'ENABLE_NOTIFY'   => isset($_POST['enable_notify']) ? 1 : 0,
+        'TRACK_HISTORY'   => isset($_POST['track_history']) ? 1 : 0,
         'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
         'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
         'TEMP_UNIT'         => ($_POST['temp_unit'] ?? 'c') === 'f' ? 1 : 0,
@@ -429,6 +430,16 @@ foreach ($bands as $floor => $label) {
         <input type="checkbox" name="enable_notify" <?= lu_checked((int)$cfg['ENABLE_NOTIFY']) ?>>
         <span>Notify on health status changes</span>
         <small>uses Unraid's own notification system</small>
+      </label>
+      <?php /* Its own switch rather than a rider on the one above. The ring
+               feeds the Health tab's link-integrity indicator, which is a
+               different feature from being told when status changes -- and an
+               indicator nobody can find is one nobody benefits from. Both are
+               off by default because both make the cron read hardware. */ ?>
+      <label class="lu-toggle" style="margin-top:10px">
+        <input type="checkbox" name="track_history" <?= lu_checked((int)($cfg['TRACK_HISTORY'] ?? 0)) ?>>
+        <span>Track link-error history</span>
+        <small>samples PHY counters every 10 minutes so HBA Health can judge trends</small>
       </label>
     </div>
 

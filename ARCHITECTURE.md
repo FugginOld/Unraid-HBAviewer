@@ -276,6 +276,11 @@ to test a branch, and it evaporates on reboot by design.
 Three documents state rules the code follows, so they do not have to be
 re-derived from the code each time:
 
+- **`docs/review-policy.md`** — which agent review tool's advice governs
+  which layer, and the paths where a "simplify this" finding is a defect in
+  the review rather than in the code. Written because three tools with
+  different biases were run across this repo and their findings had to be
+  re-adjudicated from scratch each time.
 - **`design-system/MASTER.md`** — the UI's rules, extracted from `chrome.css`
   and the renderers rather than invented: theme-variable tokens, `auto-fit`
   grids, tabular numerals, colour-as-signal, reduced-motion-preserves-signal.
@@ -300,9 +305,11 @@ Two halves:
 - **Golden tests** feed a fixture to a parser and diff stdout against
   `tests/expected/`. A dropped or renamed JSON field fails here.
 - **PHP unit tests** (`tests/*_test.php`) exercise the pure functions.
-  Registered in **both** invocation lines of `tests/run_php.sh` — the local-`php`
-  line and the Docker fallback. Missing the second is how a test silently never
-  runs in CI.
+  Registered in the `TESTS` list in `tests/run_php.sh` — **one** place, which
+  builds the `$CMD` both the local-`php` branch and the Docker fallback run. A
+  test missing from that list silently never runs in CI. (This used to be two
+  separate invocation lines, and this paragraph went on saying so after they
+  were folded into one.)
 
 Conventions that exist because of specific past bugs:
 
@@ -323,11 +330,16 @@ Conventions that exist because of specific past bugs:
 CI (`.github/workflows/php.yml`) lints every `.php` with `php -l`, every `.sh`
 under `source/` and `tests/` with `bash -n`, every `.js` with `node --check`,
 and runs the suite on Linux. Above that syntax tier sit ShellCheck, PHPStan and
-actionlint; Codacy adds jshint on the `.js` files out of band. The rule the
-`.js` tier exists to hold is **no first-party code in a language nothing
-analyses** — the JavaScript spent its first year inside two `.php` files, where
-linguist counted it as PHP, PHPStan saw inert markup and jshint never opened it
-(plan 057).
+actionlint. The rule the `.js` tier exists to hold is **no first-party code in a
+language nothing analyses** — the JavaScript spent its first year inside two
+`.php` files, where linguist counted it as PHP, PHPStan saw inert markup and
+jshint never opened it (plan 057).
+
+**That rule is currently unmet for JavaScript.** Codacy ran jshint out of band
+and was removed on 2026-08-23; `node --check` is a syntax parse, not a linter,
+so nothing now inspects `hbaviewer.js` or `flash_view.js` for anything a parser
+would accept. Restoring the tier means a lint step in `php.yml`, not another
+hosted scanner.
 
 ## Release
 
@@ -367,6 +379,40 @@ The tag must point at `main`'s tip. The workflow then runs the tests, builds the
 the forcing function for the changelog Unraid actually displays to users.
 
 Unraid clients poll the `.plg` on `main`, so that patch commit is what ships.
+
+## Testing a branch on real hardware
+
+```bash
+# on the box, from a CLEAN fetch -- the rm -rf matters, a stale checkout
+# rebuilds the wrong commit and installs it without complaint
+cd /tmp && rm -rf hbav-build && mkdir hbav-build && cd hbav-build
+curl -fsSL https://github.com/FugginOld/Unraid-HBAviewer/archive/refs/heads/<branch>.tar.gz   | tar xz --strip-components=1
+bash build.sh
+cp releases/hbaviewer.txz /tmp/hbaviewer.txz
+bash docs/install-verify.sh
+```
+
+**Do not compare the package's md5 against one built elsewhere.** `makepkg` is
+not byte-reproducible across machines — it bakes in timestamps and directory
+permissions, and prompts about the latter mid-run — so the same commit built on
+two boxes gives two checksums. Comparing them proves nothing and, on
+2026-08-23, sent an afternoon chasing a mismatch that was never evidence of
+anything. `install-verify.sh` diffs the extracted package against the installed
+tree instead, which is the check that actually holds.
+
+The md5 IS meaningful in two places: against the CI-published release asset,
+and between two builds on the same machine.
+
+**`upgradepkg` always says "Skipping package hbaviewer (already installed)".**
+Nothing versions the package name, so the installed and incoming packages are
+both plain `hbaviewer`. It is not what installs the files — the `.plg`'s second
+block wipes the plugin directory and extracts the tarball, and that is what
+`install-verify.sh` reproduces.
+
+**To verify a change reached the box, grep the installed file for it.** Not the
+tarball, not a checksum, and not a side effect: the health ring, for example,
+is appended to by `install-verify.sh`'s own health-renderer check, so its mtime
+moving says nothing about whether the cron sampler is running.
 
 ## Where the sharp edges are
 

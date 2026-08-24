@@ -2,17 +2,55 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "HBAviewer">
 <!ENTITY author    "FugginOld">
-<!ENTITY version   "2026.08.23.1">
+<!ENTITY version   "2026.08.23.2">
 <!ENTITY launch    "Tools/HBAviewer_Monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/FugginOld/Unraid-HBAviewer/main/hbaviewer.plg">
-<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.08.23.1/hbaviewer.txz">
-<!ENTITY md5       "69162d88349f075d0e0161a0a9332160">
+<!ENTITY pkgURL    "https://github.com/FugginOld/Unraid-HBAviewer/releases/download/2026.08.23.2/hbaviewer.txz">
+<!ENTITY md5       "392391a170ea34314dc94d217b36769e">
 <!ENTITY icon      "hbaviewer.png">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.08.23.3###
+**Fixed**
+- **Every tab was slow, and now is not.** Reading a controller enumerated the
+  storcli controller list twice, back to back, for the same number -- once to
+  find out the tool worked and again to ask how many cards there are. Every tab
+  goes through that path. On a 9300-16i a Health read measured 56 seconds
+  before and 2-4 seconds after. Boxes with a slow enumeration will notice this
+  most; nothing about what is displayed has changed.
+- **The plugin on a phone.** Tab labels ran outside the buttons the Unraid
+  theme draws around them, and the Overview and HBA Health cards were wider
+  than the screen, so the page scrolled sideways and the right-hand half of
+  every card sat off the edge. Three separate causes, all fixed: the tab strip
+  now scrolls instead of squeezing, the card grids collapse below their column
+  minimum, and the dual-controller card is sized by its border box rather than
+  overflowing by its own padding. Long values wrap instead of running off, and
+  a phone gets a narrower page gutter. Desktop is unchanged. (issue #21,
+  reported by jac2424)
+
+**Added**
+- **Track link-error history** on the Settings page, off by default. Samples
+  PHY counters every ten minutes so HBA Health can judge trends rather than
+  comparing whatever two moments you happened to open the tab. Previously this
+  sampling only ran if you had Notifications switched on, which is not
+  something anyone would guess: the two are separate features and now have
+  separate switches. With both off, the cron still does one small file read and
+  touches no hardware.
+
+**Internal**
+- The health ring is written atomically, so a cron sample landing mid-render
+  can no longer silently discard the accumulated history.
+- `docs/review-policy.md` records which agent review tool governs which layer
+  and which findings are rejected on sight, and `tests/review_policy_test.php`
+  fails if the code it describes is renamed away. Three claims it made about
+  the code were verified wrong and corrected.
+- The install verifier proves WHICH build it checked by diffing the package
+  against the installed tree; it had reported PASS twice against a stale
+  tarball. Codacy removed.
+
 ###2026.08.23.2###
 **Added**
 - Tabs with nothing to show now say why. The Event Log in particular: it used
