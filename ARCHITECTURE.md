@@ -330,11 +330,16 @@ Conventions that exist because of specific past bugs:
 CI (`.github/workflows/php.yml`) lints every `.php` with `php -l`, every `.sh`
 under `source/` and `tests/` with `bash -n`, every `.js` with `node --check`,
 and runs the suite on Linux. Above that syntax tier sit ShellCheck, PHPStan and
-actionlint; Codacy adds jshint on the `.js` files out of band. The rule the
-`.js` tier exists to hold is **no first-party code in a language nothing
-analyses** — the JavaScript spent its first year inside two `.php` files, where
-linguist counted it as PHP, PHPStan saw inert markup and jshint never opened it
-(plan 057).
+actionlint. The rule the `.js` tier exists to hold is **no first-party code in a
+language nothing analyses** — the JavaScript spent its first year inside two
+`.php` files, where linguist counted it as PHP, PHPStan saw inert markup and
+jshint never opened it (plan 057).
+
+**That rule is currently unmet for JavaScript.** Codacy ran jshint out of band
+and was removed on 2026-08-23; `node --check` is a syntax parse, not a linter,
+so nothing now inspects `hbaviewer.js` or `flash_view.js` for anything a parser
+would accept. Restoring the tier means a lint step in `php.yml`, not another
+hosted scanner.
 
 ## Release
 
