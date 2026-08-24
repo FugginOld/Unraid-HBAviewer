@@ -166,6 +166,15 @@
        attempts at this rule capped a card that had already shrink-wrapped, so
        raising the ceiling from 420 to 748 changed nothing on screen. */
     width: 100%;
+    /* ...and width:100% is content-box here, which is what made THIS card, and
+       only this card, overflow a phone. box-sizing: border-box is set on
+       #lu-wrap alone -- its comment is explicit that children keep what they
+       had -- so 100% of the track plus .lu-card's 18px/20px padding and 1px
+       border came to track + 42px. The sibling cards never showed it because a
+       grid item with width:auto STRETCHES, and stretching sizes the border
+       box; only an explicit width re-opens the question. Stated here rather
+       than on .lu-card, because this is the one rule that sets a width. */
+    box-sizing: border-box;
     max-width: calc((1560px - 48px - 16px) / 2);
     margin-left: auto;
     margin-right: auto;
@@ -259,6 +268,11 @@
 @media (max-width: 767px) {
     .lu-overview-row { flex-direction: column; align-items: center; gap: 14px; }
     .lu-meta { width: 100%; }
+    /* 24px of side padding is ~12% of a phone's width spent on a gutter the
+       desktop frame needs and a phone does not. The vertical padding stays --
+       it separates the panel from Unraid's chrome above and below, which is
+       still worth its pixels here. */
+    #lu-wrap { padding-left: 10px; padding-right: 10px; }
 }
 
 /* ── PCIe row ────────────────────────────────────────────────────────────── */
