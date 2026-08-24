@@ -166,13 +166,13 @@ use_storcli() {
     # points $STORCLI at a stub, and falling through to a real binary on the
     # runner's PATH would make the fixture silently not the thing under test.
     if [ -n "$STORCLI" ]; then
-        _storcli_enumerates "$STORCLI" >/dev/null || return 1
+        STORCLI_COUNT=$(_storcli_enumerates "$STORCLI") || return 1
         STORCLI_FLAVOR=$(storcli_flavor "$STORCLI")
         export STORCLI STORCLI_FLAVOR; return 0
     fi
     while read -r sc; do
         [ -n "$sc" ] || continue
-        _storcli_enumerates "$sc" >/dev/null || continue
+        STORCLI_COUNT=$(_storcli_enumerates "$sc") || continue
         STORCLI="$sc"; STORCLI_FLAVOR=$(storcli_flavor "$sc")
         export STORCLI STORCLI_FLAVOR; return 0
     done < <(storcli_candidates)
@@ -197,7 +197,20 @@ pci_addr_to_sysfs_dir() {   # $1 = "dom:bus:dev:fn"
 
 # Controller count from storcli's enumeration — the single parse of
 # "Number of Controllers" that every storcli path shares. Empty if none.
+# Measured on a 9300-16i: `storcli show` -- the GLOBAL enumeration, no /cN --
+# costs 3-7s, against 0.15s for `/c0 show`, and it varies wildly run to run.
+# hba_each used to pay for it TWICE in a row for the same number: use_storcli
+# probes with _storcli_enumerates, which computes the count and prints it, and
+# then threw it away with >/dev/null so storcli_count could go and ask again.
+# Every composer routes through hba_each, so every tab in the plugin paid that
+# toll on every open -- which is what "all the tabs are slow" turned out to be.
+#
+# Deliberately NOT exported. A command substitution is a subshell and inherits
+# plain shell variables, which is all hba_each needs; exporting it would let a
+# stale count reach a child process that had resolved a DIFFERENT $STORCLI, and
+# a wrong controller count silently renders the wrong number of cards.
 storcli_count() {
+    [ -n "$STORCLI_COUNT" ] && { echo "$STORCLI_COUNT"; return; }
     if [ "$STORCLI_FLAVOR" = storcli2 ]; then
         storcli_run show nolog 2>/dev/null | grep -m1 'Number of Controllers' | grep -oE '[0-9]+'
     else
