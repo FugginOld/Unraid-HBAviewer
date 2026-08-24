@@ -42,9 +42,13 @@ jobs:
         run: find source tests -name '*.sh' -print0 | xargs -0 -r -n1 bash -n
 
       # The plugin's own JavaScript lived inside two .php files until plan 057,
-      # where linguist counted it as PHP, phpstan saw inert markup and Codacy's
-      # jshint never opened it -- ~1,100 lines, the only language here nothing
-      # analysed. Now that it is in real .js files, this is its `php -l` tier.
+      # where linguist counted it as PHP, phpstan saw inert markup and no linter
+      # ever opened it -- ~1,100 lines, the only language here nothing analysed.
+      # Now that it is in real .js files, this is its `php -l` tier.
+      #
+      # This is a SYNTAX parse, not a lint. The out-of-band scanner that ran
+      # jshint on these files was removed on 2026-08-23, so nothing currently
+      # inspects them for anything node will happily accept. See ARCHITECTURE.md.
       # The vendored Chart.js bundle is excluded; it is not ours to lint.
       - name: Lint JS (node --check on every .js)
         run: find source -name '*.js' -not -name '*.min.js' -print0 | xargs -0 -r -n1 node --check
