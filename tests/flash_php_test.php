@@ -605,17 +605,19 @@ check('the firmware page leads with the lock',
    inline underneath the settings form, because Unraid stacks the children of
    an xmenu parent onto one page.
 
-   Menu="HBAviewer" is the shape HBAviewer_Monitor.page already proves works:
-   HBAviewer.page is Type="menu", a real container, so its children are
-   standalone pages under /Tools/. */
+   Menu="DiskUtilities" joins the shared Tools -> Disk Utilities group, the same
+   shape HBAviewer_Monitor.page uses, so the child is a standalone page under
+   /Tools/. (There used to be an HBAviewer.page Type="menu" stub creating a
+   plugin-own group for both to hang off; it is gone, and a Menu="HBAviewer"
+   child would now have no parent at all.) */
 $flashPage = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/HBAviewer_Flash.page');
 $monSrc    = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
-check('the firmware page is not a second Utilities tile',
+check('the firmware page is not a second Settings -> Utilities tile',
       !str_contains($flashPage, 'Menu="Utilities"'));
 check('nor stacked inline under the settings form',
       !str_contains($flashPage, 'Menu="HBAviewer_Settings"'));
-check('it is a standalone page under the HBAviewer menu',
-      str_contains($flashPage, 'Menu="HBAviewer"'));
+check('it is a standalone page under the shared Disk Utilities group',
+      str_contains($flashPage, 'Menu="DiskUtilities"'));
 check('the button in settings points at the URL that placement produces',
       str_contains($settingsSrc, 'href="/Tools/HBAviewer_Flash"'));
 // The Monitor's tab navigates from onclick, not href -- it has to be a <button>

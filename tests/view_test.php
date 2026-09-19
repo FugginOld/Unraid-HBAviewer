@@ -144,6 +144,14 @@ foreach (glob("$dir/*.php") ?: [] as $src) {
     }
 }
 check('every internal HBAviewer link resolves to a content page', $bad === []);
+/* Neither page may declare its own Menu="Tools" group. A Type="menu" stub with
+   no body creates a named, initially empty section on Tools; the plugin joins
+   the existing Disk Utilities group with Menu="DiskUtilities" instead. */
+check('no page creates a Tools group of its own',
+      !array_filter($pages, fn($c) => preg_match('~^Menu="Tools"~m', $c)));
+check('the Monitor joins the shared Disk Utilities group',
+      str_contains($pages['HBAviewer_Monitor'] ?? '', 'Menu="DiskUtilities"'));
+
 if ($bad) foreach ($bad as $b) echo "      $b\n";
 
 /* Same check, one directory down: every <script src> the plugin renders must
