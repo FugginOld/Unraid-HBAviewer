@@ -51,7 +51,7 @@ Nothing is downloaded at runtime, and nothing phones home.
 2. Set your **Alert Threshold**. This is not "the temperature that is bad" — it
    names the first *band* at which the badge starts complaining. The bands are
    fixed: Normal ≤65, Elevated 66–75, Warning 76–85, Alert 86–95, Critical >95 °C.
-3. **Open HBAviewer Monitor** (or **Tools → HBAviewer → HBA Monitor**).
+3. **Open HBAviewer Monitor** (or **Tools → Disk Utilities → HBA Monitor**).
 
 The Monitor opens immediately with a *"Reading controller information…"* banner
 and fills in when the hardware read completes. **The first read can take up to a

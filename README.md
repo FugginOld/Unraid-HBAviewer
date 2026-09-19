@@ -281,7 +281,7 @@ protection, with no stable direct URL), so you fetch the archive yourself:
    **Settings → HBA Connection → Firmware Event Log** shows these same steps
    and whether the full build is currently installed.
 
-After installation, find the monitor under **Tools → HBAviewer → HBA Monitor**.
+After installation, find the monitor under **Tools → Disk Utilities → HBA Monitor**.
 
 ## Layout
 
