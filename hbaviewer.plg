@@ -13,6 +13,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="&icon;">
 
 <CHANGES>
+###2026.09.19###
+**Changed**
+- HBAviewer moved off its own top-level **Tools** entry into **Tools → Disk
+  Utilities**, alongside the other disk tools. The old entry was a body-less
+  stub that only created a separate group; the Monitor and Firmware pages now
+  join the shared `DiskUtilities` menu instead. (PR #23, joshmans)
+
 ###2026.08.23.3###
 **Fixed**
 - **Every tab was slow, and now is not.** Reading a controller enumerated the
