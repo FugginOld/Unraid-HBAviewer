@@ -129,6 +129,7 @@ PAD=2000
 GAP=100000
 
 DEV_OVERRIDE=""
+STATE_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
     # User Scripts invokes with an empty argument. Never abort over an arg.
     [[ -z "$1" ]] && { shift; continue; }
@@ -162,6 +163,9 @@ fi
 
 case "$OUTDIR" in
     /boot/*) echo "refusing to write to the flash drive. change OUTDIR." >&2; exit 2 ;;
+esac
+case "$STATE_OVERRIDE" in
+    /boot/*) echo "refusing to write to the flash drive. change --state." >&2; exit 2 ;;
 esac
 if ! mkdir -p "$OUTDIR" 2>/dev/null; then
     echo "cannot create $OUTDIR -- falling back to /tmp (lost on reboot)" >&2

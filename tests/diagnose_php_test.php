@@ -114,9 +114,8 @@ check('every engine argument is escaped',
 // --out is a fresh, unique directory every launch, so a baseline keyed to it
 // never survives to the next run. The launcher must pass a stable, per-disk
 // --state path instead -- see diag_baseline_path().
-check('the start action passes a stable per-disk --state path',
-      str_contains($code, "--state '")
-      && str_contains($code, 'diag_baseline_path('));
+check('the start action passes a stable per-disk --state path, escaped',
+      str_contains($code, "--state ' . escapeshellarg(diag_baseline_path("));
 
 // Read-only phase: nothing here may reach the Tier 2/3 tools, whether by
 // accident or by a later edit that thought it was helping.
