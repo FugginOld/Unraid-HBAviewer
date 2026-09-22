@@ -169,5 +169,36 @@ TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --su
 hasnt "an unparseable version is treated as old" "$(cat "$EV")" '"n":32768'
 : > "$STUB_DMESG"
 
+# ── Never spin up a sleeping drive. ────────────────────────────────────────
+# triage_disk() only runs on a flagged disk, so seed a failing-sector line the
+# engine's own syslog harvest will pick up, same pattern as above -- this
+# gets snap() and the self-test smartctl calls exercised too, not just the
+# counter-collection loop, so the assertions below cover all three call sites.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all >/dev/null
+smart_calls=$(grep -c '^smartctl ' "$ARGS")
+[ "$smart_calls" -gt 0 ] && ok "smartctl was actually called ($smart_calls times)" \
+                         || bad "smartctl was actually called" "zero calls -- the assertion below would pass vacuously"
+hasnt "no smartctl call passes -n never" "$(cat "$ARGS")" '-n never'
+nostandby=$(grep '^smartctl ' "$ARGS" | grep -v -- '-n standby' || true)
+[ -z "$nostandby" ] && ok "every smartctl call passes -n standby" \
+                    || bad "every smartctl call passes -n standby" "$nostandby"
+
+# Mutation check: prove the assertion above can fail. A copy of the engine with
+# the guard removed must be caught by exactly these two cases and nothing else.
+# This invokes the mutant directly, not through run(), so it does not inherit
+# run()'s TRIAGE_SKIP_ROOT_CHECK -- all three test-only bypasses are set here
+# explicitly, and the dmesg seed above is still active so the mutant is
+# exercised through snap() and the self-test calls too, not just one site.
+MUT="$WORK/mutant.sh"
+sed 's/-n standby/-n never/g' "$DT" > "$MUT"
+: > "$ARGS"
+TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+    PATH="$STUBDIR:$PATH" bash "$MUT" --out "$WORK/mout" --auto-triage --all /dev/sdX >/dev/null 2>&1
+mutleft=$(grep '^smartctl ' "$ARGS" | grep -v -- '-n standby' || true)
+[ -n "$mutleft" ] && ok "the standby assertion is able to fail (mutant caught)" \
+                  || bad "the standby assertion is able to fail" "mutant passed -- the assertion proves nothing"
+: > "$STUB_DMESG"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

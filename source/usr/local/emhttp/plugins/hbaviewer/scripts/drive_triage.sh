@@ -402,7 +402,7 @@ while IFS=$'\t' read -r name dev status mderr id; do
         continue
     fi
 
-    smartctl -x -d auto -n never "/dev/$dev" > "$RUN/smart-$dev.txt" 2>&1
+    smartctl -x -d auto -n standby "/dev/$dev" > "$RUN/smart-$dev.txt" 2>&1
     S="$RUN/smart-$dev.txt"
 
     uncorr="$(awk '/^read:/ {print $NF}' "$S" | head -1)"
@@ -675,9 +675,15 @@ run_read() {
     return $(( fails > 0 ))
 }
 
+# -n standby on EVERY call, including the ones inside a triage that has already
+# decided the disk is awake. HBAviewer's standing guarantee is that nothing it
+# does wakes a sleeping disk, and a guard that holds only on the probe is a
+# guard the next edit removes without noticing. This is deliberately stricter
+# than scripts/read_smart.sh, which skips the flag on the SAS bus because a
+# log-page read is electronics-only; that exception is not extended here.
 snap() {  # device -> summed counters, one key per line
     local S="$RUN/smart-$1.txt"
-    smartctl -x -d auto -n never "/dev/$1" > "$S" 2>&1
+    smartctl -x -d auto -n standby "/dev/$1" > "$S" 2>&1
     echo "uncorr=$(awk '/^read:/ {print $NF}' "$S" | head -1 | grep -o '[0-9]*' || echo 0)"
     echo "grown=$(awk '/Elements in grown defect/ {gsub(/[^0-9]/,"",$NF); print $NF}' "$S" | head -1)"
     echo "nonmed=$(awk '/Non-medium error count/ {gsub(/[^0-9]/,"",$NF); print $NF}' "$S" | head -1)"
@@ -737,7 +743,7 @@ triage_disk() {
 
     tri_phase "$name" selftest 0
     if [[ "$SHORT_SELFTEST" == "yes" ]]; then
-        smartctl -t short -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
+        smartctl -n standby -t short -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         info "short self-test running, waiting 130s"
         # Test-only: TRIAGE_SKIP_SELFTEST_WAIT shortens this to keep the suite fast.
         # Never set in production -- the drive genuinely needs ~130s to finish.
@@ -746,7 +752,7 @@ triage_disk() {
         else
             sleep 130
         fi
-        smartctl -l selftest -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
+        smartctl -n standby -l selftest -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         if grep -qi "Completed without error\|Completed  *-" "$RUN/selftest-$dev.txt"; then
             ok "short self-test passed"
         else
@@ -755,7 +761,7 @@ triage_disk() {
     fi
 
     [[ "$LONG_SELFTEST" == "yes" ]] && {
-        smartctl -t long -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
+        smartctl -n standby -t long -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         info "long self-test queued; check: smartctl -l selftest -d auto /dev/$dev"; }
 
     dmesg | tail -n +"$dmark" | grep -i "$dev" > "$RUN/dmesg-$dev.txt" 2>/dev/null
