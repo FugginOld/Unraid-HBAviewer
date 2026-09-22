@@ -168,25 +168,25 @@ file_put_contents("$jd/pgid", "12345\n");
 file_put_contents("$jd/status", "0\n");
 file_put_contents($lock, '');
 check('a written status file means not running, no matter what else says running',
-      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === false);
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue, $root) === false);
 
 // Case 2: the trailer's `echo $? > status` truncates the file before writing
 // the exit code, so a read landing in that gap sees an EXISTING, EMPTY file.
 // That must fall through to the liveness/lock checks, not read as terminated.
 file_put_contents("$jd/status", '');
 check('an empty status file (the truncate race) falls through, not terminated',
-      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === true);
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue, $root) === true);
 @unlink("$jd/status");
 @unlink($lock);
 
 // Case 3: no status file, a live pgid -> running.
 check('no status file and a live pgid is running',
-      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === true);
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue, $root) === true);
 
 // Case 4: no status file, a recorded pgid whose probe says gone, and no lock
 // -> not running.
 check('no status file, a dead pgid, and no lock is not running',
-      diag_job_running($jd, 'sdb', $probeAlwaysFalse) === false);
+      diag_job_running($jd, 'sdb', $probeAlwaysFalse, $root) === false);
 
 // Case 5: no status file, no pgid yet, but THIS job's own directory exists
 // and the disk lock is held -- the "starting" window between `start`

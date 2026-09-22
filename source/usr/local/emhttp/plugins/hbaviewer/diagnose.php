@@ -96,8 +96,14 @@ if ($action === 'status') {
     $running = diag_job_running($dir, $disk, 'diag_kill_probe');
     $res = ['running' => $running, 'disk' => $disk,
             'exit' => $running ? null : $exit, 'done' => null];
-    if (!$running && $exit === 0)        $res['done'] = 'success';
-    elseif (!$running && $exit !== null) $res['done'] = 'error';
+    /* diag_job_running() already absorbs the "starting" window into $running
+       (case 3 of its three), so !$running here means genuinely over -- a
+       cancelled job (never writes status, since diag_cancel() SIGTERMs the
+       group before its trailer's `echo $? > status` can run), a SIGKILLed
+       engine, or an unknown job id all belong in 'error', not a silent null
+       that never lets a polling client reach a terminal state. */
+    if (!$running && $exit === 0) $res['done'] = 'success';
+    elseif (!$running)            $res['done'] = 'error';
     echo json_encode($res);
     exit;
 }

@@ -119,6 +119,15 @@ check('every frame carries the offset as its SSE id', str_contains($scode, 'id: 
 check('a reconnect is honoured via Last-Event-ID',
       str_contains($scode, 'HTTP_LAST_EVENT_ID'));
 check('the stream reads through diag_slice()', str_contains($scode, 'diag_slice('));
+// The end-of-stream check must ask per-JOB liveness (diag_job_running), not
+// the per-disk lock -- the lock is held by whichever job currently owns the
+// disk, not by the specific job this connection is streaming.
+check('the stream asks diag_job_running(), not the raw per-disk lock',
+      str_contains($scode, 'diag_job_running('));
+// A 200 that closes makes EventSource reconnect forever; only a non-2xx
+// status fails the connection permanently, so an invalid job id must send one.
+check('an invalid job id fails the connection with a non-2xx status',
+      str_contains($scode, 'http_response_code(400)'));
 
 // BOUNDED. An unbounded stream holds a php-fpm worker for the length of a
 // surface scan -- hours -- which is the exact shape of the incident
