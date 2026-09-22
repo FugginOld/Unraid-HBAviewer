@@ -36,30 +36,41 @@ BYID="$WORK/by-id"; mkdir -p "$BYID" "$WORK/dev"
 : > "$WORK/dev/sdb"; : > "$WORK/dev/sdc"
 
 # get_defects.sh's id_of() is only meaningful over a REAL symlink (it resolves
-# by-id -> sd letter with readlink -f). Skipped the same way topology_test.sh
-# already skips its own symlink fixture: Windows without Developer Mode makes
-# `ln -s` fall through to a plain file copy (exit 0, no [ -L ]), which would
-# make every disk unresolvable and every assertion below fail for a sandbox
-# reason, not a get_defects.sh reason. CI runs ubuntu-latest, where this runs.
-if ! { ln -s "$WORK/dev/sdb" "$BYID/ata-TESTDISK_0001" 2>/dev/null \
-       && [ -L "$BYID/ata-TESTDISK_0001" ]; }; then
-    echo "SKIP  get_defects tests (ln -s unavailable)"
-    echo "get_defects: all pass"
-    exit 0
+# by-id -> sd letter with readlink -f). Guarded the same way topology_test.sh
+# already guards its own symlink fixture: Windows without Developer Mode makes
+# `ln -s` fall through to a plain file copy (exit 0, no [ -L ]). But smartctl
+# runs for every lsblk-listed device BEFORE id_of() is ever consulted -- only
+# the final by-id-keyed emission depends on the symlink resolving -- so only
+# the two assertions that check a by-id NAME are gated below; everything else
+# runs for real on every platform. CI runs ubuntu-latest, where both branches
+# below exercise the "then" path.
+haveLinks=0
+if ln -s "$WORK/dev/sdb" "$BYID/ata-TESTDISK_0001" 2>/dev/null \
+   && [ -L "$BYID/ata-TESTDISK_0001" ]; then
+    ln -s "$WORK/dev/sdc" "$BYID/ata-TESTDISK_0002"
+    haveLinks=1
 fi
-ln -s "$WORK/dev/sdc" "$BYID/ata-TESTDISK_0002"
 
 out=$(PATH="$STUBDIR:$PATH" DEFECTS_BYID="$BYID" bash "$GD")
 
-has   "a measurable disk is reported by its stable id" "$out" '"ata-TESTDISK_0001":12'
-hasnt "a standby disk is omitted, not zeroed"          "$out" 'ata-TESTDISK_0002'
-has   "the output is a JSON object"                    "$out" '{'
+# These hold regardless of symlink support: smartctl runs for every
+# lsblk-listed device before id_of() is ever consulted, and the output is
+# always a JSON object even when every disk is omitted for lack of an id.
+has "the output is a JSON object" "$out" '{'
 smart_calls=$(grep -c '^smartctl ' "$ARGS")
 [ "$smart_calls" -gt 0 ] && ok "smartctl was actually called ($smart_calls times)" \
                          || bad "smartctl was actually called" "zero -- the next assertion would pass vacuously"
 nostandby=$(grep '^smartctl ' "$ARGS" | grep -v -- '-n standby' || true)
 [ -z "$nostandby" ] && ok "every smartctl call passes -n standby" \
                     || bad "every smartctl call passes -n standby" "$nostandby"
+
+# These two need a real by-id symlink to resolve at all.
+if [ "$haveLinks" -eq 1 ]; then
+    has   "a measurable disk is reported by its stable id" "$out" '"ata-TESTDISK_0001":12'
+    hasnt "a standby disk is omitted, not zeroed"          "$out" 'ata-TESTDISK_0002'
+else
+    echo "SKIP  by-id keying assertions (ln -s unavailable)"
+fi
 
 echo
 [ $fail -eq 0 ] && { echo "get_defects: all pass"; exit 0; } || { echo "get_defects: FAILURES"; exit 1; }
