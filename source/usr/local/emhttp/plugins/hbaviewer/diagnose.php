@@ -143,6 +143,7 @@ function diag_cancel(string $dir, callable $kill): bool {
    cannot tell a truncated object from a malformed one, so the returned offset
    stops at the last newline and the partial line is re-read next time. */
 function diag_slice(string $file, int $offset, int $maxBytes): array {
+    clearstatcache(true, $file);
     if (!is_file($file)) return ['bytes' => '', 'offset' => 0, 'eof' => true];
     $size = (int) filesize($file);
     /* An offset past the end is a client reconnecting to a file that was
@@ -155,7 +156,16 @@ function diag_slice(string $file, int $offset, int $maxBytes): array {
     $buf = (string) fread($fh, max(0, $maxBytes));
     fclose($fh);
     $nl = strrpos($buf, "\n");
-    if ($nl === false) return ['bytes' => '', 'offset' => $offset, 'eof' => false];
+    if ($nl === false) {
+        if (strlen($buf) >= $maxBytes) {
+            // The line exceeds one window's worth of bytes -- no newline will
+            // ever appear here. Hand back the raw chunk and advance past it
+            // rather than stalling the stream forever on one oversized event.
+            $next = $offset + strlen($buf);
+            return ['bytes' => $buf, 'offset' => $next, 'eof' => $next >= $size];
+        }
+        return ['bytes' => '', 'offset' => $offset, 'eof' => false];
+    }
     $buf = substr($buf, 0, $nl + 1);
     $next = $offset + strlen($buf);
     return ['bytes' => $buf, 'offset' => $next, 'eof' => $next >= $size];

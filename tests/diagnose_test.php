@@ -157,6 +157,36 @@ check('a negative offset is clamped to zero',      diag_slice($ev, -5, 4096)['of
 check('a missing file is empty, not an error',
       diag_slice("$jd/nope.ndjson", 0, 4096) === ['bytes' => '', 'offset' => 0, 'eof' => true]);
 
+// Fix round 1: a stat cache must not hide writes from another process. The
+// engine that appends to this file is always a different process than the
+// one reading it, which is exactly the case filesize()'s cache never
+// self-invalidates for.
+$growFile = "$jd/grow.ndjson";
+file_put_contents($growFile, "{\"a\":1}\n");
+$r1 = diag_slice($growFile, 0, 4096);
+check('first read gets the first line', $r1['bytes'] === "{\"a\":1}\n");
+
+file_put_contents($growFile, "{\"b\":2}\n", FILE_APPEND);
+$r2 = diag_slice($growFile, $r1['offset'], 4096);
+check('second read gets the appended line', $r2['bytes'] === "{\"b\":2}\n");
+
+file_put_contents($growFile, "{\"c\":3}\n", FILE_APPEND);
+$r3 = diag_slice($growFile, $r2['offset'], 4096);
+check('a third read does not replay the whole file from a stale stat cache',
+      $r3['bytes'] === "{\"c\":3}\n");
+
+// Fix round 2: a single event line longer than maxBytes must not stall the
+// stream forever -- diag_slice must make forward progress even without a
+// newline boundary once the whole window is consumed.
+$longFile = "$jd/long.ndjson";
+file_put_contents($longFile, str_repeat('x', 40)); // no newline anywhere
+$rl1 = diag_slice($longFile, 0, 10);
+check('an over-long line returns its window rather than stalling',
+      $rl1['bytes'] !== '' && $rl1['offset'] > 0);
+$rl2 = diag_slice($longFile, $rl1['offset'], 10);
+check('the offset keeps advancing on the next call',
+      $rl2['offset'] > $rl1['offset']);
+
 $wipe(); @rmdir($root);
 echo $fails === 0 ? "diagnose: all pass\n" : "diagnose: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
