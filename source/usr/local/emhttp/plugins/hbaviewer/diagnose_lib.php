@@ -70,6 +70,14 @@ function diag_lock_path(string $disk, string $root = DIAG_ROOT): string {
     return $root . '/' . $disk . '.lock';
 }
 
+/* A stable, per-disk, cross-job location for drive_triage.sh's baseline file --
+   distinct from diag_job_dir()'s per-job directories, which diag_trim_runs()
+   sweeps and this must not live inside, or the baseline would be deleted the
+   moment its own job's run got trimmed. */
+function diag_baseline_path(string $disk, string $root = DIAG_ROOT): string {
+    return $root . '/' . $disk . '.baseline.tsv';
+}
+
 /* Claim the single-flight lock ATOMICALLY. 'x' fails when the file already
    exists, so of two concurrent requests exactly one can win -- unlike
    is_file()-then-touch(), which lets both pass the gate and launch a job at

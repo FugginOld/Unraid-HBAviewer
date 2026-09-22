@@ -143,6 +143,7 @@ while [[ $# -gt 0 ]]; do
         --since)           SYSLOG_SINCE="$2"; shift ;;
         --out)             OUTDIR="$2"; shift ;;
         --events)          EVENTS="$2"; shift ;;
+        --state)           STATE_OVERRIDE="$2"; shift ;;
         --force)           ABORT_IF_BUSY="no" ;;
         --reset-baseline)  RESET_BASELINE="yes" ;;
         /dev/*)            DEV_OVERRIDE="$1" ;;
@@ -170,7 +171,7 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 RUN="$OUTDIR/$STAMP"
 mkdir -p "$RUN" || exit 2
 LOG="$RUN/report.txt"
-STATE="$OUTDIR/baseline.tsv"
+STATE="${STATE_OVERRIDE:-$OUTDIR/baseline.tsv}"
 [[ "$RESET_BASELINE" == "yes" ]] && rm -f "$STATE"
 
 log()  { printf '%s\n' "$*" | tee -a "$LOG"; }

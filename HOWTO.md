@@ -91,21 +91,26 @@ ends in a plain-language verdict: whether a fault sits in the drive's own
 media or on the SAS/SATA link to it.
 
 **Every operation is a read.** Preflight checks, a SMART snapshot, targeted
-SCSI VERIFY/READ against the ranges the kernel log already flagged, and a
-SMART short self-test — nothing here ever writes to the device. Phase 1 has
+SCSI VERIFY/READ against the ranges the kernel log already flagged (or, when
+nothing was flagged, a fixed spot-check of LBA 0:256), and a SMART short
+self-test — nothing here ever writes to the device. Phase 1 has
 no repair or reassignment action: the Verdict screen recommends next steps
 (move the drive, re-run under load, rebuild through Unraid's own array
 tools) but performs none of them.
 
 **The job outlives the tab.** Diagnose launches its engine as its own
 detached process; closing the browser tab, or the whole browser, does not
-stop it. Reopening the *same* Live Job screen resumes the view exactly where
-it left off — the browser's own reconnect carries the last position back to
-the server. Reloading the page, or opening HBAviewer fresh in a new tab,
-does not: there is currently no way to re-attach the Live view to a job
-that is already running. The drive's badge in the sidebar drive list reads
-**SCANNING** until the job ends, and the Verdict opens from there (or from
-**Recent verdicts**) once it does.
+stop it. While the *same* Live Job tab stays open, the view resumes on its
+own after any connection drop — an automatic browser-level reconnect carries
+the last position back to the server, with no action needed from you.
+Reloading the page, or opening HBAviewer fresh in a new tab, does not get
+that: there is currently no way to re-attach the Live view to a job that is
+already running. The drive's badge in the sidebar drive list reads
+**SCANNING** until the job ends, then shows its verdict — but the sidebar row's
+**Diagnose** button always starts a *new* job, even on a drive with a
+finished verdict; it is not a link back to that result. The **Recent
+verdicts** card offers that instead, but only from within an already-open
+Verdict screen in the same page session — it does not survive a reload.
 
 **Cancel stops the whole job**, not just the script that launched it — it
 signals the entire process group, so an `sg_verify` or `sg_read` still
@@ -120,7 +125,7 @@ it — every SMART and log-page read passes `-n standby`, and a sleeping
 drive's row in the run is skipped rather than woken.
 
 **The first run only establishes a baseline.** The counters a verdict is
-argued from (grown defects, uncorrected reads, running disparity, invalid
+argued from (grown defects, uncorrected reads, non-medium errors, invalid
 DWORD, loss of sync) are compared against that disk's previous run, saved
 per disk. With no previous run there is nothing to compare against — run
 Diagnose again in a few hours for deltas that mean anything.

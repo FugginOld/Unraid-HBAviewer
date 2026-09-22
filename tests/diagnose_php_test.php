@@ -111,6 +111,13 @@ check('the engine is invoked with --events', str_contains($code, '--events'));
 check('every engine argument is escaped',
       substr_count($code, 'escapeshellarg') >= 4);
 
+// --out is a fresh, unique directory every launch, so a baseline keyed to it
+// never survives to the next run. The launcher must pass a stable, per-disk
+// --state path instead -- see diag_baseline_path().
+check('the start action passes a stable per-disk --state path',
+      str_contains($code, "--state '")
+      && str_contains($code, 'diag_baseline_path('));
+
 // Read-only phase: nothing here may reach the Tier 2/3 tools, whether by
 // accident or by a later edit that thought it was helping.
 foreach (['sg_reassign', 'write-sector', 'badblocks', 'sg_format', 'sg_sanitize'] as $t) {

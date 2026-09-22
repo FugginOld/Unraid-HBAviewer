@@ -63,6 +63,13 @@ check('keep below 1 removes nothing',
 check('a disk with no runs is not an error', diag_trim_runs('sdz', 2, $root) === []);
 check('an invalid disk name trims nothing',  diag_trim_runs('../', 1, $root) === []);
 
+/* ── the baseline path is per DISK and stable across jobs ────────────────
+   Distinct from diag_job_dir()'s per-job directories, which diag_trim_runs()
+   sweeps -- the baseline must not live inside one of those or it would be
+   deleted the moment its own job's run got trimmed. */
+check('a baseline path sits under the root, keyed by disk',
+      diag_baseline_path('sdb', $root) === "$root/sdb.baseline.tsv");
+
 /* ── the lock is per DISK, and claiming is atomic ──────────────────────── */
 $lock = diag_lock_path('sdb', $root);
 check('the lock is named for the disk, not the job', $lock === "$root/sdb.lock");

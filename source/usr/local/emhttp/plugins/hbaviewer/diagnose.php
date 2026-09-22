@@ -73,6 +73,7 @@ if ($action === 'start') {
     $cmd = 'bash ' . escapeshellarg(DIAG_SCRIPTS . '/drive_triage.sh')
          . ' --out ' . escapeshellarg($dir)
          . ' --events ' . escapeshellarg("$dir/events.ndjson")
+         . ' --state ' . escapeshellarg(diag_baseline_path($disk, DIAG_ROOT))
          . ' --auto-triage --all'
          . ' ' . escapeshellarg("/dev/$disk");
     $inner = 'echo $$ > ' . escapeshellarg("$dir/pgid") . '; '

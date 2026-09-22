@@ -112,6 +112,18 @@ has "the report is still written alongside events" "$(cat "$RUNDIR/report.txt")"
 run --no-triage >/dev/null
 [ ! -s "$EV" ] && ok "no --events, no event output" || bad "no --events, no event output" "file grew"
 
+# ── --state: the baseline survives across DIFFERENT --out dirs. ────────────
+STATEFILE="$WORK/state.tsv"; rm -f "$STATEFILE"
+out1=$(PATH="$STUBDIR:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 bash "$DT" --out "$WORK/run1" --state "$STATEFILE" --no-triage /dev/sdX 2>&1)
+has "first run with --state has no baseline yet" "$out1" "no baseline yet"
+[ -s "$STATEFILE" ] && ok "--state writes the baseline file at the given path" || bad "--state writes the baseline file at the given path" "missing: $STATEFILE"
+out2=$(PATH="$STUBDIR:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 bash "$DT" --out "$WORK/run2" --state "$STATEFILE" --no-triage /dev/sdX 2>&1)
+has "a DIFFERENT --out dir still sees the baseline via --state" "$out2" "baseline present"
+# Backward compat: with no --state, baseline still lives under --out exactly as before.
+out3=$(PATH="$STUBDIR:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 bash "$DT" --out "$WORK/run3" --no-triage /dev/sdX 2>&1)
+has "without --state, a fresh --out still has no baseline (today's behavior, unchanged)" "$out3" "no baseline yet"
+[ -s "$WORK/run3/baseline.tsv" ] && ok "without --state, baseline.tsv still lands under --out" || bad "without --state, baseline.tsv still lands under --out" "missing"
+
 # ── chunk and verdict events come from the triage path. ────────────────────
 # triage_disk() only runs on a flagged disk, so seed a failing-sector line the
 # engine's own syslog harvest will pick up -- this is what flags sdX FAULTING.
