@@ -159,7 +159,7 @@ has "targeted chunks stay at 2048"     "$(grep '"phase":"targeted"' -A0 "$EV"; g
 cat > "$STUBDIR/sg_verify" <<'STUB'
 #!/bin/bash
 echo "sg_verify $*" >> "$STUB_ARGS"
-case "$1" in --version) echo "sg_verify version: 1.30 20101219"; exit 0 ;; esac
+case "$1" in --version) echo "sg_verify version: 1.20 20080910"; exit 0 ;; esac
 exit "${STUB_VERIFY_RC:-0}"
 STUB
 chmod +x "$STUBDIR/sg_verify"

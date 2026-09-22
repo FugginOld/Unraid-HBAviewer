@@ -108,12 +108,19 @@ CHUNK="2048"
 SURFACE_CHUNK="32768"
 THROTTLE="0"
 
-# sg3_utils floor for the big-chunk surface path. 1.42 is where
-# `sg_verify --16 --lba= --count=` and `sg_read bpt=` are all documented
-# together. Below it -- or when the tool will not say -- the surface scan falls
-# back to CHUNK and takes as long as it does today. Degrading is the right
-# failure here: a slow scan is a scan, a refused one is nothing.
-SG_MIN_VER="1.42"
+# sg3_utils floor for the big-chunk surface path. Originally set to 1.42 (where
+# `sg_verify --16 --lba= --count=` and `sg_read bpt=` are documented together
+# in the changelog); lowered to 1.30 after hardware verification on a real
+# fleet reported that version (plan 2026-09-21, Task 16 Block A). This floor
+# is taken from the version STRING alone -- it has not been confirmed by
+# actually exercising --16/bpt= on hardware, because the surface path (--surface)
+# is not reachable from the plugin's web UI in this phase; only CLI/User
+# Scripts callers can hit it. Re-verify directly before any future phase wires
+# a surface-scan control into the UI. Below the floor -- or when the tool will
+# not say -- the surface scan falls back to CHUNK and takes as long as it does
+# today. Degrading is the right failure here: a slow scan is a scan, a refused
+# one is nothing.
+SG_MIN_VER="1.30"
 
 # Line-oriented event sink for the plugin's live view. Empty = off, which is
 # the CLI / User Scripts path and must stay the default.
