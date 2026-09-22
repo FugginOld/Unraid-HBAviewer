@@ -701,7 +701,10 @@
    The map is also labelled with role=img and an aria-label, and every cell
    carries a title, because a grid of coloured squares is not readable to a
    screen reader and "the drive is fine" is not a thing to convey in hue only. */
-.lu-diag-screen  { display: block; }
+/* No display:block rule here on purpose: a <div> is block already, and an
+   author-origin display:block would beat the user-agent [hidden]{display:none}
+   rule regardless of specificity, silently defeating #diag-verdict's hidden
+   attribute the moment it's toggled. */
 .lu-diag-cols    { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
 .lu-diag-pills   { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .lu-diag-pill    { font-size: 11px; padding: 2px 8px; border-radius: 10px;
@@ -713,12 +716,18 @@
 .lu-diag-hotzone     { font-size: 12px; color: var(--warn-text); min-height: 1.2em; }
 .lu-diag-map     { display: flex; flex-wrap: wrap; gap: 1px; }
 .lu-diag-cell    { width: 8px; height: 8px; background: var(--border); }
+/* --good-text/--warn-text/--crit-text are contrast-tuned TEXT colours (see
+   tokens.css), not area fills -- using them directly as cell backgrounds
+   produced a vivid/pale-alternating ramp where the worse bucket of a pair
+   read as LESS severe. color-mix() builds an actual monotonic ramp from the
+   three raw tokens instead, same pattern already used elsewhere in this file
+   and in flash_view.php -- no new token invented. */
 .lu-b5    { background: var(--good); }
-.lu-b20   { background: var(--good-text); }
+.lu-b20   { background: color-mix(in srgb, var(--good) 55%, var(--warn)); }
 .lu-b50   { background: var(--warn); }
-.lu-b150  { background: var(--warn-text); }
+.lu-b150  { background: color-mix(in srgb, var(--warn) 55%, var(--crit)); }
 .lu-b500  { background: var(--crit); }
-.lu-b500p { background: var(--crit-text); }
+.lu-b500p { background: color-mix(in srgb, var(--crit) 75%, var(--text)); }
 .lu-bbad  { background: var(--crit-text); outline: 1px solid var(--text); }
 .lu-diag-hist    { display: flex; flex-direction: column; gap: 2px; margin-top: 8px;
                    font-size: 11px; font-variant-numeric: tabular-nums; }
