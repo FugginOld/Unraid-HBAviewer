@@ -139,9 +139,13 @@ function diag_cancel(string $dir, callable $kill): bool {
 /* Read the event file from a byte offset. The file is the source of truth, not
    anything held in the PHP worker -- the same rule cached_read() follows, so a
    reconnecting browser resumes instead of restarting.
-   NEVER returns a partial trailing line: the client splits on newlines and
-   cannot tell a truncated object from a malformed one, so the returned offset
-   stops at the last newline and the partial line is re-read next time. */
+   Normally never returns a partial trailing line: the returned offset stops at
+   the last newline and the partial line is re-read next time. ONE exception --
+   a line that fills the whole $maxBytes window without a newline is returned
+   raw, offset advanced past it, so the stream can't stall forever on one
+   oversized event. The client MUST concatenate successive slices before
+   splitting on newlines; it cannot assume every non-empty slice is
+   newline-terminated. */
 function diag_slice(string $file, int $offset, int $maxBytes): array {
     clearstatcache(true, $file);
     if (!is_file($file)) return ['bytes' => '', 'offset' => 0, 'eof' => true];
