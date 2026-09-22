@@ -1,0 +1,5 @@
+6,4805,1122334455,-;sd 0:0:5:0: [sdf] tag#0 Sense Key : Medium Error [current]
+6,4806,1122334456,-;sd 0:0:5:0: [sdf] tag#0 Add. Sense: Unrecovered read error
+3,4807,1122334457,-;critical medium error, dev sdf, sector 1234567 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2
+6,4808,1122334999,-;sd 0:0:2:0: [sdc] Attached SCSI disk
+3,4812,1122335000,-;critical medium error, dev sdc, sector 98765 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2

@@ -64,6 +64,15 @@ check events-empty     events_empty.json     bash "$P/events.sh"       < fixture
 check events-table     events_table.json     bash "$P/events.sh"       < fixtures/hba_eventlog_table.txt
 check events-table-empty events_empty.json   bash "$P/events.sh"       < fixtures/events_table_empty.txt
 check drives-osmap     drives_osmap.txt      bash "$P/drives_osmap.sh" < fixtures/drives_hbaviewer.txt
+# /dev/kmsg, not dmesg line counts. sas_error_monitor.sh tracked new kernel
+# messages by counting lines, so once the ring buffer wrapped the count stopped
+# growing and every later medium error was silently missed. The sequence number
+# in field 2 is monotonic across a wrap and is the only cursor that survives it.
+check kmsg-medium  kmsg_medium.json  bash "$P/kmsg.sh"      < fixtures/kmsg_medium.txt
+# Resuming from a cursor: everything at or below it is already reported. The
+# MAXIMUM is unfiltered, or a quiet window would leave the cursor stuck.
+check kmsg-since   kmsg_since.json   bash "$P/kmsg.sh" 4807 < fixtures/kmsg_medium.txt
+check kmsg-empty   kmsg_empty.json   bash "$P/kmsg.sh"      < /dev/null
 check storcli-overview storcli_overview.json bash "$P/storcli_overview.sh" 80 < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
 # PCIe link + power state arrive as $4/$5/$6 from the composer (sysfs); storcli reports none
 check storcli-overview-pcie storcli_overview_pcie.json bash "$P/storcli_overview.sh" 80 0 "" "x8" "Gen3 (8.0 GT/s)" "Full" < <(cat fixtures/storcli/overview_c0.txt fixtures/storcli/temp_c0.txt)
