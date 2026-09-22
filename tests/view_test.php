@@ -361,7 +361,12 @@ if (!$resolveFailed) {
         // signal through HUE, not luminance -- a small luminance increase
         // there is the conventional good->warn->crit progression, not a bug.
         if ($order[$i - 1] === 'lu-b20' && $order[$i] === 'lu-b50') continue;
-        if ($lum[$order[$i]] > $lum[$order[$i - 1]]) { $ok = false; break; }
+        // >=, not >: two adjacent buckets landing on the SAME luminance is a
+        // real defect too -- it means two severities are indistinguishable on
+        // the map, not just that the ramp failed to lighten. A prior version
+        // of this guard used a bare > and would have passed b500p collapsed
+        // onto b500's exact color.
+        if ($lum[$order[$i]] >= $lum[$order[$i - 1]]) { $ok = false; break; }
     }
     check('the latency-bucket ramp darkens monotonically (except the hue-carried b20->b50 step)', $ok);
 }
