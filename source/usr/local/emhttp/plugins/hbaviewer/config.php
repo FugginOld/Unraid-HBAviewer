@@ -85,6 +85,9 @@ const LSI_SCHEMA = [
     // Bounded by default rather than by the user remembering: the technique
     // keeps the drive awake for as long as it runs (plan 048).
     'LOCATE_MAX_SECS'  => [300, 30, 1800],
+    /* Diagnose job directories kept per disk under /tmp/hbaviewer/jobs.
+       Count-based, the same shape as drive_triage.sh's own KEEP_RUNS. */
+    'DIAG_KEEP_RUNS'  => [14, 1, 90],
     // Drive temperature the bay map calls hot, in °C. NOT ALERT_THRESHOLD:
     // that one is the HBA controller chip's band floor, and a chip at 76°C is
     // ordinary while a spinning disk at 76°C is an emergency.

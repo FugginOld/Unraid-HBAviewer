@@ -109,6 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_hbaviewer'])) {
         'PCIE_EXPECT_WIDTH' => $_POST['pcie_width'] ?? 0,
         'PCIE_EXPECT_GEN'   => $_POST['pcie_gen']   ?? 0,
         'TEMP_UNIT'         => ($_POST['temp_unit'] ?? 'c') === 'f' ? 1 : 0,
+        'DIAG_KEEP_RUNS'    => $_POST['diag_keep_runs'] ?? 14,
     ]);
     $cfg   = lsi_config_read();
     $saved = true;
@@ -388,6 +389,19 @@ foreach ($bands as $floor => $label) {
 }
 ?>
           </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="lu-s-card">
+      <h3>Diagnose</h3>
+      <div class="lu-s-row">
+        <div class="lu-s-label">
+          Diagnose runs kept per disk:
+          <small>How many completed Diagnose runs to keep for each disk. Older ones are removed when a new job starts. They live in RAM and are gone at reboot either way.</small>
+        </div>
+        <div class="lu-s-control">
+          <input type="number" name="diag_keep_runs" value="<?= (int)$cfg['DIAG_KEEP_RUNS'] ?>" min="1" max="90">
         </div>
       </div>
     </div>
