@@ -34,6 +34,32 @@ if ($doNotify) {
     // rather than exit(0): this must not skip the history sample below, which is
     // a separate feature reading a separate composer.
     if (is_array($data)) lsi_notify_run(lsi_controllers($data));
+
+    /* Per-disk alerts: kernel medium errors and grown-defect increases, from
+       the two checks worth keeping in sas_error_monitor.sh. Under
+       ENABLE_NOTIFY alongside the controller-health check rather than a third
+       toggle -- both answer "tell me when a disk problem appears", and the
+       TRACK_HISTORY split was about two DIFFERENT features sharing a switch,
+       not about splitting one.
+       Both composers are bounded: one smartctl per disk, and a non-blocking
+       read of a kernel buffer. Cron may block -- no request exists
+       (docs/foreground-reads.md). */
+    require_once "$plugin/disk_alerts.php";
+    $defects = json_decode((string) shell_exec(
+        'bash ' . escapeshellarg(__DIR__ . '/get_defects.sh') . ' 2>/dev/null'), true);
+    $kmsg = json_decode((string) shell_exec(
+        'bash ' . escapeshellarg(__DIR__ . '/get_kmsg.sh') . ' 2>/dev/null'), true);
+    /* /proc/sys/kernel/random/boot_id is a kernel-level UUID that changes every
+       boot -- disk_alert_run() uses a mismatch against the last-stored value as
+       an authoritative reboot signal (a sequence-number-alone heuristic can miss
+       two reboots close together). null on a read failure degrades gracefully
+       to the sequence-only fallback already inside disk_alert_run(). */
+    $bootId = trim((string) @file_get_contents('/proc/sys/kernel/random/boot_id')) ?: null;
+    /* BOTH reads must have parsed. An unreadable defect list is not "every
+       disk has zero defects": running with [] rewrites the baseline empty, so
+       the next good read is a first sighting for every disk and the increase
+       that mattered is gone. Same shape as the is_array($data) guard above. */
+    if (is_array($defects) && is_array($kmsg)) disk_alert_run($defects, $kmsg, bootId: $bootId);
 }
 
 /* ── Feed the health ring ────────────────────────────────────────────────────

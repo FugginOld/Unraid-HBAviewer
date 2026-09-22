@@ -596,6 +596,10 @@ echo "=== drive triage engine tests ==="
 bash drive_triage_test.sh; drive_triage_fail=$?
 
 echo
+echo "=== grown defect collector tests ==="
+bash get_defects_test.sh; get_defects_fail=$?
+
+echo
 echo "=== PHP tests ==="
 bash run_php.sh; php_fail=$?
 
@@ -617,7 +621,7 @@ done
 [ $nl_fail -eq 0 ] && echo "PASS  no golden carries a trailing newline"
 
 echo
-if [ $fail -eq 0 ] && [ $nl_fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $sort_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $storcli_count_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $drive_triage_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
+if [ $fail -eq 0 ] && [ $nl_fail -eq 0 ] && [ $flash_fail -eq 0 ] && [ $flash_js_fail -eq 0 ] && [ $baymap_js_fail -eq 0 ] && [ $sort_js_fail -eq 0 ] && [ $anon_fail -eq 0 ] && [ $read_smart_fail -eq 0 ] && [ $health_sh_fail -eq 0 ] && [ $drives_sysfs_fail -eq 0 ] && [ $topology_fail -eq 0 ] && [ $multiport_fail -eq 0 ] && [ $storcli_count_fail -eq 0 ] && [ $locate_sh_fail -eq 0 ] && [ $phys_json_fail -eq 0 ] && [ $bundle_coverage_fail -eq 0 ] && [ $collect_smart_fail -eq 0 ] && [ $drive_triage_fail -eq 0 ] && [ $get_defects_fail -eq 0 ] && [ $php_fail -eq 0 ]; then
     echo "--- all pass ---"; exit 0
 else
     echo "--- FAILURES ---"; exit 1

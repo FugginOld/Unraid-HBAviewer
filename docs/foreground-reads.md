@@ -82,6 +82,12 @@ Dashboard *closed*, this table is where to look first.
 `flash.php:124, 337, 359, 380` · `bundle.php:46` · `locate.php:120` ·
 `notify.php:88` · `scripts/notify_check.php:23`
 
+`scripts/notify_check.php` disk alerts — `get_defects.sh` (one
+`smartctl -n standby` per disk) and `get_kmsg.sh` (`dd iflag=nonblock` on
+`/dev/kmsg`, which never waits for a message that has not arrived). Cron, so
+there is no request to hold. Both are bounded by the disk count and the buffer
+size respectively; neither talks to a controller.
+
 ## Checking it
 
 ```bash
