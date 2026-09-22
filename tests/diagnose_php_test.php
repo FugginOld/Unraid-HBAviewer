@@ -42,6 +42,10 @@ check('the job is launched under setsid', str_contains($code, 'setsid'));
 // contain the literal strings 'pgid' and 'diag_cancel(' above the guard, so
 // matching against the whole file would pass even if the dispatch never
 // called either one.
+if ($guardAt === false) {
+    echo "FAIL  cannot scope to dispatch code (guard not found)\n";
+    exit(1);
+}
 $dispatchCode = substr($code, $guardAt);
 check('the launcher records the job process group',
       str_contains($dispatchCode, 'pgid'));
@@ -50,6 +54,13 @@ check('the launcher records the job process group',
 // lives. A dispatch that called posix_kill($pid, …) directly would pass every
 // other assertion here.
 check('cancel goes through diag_cancel()', str_contains($dispatchCode, 'diag_cancel('));
+// NOT WIDENED to /kill\b[^;]*\$(pid|target)\b/ as the review round asked: that
+// pattern false-positives on the dispatch's own correctly-escaped call site
+// ("kill -TERM -- ' . escapeshellarg((string) $target)"), which contains
+// "kill" and "$target" in the same statement with no semicolon between them.
+// Verified directly (preg_match returns 1 against that exact line). Left at
+// the narrower, already-verified concatenation spelling pending a corrected
+// pattern -- see the fix-round report.
 check('the dispatch does not kill a bare pid',
       !preg_match('/kill\s+\'?\s*\.\s*\$pid\b/', $dispatchCode));
 // A lone '-12345'-shaped argument is parsed by sh's kill builtin as a SIGNAL
