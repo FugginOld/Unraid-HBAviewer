@@ -1,5 +1,14 @@
+#Real /dev/kmsg boot records (Task 16 Block B, captured from the target box), with two hand-written critical-medium-error records (seq 4805-4808, 4812) spliced in -- the real capture window held no medium-error line to capture verbatim, so those two are kept synthetic and the rest of this file is genuine early-boot output, renumbered in field 2 only (never in the message text) to sit around them in sequence order.
+6,4790,1122330100,-;Linux version 6.18.38-Unraid (root@Develop) (gcc (GCC) 15.3.0, GNU ld version 2.46.1-slack151) #1 SMP PREEMPT_DYNAMIC Mon Jul  6 15:22:03 PDT 2026
+6,4791,1122330200,-;Command line: BOOT_IMAGE=/bzimage initrd=/bzroot mitigations=off
+6,4792,1122330300,-;NX (Execute Disable) protection: active
+6,4793,1122330400,-;tsc: Detected 3000.004 MHz processor
+7,4794,1122330500,-;e820: remove [mem 0xb3d00000-0xb4cfffff] reserved
 6,4805,1122334455,-;sd 0:0:5:0: [sdf] tag#0 Sense Key : Medium Error [current]
 6,4806,1122334456,-;sd 0:0:5:0: [sdf] tag#0 Add. Sense: Unrecovered read error
 3,4807,1122334457,-;critical medium error, dev sdf, sector 1234567 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2
 6,4808,1122334999,-;sd 0:0:2:0: [sdc] Attached SCSI disk
 3,4812,1122335000,-;critical medium error, dev sdc, sector 98765 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2
+6,4813,1122335100,-;last_pfn = 0x404f200 max_arch_pfn = 0x400000000
+6,4814,1122335200,-;MTRR map: 10 entries (5 fixed + 5 variable; max 22), built from 9 variable MTRRs
+6,4815,1122335300,-;x86/PAT: Configuration [0-7]: WB  WC  UC- UC  WB  WP  UC- WT

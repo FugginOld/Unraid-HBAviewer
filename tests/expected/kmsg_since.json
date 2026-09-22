@@ -1,1 +1,1 @@
-{"max_seq":4812,"events":[{"seq":4812,"dev":"sdc","text":"critical medium error, dev sdc, sector 98765 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2"}]}
+{"max_seq":4815,"events":[{"seq":4812,"dev":"sdc","text":"critical medium error, dev sdc, sector 98765 op 0x0:(READ) flags 0x0 phys_seg 1 prio class 2"}]}
