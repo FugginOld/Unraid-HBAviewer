@@ -289,5 +289,82 @@ $diagCss = (string) (strstr($css, '/* Diagnose') ?: '');
 check('the new rules use theme variables, not literal hex',
       $diagCss !== '' && !preg_match('/:\s*#[0-9a-fA-F]{3,8}\s*;/', $diagCss));
 
+/* The latency-bucket ramp inverted its own severity ordering three times
+   across three review rounds -- twice because a color-mix() endpoint was a
+   THEME-BOUND token (--text, then --bg: both light on the white/azure themes,
+   dark on black/gray/default), so the darkening direction flipped depending
+   on which theme was active. Nothing in the suite could catch it: the checks
+   above only prove each class EXISTS, not that the colors it resolves to are
+   ordered correctly. This parses the real declarations from chrome.css and
+   computes actual sRGB relative luminance, so a future edit that reintroduces
+   a theme-bound endpoint fails loudly here instead of shipping a fourth time.
+   Only --good/--warn/--crit (tokens.css literals) and the `black` keyword are
+   theme-invariant, so those are the only resolvable endpoints -- anything
+   else throws, which is the point. */
+function hex2rgb(string $hex): array {
+    $hex = ltrim($hex, '#');
+    return [hexdec(substr($hex, 0, 2)), hexdec(substr($hex, 2, 2)), hexdec(substr($hex, 4, 2))];
+}
+function srgb_lin(float $c): float {
+    $c /= 255;
+    return $c <= 0.04045 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+}
+function rel_lum(array $rgb): float {
+    return 0.2126 * srgb_lin($rgb[0]) + 0.7152 * srgb_lin($rgb[1]) + 0.0722 * srgb_lin($rgb[2]);
+}
+function mix_rgb(array $c1, array $c2, float $pct): array {
+    $p = $pct / 100;
+    return [(int) round($c1[0] * $p + $c2[0] * (1 - $p)),
+            (int) round($c1[1] * $p + $c2[1] * (1 - $p)),
+            (int) round($c1[2] * $p + $c2[2] * (1 - $p))];
+}
+// Only these are theme-invariant. Anything else in a bucket declaration is
+// exactly the mistake this guard exists to catch, so it is deliberately not
+// in this map -- resolveColor() below throws on an unknown name.
+function resolveColor(string $expr, array $vars): array {
+    $expr = trim($expr);
+    if (preg_match('/^var\(--([\w-]+)\)$/', $expr, $m) && isset($vars[$m[1]])) return $vars[$m[1]];
+    if ($expr === 'black') return [0, 0, 0];
+    if (preg_match('/^color-mix\(in srgb,\s*var\(--([\w-]+)\)\s*(\d+)%,\s*(.+)\)$/', $expr, $m)
+        && isset($vars[$m[1]])) {
+        return mix_rgb($vars[$m[1]], resolveColor($m[3], $vars), (float) $m[2]);
+    }
+    throw new RuntimeException("view_test.php cannot resolve a theme-invariant color from: $expr");
+}
+$tokens = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/tokens.css');
+preg_match('/--good:\s*(#[0-9a-fA-F]{6})/', $tokens, $mg);
+preg_match('/--warn:\s*(#[0-9a-fA-F]{6})/', $tokens, $mw);
+preg_match('/--crit:\s*(#[0-9a-fA-F]{6})/', $tokens, $mc);
+$vars = ['good' => hex2rgb($mg[1]), 'warn' => hex2rgb($mw[1]), 'crit' => hex2rgb($mc[1])];
+
+$order = ['lu-b5', 'lu-b20', 'lu-b50', 'lu-b150', 'lu-b500', 'lu-b500p'];
+$lum = [];
+$resolveFailed = false;
+foreach ($order as $cls) {
+    if (!preg_match('/\.' . preg_quote($cls, '/') . '\s*\{\s*background:\s*([^;]+);/', $css, $m)) {
+        check("view_test.php can locate .$cls's background declaration", false);
+        $resolveFailed = true;
+        continue;
+    }
+    try {
+        $lum[$cls] = rel_lum(resolveColor($m[1], $vars));
+    } catch (Throwable $e) {
+        check($e->getMessage(), false);
+        $resolveFailed = true;
+    }
+}
+if (!$resolveFailed) {
+    $ok = true;
+    for ($i = 1; $i < count($order); $i++) {
+        // The green->orange hue transition at b20->b50 carries the severity
+        // signal through HUE, not luminance -- a small luminance increase
+        // there is the conventional good->warn->crit progression, not a bug.
+        if ($order[$i - 1] === 'lu-b20' && $order[$i] === 'lu-b50') continue;
+        if ($lum[$order[$i]] > $lum[$order[$i - 1]]) { $ok = false; break; }
+    }
+    check('the latency-bucket ramp darkens monotonically (except the hue-carried b20->b50 step)', $ok);
+}
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

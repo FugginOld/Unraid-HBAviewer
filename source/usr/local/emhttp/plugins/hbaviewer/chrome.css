@@ -727,12 +727,16 @@
 .lu-b50   { background: var(--warn); }
 .lu-b150  { background: color-mix(in srgb, var(--warn) 55%, var(--crit)); }
 .lu-b500  { background: var(--crit); }
-/* Mixed toward --bg, not --text: --text defaults LIGHT on this plugin's dark
-   theme, so mixing crit toward it lightens and desaturates the worst bucket
-   instead of darkening it -- verified by computed sRGB relative luminance,
-   not assumed (0.134 toward --bg vs 0.225 for plain --crit; toward --text it
-   was 0.292, the same inversion this rule exists to avoid). */
-.lu-b500p { background: color-mix(in srgb, var(--crit) 75%, var(--bg)); }
+/* Mixed toward the black KEYWORD, not a token: --text and --bg are both
+   theme-bound (light on the white/azure themes, dark on black/gray/default),
+   so mixing crit toward either one flips the darkening direction depending on
+   which theme is active -- --bg looked right on this repo's dark default and
+   inverted the ramp again on the two light themes. --good/--warn/--crit are
+   the only theme-INVARIANT stops in this ramp (tokens.css literals), so the
+   darkening endpoint has to be invariant too. Relative luminance of the
+   result is lower than plain --crit in every theme, verified by computation,
+   not by picking a token that happened to look dark from one theme. */
+.lu-b500p { background: color-mix(in srgb, var(--crit) 75%, black); }
 .lu-bbad  { background: var(--crit-text); outline: 1px solid var(--text); }
 .lu-diag-hist    { display: flex; flex-direction: column; gap: 2px; margin-top: 8px;
                    font-size: 11px; font-variant-numeric: tabular-nums; }
