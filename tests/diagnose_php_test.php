@@ -54,18 +54,17 @@ check('the launcher records the job process group',
 // lives. A dispatch that called posix_kill($pid, …) directly would pass every
 // other assertion here.
 check('cancel goes through diag_cancel()', str_contains($dispatchCode, 'diag_cancel('));
-// A dedicated "does not kill a bare pid" regex was tried here and dropped: any
-// pattern loose enough to catch string interpolation also matches the
-// dispatch's own correctly-escaped call ("kill -TERM -- ' .
-// escapeshellarg((string) $target)"), since that statement legitimately
-// contains both "kill" and "$target". The two checks below already cover the
-// same ground without that ambiguity: diag_cancel() above is the only place a
-// kill target is EVER formed, and the exact invocation shape is pinned next.
+// A dedicated "does not kill a bare pid" regex existed here and was dropped
+// for being existential rather than universal, then replaced by this one --
+// which checks EVERY 'kill' token in the dispatch, not just the presence of
+// one correct call. \bkill\b skips diag_kill_probe (no word boundary between
+// '_' and 'k') and only matches the standalone command word.
 // A lone '-12345'-shaped argument is parsed by sh's kill builtin as a SIGNAL
 // SPEC, not a pid -- nothing gets signalled and the error is swallowed by
-// 2>/dev/null. 'kill -SIG -- <pid>' is the only unambiguous form.
-check('cancel signals with the unambiguous kill -SIG -- form',
-      (bool) preg_match('/kill\s+-\w+\s+--\s/', $dispatchCode));
+// 2>/dev/null. 'kill -SIG -- <pid>' is the only unambiguous form, so every
+// occurrence must be followed by it.
+check('every kill in the dispatch uses the unambiguous kill -SIG -- form',
+      !preg_match('/\bkill\b(?!\s+-\w+\s+--\s)/', $dispatchCode));
 // status and list must ask per-JOB liveness (a signal-0 probe on the
 // recorded pgid), not the per-disk lock -- the lock is held by whichever job
 // currently owns the disk, not by the specific job being asked about.
