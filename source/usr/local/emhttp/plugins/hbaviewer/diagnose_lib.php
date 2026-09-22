@@ -242,7 +242,7 @@ function diag_job_disk(string $jobId): string {
 function diag_evidence_file(string $dir, string $name): string {
     $nested = glob("$dir/*/$name") ?: [];
     if ($nested !== []) {
-        usort($nested, fn($a, $b) => filemtime($b) <=> filemtime($a));
+        usort($nested, fn($a, $b) => (int) @filemtime($b) <=> (int) @filemtime($a));
         return $nested[0];
     }
     return "$dir/$name";
