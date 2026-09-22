@@ -54,6 +54,7 @@
         } else if (name !== 'overview' && !loaded[name]) {
             luReloadTab(name);
         }
+        if (name === 'diagnose' && typeof luDiagDrives === 'function') luDiagDrives();
     };
 
     /* Arrow-key movement along the strip, which is what role=tablist promises a

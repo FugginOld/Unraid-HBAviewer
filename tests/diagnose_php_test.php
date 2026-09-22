@@ -10,7 +10,16 @@ $src = (string) file_get_contents(
 // Comments are stripped before matching: this file argues about setsid and
 // about kill -PGID in its own prose, and a comment naming a flag must not be
 // able to satisfy an assertion about the code using it.
-$code = (string) preg_replace('~/\*.*?\*/|//[^\n]*~s', '', $src);
+// Tokenized, not regexed: the dispatch's own glob(DIAG_ROOT . '/*', ...) calls
+// put a literal "/*" inside a STRING, and a regex stripper can't tell that
+// apart from a real comment opener -- once a real comment appears anywhere
+// later in the file, a naive `/\*.*?\*/` match spans from that string's "/*"
+// to the far-off real "*/", silently deleting everything in between. PHP's own
+// tokenizer already knows the difference; use it instead of re-deriving it.
+$code = implode('', array_map(
+    fn($t) => is_array($t) && in_array($t[0], [T_COMMENT, T_DOC_COMMENT], true) ? '' : (is_array($t) ? $t[1] : $t),
+    token_get_all($src)
+));
 
 $fails = 0;
 function check(string $name, bool $ok): void {
@@ -151,6 +160,34 @@ check('and the bound is actually compared against elapsed time',
 check('the loop sleeps between polls',       preg_match('/usleep|sleep\(/', $scode));
 check('a disconnected client ends the loop', str_contains($scode, 'connection_aborted'));
 check('the job id is validated before use',  str_contains($scode, 'diag_job_valid('));
+
+check('the verdict action renders server-side',
+      str_contains($code, "action === 'verdict'")
+      && str_contains($code, 'renderDiagVerdict('));
+// An unreadable disks.ini must mean ASSIGNED, the stricter card -- it is the
+// one that never suggests writing to the disk. The permissive default here
+// would offer sector-level advice for an array member.
+check('assigned-ness defaults to true when disks.ini cannot be read',
+      str_contains($code, '$arrayDisk = true;'));
+// renderDiagDriveList has exactly one caller. An uncalled renderer is one
+// nobody notices breaking, and this is the surface every Diagnose job is
+// started from.
+check('the drive list has an action that renders it',
+      str_contains($code, "action === 'drivelist'")
+      && str_contains($code, 'renderDiagDriveList('));
+
+$js = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose_view.js');
+check('the client fetches the drive list',  str_contains($js, 'luDiagDrives'));
+check('the verdict renderer takes no arguments, matching its caller',
+      str_contains($js, 'window.luDiagRenderVerdict = function ()')
+      && str_contains($js, 'window.luDiagRenderVerdict();'));
+$hbjs = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.js');
+// hbaviewer.js loads BEFORE diagnose_view.js, so the hook must be guarded on
+// typeof or the first render of any tab throws before the strip works.
+check('luTab fills the drive list, guarded on typeof',
+      str_contains($hbjs, "typeof luDiagDrives === 'function'"));
 
 echo $fails === 0 ? "diagnose_php: all pass\n" : "diagnose_php: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

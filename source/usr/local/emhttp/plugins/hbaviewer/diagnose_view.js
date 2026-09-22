@@ -215,6 +215,7 @@
                otherwise and would go unused. */
             window.luDiagRenderVerdict();
             luDiagShow('verdict');
+            luDiagDrives();
             el('diag-dot').classList.remove('running');
             el('diag-dot').setAttribute('aria-label', 'No job running');
             el('diag-pause').disabled = true;
@@ -243,6 +244,7 @@
             el('diag-pause').disabled = true;
             el('diag-cancel').disabled = true;
             logLine('job finished', 'ok');
+            luDiagDrives();
         });
     }
 
@@ -307,11 +309,49 @@
             el('diag-cancel').disabled = false;
             logLine('job ' + d.job + ' started', 'ok');
             openStream();
+            /* Only after the start is CONFIRMED, not right after luDiagShow --
+               firing this before the POST resolves would badge the sidebar
+               SCANNING for a disk whose start might still get refused (the
+               per-disk lock rejecting a double-click), the same premature-state
+               mistake the pause/refused-start fixes above this line exist to
+               avoid. */
+            luDiagDrives();
           })
           .catch(function () { logLine('request failed', 'crit'); });
     };
 
-    /* Replaced by render/diagnose.php's client half in the next task. */
-    if (!window.luDiagRenderVerdict) window.luDiagRenderVerdict = function () {};
+    /* The verdict screen is server-rendered: it needs the per-range sense keys,
+       the worst cmd_age and the other recent runs, none of which the event
+       stream carries. One fetch, once, when the job ends. */
+    window.luDiagRenderVerdict = function () {
+        return fetch('/plugins/hbaviewer/diagnose.php?action=verdict&job='
+                     + encodeURIComponent(luDiagJob))
+          .then(function (r) { return r.text(); })
+          .then(function (h) { el('diag-verdict').innerHTML = h; })
+          .catch(function () {
+            el('diag-verdict').textContent = 'Could not load the verdict — the run is on disk, reload the tab.';
+          });
+    };
+
+    /* Reopening a past verdict. Switches screens without starting anything:
+       every button on the Verdict screen is read-only. */
+    window.luDiagOpen = function (job) {
+        luDiagJob = job;
+        luDiagShow('verdict');
+        if (typeof luTab === 'function') luTab('diagnose');
+        return luDiagRenderVerdict();
+    };
+
+    /* The sidebar drive list, worst-first with verdict badges. Server-rendered
+       for the same reason the verdict screen is: the badges come from each
+       disk's newest job directory, which only the server can see. */
+    window.luDiagDrives = function () {
+        return fetch('/plugins/hbaviewer/diagnose.php?action=drivelist')
+          .then(function (r) { return r.text(); })
+          .then(function (h) { el('diag-drives').innerHTML = h; })
+          .catch(function () {
+            el('diag-drives').textContent = 'Could not load the drive list.';
+          });
+    };
 
 })();

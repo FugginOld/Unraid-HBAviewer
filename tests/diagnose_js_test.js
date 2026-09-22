@@ -157,7 +157,9 @@ async function tail() {
     esInstances.length = 0;
     await sandbox.luDiagnose('sdb');
     check('starting a job posts to diagnose.php',
-          fetches.length === 1 && fetches[0].url.includes('diagnose.php'));
+          fetches.length === 2 && fetches[0].url.includes('diagnose.php'));
+    check('starting a job also refreshes the sidebar drive list',
+          fetches[1] && fetches[1].url.includes('action=drivelist'));
     check('and names the disk, not a /dev path',
           fetches[0].body.includes('disk=sdb') && !fetches[0].body.includes('%2Fdev'));
     check('and sends Unraid\'s CSRF token',  fetches[0].body.includes('csrf_token=TOKEN'));
