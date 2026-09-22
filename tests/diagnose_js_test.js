@@ -46,6 +46,7 @@ const ids = ['diag-live','diag-verdict','diag-head','diag-dot','diag-pause','dia
 ids.forEach(i => els.set(i, mkEl(i)));
 
 const fetches = [];
+const esInstances = [];
 const sandbox = {
     console, URLSearchParams,
     window: {},
@@ -61,7 +62,12 @@ const sandbox = {
         fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
         return Promise.resolve({ json: () => Promise.resolve({ ok: true, job: 'sdb-1', disk: 'sdb' }) });
     },
-    EventSource: function (url) { this.url = url; this.close = () => {}; },
+    EventSource: function (url) {
+        this.url = url;
+        this.closed = false;
+        this.close = () => { this.closed = true; };
+        esInstances.push(this);
+    },
     setTimeout: (fn) => fn && 0,
     luTab: () => {},
 };
@@ -138,15 +144,51 @@ A({ t: 'verdict', disk: 'sdb', v: 'TRANSPORT', why: 'verify clean, read failed x
 check('a verdict event switches to the verdict screen',
       els.get('diag-verdict').hidden === false && els.get('diag-live').hidden === true);
 
-/* ── starting a job ─────────────────────────────────────────────────────── */
-fetches.length = 0;
-sandbox.luDiagnose('sdb');
-check('starting a job posts to diagnose.php',
-      fetches.length === 1 && fetches[0].url.includes('diagnose.php'));
-check('and names the disk, not a /dev path',
-      fetches[0].body.includes('disk=sdb') && !fetches[0].body.includes('%2Fdev'));
-check('and sends Unraid\'s CSRF token',  fetches[0].body.includes('csrf_token=TOKEN'));
+/* ── starting a job, EventSource lifecycle, and the pause fix ───────────── */
+/* Async because openStream() -- and the EventSource it opens -- only runs
+ * after luDiagnose's fetch().then() chain resolves. */
+async function tail() {
+    fetches.length = 0;
+    esInstances.length = 0;
+    await sandbox.luDiagnose('sdb');
+    check('starting a job posts to diagnose.php',
+          fetches.length === 1 && fetches[0].url.includes('diagnose.php'));
+    check('and names the disk, not a /dev path',
+          fetches[0].body.includes('disk=sdb') && !fetches[0].body.includes('%2Fdev'));
+    check('and sends Unraid\'s CSRF token',  fetches[0].body.includes('csrf_token=TOKEN'));
+    check('starting a job opens one EventSource',
+          esInstances.length === 1 && esInstances[0].closed === false);
 
-console.log();
-if (fails === 0) { console.log('diagnose_js: all pass'); process.exit(0); }
-console.log('diagnose_js: FAILURES'); process.exit(1);
+    // Critical: a second start must close the first job's EventSource, not
+    // orphan it -- an orphan keeps writing the old disk's events into
+    // whatever state the new job set up, and holds a php-fpm worker open.
+    await sandbox.luDiagnose('sdb2');
+    check('starting a second job closes the previous EventSource',
+          esInstances[0].closed === true);
+    check('and opens a fresh EventSource for the new job',
+          esInstances.length === 2 && esInstances[1].closed === false);
+
+    // Important: pause freezes the VIEW, not data collection. An event that
+    // arrives while paused must still be applied to state (so resuming can
+    // catch up) but must not redraw until resumed.
+    sandbox.luDiagPause();
+    esInstances[1].onmessage({
+        data: JSON.stringify({ t: 'chunk', lba: 640, n: 64, ms: 5, ok: true }),
+        lastEventId: '77',
+    });
+    check('an event arriving while paused does not redraw the map',
+          els.get('diag-map')._html === '');
+    sandbox.luDiagPause();
+    check('resuming redraws the map with the event that arrived while paused',
+          els.get('diag-map')._html.includes('lu-diag-cell'));
+}
+
+tail().then(() => {
+    console.log();
+    if (fails === 0) { console.log('diagnose_js: all pass'); process.exit(0); }
+    console.log('diagnose_js: FAILURES'); process.exit(1);
+}).catch((e) => {
+    console.error(e);
+    console.log('diagnose_js: FAILURES');
+    process.exit(1);
+});

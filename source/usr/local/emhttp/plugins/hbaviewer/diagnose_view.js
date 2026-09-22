@@ -6,8 +6,11 @@
  * the whole reason there is no templating step here.
  *
  * The event file is the source of truth. This file holds a byte offset and
- * nothing else durable: reload the tab mid-scan and the stream resumes from
- * that offset rather than replaying or restarting.
+ * nothing else durable: it buys a transparent reconnect within one page
+ * life, not a resume across a reload. The browser's automatic EventSource
+ * retry replays via Last-Event-ID, which diagnose_stream.php prefers over
+ * the URL param, so a dropped connection picks up where it left off without
+ * this file tracking anything the browser doesn't already know.
  */
 'use strict';
 (function () {
@@ -78,8 +81,11 @@
     var PHASES = [['preflight', 'Preflight'], ['baseline', 'Baseline snapshot'],
                   ['targeted', 'Targeted VERIFY/READ'], ['surface', 'Surface VERIFY'],
                   ['selftest', 'SMART short test'], ['verdict', 'Verdict']];
-    var st = { phase: '', cells: [], deltas: {}, es: null, offset: 0,
-               paused: false, started: 0, lbaTotal: 0, lba: 0 };
+    function freshState() {
+        return { phase: '', cells: [], deltas: {}, es: null, offset: 0,
+                 paused: false, started: 0, lbaTotal: 0, lba: 0 };
+    }
+    var st = freshState();
 
     function drawPills() {
         var seen = false, out = '';
@@ -97,7 +103,8 @@
         for (i = 0; i < st.cells.length; i++) {
             c = st.cells[i];
             out += '<span class="lu-diag-cell ' + luDiagBucket(c.ms, c.ok)
-                 + '" title="LBA ' + c.lba + ' +' + c.n + ' · ' + c.ms + ' ms'
+                 + '" title="LBA ' + (Number(c.lba) || 0) + ' +' + (Number(c.n) || 0)
+                 + ' · ' + (Number(c.ms) || 0) + ' ms'
                  + (c.ok ? '' : ' · UNREADABLE') + '"></span>';
         }
         el('diag-map').innerHTML = out;
@@ -138,7 +145,7 @@
             d = st.deltas[k];
             out += '<div>' + fesc(keys[i][1]) + ': '
                  + (d === undefined ? '<span class="lu-muted">—</span>'
-                    : d.after + ' (' + (d.after - d.before >= 0 ? '+' : '')
+                    : (Number(d.after) || 0) + ' (' + (d.after - d.before >= 0 ? '+' : '')
                       + (d.after - d.before) + ')') + '</div>';
         }
         el('diag-counters').innerHTML = out;
@@ -186,16 +193,20 @@
             st.phase = ev.phase;
             if (ev.lba_total) st.lbaTotal = ev.lba_total;
             if (!st.started) st.started = Date.now();
-            drawPills(); drawProgress();
-            logLine('phase: ' + ev.phase, 'muted');
+            if (!st.paused) {
+                drawPills(); drawProgress();
+                logLine('phase: ' + ev.phase, 'muted');
+            }
         } else if (ev.t === 'chunk') {
             st.cells.push({ lba: ev.lba, n: ev.n, ms: ev.ms, ok: ev.ok !== false });
             st.lba = ev.lba + ev.n;
-            drawMap(); drawHist(); drawProgress();
-            if (ev.ok === false) logLine(ev.op + ' FAILED at LBA ' + ev.lba + ' +' + ev.n, 'crit');
+            if (!st.paused) {
+                drawMap(); drawHist(); drawProgress();
+                if (ev.ok === false) logLine(ev.op + ' FAILED at LBA ' + ev.lba + ' +' + ev.n, 'crit');
+            }
         } else if (ev.t === 'counter') {
             st.deltas[ev.key] = { before: ev.before, after: ev.after };
-            drawCounters();
+            if (!st.paused) drawCounters();
         } else if (ev.t === 'verdict') {
             logLine('verdict: ' + ev.v + ' — ' + ev.why, ev.v === 'CLEAN' ? 'ok' : 'crit');
             /* No arguments: the verdict screen is rendered server-side from the
@@ -220,7 +231,6 @@
         st.es = new EventSource('/plugins/hbaviewer/diagnose_stream.php?job='
             + encodeURIComponent(luDiagJob) + '&offset=' + st.offset);
         st.es.onmessage = function (m) {
-            if (st.paused) return;
             if (m.lastEventId) st.offset = parseInt(m.lastEventId, 10) || st.offset;
             var ev = null;
             try { ev = JSON.parse(m.data); } catch (e) { return; }
@@ -245,6 +255,9 @@
         st.paused = !st.paused;
         el('diag-pause').textContent = st.paused ? 'Resume' : 'Pause';
         logLine(st.paused ? 'view paused — the job keeps running' : 'view resumed', 'muted');
+        /* Resuming catches up: events kept landing in st while paused, so one
+           full redraw from current state shows everything that arrived. */
+        if (!st.paused) { drawPills(); drawProgress(); drawMap(); drawHist(); drawCounters(); }
     };
 
     window.luDiagCancel = function () {
@@ -261,8 +274,14 @@
        both sides of the wire. */
     window.luDiagnose = function (dev) {
         var disk = String(dev || '').replace(/^\/dev\//, '');
-        st = { phase: '', cells: [], deltas: {}, es: null, offset: 0,
-               paused: false, started: 0, lbaTotal: 0, lba: 0 };
+        /* Close out the PREVIOUS job's stream before dropping the reference to
+           it. st.es is null in a fresh state, so openStream()'s own "if
+           (st.es) close()" guard finds nothing to close once st has already
+           been replaced -- the old EventSource is orphaned, keeps a php-fpm
+           worker held open, and its handlers keep writing the old disk's
+           events into whatever st now points to. */
+        if (st.es) { st.es.close(); st.es = null; }
+        st = freshState();
         el('diag-map').innerHTML = '';
         el('diag-stream').innerHTML = '';
         el('diag-hotzone').textContent = '';
