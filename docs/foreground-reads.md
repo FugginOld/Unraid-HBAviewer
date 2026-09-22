@@ -34,6 +34,7 @@ the cached body, launches a detached producer, and returns immediately.
 | `ajax_info.php:116` | `nohup` SMART collection. Fire-and-forget; the tab polls for the result. |
 | `flash.php:438` | `nohup` the flash itself. Must outlive the request. |
 | `locate.php:150` | `nohup` the blink loop. Same. |
+| `diagnose.php` (start) | `setsid sh -c … &` — the triage job. Must outlive the request AND own its own process group, so Cancel has something to signal. |
 
 ### Rendered inside someone else's page — the dangerous class
 
@@ -54,6 +55,8 @@ the cached body, launches a detached producer, and returns immediately.
 | `ajax_info.php:135, 141, 291` | device and drive lookups |
 | `render/drives.php:23` | `lsblk` — bounded, no hardware |
 | `phy_baseline.php:140` | re-reads counters after a baseline reset |
+| `diagnose.php` `start` | `setsid` launch of `drive_triage.sh` — detached, returns immediately. The read itself never happens in the request. |
+| `diagnose.php` `cancel` | `/bin/kill` on a process group. Signals and returns; no wait. |
 
 **Investigated 2026-08-23, deliberately left alone.** Putting these behind
 `cached_read()` was tried once and reverted — `render/phy.php` carries the

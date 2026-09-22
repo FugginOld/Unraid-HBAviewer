@@ -22,6 +22,10 @@
 const DIAG_ROOT    = '/tmp/hbaviewer/jobs';
 const DIAG_SCRIPTS = '/usr/local/emhttp/plugins/hbaviewer/scripts';
 
+/* How long one SSE connection is allowed to hold a php-fpm worker before it
+   closes and the browser reconnects. See diagnose_stream.php. */
+const DIAG_SSE_MAX_SECS = 55;
+
 /* Lowercase alnum only. That covers every name Linux gives a physical block
    device (sdb, nvme0n1) and excludes a traversal, a shell metacharacter, and
    the ':' NTFS cannot hold in a path. Device-mapper names are excluded on
@@ -174,3 +178,143 @@ function diag_slice(string $file, int $offset, int $maxBytes): array {
     $next = $offset + strlen($buf);
     return ['bytes' => $buf, 'offset' => $next, 'eof' => $next >= $size];
 }
+
+/* Is the array mid-parity-op? mdResync is nonzero during a check or rebuild.
+   Fails closed the way flash_array_stopped() does: an unreadable state is a
+   refusal, not a pass. */
+function diag_resync(string $varini = '/var/local/emhttp/var.ini'): int {
+    if (!is_file($varini)) return 1;
+    $ini = @parse_ini_file($varini);
+    if (!is_array($ini)) return 1;
+    return (int) ($ini['mdResync'] ?? 1);
+}
+
+/* ── HTTP dispatch (served only; skipped under the CLI test runner) ────────── */
+if (PHP_SAPI === 'cli') return;
+
+require_once __DIR__ . '/config.php';
+
+header('Content-Type: application/json');
+/* CSRF is enforced by Unraid's platform layer; a token-less POST never reaches
+   here. A plugin-side check was added once, denied every settings save, and is
+   marked do-not-re-attempt. */
+$action = $_POST['action'] ?? $_GET['action'] ?? '';
+$cfg    = lsi_config_read();
+@mkdir(DIAG_ROOT, 0755, true);
+
+/* A job id is "<disk>-<digits>". Validated on the way IN, because it becomes a
+   directory name and the disk half of it becomes a kill target. */
+function diag_job_valid(string $jobId): bool {
+    return (bool) preg_match('/^[a-z0-9]{2,32}-\d{1,20}\z/', $jobId);
+}
+function diag_job_disk(string $jobId): string {
+    return substr($jobId, 0, (int) strrpos($jobId, '-'));
+}
+
+if ($action === 'start') {
+    $disk = (string) ($_POST['disk'] ?? '');
+    $lock = diag_lock_path($disk, DIAG_ROOT);
+
+    /* Claim single-flight BEFORE the gate, so the check and the claim cannot be
+       interleaved by a second request. Any refusal below hands the lock back.
+       Unlike flash.php there is no expensive hardware read to keep outside the
+       claim window -- every input here is a stat or a small file read. */
+    $owned = diag_disk_valid($disk) && diag_claim_lock($lock);
+
+    $pf = diag_preflight([
+        'disk'   => $disk,
+        'exists' => diag_disk_valid($disk) && is_file("/sys/block/$disk/dev"),
+        'resync' => diag_resync(),
+        'locked' => !$owned,
+    ]);
+    if (!$pf['ok']) {
+        if ($owned) @unlink($lock);
+        echo json_encode(['error' => $pf['error']]);
+        exit;
+    }
+
+    $now = time();
+    $job = diag_job_id($disk, $now);
+    $dir = diag_job_dir($job, DIAG_ROOT);
+    @mkdir($dir, 0755, true);
+
+    /* Trim BEFORE the new run, not after: trimming after would have to exclude
+       the run it just made, and the count the user set would be off by one in
+       whichever direction the next reader assumed. */
+    diag_trim_runs($disk, (int) lsi_clamp('DIAG_KEEP_RUNS', $cfg['DIAG_KEEP_RUNS']), DIAG_ROOT);
+
+    /* setsid, not a bare nohup. nohup detaches from the terminal but leaves the
+       job in the CALLER's process group -- there would be no group of its own
+       to signal, and Cancel would kill the wrapper shell while sg_verify kept
+       reading the disk. setsid makes the engine a group leader, and the
+       launcher records that group so diag_cancel() can signal all of it.
+       $$ inside the setsid'd shell IS the new group id, because setsid makes
+       that shell the leader. */
+    $cmd = 'bash ' . escapeshellarg(DIAG_SCRIPTS . '/drive_triage.sh')
+         . ' --out ' . escapeshellarg($dir)
+         . ' --events ' . escapeshellarg("$dir/events.ndjson")
+         . ' --auto-triage --all'
+         . ' ' . escapeshellarg("/dev/$disk");
+    $inner = 'echo $$ > ' . escapeshellarg("$dir/pgid") . '; '
+           . $cmd . ' > ' . escapeshellarg("$dir/job.log") . ' 2>&1; '
+           . 'echo $? > ' . escapeshellarg("$dir/status") . '; '
+           . 'rm -f ' . escapeshellarg($lock);
+    shell_exec('setsid sh -c ' . escapeshellarg($inner) . ' >/dev/null 2>&1 &');
+
+    echo json_encode(['ok' => true, 'job' => $job, 'disk' => $disk]);
+    exit;
+}
+
+if ($action === 'status') {
+    $job = (string) ($_GET['job'] ?? $_POST['job'] ?? '');
+    if (!diag_job_valid($job)) { echo json_encode(['error' => 'Invalid job.']); exit; }
+    $disk = diag_job_disk($job);
+    $dir  = diag_job_dir($job, DIAG_ROOT);
+    $stf  = "$dir/status";
+    $running = is_file(diag_lock_path($disk, DIAG_ROOT));
+    $exit    = is_file($stf) ? (int) trim((string) @file_get_contents($stf)) : null;
+    $res = ['running' => $running, 'disk' => $disk,
+            'exit' => $running ? null : $exit, 'done' => null];
+    if (!$running && $exit === 0)        $res['done'] = 'success';
+    elseif (!$running && $exit !== null) $res['done'] = 'error';
+    echo json_encode($res);
+    exit;
+}
+
+if ($action === 'cancel') {
+    $job = (string) ($_POST['job'] ?? '');
+    if (!diag_job_valid($job)) { echo json_encode(['ok' => false, 'error' => 'Invalid job.']); exit; }
+    $dir  = diag_job_dir($job, DIAG_ROOT);
+    $disk = diag_job_disk($job);
+    /* Signal the GROUP. posix_kill is not guaranteed present in Unraid's PHP
+       build, so this goes through /bin/kill, which takes the negative pid the
+       same way. diag_cancel() is what puts the minus sign there -- it is not
+       spelled at this call site on purpose, so one place owns it. */
+    $sent = diag_cancel($dir, function (int $target): void {
+        shell_exec('kill ' . escapeshellarg((string) $target) . ' 2>/dev/null');
+    });
+    /* Release the lock even when no pgid was found: a job directory with no
+       pgid is a launch that died before recording one, and leaving the lock
+       would refuse every later job on that disk until reboot -- the orphaned
+       lock flash.php's ordering comment exists to avoid. */
+    @unlink(diag_lock_path($disk, DIAG_ROOT));
+    echo json_encode(['ok' => $sent]);
+    exit;
+}
+
+if ($action === 'list') {
+    $jobs = [];
+    foreach (glob(DIAG_ROOT . '/*', GLOB_ONLYDIR) ?: [] as $d) {
+        $job = basename($d);
+        if (!diag_job_valid($job)) continue;
+        $disk = diag_job_disk($job);
+        $jobs[] = ['job' => $job, 'disk' => $disk, 'mtime' => (int) @filemtime($d),
+                   'running' => is_file(diag_lock_path($disk, DIAG_ROOT))];
+    }
+    usort($jobs, fn($a, $b) => $b['mtime'] <=> $a['mtime']);
+    echo json_encode(['jobs' => $jobs]);
+    exit;
+}
+
+http_response_code(400);
+echo json_encode(['error' => 'Unknown action.']);
