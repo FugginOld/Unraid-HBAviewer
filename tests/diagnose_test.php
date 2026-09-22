@@ -4,7 +4,7 @@
    touches /tmp/hbaviewer, a real disk or a real job -- every path is injected.
      php tests/diagnose_test.php  ->  "diagnose: all pass" (exit 0) */
 
-require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose.php';
+require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose_lib.php';
 
 $fails = 0;
 function check(string $name, bool $ok): void {
