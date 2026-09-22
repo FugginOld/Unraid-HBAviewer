@@ -6,6 +6,7 @@ how it is built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - [Install](#install)
 - [First run](#first-run)
 - [Find the drive behind a failing PHY](#find-the-drive-behind-a-failing-phy)
+- [Diagnose](#diagnose)
 - [Map your drive bays](#map-your-drive-bays)
 - [Find a drive in the rack (Locate)](#find-a-drive-in-the-rack-locate)
 - [Set a PHY error baseline](#set-a-phy-error-baseline)
@@ -81,6 +82,48 @@ Every one of those tables also carries the **`/dev` name** and **what Unraid
 calls the disk** (`Parity`, `Disk 1`, `Cache`), so a row here can be matched
 against the Main page without tracking `sdX` by eye. A dash in the Unraid column
 means the array does not use that drive.
+
+## Diagnose
+
+**Drives tab → Diagnose**, or **PHY Health tab → Diagnose** on a row that
+names a drive. Runs a read-only triage against that one physical drive and
+ends in a plain-language verdict: whether a fault sits in the drive's own
+media or on the SAS/SATA link to it.
+
+**Every operation is a read.** Preflight checks, a SMART snapshot, targeted
+SCSI VERIFY/READ against the ranges the kernel log already flagged, and a
+SMART short self-test — nothing here ever writes to the device. Phase 1 has
+no repair or reassignment action: the Verdict screen recommends next steps
+(move the drive, re-run under load, rebuild through Unraid's own array
+tools) but performs none of them.
+
+**The job outlives the tab.** Diagnose launches its engine as its own
+detached process; closing the browser tab, or the whole browser, does not
+stop it. Reopening the *same* Live Job screen resumes the view exactly where
+it left off — the browser's own reconnect carries the last position back to
+the server. Reloading the page, or opening HBAviewer fresh in a new tab,
+does not: there is currently no way to re-attach the Live view to a job
+that is already running. The drive's badge in the sidebar drive list reads
+**SCANNING** until the job ends, and the Verdict opens from there (or from
+**Recent verdicts**) once it does.
+
+**Cancel stops the whole job**, not just the script that launched it — it
+signals the entire process group, so an `sg_verify` or `sg_read` still
+holding the disk open is torn down along with it. **Pause only freezes the
+screen.** Phase 1 has no way to suspend a SCSI command mid-flight, so Pause
+stops the map, histogram and counters from redrawing and says so in the log
+("view paused — the job keeps running") instead of pretending the drive
+stopped being read.
+
+**A drive in standby is left asleep.** Diagnose never spins one up to test
+it — every SMART and log-page read passes `-n standby`, and a sleeping
+drive's row in the run is skipped rather than woken.
+
+**The first run only establishes a baseline.** The counters a verdict is
+argued from (grown defects, uncorrected reads, running disparity, invalid
+DWORD, loss of sync) are compared against that disk's previous run, saved
+per disk. With no previous run there is nothing to compare against — run
+Diagnose again in a few hours for deltas that mean anything.
 
 ## Map your drive bays
 

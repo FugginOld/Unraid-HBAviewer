@@ -495,3 +495,29 @@ moving says nothing about whether the cron sampler is running.
   It is ported from techanonymous's `Unraid-HBAviewer-sas4` fork (MIT,
   commit 882f88c), verified on their own box — not confirmed here.
   Ask the kernel what exists; do not infer from a product string.
+- **An SSE stream holds a php-fpm worker for as long as it is open.** A surface
+  scan runs for hours, so `diagnose_stream.php` ends its response after
+  `DIAG_SSE_MAX_SECS` (55) and lets `EventSource` reconnect, carrying the byte
+  offset back as `Last-Event-ID`. The resume the design needs anyway is what
+  makes the bound free — and an unbounded version is the same shape as the
+  incident `docs/foreground-reads.md` was written after.
+- **`diagnose_lib.php` exists because a dispatch executes on `require`.**
+  `diagnose_stream.php` needs four of `diagnose.php`'s pure helpers, and
+  requiring that file under a web SAPI runs its dispatch, which answers the
+  request with a 400 before the stream writes a byte. The pure half therefore
+  lives in a file with no dispatch at all.
+- **The Diagnose lock is per DISK, not per job.** The Tier 1 gate is "one job
+  per disk at a time", and a lock named for the job cannot express it — two
+  jobs on one disk would take two different locks and both win.
+- **Cancel signals the process GROUP, negative pid.** The engine runs under
+  `setsid` so it leads its own group, and it spawns `sg_verify`/`sg_read`
+  children that hold the disk open. `diag_pgid()` refuses 0 and 1 explicitly:
+  `kill -0` signals the caller's own process group — the php-fpm pool — and
+  `kill -1` signals everything the user can reach, and both are what a
+  truncated pgid file most easily produces.
+- **`-n standby` is absolute on the Diagnose and disk-alert paths**, and that is
+  deliberately stricter than `scripts/read_smart.sh`, which skips the flag on
+  the SAS bus because a log-page read is electronics-only. The exception is not
+  extended: a guard that holds only on the probe is a guard the next edit
+  removes without noticing. Asserted, with a mutation check, in
+  `tests/drive_triage_test.sh`.
