@@ -140,6 +140,17 @@ function diag_cancel(string $dir, callable $kill): bool {
     return true;
 }
 
+/* Is this job's process group still alive? diag_pgid() already validates the
+   pgid file; this asks the injected probe (a real signal-0 kill in
+   production) whether that group still exists. Unlike the per-disk lock,
+   this answers the question per JOB: an old completed run on the same disk
+   does not borrow "running" from whatever job currently holds the disk's
+   lock. */
+function diag_job_alive(string $dir, callable $probe): bool {
+    $pgid = diag_pgid($dir);
+    return $pgid !== null && $probe($pgid);
+}
+
 /* Read the event file from a byte offset. The file is the source of truth, not
    anything held in the PHP worker -- the same rule cached_read() follows, so a
    reconnecting browser resumes instead of restarting.
@@ -187,6 +198,11 @@ function diag_resync(string $varini = '/var/local/emhttp/var.ini'): int {
     $ini = @parse_ini_file($varini);
     if (!is_array($ini)) return 1;
     return (int) ($ini['mdResync'] ?? 1);
+}
+
+function diag_kill_probe(int $pgid): bool {
+    exec('/bin/kill -0 -- ' . escapeshellarg((string) (-$pgid)) . ' 2>/dev/null', $out, $rc);
+    return $rc === 0;
 }
 
 /* ── HTTP dispatch (served only; skipped under the CLI test runner) ────────── */
@@ -271,12 +287,12 @@ if ($action === 'status') {
     $disk = diag_job_disk($job);
     $dir  = diag_job_dir($job, DIAG_ROOT);
     $stf  = "$dir/status";
-    $running = is_file(diag_lock_path($disk, DIAG_ROOT));
+    $running = diag_job_alive($dir, 'diag_kill_probe');
     $exit    = is_file($stf) ? (int) trim((string) @file_get_contents($stf)) : null;
     $res = ['running' => $running, 'disk' => $disk,
             'exit' => $running ? null : $exit, 'done' => null];
-    if (!$running && $exit === 0)        $res['done'] = 'success';
-    elseif (!$running && $exit !== null) $res['done'] = 'error';
+    if (!$running && $exit === 0)   $res['done'] = 'success';
+    elseif (!$running)              $res['done'] = 'error';
     echo json_encode($res);
     exit;
 }
@@ -291,7 +307,7 @@ if ($action === 'cancel') {
        same way. diag_cancel() is what puts the minus sign there -- it is not
        spelled at this call site on purpose, so one place owns it. */
     $sent = diag_cancel($dir, function (int $target): void {
-        shell_exec('kill ' . escapeshellarg((string) $target) . ' 2>/dev/null');
+        shell_exec('/bin/kill -TERM -- ' . escapeshellarg((string) $target) . ' 2>/dev/null');
     });
     /* Release the lock even when no pgid was found: a job directory with no
        pgid is a launch that died before recording one, and leaving the lock
@@ -309,7 +325,7 @@ if ($action === 'list') {
         if (!diag_job_valid($job)) continue;
         $disk = diag_job_disk($job);
         $jobs[] = ['job' => $job, 'disk' => $disk, 'mtime' => (int) @filemtime($d),
-                   'running' => is_file(diag_lock_path($disk, DIAG_ROOT))];
+                   'running' => diag_job_alive($d, 'diag_kill_probe')];
     }
     usort($jobs, fn($a, $b) => $b['mtime'] <=> $a['mtime']);
     echo json_encode(['jobs' => $jobs]);

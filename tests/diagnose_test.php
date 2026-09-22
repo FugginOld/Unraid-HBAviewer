@@ -129,6 +129,30 @@ check('pgid 0 is refused', diag_pgid($jd) === null);
 file_put_contents("$jd/pgid", "1\n");
 check('pgid 1 is refused', diag_pgid($jd) === null);
 
+/* ── job liveness: per JOB, not the shared per-disk lock ─────────────────
+   status/list must not borrow "running" from the per-disk lock: an old
+   completed job on the same disk must not read as running just because a
+   NEW job currently holds that disk's lock. */
+@unlink("$jd/pgid");
+$probeCalls = [];
+$probe = function (int $pgid) use (&$probeCalls) { $probeCalls[] = $pgid; return true; };
+check('no pgid file means not alive, and the probe is never called',
+      diag_job_alive($jd, $probe) === false && $probeCalls === []);
+
+file_put_contents("$jd/pgid", "12345\n");
+$probeCalls = [];
+check('a recorded pgid whose probe says alive is alive',
+      diag_job_alive($jd, $probe) === true);
+// diag_job_alive() hands the probe the pgid AS READ -- positive. Negating it
+// for the real kill call is diag_kill_probe()'s job, not this function's.
+check('the probe receives the POSITIVE pgid, not the negated form',
+      $probeCalls === [12345]);
+
+$probeCalls = [];
+$probeDead = function (int $pgid) use (&$probeCalls) { $probeCalls[] = $pgid; return false; };
+check('a recorded pgid whose probe says gone is not alive',
+      diag_job_alive($jd, $probeDead) === false);
+
 /* ── the SSE slice: resume from a byte offset ──────────────────────────── */
 $ev = "$jd/events.ndjson";
 file_put_contents($ev, "{\"t\":\"phase\"}\n{\"t\":\"chunk\"}\n");

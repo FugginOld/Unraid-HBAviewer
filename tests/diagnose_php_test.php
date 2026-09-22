@@ -36,15 +36,32 @@ foreach (['DIAG_ROOT', 'DIAG_SCRIPTS', 'DIAG_SSE_MAX_SECS'] as $c) {
 // in the caller's process group, so there is no group of its own to signal and
 // cancel degrades to killing the shell while sg_verify keeps reading.
 check('the job is launched under setsid', str_contains($code, 'setsid'));
+
+// The three checks below must be scoped to the DISPATCH code only (below the
+// CLI guard). Task 9's diag_cancel()/diag_pgid() function bodies already
+// contain the literal strings 'pgid' and 'diag_cancel(' above the guard, so
+// matching against the whole file would pass even if the dispatch never
+// called either one.
+$dispatchCode = substr($code, $guardAt);
 check('the launcher records the job process group',
-      str_contains($code, 'pgid'));
+      str_contains($dispatchCode, 'pgid'));
 
 // The cancel path must reach diag_cancel(), which is where the NEGATIVE pid
 // lives. A dispatch that called posix_kill($pid, …) directly would pass every
 // other assertion here.
-check('cancel goes through diag_cancel()', str_contains($code, 'diag_cancel('));
+check('cancel goes through diag_cancel()', str_contains($dispatchCode, 'diag_cancel('));
 check('the dispatch does not kill a bare pid',
-      !preg_match('/kill\s+\'?\s*\.\s*\$pid\b/', $code));
+      !preg_match('/kill\s+\'?\s*\.\s*\$pid\b/', $dispatchCode));
+// A lone '-12345'-shaped argument is parsed by sh's kill builtin as a SIGNAL
+// SPEC, not a pid -- nothing gets signalled and the error is swallowed by
+// 2>/dev/null. 'kill -SIG -- <pid>' is the only unambiguous form.
+check('cancel signals with the unambiguous kill -SIG -- form',
+      (bool) preg_match('/kill\s+-\w+\s+--\s/', $dispatchCode));
+// status and list must ask per-JOB liveness (a signal-0 probe on the
+// recorded pgid), not the per-disk lock -- the lock is held by whichever job
+// currently owns the disk, not by the specific job being asked about.
+check('status and list both use per-job liveness, not the per-disk lock',
+      substr_count($dispatchCode, 'diag_job_alive(') >= 2);
 
 // The engine is invoked with --events, or the whole live view has nothing to
 // read, and with the disk as an explicit /dev path.
