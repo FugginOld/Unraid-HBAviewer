@@ -19,3 +19,6 @@ releases/
 # Subagent-driven-development scratch: ledger, briefs, review packages.
 # Git history is the durable record; this is the controller working memory.
 .superpowers/
+
+# Local git worktrees used for isolated feature branches.
+.worktrees/
