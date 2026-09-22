@@ -270,6 +270,45 @@ $rl2 = diag_slice($longFile, $rl1['offset'], 10);
 check('the offset keeps advancing on the next call',
       $rl2['offset'] > $rl1['offset']);
 
+/* ── diag_evidence_file(): the engine stamps its OWN run subdirectory ────
+   inside --out (OUTDIR/STAMP), so sense-<dev>.txt / dmesg-<dev>.txt land at
+   $dir/<STAMP>/name, never at $dir/name directly. Reading the flat path is
+   the bug this function exists to fix -- Fix round 1's Critical finding. */
+$evJob = "$root/sdb-77";
+@mkdir($evJob, 0777, true);
+check('no stamped run dir yet falls back to the flat path',
+      diag_evidence_file($evJob, 'sense-sdb.txt') === "$evJob/sense-sdb.txt");
+
+@mkdir("$evJob/20260101-000000", 0777, true);
+file_put_contents("$evJob/20260101-000000/sense-sdb.txt", "  4 Sense Key : 0x3\n");
+check('a single stamped run dir resolves the nested path',
+      diag_evidence_file($evJob, 'sense-sdb.txt') === "$evJob/20260101-000000/sense-sdb.txt");
+
+// Two stamped run dirs (a re-run reusing the same job id is not how the
+// launcher works, but the resolver must not assume there is exactly one) --
+// the NEWER one wins, by mtime, not by name sorting first or last.
+@mkdir("$evJob/20260101-010000", 0777, true);
+file_put_contents("$evJob/20260101-010000/sense-sdb.txt", "  1 Sense Key : 0x4\n");
+touch("$evJob/20260101-000000/sense-sdb.txt", 1_700_000_000);
+touch("$evJob/20260101-010000/sense-sdb.txt", 1_700_000_100);
+check('the newer stamped run dir wins when two exist',
+      diag_evidence_file($evJob, 'sense-sdb.txt') === "$evJob/20260101-010000/sense-sdb.txt");
+// ...and reversed mtimes flip the answer, so this is reading mtime, not
+// picking whichever glob() happened to return first.
+touch("$evJob/20260101-000000/sense-sdb.txt", 1_700_000_200);
+touch("$evJob/20260101-010000/sense-sdb.txt", 1_700_000_000);
+check('mtime decides, not glob order', str_contains(
+    diag_evidence_file($evJob, 'sense-sdb.txt'), '20260101-000000'));
+
+// $wipe() only descends one level (matches the rest of this file's job dirs,
+// which are flat); this fixture nests a stamped subdirectory inside its job
+// dir, so clean that extra level up by hand rather than leaving it behind.
+foreach (glob("$evJob/*", GLOB_ONLYDIR) ?: [] as $stamp) {
+    foreach (glob("$stamp/*") ?: [] as $f) @unlink($f);
+    @rmdir($stamp);
+}
+@rmdir($evJob);
+
 $wipe(); @rmdir($root);
 echo $fails === 0 ? "diagnose: all pass\n" : "diagnose: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

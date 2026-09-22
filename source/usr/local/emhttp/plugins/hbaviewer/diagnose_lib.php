@@ -232,3 +232,18 @@ function diag_job_valid(string $jobId): bool {
 function diag_job_disk(string $jobId): string {
     return substr($jobId, 0, (int) strrpos($jobId, '-'));
 }
+
+/* The engine's --out is a fresh, unique directory per job, but drive_triage.sh
+   still stamps its own run subdirectory inside it (OUTDIR/STAMP) and writes
+   sense-<dev>.txt / dmesg-<dev>.txt there, not at --out itself. Exactly one
+   stamped subdirectory is expected per job -- glob for the newest rather than
+   assume there's only one, and fall back to the flat path so a future engine
+   change that writes flat doesn't silently regress this to nothing. */
+function diag_evidence_file(string $dir, string $name): string {
+    $nested = glob("$dir/*/$name") ?: [];
+    if ($nested !== []) {
+        usort($nested, fn($a, $b) => filemtime($b) <=> filemtime($a));
+        return $nested[0];
+    }
+    return "$dir/$name";
+}

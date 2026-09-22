@@ -146,7 +146,7 @@ if ($action === 'list') {
 
 if ($action === 'verdict') {
     $job = (string) ($_GET['job'] ?? '');
-    if (!diag_job_valid($job)) { echo json_encode(['error' => 'Invalid job.']); exit; }
+    if (!diag_job_valid($job)) { http_response_code(400); echo 'Invalid job.'; exit; }
     header('Content-Type: text/html; charset=utf-8');
     require_once __DIR__ . '/render/diagnose.php';
     $dir  = diag_job_dir($job, DIAG_ROOT);
@@ -156,15 +156,16 @@ if ($action === 'verdict') {
        count -- not a stream to keep up with. */
     $events = diag_events_decode((string) @file_get_contents("$dir/events.ndjson"));
     /* sense-<dev>.txt is "  4 Sense Key : 0x3" per line, the engine's own
-       uniq -c output. */
+       uniq -c output. Not at $dir itself -- drive_triage.sh stamps its own run
+       subdirectory inside --out, so diag_evidence_file() has to find it. */
     $sense = [];
-    foreach (explode("\n", (string) @file_get_contents("$dir/sense-$disk.txt")) as $l) {
+    foreach (explode("\n", (string) @file_get_contents(diag_evidence_file($dir, "sense-$disk.txt"))) as $l) {
         if (preg_match('/^\s*(\d+)\s+Sense Key : (0x[0-9a-f]+)/', $l, $m)) {
             $sense[$m[2]] = (int) $m[1];
         }
     }
     $age = null;
-    if (preg_match_all('/cmd_age=(\d+)/', (string) @file_get_contents("$dir/dmesg-$disk.txt"), $m)) {
+    if (preg_match_all('/cmd_age=(\d+)/', (string) @file_get_contents(diag_evidence_file($dir, "dmesg-$disk.txt")), $m)) {
         $age = max(array_map('intval', $m[1]));
     }
     /* Assigned-ness decides which next-steps card the screen shows, and

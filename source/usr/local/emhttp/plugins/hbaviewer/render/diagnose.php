@@ -61,10 +61,10 @@ function diag_evidence_cards(array $events): array {
     $f = ['verify' => 0, 'read' => 0];
     $media = 0; $path = 0;
     foreach ($events as $e) {
-        if ($e['t'] === 'chunk' && isset($n[$e['op'] ?? ''])) {
+        if (($e['t'] ?? '') === 'chunk' && isset($n[$e['op'] ?? ''])) {
             $n[$e['op']]++;
             if (($e['ok'] ?? true) === false) $f[$e['op']]++;
-        } elseif ($e['t'] === 'counter') {
+        } elseif (($e['t'] ?? '') === 'counter') {
             $d = (int) ($e['after'] ?? 0) - (int) ($e['before'] ?? 0);
             if ($d <= 0) continue;
             if (in_array($e['key'] ?? '', ['grown', 'uncorr'], true)) $media += $d;
@@ -201,7 +201,7 @@ function renderDiagVerdict(array $in): string {
     $out .= '</div>';
 
     $rows = diag_ranges_rows($events, (array) ($in['sense'] ?? []),
-                             $in['max_cmd_age'] === null ? null : (int) $in['max_cmd_age']);
+                             ($in['max_cmd_age'] ?? null) === null ? null : (int) $in['max_cmd_age']);
     $out .= '<div class="lu-card"><h4>Tested ranges</h4>';
     $out .= $rows === []
         ? '<p class="lu-muted">No range was tested in this run.</p>'

@@ -128,6 +128,16 @@ check('the drive list renders every drive',
 check('MEDIA sorts above CLEAN', strpos($list, 'sdc') < strpos($list, 'sdb'));
 check('unassigned drives are their own group',
       str_contains(strtolower($list), 'unassigned'));
+// The fixture above has its worst drive in the UNASSIGNED group, so a
+// hardcoded "unassigned always renders first" rule would pass that check by
+// coincidence. Pin the actual rule with the worst drive on the OTHER side:
+// an assigned disk with the worst badge, against an unassigned one that's
+// healthy -- assigned must still render first.
+$list2 = renderDiagDriveList(
+    [['dev' => 'sda', 'role' => 'Disk 1'], ['dev' => 'sdz', 'role' => '']],
+    ['sda' => 'MEDIA', 'sdz' => 'CLEAN']);
+check('an assigned disk with the worst badge still sorts first',
+      strpos($list2, 'sda') < strpos($list2, 'sdz'));
 
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
