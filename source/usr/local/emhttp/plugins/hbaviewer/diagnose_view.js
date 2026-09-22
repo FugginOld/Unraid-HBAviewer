@@ -253,7 +253,10 @@
        map/histogram/counters/hot-zone catch up fully on resume -- but the
        diag-stream LOG does not: logLine() calls made while paused are
        skipped, not queued, so the text log has a gap for whatever arrived
-       during the pause even though the state it describes was captured. */
+       during the pause even though the state it describes was captured.
+       The verdict event is the one exception -- it logs and switches the
+       screen unconditionally, ignoring st.paused, because job completion
+       has to surface even if the view was paused when it happened. */
     window.luDiagPause = function () {
         st.paused = !st.paused;
         el('diag-pause').textContent = st.paused ? 'Resume' : 'Pause';

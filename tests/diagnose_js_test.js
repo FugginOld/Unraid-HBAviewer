@@ -69,6 +69,8 @@ const sandbox = {
         this.url = url;
         this.closed = false;
         this.close = () => { this.closed = true; };
+        this._listeners = {};
+        this.addEventListener = (type, fn) => { this._listeners[type] = fn; };
         esInstances.push(this);
     },
     setTimeout: (fn) => fn && 0,
@@ -214,6 +216,25 @@ async function tail() {
     check('a refused second start appends to the log rather than wiping it',
           els.get('diag-stream')._html.startsWith(streamBefore)
           && els.get('diag-stream')._html.includes('refused'));
+
+    // Regression guard: openStream() registers its 'end' handler via
+    // addEventListener, not onmessage. A stub missing addEventListener lets
+    // that call throw, swallowed by luDiagnose's own .catch -- every
+    // "successful start" check above would still report PASS while nothing
+    // past openStream() ever actually ran and the 'end' handler (clears the
+    // dot, disables Pause/Cancel) went unexercised by the whole suite.
+    fetches.length = 0;
+    esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sdd-1', disk: 'sdd' };
+    await sandbox.luDiagnose('sdd');
+    check('opening a stream registers an end handler via addEventListener',
+          typeof esInstances[0]._listeners.end === 'function');
+    esInstances[0]._listeners.end();
+    check('the end event closes the stream, clears the running dot, and disables controls',
+          esInstances[0].closed === true
+          && !els.get('diag-dot').classList.contains('running')
+          && els.get('diag-pause').disabled === true
+          && els.get('diag-cancel').disabled === true);
 }
 
 tail().then(() => {
