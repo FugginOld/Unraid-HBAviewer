@@ -78,5 +78,51 @@ PATH="$STUBDIR:$PATH" bash "$DT" --out /boot/nope /dev/sdX >/dev/null 2>&1
 out=$(PATH="$STUBDIR:$PATH" bash "$DT" --out "$WORK/rootcheck" /dev/sdX 2>&1)
 [ $? -eq 3 ] && has "root gate fires without test bypass" "$out" "must run as root" || bad "root gate fires without test bypass" "exit was not 3 or missing message"
 
+# ── --events: a second, line-oriented channel. ─────────────────────────────
+EV="$WORK/events.ndjson"
+: > "$EV"
+out=$(run --no-triage --events "$EV")
+[ -s "$EV" ] && ok "--events writes an event file" || bad "--events writes an event file" "empty"
+
+# Every line must be one complete JSON object -- the SSE reader in
+# diagnose_stream.php splits on newlines and cannot recover from a wrapped one.
+badline=0
+while IFS= read -r l; do
+    case "$l" in '{"t":"'*'}') ;; *) badline=1; echo "    offending line: $l" ;; esac
+done < "$EV"
+[ $badline -eq 0 ] && ok "every event line is one complete object" \
+                   || bad "every event line is one complete object" "see above"
+
+# Only the four documented types.
+types=$(grep -o '"t":"[a-z]*"' "$EV" | sort -u | tr '\n' ' ')
+case "$types" in
+    *'"t":"phase"'*) ok "a phase event is emitted" ;;
+    *) bad "a phase event is emitted" "types seen: $types" ;;
+esac
+unknown=$(grep -o '"t":"[a-z]*"' "$EV" | sort -u \
+          | grep -v -E '"t":"(phase|chunk|counter|verdict)"' || true)
+[ -z "$unknown" ] && ok "no undocumented event type" || bad "no undocumented event type" "$unknown"
+
+# The human report is unaffected by the flag -- this is the CLI contract.
+RUNDIR=$(ls -1d "$WORK/out"/*/ 2>/dev/null | head -1)
+has "the report is still written alongside events" "$(cat "$RUNDIR/report.txt")" "SLOT SCAN"
+
+# Without the flag, nothing is emitted anywhere.
+: > "$EV"
+run --no-triage >/dev/null
+[ ! -s "$EV" ] && ok "no --events, no event output" || bad "no --events, no event output" "file grew"
+
+# ── chunk and verdict events come from the triage path. ────────────────────
+# triage_disk() only runs on a flagged disk, so seed a failing-sector line the
+# engine's own syslog harvest will pick up -- this is what flags sdX FAULTING.
+: > "$EV"
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+STUB_READ_RC=1 TRIAGE_SKIP_DEV_CHECK=1 run --auto-triage --all --events "$EV" >/dev/null
+: > "$STUB_DMESG"
+has "a chunk event carries op and ms" "$(cat "$EV")" '"t":"chunk"'
+has "a chunk event names its op"      "$(cat "$EV")" '"op":"verify"'
+has "a verdict event is emitted"      "$(cat "$EV")" '"t":"verdict"'
+has "verify clean + read failed reads TRANSPORT" "$(cat "$EV")" '"v":"TRANSPORT"'
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

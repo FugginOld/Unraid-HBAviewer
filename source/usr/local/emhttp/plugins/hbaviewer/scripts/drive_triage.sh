@@ -104,6 +104,10 @@ DELTA_FLOOR="10"
 CHUNK="2048"
 THROTTLE="0"
 
+# Line-oriented event sink for the plugin's live view. Empty = off, which is
+# the CLI / User Scripts path and must stay the default.
+EVENTS=""
+
 # ============================================================================
 #  END CONFIG
 # ============================================================================
@@ -127,6 +131,7 @@ while [[ $# -gt 0 ]]; do
         --long)            LONG_SELFTEST="yes" ;;
         --since)           SYSLOG_SINCE="$2"; shift ;;
         --out)             OUTDIR="$2"; shift ;;
+        --events)          EVENTS="$2"; shift ;;
         --force)           ABORT_IF_BUSY="no" ;;
         --reset-baseline)  RESET_BASELINE="yes" ;;
         /dev/*)            DEV_OVERRIDE="$1" ;;
@@ -165,6 +170,37 @@ bad()  { log "  XX  ${C_R}$*${C_0}"; }
 sect() { log ""; log "${C_B}===== $* =====${C_0}"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# One JSON object per line, appended. Everything the browser sees comes through
+# here, so it is deliberately the only writer: a second emission path is a
+# second place for the schema to drift.
+#
+# No jq. The values are integers, a fixed set of lowercase keywords, and one
+# free-text reason -- so the only escaping this needs is on `why`, and doing it
+# in shell keeps the engine's dependency list at sg3_utils + smartctl.
+tri_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/[[:cntrl:]]/ /g'; }
+
+tri_emit() {  # $1 = complete JSON object body, without braces
+    [[ -n "$EVENTS" ]] || return 0
+    printf '{%s}\n' "$1" >> "$EVENTS"
+}
+
+tri_phase() {  # disk phase lba_total
+    tri_emit "\"t\":\"phase\",\"disk\":\"$(tri_esc "$1")\",\"phase\":\"$2\",\"lba_total\":${3:-0}"
+}
+tri_chunk() {  # lba n op ms ok(0|1)
+    local b=false; [[ "$5" == "1" ]] && b=true
+    tri_emit "\"t\":\"chunk\",\"lba\":$1,\"n\":$2,\"op\":\"$3\",\"ms\":$4,\"ok\":$b"
+}
+tri_counter() {  # key before after
+    tri_emit "\"t\":\"counter\",\"key\":\"$1\",\"before\":$2,\"after\":$3"
+}
+tri_verdict() {  # disk v why
+    tri_emit "\"t\":\"verdict\",\"disk\":\"$(tri_esc "$1")\",\"v\":\"$2\",\"why\":\"$(tri_esc "$3")\""
+}
+
+# Milliseconds elapsed since $1 (a value from tri_now_ms).
+tri_now_ms() { printf '%s' "$(( $(date +%s%N) / 1000000 ))"; }
+
 notify() {
     [[ "$NOTIFY" == "yes" ]] || return 0
     local n="/usr/local/emhttp/webGui/scripts/notify"
@@ -186,6 +222,7 @@ log "results : $RUN"
 # ============================================================================
 sect "PREFLIGHT"
 # ============================================================================
+tri_phase "-" preflight 0
 
 # Test-only gate: TRIAGE_SKIP_ROOT_CHECK allows test harness to run without root. Never set in production.
 [[ $EUID -eq 0 || -n "${TRIAGE_SKIP_ROOT_CHECK:-}" ]] || { bad "must run as root"; exit 3; }
@@ -293,13 +330,16 @@ info "$(wc -l < "$CAT_LOG") lines to search"
 # ============================================================================
 sect "COLLECTING COUNTERS"
 # ============================================================================
+tri_phase "-" baseline 0
 
 DATA="$RUN/data.tsv"
 : > "$DATA"
 declare -A LBS_OF HOST_OF
 
 while IFS=$'\t' read -r name dev status mderr id; do
-    [[ -b "/dev/$dev" ]] || continue
+    # Test-only gate: TRIAGE_SKIP_DEV_CHECK allows test harness to run the
+    # per-disk loop against a fake device node. Never set in production.
+    [[ -b "/dev/$dev" || -n "${TRIAGE_SKIP_DEV_CHECK:-}" ]] || continue
 
     HOST_OF["$dev"]="$(readlink -f "/sys/block/$dev/device" 2>/dev/null | grep -o 'host[0-9]*' | head -1)"
     LBS_OF["$dev"]="$(cat "/sys/block/$dev/queue/logical_block_size" 2>/dev/null || echo 512)"
@@ -569,11 +609,15 @@ run_verify() {
     local dev="$1" start="$2" count="$3" pos=0 n rc fails=0
     while [[ $pos -lt $count ]]; do
         n=$(( count - pos )); [[ $n -gt $CHUNK ]] && n=$CHUNK
+        local t0 ms cok=1
+        t0="$(tri_now_ms)"
         if ! timeout 120 sg_verify --16 --vrprotect=0 --lba=$(( start + pos )) \
             --count=$n "/dev/$dev" >> "$RUN/verify-$dev.txt" 2>&1; then
-            rc=$?; fails=$(( fails + 1 ))
+            rc=$?; fails=$(( fails + 1 )); cok=0
             echo "VERIFY FAIL lba=$(( start + pos )) count=$n rc=$rc" >> "$RUN/verify-fail-$dev.txt"
         fi
+        ms=$(( $(tri_now_ms) - t0 ))
+        tri_chunk "$(( start + pos ))" "$n" verify "$ms" "$cok"
         pos=$(( pos + n ))
         [[ "$THROTTLE" != "0" ]] && sleep "$THROTTLE"
     done
@@ -584,17 +628,21 @@ run_read() {
     local dev="$1" start="$2" count="$3" pos=0 n rc fails=0 bs="${LBS_OF[$dev]:-512}"
     while [[ $pos -lt $count ]]; do
         n=$(( count - pos )); [[ $n -gt $CHUNK ]] && n=$CHUNK
+        local t0 ms cok=1
+        t0="$(tri_now_ms)"
         if have sg_read; then
             timeout 120 sg_read if="/dev/$dev" bs="$bs" skip=$(( start + pos )) \
                 count=$n bpt=256 >> "$RUN/read-$dev.txt" 2>&1 || {
-                rc=$?; fails=$(( fails + 1 ))
+                rc=$?; fails=$(( fails + 1 )); cok=0
                 echo "READ FAIL lba=$(( start + pos )) count=$n rc=$rc" >> "$RUN/read-fail-$dev.txt"; }
         else
             timeout 120 dd if="/dev/$dev" of=/dev/null bs="$bs" \
                 skip=$(( start + pos )) count=$n iflag=direct >> "$RUN/read-$dev.txt" 2>&1 || {
-                rc=$?; fails=$(( fails + 1 ))
+                rc=$?; fails=$(( fails + 1 )); cok=0
                 echo "READ FAIL lba=$(( start + pos )) count=$n rc=$rc" >> "$RUN/read-fail-$dev.txt"; }
         fi
+        ms=$(( $(tri_now_ms) - t0 ))
+        tri_chunk "$(( start + pos ))" "$n" read "$ms" "$cok"
         pos=$(( pos + n ))
         [[ "$THROTTLE" != "0" ]] && sleep "$THROTTLE"
     done
@@ -628,6 +676,7 @@ triage_disk() {
     fi
     info "ranges: $ranges"
 
+    tri_phase "$name" targeted 0
     IFS=',' read -ra RL <<< "$ranges"
     for r in "${RL[@]}"; do
         local rs="${r%%:*}" rc="${r##*:}"
@@ -650,6 +699,7 @@ triage_disk() {
     if [[ "$SURFACE_SCAN" == "yes" && $HAVE_SG -eq 1 ]]; then
         local total step
         total=$(( $(blockdev --getsz "/dev/$dev") / ( ${LBS_OF[$dev]:-512} / 512 ) ))
+        tri_phase "$name" surface "$total"
         warn "full-surface VERIFY of $total blocks -- hours"
         step=$(( total / 20 ))
         for i in $(seq 0 19); do
@@ -658,6 +708,7 @@ triage_disk() {
         done
     fi
 
+    tri_phase "$name" selftest 0
     if [[ "$SHORT_SELFTEST" == "yes" ]]; then
         smartctl -t short -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         info "short self-test running, waiting 130s"
@@ -696,6 +747,7 @@ triage_disk() {
         [[ "$v1" =~ ^[0-9]+$ && "$v2" =~ ^[0-9]+$ ]] || continue
         local d=$(( v2 - v1 ))
         printf '    %-8s %10s -> %-10s %+d\n' "$k" "$v1" "$v2" "$d" | tee -a "$LOG"
+        tri_counter "$k" "$v1" "$v2"
         if [[ $d -gt 0 ]]; then
             case "$k" in
                 uncorr|grown)      dmedia=$(( dmedia + d )) ;;
@@ -705,6 +757,7 @@ triage_disk() {
     done < "$RUN/after-$dev.txt"
 
     log ""
+    tri_phase "$name" verdict 0
     if [[ $vran -eq 1 && $vfail -eq 0 && $rfail -eq 1 ]]; then
         bad "$name VERDICT: TRANSPORT"
         info "the drive read these blocks fine internally but they could not"
@@ -713,14 +766,17 @@ triage_disk() {
         info "  errors follow the SLOT  -> cable / backplane / expander / HBA"
         info "  errors follow the DRIVE -> the drive's SAS interface electronics"
         SUMMARY+=("$name ($dev): TRANSPORT -- link fault, not media")
+        tri_verdict "$name" TRANSPORT "verify clean, read failed"
     elif [[ $vfail -eq 1 ]]; then
         bad "$name VERDICT: MEDIA"
         info "the drive cannot read its own platters here. Plan replacement."
         SUMMARY+=("$name ($dev): MEDIA -- replace")
+        tri_verdict "$name" MEDIA "verify failed on the drive's own media"
     else
         ok "$name VERDICT: no fault reproduced"
         info "intermittent. re-run under load, or enable SURFACE_SCAN."
         SUMMARY+=("$name ($dev): not reproduced")
+        tri_verdict "$name" CLEAN "no fault reproduced"
     fi
     [[ $dpath -gt 0 && $dmedia -eq 0 ]] && warn "counters moved on the PATH side only (+$dpath)"
     [[ $dmedia -gt 0 ]] && bad "media counters rose by $dmedia during this run"
