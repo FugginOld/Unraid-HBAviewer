@@ -81,11 +81,13 @@ check('cancel goes through diag_cancel()', str_contains($dispatchCode, 'diag_can
 // occurrence must be followed by it.
 check('every kill in the dispatch uses the unambiguous kill -SIG -- form',
       !preg_match('/\bkill\b(?!\s+-\w+\s+--\s)/', $dispatchCode));
-// status and list must ask per-JOB liveness (a signal-0 probe on the
-// recorded pgid), not the per-disk lock -- the lock is held by whichever job
-// currently owns the disk, not by the specific job being asked about.
-check('status and list both use per-job liveness, not the per-disk lock',
-      substr_count($dispatchCode, 'diag_job_alive(') >= 2);
+// status and list must ask per-JOB liveness through the one shared decision
+// (diag_job_running(), which itself checks status file -> diag_job_alive() ->
+// disk lock, in that order) -- not the per-disk lock alone, which is held by
+// whichever job currently owns the disk, not by the specific job being asked
+// about.
+check('status and list both use the shared per-job running check',
+      substr_count($dispatchCode, 'diag_job_running(') >= 2);
 
 // The engine is invoked with --events, or the whole live view has nothing to
 // read, and with the disk as an explicit /dev path.

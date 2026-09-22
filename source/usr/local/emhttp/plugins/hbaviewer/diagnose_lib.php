@@ -144,6 +144,32 @@ function diag_job_alive(string $dir, callable $probe): bool {
     return $pgid !== null && $probe($pgid);
 }
 
+/* Is a job the one CURRENTLY active for its disk? One boolean, three cases,
+   in this order -- status/list/the SSE stream all call this instead of each
+   answering the question their own way, which is how the per-disk-lock vs
+   per-job-liveness ambiguity kept reappearing.
+     1. A written, non-empty status file is proof of termination. Always wins.
+     2. Otherwise a live process group (diag_job_alive) proves THIS job is
+        running -- not just some job on the disk.
+     3. Otherwise, only for a job whose own directory exists and has not yet
+        written its pgid file: the disk's lock. diag_claim_lock() claims it
+        SYNCHRONOUSLY inside 'start', before that response is ever sent, so
+        this exact window can only belong to this job's own launch in
+        flight -- never a different job's, because a different job could
+        only hold this lock by way of ITS OWN pgid file existing (case 2
+        would already be true) or ITS OWN status file existing (case 1
+        would already be true).
+   $root is injectable, matching diag_job_dir()/diag_lock_path()/
+   diag_trim_runs() -- every production caller omits it and gets DIAG_ROOT;
+   the test runner injects a throwaway directory, same as every other helper
+   here that touches a job or lock path. */
+function diag_job_running(string $dir, string $disk, callable $probe, string $root = DIAG_ROOT): bool {
+    $raw = is_file("$dir/status") ? trim((string) @file_get_contents("$dir/status")) : '';
+    if ($raw !== '') return false;
+    if (diag_job_alive($dir, $probe)) return true;
+    return is_dir($dir) && !is_file("$dir/pgid") && is_file(diag_lock_path($disk, $root));
+}
+
 /* Read the event file from a byte offset. The file is the source of truth, not
    anything held in the PHP worker -- the same rule cached_read() follows, so a
    reconnecting browser resumes instead of restarting.

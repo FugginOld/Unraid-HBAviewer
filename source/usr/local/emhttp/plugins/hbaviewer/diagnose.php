@@ -91,32 +91,13 @@ if ($action === 'status') {
     $disk = diag_job_disk($job);
     $dir  = diag_job_dir($job, DIAG_ROOT);
     $stf  = "$dir/status";
-    /* A written status file is proof of termination on its own -- read it
-       FIRST and skip the liveness probe once it exists. Without this, a
-       finished job's pgid can be recycled by the kernel for an unrelated
-       process and diag_job_alive() would say "running" again. */
-    /* The trailer's `echo $? > status` truncates the file before it writes the
-       exit code, so a read landing in that gap sees an EXISTING, EMPTY file --
-       treat that as "not written yet", not as exit 0, or a run that failed
-       reports done:'success' for the instant before its real code lands. */
     $raw     = is_file($stf) ? trim((string) @file_get_contents($stf)) : '';
     $exit    = $raw === '' ? null : (int) $raw;
-    $running = $exit === null && diag_job_alive($dir, 'diag_kill_probe');
-    /* The launcher writes its OWN pgid file from inside the setsid'd shell, so
-       there is a real window right after `start` returns where neither a pgid
-       nor a status file exists yet. That is "starting", not "dead" -- and the
-       per-disk lock is still held during exactly this window, which is the
-       one place it's still the right signal. Without this, a client sees a
-       false done:'error' for a job that is launching fine. Bounded to a job
-       whose directory actually exists: a syntactically valid but unknown job
-       id for a disk whose LOCK happens to be held by a different, real job
-       must still resolve to done:'error', not hang in "starting" forever. */
-    $starting = is_dir($dir) && !is_file("$dir/pgid") && $exit === null
-             && is_file(diag_lock_path($disk, DIAG_ROOT));
+    $running = diag_job_running($dir, $disk, 'diag_kill_probe');
     $res = ['running' => $running, 'disk' => $disk,
             'exit' => $running ? null : $exit, 'done' => null];
-    if (!$running && $exit === 0)               $res['done'] = 'success';
-    elseif (!$running && !$starting)            $res['done'] = 'error';
+    if (!$running && $exit === 0)        $res['done'] = 'success';
+    elseif (!$running && $exit !== null) $res['done'] = 'error';
     echo json_encode($res);
     exit;
 }
@@ -148,7 +129,7 @@ if ($action === 'list') {
         $job = basename($d);
         if (!diag_job_valid($job)) continue;
         $disk = diag_job_disk($job);
-        $running = !is_file("$d/status") && diag_job_alive($d, 'diag_kill_probe');
+        $running = diag_job_running($d, $disk, 'diag_kill_probe');
         $jobs[] = ['job' => $job, 'disk' => $disk, 'mtime' => (int) @filemtime($d),
                    'running' => $running];
     }

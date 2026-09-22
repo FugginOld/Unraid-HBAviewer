@@ -153,6 +153,65 @@ $probeDead = function (int $pgid) use (&$probeCalls) { $probeCalls[] = $pgid; re
 check('a recorded pgid whose probe says gone is not alive',
       diag_job_alive($jd, $probeDead) === false);
 
+/* ── diag_job_running(): the one shared "is THIS job active" decision ────
+   status/list/the SSE stream all call this instead of each answering the
+   question their own way -- that drift is what reopened the per-disk-lock
+   bug a third time. */
+$probeAlwaysTrue  = function (int $pgid) { return true; };
+$probeAlwaysFalse = function (int $pgid) { return false; };
+$lock = diag_lock_path('sdb', $root);
+
+// Case 1: a written, non-empty status file is proof of termination and wins
+// over everything else -- a pgid the kernel recycled or a lock still held for
+// a different reason must not override it.
+file_put_contents("$jd/pgid", "12345\n");
+file_put_contents("$jd/status", "0\n");
+file_put_contents($lock, '');
+check('a written status file means not running, no matter what else says running',
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === false);
+
+// Case 2: the trailer's `echo $? > status` truncates the file before writing
+// the exit code, so a read landing in that gap sees an EXISTING, EMPTY file.
+// That must fall through to the liveness/lock checks, not read as terminated.
+file_put_contents("$jd/status", '');
+check('an empty status file (the truncate race) falls through, not terminated',
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === true);
+@unlink("$jd/status");
+@unlink($lock);
+
+// Case 3: no status file, a live pgid -> running.
+check('no status file and a live pgid is running',
+      diag_job_running($jd, 'sdb', $probeAlwaysTrue) === true);
+
+// Case 4: no status file, a recorded pgid whose probe says gone, and no lock
+// -> not running.
+check('no status file, a dead pgid, and no lock is not running',
+      diag_job_running($jd, 'sdb', $probeAlwaysFalse) === false);
+
+// Case 5: no status file, no pgid yet, but THIS job's own directory exists
+// and the disk lock is held -- the "starting" window between `start`
+// returning and the launcher's own setsid'd shell writing its pgid file.
+@unlink("$jd/pgid");
+file_put_contents($lock, '');
+check('no pgid yet, own job dir exists, disk lock held: starting, i.e. running',
+      diag_job_running($jd, 'sdb', $probeAlwaysFalse, $root) === true);
+
+// Case 6: same, but the lock is not held either -> not running.
+@unlink($lock);
+check('no pgid, own job dir exists, no lock: not running',
+      diag_job_running($jd, 'sdb', $probeAlwaysFalse, $root) === false);
+
+// Case 7: THE BUG THIS FUNCTION FIXES. A job whose own directory does not
+// exist at all (never launched) must not read as running just because a
+// DIFFERENT job currently holds this disk's lock -- the exact case that broke
+// under the old per-disk-lock-only check (that check would have returned
+// true here, since it never looked at the job's own directory at all).
+$ghostDir = diag_job_dir('sdb-999', $root);   // deliberately never created
+file_put_contents($lock, '');
+check("a lock held by a DIFFERENT job's launch does not make a nonexistent job dir read as running",
+      diag_job_running($ghostDir, 'sdb', $probeAlwaysFalse, $root) === false);
+@unlink($lock);
+
 /* ── the SSE slice: resume from a byte offset ──────────────────────────── */
 $ev = "$jd/events.ndjson";
 file_put_contents($ev, "{\"t\":\"phase\"}\n{\"t\":\"chunk\"}\n");

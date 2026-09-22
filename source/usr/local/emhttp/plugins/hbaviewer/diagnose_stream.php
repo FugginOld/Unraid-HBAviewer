@@ -33,7 +33,14 @@ header('Cache-Control: no-cache');
 header('X-Accel-Buffering: no');
 
 $job = (string) ($_GET['job'] ?? '');
-if (!diag_job_valid($job)) { echo "event: error\ndata: invalid job\n\n"; exit; }
+/* A non-2xx status is what stops EventSource reconnecting on its own -- a 200
+   that just closes makes the browser retry the same invalid id every ~3s
+   forever. Safe to send here: nothing has been echoed yet, only header(). */
+if (!diag_job_valid($job)) {
+    http_response_code(400);
+    echo "event: error\ndata: invalid job\n\n";
+    exit;
+}
 
 $dir  = diag_job_dir($job, DIAG_ROOT);
 $disk = diag_job_disk($job);
@@ -56,6 +63,13 @@ while (true) {
            browser stores it and hands it back as Last-Event-ID, so the server
            holds no per-client state at all. */
         echo 'id: ' . $offset . "\n";
+        // This framing assumes the producer (drive_triage.sh) never emits a
+        // single event line longer than DIAG_SSE_CHUNK. diag_slice() itself
+        // allows a raw, non-newline-terminated chunk once its window fills
+        // with no newline, which this loop cannot render as a distinct SSE
+        // message -- not reachable today (the producer's records are short
+        // and fixed-shape, pinned by tests/drive_triage_test.sh:88), just a
+        // note for the next reader.
         foreach (explode("\n", rtrim($s['bytes'], "\n")) as $line) {
             echo 'data: ' . $line . "\n";
         }
@@ -63,12 +77,20 @@ while (true) {
         flush();
     }
 
-    /* The job is over when its lock is gone AND the slice reached the end.
-       Both, in that order: the engine can release the lock a moment before the
-       last line is flushed to disk, and ending on the lock alone truncates the
-       verdict off the live view. */
-    $running = is_file(diag_lock_path($disk, DIAG_ROOT));
+    /* The job is over when it is no longer the ACTIVE job for its disk (see
+       diag_job_running()) AND the slice reached the end. Both, in that order:
+       the engine can stop being active a moment before the last line is
+       flushed to disk, and ending on that alone truncates the verdict off the
+       live view. Per-JOB, not the per-disk lock alone -- a stale stream for an
+       old, finished job on this disk must not see a NEW job's lock and hang
+       open reconnecting for that new job's entire run, and cancelling a stale
+       job's id (which unlinks the disk's lock unconditionally) must not make
+       a currently-running job's stream send a false event: end. */
+    $running = diag_job_running($dir, $disk, 'diag_kill_probe');
     if (!$running && $s['eof']) {
+        // No id: on this frame. It is the terminal frame, not a resumable
+        // one -- the client must call EventSource.close() on it, or the
+        // browser reconnects into a stream that can only ever end again.
         echo "event: end\ndata: " . $offset . "\n\n";
         flush();
         exit;
