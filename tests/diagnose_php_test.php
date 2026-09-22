@@ -63,6 +63,13 @@ if ($guardAt === false) {
     exit(1);
 }
 $dispatchCode = substr($code, $guardAt);
+// Rounds 1 and 2 both spent a fix cycle on this exact branch: diag_job_running()
+// folds the starting window into $running, so a lingering "$exit !== null"
+// term silently turned every cancelled job, SIGKILLed engine and unknown job
+// id into a done:null a polling client can never resolve, instead of 'error'.
+check('a job that ends with no status file still resolves to done:error, not a stuck null',
+      str_contains($dispatchCode, 'elseif (!$running)')
+      && !str_contains($dispatchCode, '$exit !== null'));
 check('the launcher records the job process group',
       str_contains($dispatchCode, 'pgid'));
 
