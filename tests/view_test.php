@@ -239,5 +239,55 @@ $roc = lsi_hba_view([
 check('the chip mapping reaches the verdict (RAID-on-Chip detected via chip, not board)',
     ($roc['firmware_verdict']['status'] ?? '') === 'no_it_firmware');
 
+/* ── the Diagnose tab (plan 2026-09-21) ────────────────────────────────── */
+$hb = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/hbaviewer.php');
+
+check('the Diagnose tab button exists',  str_contains($hb, "luTab('diagnose')"));
+check('its pane exists',                 str_contains($hb, 'id="tab-diagnose"'));
+check('the tab button is a real tab, not a link',
+      str_contains($hb, 'id="tabbtn-diagnose" aria-controls="tab-diagnose"'));
+
+// Every container the JS writes into. A typo here renders a page that looks
+// perfectly normal and does nothing at all -- the same failure mode
+// view_test.php's <script src> check exists for.
+foreach (['diag-live', 'diag-verdict', 'diag-head', 'diag-dot', 'diag-pause',
+          'diag-cancel', 'diag-pills', 'diag-progress', 'diag-hotzone',
+          'diag-map', 'diag-hist', 'diag-counters', 'diag-interp',
+          'diag-stream', 'diag-newjob', 'diag-standby', 'diag-drives'] as $id) {
+    check("the Live Job markup carries #$id", str_contains($hb, 'id="' . $id . '"'));
+}
+
+// Honoured BY DEFAULT, per the spec. A toggle that protects a sleeping disk
+// and defaults off protects nothing.
+check('leave standby drives asleep is checked by default',
+      (bool) preg_match('/id="diag-standby"[^>]*\bchecked\b/', $hb));
+
+// The inline <script> must declare it, above the <script src>: the static .js
+// reads it as a global and there is no templating step. $csrfToken is read
+// unconditionally already; this rides the same block.
+check('the job global is declared in the inline block',
+      str_contains($hb, 'var luDiagJob'));
+$inlineAt = strpos($hb, 'var luDiagJob');
+$srcAt    = strpos($hb, 'src="/plugins/hbaviewer/diagnose_view.js');
+check('the inline block sits above the diagnose script tag',
+      $inlineAt !== false && $srcAt !== false && $inlineAt < $srcAt);
+
+// The CSS classes the JS applies must exist, or the surface map renders as a
+// column of unstyled divs and the latency buckets carry no meaning at all.
+$css = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/chrome.css');
+foreach (['lu-diag-map', 'lu-diag-cell', 'lu-b5', 'lu-b20', 'lu-b50',
+          'lu-b150', 'lu-b500', 'lu-b500p', 'lu-bbad', 'lu-diag-hist',
+          'lu-diag-pill'] as $cls) {
+    check("chrome.css defines .$cls", str_contains($css, '.' . $cls));
+}
+// This plugin is a guest inside the Dynamix webGui: it inherits the user's
+// theme through tokens.css, ships no fonts and adds no framework. A hard-coded
+// hex in a new rule is a colour no theme can reach.
+$diagCss = (string) (strstr($css, '/* Diagnose') ?: '');
+check('the new rules use theme variables, not literal hex',
+      $diagCss !== '' && !preg_match('/:\s*#[0-9a-fA-F]{3,8}\s*;/', $diagCss));
+
 echo $fails === 0 ? "view: all pass\n" : "view: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

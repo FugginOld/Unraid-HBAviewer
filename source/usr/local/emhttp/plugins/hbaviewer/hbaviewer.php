@@ -46,6 +46,11 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
            same toggle rather than adding a second setting for one data source. */ ?>
   <?php if ($showDrives): ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-baymap" aria-controls="tab-baymap" aria-selected="false" tabindex="-1" data-tab="baymap" onclick="luTab('baymap')">Array Map</button><?php endif; ?>
   <button class="lu-tab-btn" type="button" role="tab" id="tabbtn-smart" aria-controls="tab-smart" aria-selected="false" tabindex="-1" data-tab="smart" onclick="luTab('smart')">SMART</button>
+  <?php /* Diagnose: the read-only media-vs-transport triage. A TAB and not a
+           page, unlike Firmware -- there is nothing dangerous to gate behind a
+           danger notice here, every operation it starts is a read, and it
+           shares the Drives payload the strip already loads. */ ?>
+  <button class="lu-tab-btn" type="button" role="tab" id="tabbtn-diagnose" aria-controls="tab-diagnose" aria-selected="false" tabindex="-1" data-tab="diagnose" onclick="luTab('diagnose')">Diagnose</button>
   <?php if ($showEvents): ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-events" aria-controls="tab-events" aria-selected="false" tabindex="-1" data-tab="events" onclick="luTab('events')">Event Log</button><?php endif; ?>
   <?php if ($showPerf):   ?><button class="lu-tab-btn" type="button" role="tab" id="tabbtn-perf" aria-controls="tab-perf" aria-selected="false" tabindex="-1" data-tab="perf"   onclick="luTab('perf')">Performance</button><?php endif; ?>
   <?php /* Firmware sits at the end of the strip, red, and only once the user
@@ -149,6 +154,74 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   </div>
 </div>
 
+<!-- ── Diagnose tab: two screens, Live Job and Verdict ─────────────────────
+     Both live in one pane and are toggled by luDiagShow() rather than being
+     two routes: they render from the same job and the same event file, and a
+     verdict is a finished live view, not a different page. -->
+<div id="tab-diagnose" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-diagnose">
+
+  <div id="diag-live" class="lu-diag-screen">
+    <div class="lu-card first">
+      <!-- Header strip: identity, dev path, model, host/phy, what the job is
+           doing in plain language, the live dot, and the two controls. -->
+      <div class="lu-tab-toolbar">
+        <div id="diag-head"><span class="lu-muted">No job running. Pick a drive on the Drives tab and press Diagnose.</span></div>
+        <span>
+          <span id="diag-dot" class="lu-diag-dot" role="img" aria-label="No job running"></span>
+          <button class="lu-refresh-btn" id="diag-pause"  type="button" onclick="luDiagPause()"  disabled>Pause</button>
+          <button class="lu-refresh-btn" id="diag-cancel" type="button" onclick="luDiagCancel()" disabled>Cancel</button>
+        </span>
+      </div>
+      <!-- Preflight -> Baseline snapshot -> Targeted VERIFY/READ -> Surface
+           VERIFY -> SMART short test -> Verdict, each done/active/queued. -->
+      <div id="diag-pills" class="lu-diag-pills"></div>
+      <!-- percent, current LBA, throughput, elapsed, remaining -->
+      <div id="diag-progress" class="lu-diag-progress"></div>
+    </div>
+
+    <div class="lu-card">
+      <!-- A cluster of slow or failing chunks is named above the map with its
+           LBA range: the map shows where, the callout says what to do with it. -->
+      <div id="diag-hotzone" class="lu-diag-hotzone"></div>
+      <div id="diag-map" class="lu-diag-map" role="img" aria-label="Surface scan map, one cell per scanned chunk, coloured by read latency"></div>
+      <!-- Same buckets as the map, as bars: a forming weak region shows in the
+           distribution before it is visible as a shape on the map. -->
+      <div id="diag-hist" class="lu-diag-hist"></div>
+    </div>
+
+    <div class="lu-diag-cols">
+      <div class="lu-card">
+        <!-- grown defect list, uncorrected verify/read, running disparity,
+             invalid DWORD, loss of DWORD sync -- media side vs path side. -->
+        <div id="diag-counters"></div>
+        <p id="diag-interp" class="lu-muted"></p>
+      </div>
+      <div class="lu-card">
+        <div id="diag-stream" class="lu-diag-stream" role="log" aria-live="polite" aria-label="Diagnose event stream"></div>
+      </div>
+      <div class="lu-card">
+        <div id="diag-newjob">
+          <label for="diag-op">Queue a test</label>
+          <select id="diag-op">
+            <option value="targeted">Targeted VERIFY / READ</option>
+            <option value="surface">Full-surface VERIFY</option>
+            <option value="selftest">SMART short self-test</option>
+          </select>
+          <!-- Checked by default. HBAviewer's standing guarantee is that it
+               never wakes a sleeping disk, so the protective setting is the
+               one you have to turn OFF. -->
+          <label><input type="checkbox" id="diag-standby" checked> Leave standby drives asleep</label>
+        </div>
+        <!-- Worst-first, with MEDIA / TRANSPORT / SCANNING / CLEAN / STANDBY
+             badges; unassigned drives in their own group. -->
+        <div id="diag-drives"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="diag-verdict" class="lu-diag-screen" hidden></div>
+</div>
+
 <!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->
 <?php if ($showPerf): ?>
 <div id="tab-perf" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-perf">
@@ -184,5 +257,12 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
        renderers print, mirroring how the PHP-rendered tabs switch through
        lsi_temp_convert()/lsi_temp_str(). */
     var luTempUnit = <?= (int) ($cfg['TEMP_UNIT'] ?? 0) ?>; // 0 = °C, 1 = °F
+
+    /* The job the two Diagnose screens are showing. Declared HERE, in the
+       inline block above the <script src>, because diagnose_view.js reads it
+       as a global and there is no templating step -- the same load-bearing
+       split luCsrf depends on. */
+    var luDiagJob = '';
 </script>
 <script src="/plugins/hbaviewer/hbaviewer.js?v=<?= (int) @filemtime(__DIR__ . '/hbaviewer.js') ?>"></script>
+<script src="/plugins/hbaviewer/diagnose_view.js?v=<?= (int) @filemtime(__DIR__ . '/diagnose_view.js') ?>"></script>
