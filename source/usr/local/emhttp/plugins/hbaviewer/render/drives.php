@@ -86,6 +86,32 @@ function lsi_role_cell(?string $dev, array $roles, array $udMounts = []): string
     return '<span class="lu-muted">—</span>';
 }
 
+/* The Diagnose cell for one drive row. Offered only where a /dev name
+   resolved: the job is scoped to a block device and there is nothing to
+   diagnose without one, so the cell says why rather than presenting a button
+   that cannot work -- the same choice $locCell makes for a missing SCSI
+   address.
+   The BARE name is passed, never the /dev path: diagnose.php validates
+   /^[a-z0-9]{2,32}$/ and would refuse the path. One spelling, both sides. */
+function diag_cell(array $d, array $devBySerial): string {
+    $dev = drive_dev_name($d, $devBySerial);
+    if ($dev === null) {
+        return '<span class="lu-muted" role="img" aria-label="No device name for this drive"'
+             . ' title="No device name for this drive">—</span>';
+    }
+    $bare = preg_replace('~^/dev/~', '', $dev);
+    /* The name came from lsblk or from the sysfs join, so it cannot carry a
+       quote -- htmlspecialchars is the belt, and the alnum filter is the
+       braces: anything else would be refused server-side anyway, and a button
+       that posts a value the server rejects is worse than no button. */
+    if (!preg_match('/^[a-z0-9]{2,32}\z/', (string) $bare)) {
+        return '<span class="lu-muted" role="img" aria-label="Unrecognised device name"'
+             . ' title="Unrecognised device name">—</span>';
+    }
+    return sprintf('<button class="lu-refresh-btn" onclick="luDiagnose(\'%s\')">Diagnose</button>',
+                   htmlspecialchars((string) $bare, ENT_QUOTES));
+}
+
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 function renderDrivesTables(array $data, array $devBySerial = [], array $roles = [],
                             array $addrByDev = [], array $locating = [],
@@ -183,9 +209,10 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     htmlspecialchars($d['firmware']),
                     $smart,
                     $locCell($d),
+                    diag_cell($d, $devBySerial),
                 ];
             }
-            $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART', 'Locate'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART', 'Locate', 'Diagnose'], $rows);
         } else {
             // lsiutil backend: device, bus:target, port, SAS address. The /dev
             // name was already here as a trailing "OS Device" column; it moves
@@ -203,9 +230,10 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     htmlspecialchars((string) ($d['bus'] ?? '')) . ':' . htmlspecialchars((string) ($d['target'] ?? '')),
                     $phy, $sas,
                     $locCell($d),
+                    diag_cell($d, $devBySerial),
                 ];
             }
-            $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address', 'Locate'], $rows);
+            $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address', 'Locate', 'Diagnose'], $rows);
         }
         return $out;
     });

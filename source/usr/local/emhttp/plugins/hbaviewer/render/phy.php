@@ -157,6 +157,19 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
             'rate_total' => $total,
             'rate'       => $d['rate'],
             'drive'      => phy_drive_label($drives, $p, $devBySerial),
+            /* The bare device name, for the Diagnose button. Separate from
+               'drive' on purpose: that one is a LABEL ("8:1 · /dev/sdf") built
+               for reading, and handing a label to an endpoint that validates
+               /^[a-z0-9]{2,32}$/ would refuse every row. Null, never a guess --
+               the value becomes an argument to a script running as root. */
+            'dev'        => (function () use ($drives, $p, $devBySerial): ?string {
+                $d = phy_drive($drives, $p);
+                if ($d === null) return null;
+                $n = drive_dev_name($d, $devBySerial);
+                if ($n === null) return null;
+                $bare = (string) preg_replace('~^/dev/~', '', $n);
+                return preg_match('/^[a-z0-9]{2,32}\z/', $bare) ? $bare : null;
+            })(),
         ];
     }
     usort($rows, fn($a, $b) => $a['rate_total'] === $b['rate_total']
@@ -258,9 +271,14 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                             . ' &middot; disp ' . number_format($o['rate']['disp'], 1)
                             . ' &middot; sync ' . number_format($o['rate']['sync'], 1)
                             . ' &middot; reset ' . number_format($o['rate']['reset'], 1) . '</span>',
+                        $o['dev'] !== null
+                            ? '<button class="lu-refresh-btn" onclick="luDiagnose(\''
+                              . htmlspecialchars($o['dev'], ENT_QUOTES) . '\')">Diagnose</button>'
+                            : '<span class="lu-muted" role="img" aria-label="Drive not identified"'
+                              . ' title="Drive not identified">—</span>',
                     ];
                 }
-                $out .= luTable(['#', 'PHY', 'Errors/hr — average since baseline', 'Breakdown'], $rows);
+                $out .= luTable(['#', 'PHY', 'Errors/hr — average since baseline', 'Breakdown', 'Diagnose'], $rows);
             }
         }
 

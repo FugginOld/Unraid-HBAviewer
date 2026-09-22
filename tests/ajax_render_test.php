@@ -2087,6 +2087,42 @@ check('the parent is built from member 1, not slot 0',
       preg_match('~lu-card-parent.*?<p>Model: <span>SAS9300-16i~s', $A) === 1
    && substr_count($A, 'SAS9207-8i') === 1);
 
+/* ── Diagnose entry points (plan 2026-09-21) ───────────────────────────── */
+$dv = ['backend' => 'storcli', 'controllers' => [['drives' => [
+    ['slot' => '8:1', 'model' => 'ST10', 'serial' => 'SER1', 'state' => 'Onln',
+     'size' => '10TB', 'sas_address' => '0x5', 'link' => '12G', 'firmware' => 'A1',
+     'port' => '0'],
+    ['slot' => '8:2', 'model' => 'ST10', 'serial' => 'NOSUCH', 'state' => 'Onln',
+     'size' => '10TB', 'sas_address' => '0x6', 'link' => '12G', 'firmware' => 'A1',
+     'port' => '1'],
+]]]];
+$h = renderDrivesTables($dv, ['SER1' => '/dev/sdf']);
+check('the Drives table has a Diagnose column', str_contains($h, 'Diagnose'));
+// The BARE name, never the /dev path: diagnose.php validates
+// /^[a-z0-9]{2,32}$/ and would refuse "/dev/sdf". One spelling on both sides.
+check('the Diagnose button passes the bare device name',
+      str_contains($h, "luDiagnose('sdf')"));
+check('and never the /dev path', !str_contains($h, "luDiagnose('/dev/sdf')"));
+// No /dev name resolved means there is nothing to diagnose. Offering a button
+// that cannot work is the failure the Locate cell already avoids by saying why.
+check('a drive with no /dev name gets no button, and says why',
+      substr_count($h, 'luDiagnose(') === 1
+      && str_contains($h, 'No device name for this drive'));
+
+/* Top offenders rows carry a bare dev for the same reason. */
+$offPhys  = [['phy' => 0, 'inv' => 100, 'disp' => 0, 'sync' => 0, 'reset' => 0]];
+$offDelta = [0 => ['rate' => ['inv' => 5.0, 'disp' => 0.0, 'sync' => 0.0, 'reset' => 0.0],
+                   'reset' => false]];
+$offDrv   = [['phy' => 0, 'serial' => 'SER1', 'slot' => '8:1', 'sas_address' => '0x5']];
+$off = phy_top_offenders($offPhys, $offDelta, $offDrv, 5, ['SER1' => '/dev/sdf']);
+check('a top-offenders row carries a bare dev', ($off[0]['dev'] ?? null) === 'sdf');
+check('and keeps its human label',              str_contains((string) $off[0]['drive'], 'sdf'));
+// A PHY whose drive could not be identified must carry null, not a guess: the
+// value ends up as an argument to a root script.
+$offNone = phy_top_offenders($offPhys, $offDelta, [], 5, []);
+check('an unidentified drive carries a null dev',
+      array_key_exists('dev', $offNone[0]) && $offNone[0]['dev'] === null);
+
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
