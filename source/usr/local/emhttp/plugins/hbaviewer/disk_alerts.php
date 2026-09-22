@@ -23,17 +23,18 @@
 const DISK_ALERT_STATE = '/boot/config/plugins/hbaviewer/disk_alerts.json';
 const DISK_ALERT_BIN   = '/usr/local/emhttp/webGui/scripts/notify';
 
-/* {"seq": int, "defects": {disk_id: int}} */
+/* {"seq": int, "boot_id": string, "defects": {disk_id: int}} */
 function disk_alert_state_read(?string $path = null): array {
     $path ??= DISK_ALERT_STATE;
     $s = is_file($path) ? (json_decode((string) @file_get_contents($path), true) ?: []) : [];
-    return ['seq' => (int) ($s['seq'] ?? 0), 'defects' => (array) ($s['defects'] ?? [])];
+    return ['seq' => (int) ($s['seq'] ?? 0), 'boot_id' => (string) ($s['boot_id'] ?? ''), 'defects' => (array) ($s['defects'] ?? [])];
 }
 function disk_alert_state_write(array $state, ?string $path = null): void {
     $path ??= DISK_ALERT_STATE;
     @mkdir(dirname($path), 0755, true);
     @file_put_contents($path, json_encode([
         'seq'     => (int) ($state['seq'] ?? 0),
+        'boot_id' => (string) ($state['boot_id'] ?? ''),
         'defects' => (array) ($state['defects'] ?? []),
     ]));
 }
@@ -65,7 +66,7 @@ function disk_alert_send(string $subject, string $description, string $importanc
    caller. $kmsg: the decoded payload from scripts/parse/kmsg.sh.
    Returns what it fired and the cursor it stored. */
 function disk_alert_run(array $defects, array $kmsg, ?callable $send = null,
-                        ?string $path = null, ?int $now = null): array {
+                        ?string $path = null, ?int $now = null, ?string $bootId = null): array {
     $send ??= 'disk_alert_send';
     $now  ??= time();
     $prev   = disk_alert_state_read($path);
@@ -74,10 +75,11 @@ function disk_alert_run(array $defects, array $kmsg, ?callable $send = null,
     /* A reboot restarts /dev/kmsg at 0, so a stored cursor can sit AHEAD of the
        whole buffer. Left alone that silences medium-error reporting until the
        box organically passed the old number -- hours or days of nothing, with
-       the setting still ticked. A max_seq below the cursor is the only evidence
-       of the reset available here, and acting on it costs at most one repeat of
-       an error that is still present. */
-    $cursor = $maxSeq < $prev['seq'] ? 0 : $prev['seq'];
+       the setting still ticked. Boot-id mismatch is the authoritative reset
+       signal; sequence-number fall-through catches reboots when boot_id is unavailable. */
+    $reset = ($bootId !== null && $prev['boot_id'] !== '' && $bootId !== $prev['boot_id'])
+           || $maxSeq < $prev['seq'];
+    $cursor = $reset ? 0 : $prev['seq'];
 
     $medium = [];
     foreach ((array) ($kmsg['events'] ?? []) as $e) {
@@ -94,6 +96,6 @@ function disk_alert_run(array $defects, array $kmsg, ?callable $send = null,
             . '. The drive has remapped more sectors since the last check.', 'warning');
     }
 
-    disk_alert_state_write(['seq' => $maxSeq, 'defects' => $defects], $path);
+    disk_alert_state_write(['seq' => $maxSeq, 'boot_id' => (string) ($bootId ?? ''), 'defects' => $defects], $path);
     return ['defects' => $rises, 'medium' => $medium, 'seq' => $maxSeq];
 }

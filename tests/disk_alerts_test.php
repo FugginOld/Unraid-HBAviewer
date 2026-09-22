@@ -73,6 +73,37 @@ $r = disk_alert_run(['ata-X' => 6], ['max_seq' => 8, 'events' => [
 check('a sequence reset is detected and not swallowed', count($sent) === 1);
 check('and the cursor follows the buffer back down',    $r['seq'] === 8);
 
+/* ── boot_id: authoritative detection of double reboot edge case ───────────── */
+// The scenario: a first reset brings the cursor down to a low value (say 8).
+// A SECOND reboot happens before the next check. Ordinary boot-time kernel
+// log volume easily produces more than 8 messages before the next cron check,
+// so by the time disk_alert_run() runs again, max_seq (e.g. 20) is no longer
+// < prev['seq'] (8) -- the sequence heuristic alone would miss the reset and
+// the cursor would stay stale, silently losing a genuine early-sequence event.
+// Boot-id mismatch is the authoritative reset signal.
+@unlink($state);
+$sent = [];
+// First boot (boot_id_1): record a low cursor (e.g. 8)
+$r = disk_alert_run(['ata-X' => 6], ['max_seq' => 8, 'events' => []], $send, $state, 1_700_000_500, 'boot_id_1');
+check('first boot records boot_id_1',               count($sent) === 0);
+
+$sent = [];
+// SECOND reboot (boot_id_2, much higher max_seq due to boot-time log volume):
+// The sequence-only heuristic would NOT trigger reset (20 > 8).
+// Boot_id mismatch MUST detect and fire the reset.
+$r = disk_alert_run(['ata-X' => 6], ['max_seq' => 20, 'events' => [
+        ['seq' => 3, 'dev' => 'sdf', 'text' => 'critical medium error, dev sdf, sector 999'],
+     ]], $send, $state, 1_700_000_600, 'boot_id_2');
+check('boot_id mismatch detects second reboot',     $r['seq'] === 20);
+check('genuine early-sequence event is NOT lost',   count($sent) === 1);
+check('early-seq event after reboot reaches alerts', $sent[0][2] === 'alert');
+
+// Verify backward compatibility: omitting bootId falls through to sequence heuristic.
+@unlink($state);
+$sent = [];
+$r = disk_alert_run(['ata-X' => 4], ['max_seq' => 100, 'events' => []], $send, $state, 1_700_000_700);
+check('5-arg call (no bootId) still works',        count($sent) === 0);
+
 @unlink($state);
 echo $fails === 0 ? "disk_alerts: all pass\n" : "disk_alerts: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
