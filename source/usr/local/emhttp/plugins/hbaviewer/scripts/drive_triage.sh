@@ -712,7 +712,13 @@ triage_disk() {
     if [[ "$SHORT_SELFTEST" == "yes" ]]; then
         smartctl -t short -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         info "short self-test running, waiting 130s"
-        sleep 130
+        # Test-only: TRIAGE_SKIP_SELFTEST_WAIT shortens this to keep the suite fast.
+        # Never set in production -- the drive genuinely needs ~130s to finish.
+        if [[ -n "${TRIAGE_SKIP_SELFTEST_WAIT:-}" ]]; then
+            sleep 1
+        else
+            sleep 130
+        fi
         smartctl -l selftest -d auto "/dev/$dev" >> "$RUN/selftest-$dev.txt" 2>&1
         if grep -qi "Completed without error\|Completed  *-" "$RUN/selftest-$dev.txt"; then
             ok "short self-test passed"

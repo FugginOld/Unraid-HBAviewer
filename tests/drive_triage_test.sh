@@ -117,7 +117,7 @@ run --no-triage >/dev/null
 # engine's own syslog harvest will pick up -- this is what flags sdX FAULTING.
 : > "$EV"
 echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
-STUB_READ_RC=1 TRIAGE_SKIP_DEV_CHECK=1 run --auto-triage --all --events "$EV" >/dev/null
+STUB_READ_RC=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV" >/dev/null
 : > "$STUB_DMESG"
 has "a chunk event carries op and ms" "$(cat "$EV")" '"t":"chunk"'
 has "a chunk event names its op"      "$(cat "$EV")" '"op":"verify"'
