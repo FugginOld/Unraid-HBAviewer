@@ -249,14 +249,17 @@
     /* Pause is a VIEW control, not a job control. Phase 1 has no way to
        suspend an sg_verify mid-command and pretending otherwise would leave
        the disk being read while the screen said "paused". This freezes the
-       rendering and says so; the stream keeps its offset, so resuming catches
-       up rather than skipping. */
+       rendering and says so. Events keep landing in st while paused, so the
+       map/histogram/counters/hot-zone catch up fully on resume -- but the
+       diag-stream LOG does not: logLine() calls made while paused are
+       skipped, not queued, so the text log has a gap for whatever arrived
+       during the pause even though the state it describes was captured. */
     window.luDiagPause = function () {
         st.paused = !st.paused;
         el('diag-pause').textContent = st.paused ? 'Resume' : 'Pause';
         logLine(st.paused ? 'view paused — the job keeps running' : 'view resumed', 'muted');
-        /* Resuming catches up: events kept landing in st while paused, so one
-           full redraw from current state shows everything that arrived. */
+        /* One full redraw from current state shows everything that arrived
+           -- for the map/histogram/counters/hot-zone only; see above. */
         if (!st.paused) { drawPills(); drawProgress(); drawMap(); drawHist(); drawCounters(); }
     };
 
@@ -274,25 +277,26 @@
        both sides of the wire. */
     window.luDiagnose = function (dev) {
         var disk = String(dev || '').replace(/^\/dev\//, '');
-        /* Close out the PREVIOUS job's stream before dropping the reference to
-           it. st.es is null in a fresh state, so openStream()'s own "if
-           (st.es) close()" guard finds nothing to close once st has already
-           been replaced -- the old EventSource is orphaned, keeps a php-fpm
-           worker held open, and its handlers keep writing the old disk's
-           events into whatever st now points to. */
-        if (st.es) { st.es.close(); st.es = null; }
-        st = freshState();
-        el('diag-map').innerHTML = '';
-        el('diag-stream').innerHTML = '';
-        el('diag-hotzone').textContent = '';
         luDiagShow('live');
         if (typeof luTab === 'function') luTab('diagnose');
-        el('diag-head').innerHTML = 'Diagnosing <code>/dev/' + fesc(disk) + '</code>';
         return fetch('/plugins/hbaviewer/diagnose.php', { method: 'POST',
             body: new URLSearchParams({ action: 'start', disk: disk, csrf_token: luCsrf }) })
           .then(function (r) { return r.json(); })
           .then(function (d) {
             if (d.error) { logLine('refused: ' + d.error, 'crit'); return; }
+            /* Close out the PREVIOUS job's stream only now that a NEW job is
+               confirmed started. Tearing the view down before knowing the
+               start succeeded left a refused start (e.g. the per-disk lock
+               rejecting a double-click) with a permanently blanked,
+               unrecoverable view of a still-running job -- there is no
+               reload-resume (luDiagJob is '' on page load) and no re-open. */
+            if (st.es) { st.es.close(); st.es = null; }
+            st = freshState();
+            el('diag-map').innerHTML = '';
+            el('diag-stream').innerHTML = '';
+            el('diag-hotzone').textContent = '';
+            el('diag-head').innerHTML = 'Diagnosing <code>/dev/' + fesc(disk) + '</code>';
+            el('diag-pause').textContent = 'Pause';
             luDiagJob = d.job;
             el('diag-dot').classList.add('running');
             el('diag-dot').setAttribute('aria-label', 'Job running');

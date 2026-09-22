@@ -47,6 +47,9 @@ ids.forEach(i => els.set(i, mkEl(i)));
 
 const fetches = [];
 const esInstances = [];
+/* Mutable so a test can make the NEXT diagnose.php POST come back refused
+ * (e.g. the per-disk lock rejecting a double-click) without a second sandbox. */
+let fetchResponse = { ok: true, job: 'sdb-1', disk: 'sdb' };
 const sandbox = {
     console, URLSearchParams,
     window: {},
@@ -60,7 +63,7 @@ const sandbox = {
     },
     fetch: (url, opts) => {
         fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
-        return Promise.resolve({ json: () => Promise.resolve({ ok: true, job: 'sdb-1', disk: 'sdb' }) });
+        return Promise.resolve({ json: () => Promise.resolve(fetchResponse) });
     },
     EventSource: function (url) {
         this.url = url;
@@ -181,6 +184,36 @@ async function tail() {
     sandbox.luDiagPause();
     check('resuming redraws the map with the event that arrived while paused',
           els.get('diag-map')._html.includes('lu-diag-cell'));
+
+    // Blocking (round 2): a refused start must not tear down the CURRENT,
+    // still-running job's view. Job A starts, gets rendered content, then a
+    // second start (e.g. the per-disk lock rejecting a double-click) is
+    // refused -- job A's stream and view must survive untouched.
+    fetches.length = 0;
+    esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sdc-1', disk: 'sdc' };
+    await sandbox.luDiagnose('sdc');
+    const jobA = esInstances[0];
+    jobA.onmessage({
+        data: JSON.stringify({ t: 'chunk', lba: 0, n: 64, ms: 5, ok: true }),
+        lastEventId: '1',
+    });
+    const mapBefore = els.get('diag-map')._html;
+    const streamBefore = els.get('diag-stream')._html;
+    check('job A has rendered content before the refused second start',
+          mapBefore.includes('lu-diag-cell') && streamBefore.length > 0);
+
+    fetchResponse = { error: 'disk sdc already has a job running' };
+    await sandbox.luDiagnose('sdc');
+    check('a refused second start does not close job A\'s EventSource',
+          jobA.closed === false);
+    check('a refused second start does not open a new EventSource',
+          esInstances.length === 1);
+    check('a refused second start leaves the map untouched',
+          els.get('diag-map')._html === mapBefore);
+    check('a refused second start appends to the log rather than wiping it',
+          els.get('diag-stream')._html.startsWith(streamBefore)
+          && els.get('diag-stream')._html.includes('refused'));
 }
 
 tail().then(() => {
