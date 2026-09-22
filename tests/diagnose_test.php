@@ -63,6 +63,100 @@ check('keep below 1 removes nothing',
 check('a disk with no runs is not an error', diag_trim_runs('sdz', 2, $root) === []);
 check('an invalid disk name trims nothing',  diag_trim_runs('../', 1, $root) === []);
 
+/* ── the lock is per DISK, and claiming is atomic ──────────────────────── */
+$lock = diag_lock_path('sdb', $root);
+check('the lock is named for the disk, not the job', $lock === "$root/sdb.lock");
+@unlink($lock);
+check('the first claim wins',   diag_claim_lock($lock) === true);
+// fopen('x') and not is_file()-then-touch(): the latter lets two concurrent
+// requests both pass the check and both launch a job at the same disk.
+check('the second claim loses',  diag_claim_lock($lock) === false);
+@unlink($lock);
+check('and wins again once released', diag_claim_lock($lock) === true);
+@unlink($lock);
+
+/* ── preflight: every gate fails closed ────────────────────────────────── */
+$base = ['disk' => 'sdb', 'resync' => 0, 'locked' => false, 'exists' => true];
+check('a clean request passes', diag_preflight($base)['ok'] === true);
+
+$r = diag_preflight(['disk' => 'sdb', 'resync' => 0, 'locked' => false, 'exists' => false]);
+check('a device that is not there is refused', $r['ok'] === false);
+check('and the refusal names the device',      str_contains($r['error'], 'sdb'));
+
+check('an invalid disk name is refused',
+      diag_preflight(array_merge($base, ['disk' => '../etc']))['ok'] === false);
+check('an empty disk name is refused',
+      diag_preflight(array_merge($base, ['disk' => '']))['ok'] === false);
+// Tier 1 gate from the risk table: the array must not be mid-rebuild. Reading
+// every block of a disk that parity is currently reconstructing competes with
+// the rebuild for the same spindle and the same link.
+check('a running parity op is refused',
+      diag_preflight(array_merge($base, ['resync' => 1]))['ok'] === false);
+check('an existing job on this disk is refused',
+      diag_preflight(array_merge($base, ['locked' => true]))['ok'] === false);
+
+// Absence is refusal, not permission. flash_preflight's 'card' gate defaulted
+// to allow once and it was the most dangerous gate in the plugin; this one is
+// far cheaper but the rule is the rule, and a caller that forgets to pass a
+// key must not get a pass.
+foreach (['disk', 'resync', 'locked', 'exists'] as $k) {
+    $missing = $base; unset($missing[$k]);
+    check("omitting '$k' fails closed", diag_preflight($missing)['ok'] === false);
+}
+
+/* ── cancel kills the GROUP ────────────────────────────────────────────── */
+$jd = diag_job_dir('sdb-42', $root);
+@mkdir($jd, 0777, true);
+$killed = [];
+$kill = function (int $sig) use (&$killed) { $killed[] = $sig; return true; };
+check('no pgid recorded means nothing to cancel', diag_cancel($jd, $kill) === false);
+check('and nothing was signalled',                $killed === []);
+
+file_put_contents("$jd/pgid", "12345\n");
+check('a recorded pgid is read back', diag_pgid($jd) === 12345);
+$killed = [];
+check('cancel reports it signalled', diag_cancel($jd, $kill) === true);
+// NEGATIVE. setsid puts the engine in its own process group and the engine
+// spawns sg_verify/sg_read/smartctl children; signalling the parent alone
+// leaves an sg_verify holding the disk with nothing left to reap it.
+check('cancel signals the whole process GROUP', $killed === [-12345]);
+
+file_put_contents("$jd/pgid", "not a number\n");
+check('a corrupt pgid file is no pgid', diag_pgid($jd) === null);
+// A pgid of 0 or 1 would mean "signal this process group" or init. Refuse.
+file_put_contents("$jd/pgid", "0\n");
+check('pgid 0 is refused', diag_pgid($jd) === null);
+file_put_contents("$jd/pgid", "1\n");
+check('pgid 1 is refused', diag_pgid($jd) === null);
+
+/* ── the SSE slice: resume from a byte offset ──────────────────────────── */
+$ev = "$jd/events.ndjson";
+file_put_contents($ev, "{\"t\":\"phase\"}\n{\"t\":\"chunk\"}\n");
+$s = diag_slice($ev, 0, 4096);
+check('from zero the slice is the whole file', $s['bytes'] === "{\"t\":\"phase\"}\n{\"t\":\"chunk\"}\n");
+check('and the offset advances to the end',    $s['offset'] === filesize($ev));
+check('and it reports eof',                    $s['eof'] === true);
+
+$s2 = diag_slice($ev, 14, 4096);
+check('resuming mid-file returns only what is new', $s2['bytes'] === "{\"t\":\"chunk\"}\n");
+
+// A slice that stops mid-line hands the browser half a JSON object, and the
+// client cannot tell a truncated line from a malformed one. The offset must
+// come back at the last NEWLINE, so the partial line is re-read next time.
+file_put_contents($ev, "{\"t\":\"phase\"}\n{\"t\":\"par");
+$s3 = diag_slice($ev, 0, 4096);
+check('a partial trailing line is withheld', $s3['bytes'] === "{\"t\":\"phase\"}\n");
+check('and the offset stops at the newline',  $s3['offset'] === 14);
+check('and it is not eof',                    $s3['eof'] === false);
+
+// An offset past the end is a client that reconnected to a file which was
+// trimmed or replaced. Restart it rather than returning garbage or failing.
+$s4 = diag_slice($ev, 999999, 4096);
+check('an offset past the end restarts from zero', $s4['offset'] === 14 && $s4['bytes'] !== '');
+check('a negative offset is clamped to zero',      diag_slice($ev, -5, 4096)['offset'] === 14);
+check('a missing file is empty, not an error',
+      diag_slice("$jd/nope.ndjson", 0, 4096) === ['bytes' => '', 'offset' => 0, 'eof' => true]);
+
 $wipe(); @rmdir($root);
 echo $fails === 0 ? "diagnose: all pass\n" : "diagnose: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
