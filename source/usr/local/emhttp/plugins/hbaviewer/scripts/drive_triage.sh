@@ -100,9 +100,20 @@ NONMED_FLOOR="1000"
 # Any increase at or above this, since the previous run, counts as "active".
 DELTA_FLOOR="10"
 
-# Read chunk size in blocks, and optional pause between chunks in seconds.
+# Targeted re-test of an already-flagged range: small chunks, because
+# per-chunk latency is the signal there.
 CHUNK="2048"
+# Full surface: big chunks. At 2048 blocks a 10 TB 512B-block disk is roughly
+# 9.5 MILLION sg_verify launches and process start-up dominates the scan.
+SURFACE_CHUNK="32768"
 THROTTLE="0"
+
+# sg3_utils floor for the big-chunk surface path. 1.42 is where
+# `sg_verify --16 --lba= --count=` and `sg_read bpt=` are all documented
+# together. Below it -- or when the tool will not say -- the surface scan falls
+# back to CHUNK and takes as long as it does today. Degrading is the right
+# failure here: a slow scan is a scan, a refused one is nothing.
+SG_MIN_VER="1.42"
 
 # Line-oriented event sink for the plugin's live view. Empty = off, which is
 # the CLI / User Scripts path and must stay the default.
@@ -200,6 +211,21 @@ tri_verdict() {  # disk v why
 
 # Milliseconds elapsed since $1 (a value from tri_now_ms).
 tri_now_ms() { printf '%s' "$(( $(date +%s%N) / 1000000 ))"; }
+
+# "1.48" -> 1048, "1.9" -> 1009: a sortable integer, so 1.9 does not compare
+# above 1.42 the way a string would.
+tri_ver_num() { awk -F. '{ printf "%d%03d", $1, $2 }' <<< "${1%%[!0-9.]*}"; }
+
+tri_surface_chunk() {
+    local v
+    v="$(sg_verify --version 2>/dev/null | grep -o '[0-9]\+\.[0-9]\+' | head -1)"
+    if [[ -n "$v" ]] && [[ "$(tri_ver_num "$v")" -ge "$(tri_ver_num "$SG_MIN_VER")" ]]; then
+        printf '%s' "$SURFACE_CHUNK"
+        return 0
+    fi
+    warn "sg3_utils ${v:-unreadable} is below $SG_MIN_VER -- surface scan falls back to $CHUNK-block chunks (slower, same result)"
+    printf '%s' "$CHUNK"
+}
 
 notify() {
     [[ "$NOTIFY" == "yes" ]] || return 0
@@ -606,9 +632,9 @@ done
 # ============================================================================
 
 run_verify() {
-    local dev="$1" start="$2" count="$3" pos=0 n rc fails=0
+    local dev="$1" start="$2" count="$3" chunk="${4:-$CHUNK}" pos=0 n rc fails=0
     while [[ $pos -lt $count ]]; do
-        n=$(( count - pos )); [[ $n -gt $CHUNK ]] && n=$CHUNK
+        n=$(( count - pos )); [[ $n -gt $chunk ]] && n=$chunk
         local t0 ms cok=1
         t0="$(tri_now_ms)"
         if ! timeout 120 sg_verify --16 --vrprotect=0 --lba=$(( start + pos )) \
@@ -697,13 +723,14 @@ triage_disk() {
     done
 
     if [[ "$SURFACE_SCAN" == "yes" && $HAVE_SG -eq 1 ]]; then
-        local total step
+        local total step schunk
         total=$(( $(blockdev --getsz "/dev/$dev") / ( ${LBS_OF[$dev]:-512} / 512 ) ))
+        schunk="$(tri_surface_chunk)"
+        warn "full-surface VERIFY of $total blocks in $schunk-block chunks -- hours"
         tri_phase "$name" surface "$total"
-        warn "full-surface VERIFY of $total blocks -- hours"
         step=$(( total / 20 ))
         for i in $(seq 0 19); do
-            run_verify "$dev" $(( i * step )) "$step" || vfail=1
+            run_verify "$dev" $(( i * step )) "$step" "$schunk" || vfail=1
             info "  $(( (i+1) * 5 ))% ($(date +%H:%M:%S))"
         done
     fi

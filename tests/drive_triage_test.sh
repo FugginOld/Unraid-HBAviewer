@@ -124,5 +124,50 @@ has "a chunk event names its op"      "$(cat "$EV")" '"op":"verify"'
 has "a verdict event is emitted"      "$(cat "$EV")" '"t":"verdict"'
 has "verify clean + read failed reads TRANSPORT" "$(cat "$EV")" '"v":"TRANSPORT"'
 
+# ── Surface scans use big chunks; targeted re-tests keep small ones. ───────
+# triage_disk() only runs on a flagged disk, so seed a failing-sector line the
+# engine's own syslog harvest will pick up, same as the block above.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+
+cat > "$STUBDIR/sg_verify" <<'STUB'
+#!/bin/bash
+echo "sg_verify $*" >> "$STUB_ARGS"
+case "$1" in --version) echo "sg_verify version: 1.48 20230228"; exit 0 ;; esac
+exit "${STUB_VERIFY_RC:-0}"
+STUB
+chmod +x "$STUBDIR/sg_verify"
+
+: > "$EV"
+TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --surface --events "$EV" >/dev/null
+has "the surface phase is announced"   "$(cat "$EV")" '"phase":"surface"'
+has "surface chunks are 32768 blocks"  "$(cat "$EV")" '"n":32768,"op":"verify"'
+has "targeted chunks stay at 2048"     "$(grep '"phase":"targeted"' -A0 "$EV"; grep -m1 '"n":2048' "$EV")" '"n":2048'
+
+# ── An sg3_utils too old for the big chunk degrades, it does not fail. ────
+cat > "$STUBDIR/sg_verify" <<'STUB'
+#!/bin/bash
+echo "sg_verify $*" >> "$STUB_ARGS"
+case "$1" in --version) echo "sg_verify version: 1.30 20101219"; exit 0 ;; esac
+exit "${STUB_VERIFY_RC:-0}"
+STUB
+chmod +x "$STUBDIR/sg_verify"
+: > "$EV"
+out=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --surface --events "$EV")
+hasnt "an old sg3_utils does not use the big chunk" "$(cat "$EV")" '"n":32768'
+has   "and says why in the report"                  "$out" "sg3_utils"
+
+# ── sg_verify that cannot report a version is treated as old. ─────────────
+cat > "$STUBDIR/sg_verify" <<'STUB'
+#!/bin/bash
+echo "sg_verify $*" >> "$STUB_ARGS"
+case "$1" in --version) exit 1 ;; esac
+exit "${STUB_VERIFY_RC:-0}"
+STUB
+chmod +x "$STUBDIR/sg_verify"
+: > "$EV"
+TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --surface --events "$EV" >/dev/null
+hasnt "an unparseable version is treated as old" "$(cat "$EV")" '"n":32768'
+: > "$STUB_DMESG"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }
