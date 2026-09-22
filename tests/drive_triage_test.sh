@@ -75,7 +75,7 @@ PATH="$STUBDIR:$PATH" bash "$DT" --out /boot/nope /dev/sdX >/dev/null 2>&1
 
 # ── Root gate: verifies real-world behavior is unchanged. Script still enforces ─
 # ── root requirement when TRIAGE_SKIP_ROOT_CHECK is not set. ───────────────────
-out=$(PATH="$STUBDIR:$PATH" bash "$DT" --out /tmp /dev/sdX 2>&1)
+out=$(PATH="$STUBDIR:$PATH" bash "$DT" --out "$WORK/rootcheck" /dev/sdX 2>&1)
 [ $? -eq 3 ] && has "root gate fires without test bypass" "$out" "must run as root" || bad "root gate fires without test bypass" "exit was not 3 or missing message"
 
 echo
