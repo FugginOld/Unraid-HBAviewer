@@ -58,7 +58,7 @@ export STUB_ARGS="$ARGS"
 run() {  # remaining args go to the engine
     : > "$ARGS"
     OUT="$WORK/out"; rm -rf "$OUT"
-    PATH="$STUBDIR:$PATH" EUID=0 bash "$DT" --out "$OUT" "$@" /dev/sdX 2>&1
+    PATH="$STUBDIR:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 bash "$DT" --out "$OUT" "$@" /dev/sdX 2>&1
 }
 
 # ── The CLI path still produces its report. ────────────────────────────────
@@ -72,6 +72,11 @@ has "the slot scan header is present" "$(cat "$RUNDIR/report.txt")" "SLOT SCAN"
 # ── --out under /boot is refused outright: this must never touch the flash. ─
 PATH="$STUBDIR:$PATH" bash "$DT" --out /boot/nope /dev/sdX >/dev/null 2>&1
 [ $? -eq 2 ] && ok "refuses to write to /boot" || bad "refuses to write to /boot" "exit was not 2"
+
+# ── Root gate: verifies real-world behavior is unchanged. Script still enforces ─
+# ── root requirement when TRIAGE_SKIP_ROOT_CHECK is not set. ───────────────────
+out=$(PATH="$STUBDIR:$PATH" bash "$DT" --out /tmp /dev/sdX 2>&1)
+[ $? -eq 3 ] && has "root gate fires without test bypass" "$out" "must run as root" || bad "root gate fires without test bypass" "exit was not 3 or missing message"
 
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

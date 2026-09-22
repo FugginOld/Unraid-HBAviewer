@@ -187,7 +187,8 @@ log "results : $RUN"
 sect "PREFLIGHT"
 # ============================================================================
 
-[[ $EUID -eq 0 ]] || { bad "must run as root"; exit 3; }
+# Test-only gate: TRIAGE_SKIP_ROOT_CHECK allows test harness to run without root. Never set in production.
+[[ $EUID -eq 0 || -n "${TRIAGE_SKIP_ROOT_CHECK:-}" ]] || { bad "must run as root"; exit 3; }
 have smartctl || { bad "smartctl missing"; exit 3; }
 
 HAVE_SG=0
