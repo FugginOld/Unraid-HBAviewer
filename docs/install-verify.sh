@@ -90,7 +90,7 @@ cp -f "$PLUGIN/icon.png" /usr/local/emhttp/plugins/HBAviewer/hbaviewer.png
 echo
 echo "=== files ==="
 n=$(ls "$PLUGIN/render"/*.php 2>/dev/null | wc -l)
-[ "$n" = 8 ] && note OK "render/ holds 8 files" || note FAIL "render/ holds $n files, expected 8"
+[ "$n" = 9 ] && note OK "render/ holds 9 files" || note FAIL "render/ holds $n files, expected 9"
 lines=$(wc -l < "$PLUGIN/ajax_info.php")
 [ "$lines" -lt 400 ] && note OK "ajax_info.php is $lines lines (split applied)" \
                      || note FAIL "ajax_info.php is $lines lines -- old version still installed?"
