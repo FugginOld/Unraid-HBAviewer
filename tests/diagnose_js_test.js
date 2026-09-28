@@ -297,6 +297,48 @@ async function tail() {
     await resumeCase([{ job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }], 'sdz-1');
     check('a job the page already holds is not replaced by a resume',
           sandbox.luDiagJob === 'sdz-1' && esInstances.length === 0);
+
+    /* The check above sets luDiagJob BEFORE calling luDiagResume, so it
+     * cannot tell whether the "if (luDiagJob) return;" guard sits before or
+     * after the fetch -- a mutant moving it earlier still passes it. These
+     * hold the list fetch open with a deferred promise so a page-owned job
+     * can land WHILE it is still in flight, which only the correct
+     * (post-fetch) placement of the guard survives. */
+    const deferredResumeRace = async (landJob) => {
+        fetches.length = 0;
+        esInstances.length = 0;
+        sandbox.luDiagJob = '';
+        els.get('diag-head').innerHTML = idleHead;
+        els.get('diag-dot').classList.remove('running');
+        els.get('diag-cancel').disabled = true;
+
+        const originalFetch = sandbox.fetch;
+        let heldResolve = null;
+        sandbox.fetch = (url, opts) => {
+            fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
+            // Only the FIRST call (luDiagResume's own list request) is held
+            // open; anything the landed job triggers (a verdict fetch, a
+            // confirmed start) goes through the real mock so it settles.
+            if (heldResolve) return originalFetch(url, opts);
+            return new Promise((resolve) => { heldResolve = resolve; });
+        };
+
+        const resumePromise = sandbox.luDiagResume();
+        await landJob();
+        sandbox.fetch = originalFetch;
+        heldResolve({ json: () => Promise.resolve(
+            { jobs: [{ job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }] }) });
+        await resumePromise;
+    };
+
+    await deferredResumeRace(() => { sandbox.luDiagOpen('sdr-1'); return Promise.resolve(); });
+    check('a reopened verdict landing while resume\'s list fetch is in flight is not overwritten',
+          sandbox.luDiagJob === 'sdr-1' && esInstances.length === 0);
+
+    fetchResponse = { ok: true, job: 'sdt-1', disk: 'sdt' };
+    await deferredResumeRace(() => sandbox.luDiagnose('sdt'));
+    check('a confirmed start landing while resume\'s list fetch is in flight is not overwritten',
+          sandbox.luDiagJob === 'sdt-1' && esInstances.length === 1);
 }
 
 tail().then(() => {
