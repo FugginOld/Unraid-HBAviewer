@@ -80,6 +80,11 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(SRC, 'utf8'), sandbox);
 
+// The bug Block E found: nothing on page load asked whether a job was
+// already running, so a reload always showed "No job running".
+check('loading the page asks diagnose.php for the job list once',
+      fetches.length === 1 && fetches[0].url.includes('action=list'));
+
 /* ── latency buckets: the boundaries the spec names, exactly ────────────── */
 const B = sandbox.luDiagBucket;
 check('an unreadable chunk is its own bucket', B(12, false) === 'lu-bbad');
@@ -237,6 +242,103 @@ async function tail() {
           && !els.get('diag-dot').classList.contains('running')
           && els.get('diag-pause').disabled === true
           && els.get('diag-cancel').disabled === true);
+
+    /* ── reattach after a reload (Task 16 Block E fix round) ─────────── */
+    const idleHead = '<span class="lu-muted">No job running.</span>';
+    const resumeCase = async (jobs, pageJob) => {
+        fetches.length = 0;
+        esInstances.length = 0;
+        sandbox.luDiagJob = pageJob || '';
+        els.get('diag-head').innerHTML = idleHead;
+        els.get('diag-dot').classList.remove('running');
+        els.get('diag-cancel').disabled = true;
+        fetchResponse = { jobs };
+        await sandbox.luDiagResume();
+    };
+
+    await resumeCase([{ job: 'sdq-300', disk: 'sdq', mtime: 300, running: false }]);
+    check('resume asks diagnose.php for the job list',
+          fetches.length === 1 && fetches[0].url.includes('action=list'));
+    check('no running job: no EventSource is opened', esInstances.length === 0);
+    check('no running job: the idle header is left alone',
+          els.get('diag-head')._html === idleHead);
+    check('no running job: nothing is attached', sandbox.luDiagJob === '');
+
+    // The newest job is a FINISHED one: an implementation that takes
+    // jobs[0] instead of the running one attaches to the wrong job.
+    await resumeCase([{ job: 'sdr-400', disk: 'sdr', mtime: 400, running: false },
+                      { job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }]);
+    check('one running job: the view attaches to it, not to the newest job',
+          sandbox.luDiagJob === 'sdq-300');
+    check('one running job: one EventSource, for that job, from offset 0',
+          esInstances.length === 1 && esInstances[0].url.includes('job=sdq-300')
+          && esInstances[0].url.includes('offset=0'));
+    check('one running job: the header names its disk',
+          els.get('diag-head')._html.includes('/dev/sdq'));
+    check('one running job: the dot runs and Cancel is live',
+          els.get('diag-dot').classList.contains('running')
+          && els.get('diag-cancel').disabled === false);
+    esInstances[0].onmessage({
+        data: JSON.stringify({ t: 'chunk', lba: 0, n: 64, ms: 5, ok: true }),
+        lastEventId: '60',
+    });
+    check('one running job: replayed events redraw the map',
+          els.get('diag-map')._html.includes('lu-diag-cell'));
+
+    await resumeCase([{ job: 'sds-500', disk: 'sds', mtime: 500, running: true },
+                      { job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }]);
+    check('two running jobs: no EventSource is opened', esInstances.length === 0);
+    check('two running jobs: nothing is attached, so Cancel has no target',
+          sandbox.luDiagJob === '' && els.get('diag-cancel').disabled === true);
+    check('two running jobs: the header names both disks',
+          els.get('diag-head')._html.includes('/dev/sds')
+          && els.get('diag-head')._html.includes('/dev/sdq'));
+
+    await resumeCase([{ job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }], 'sdz-1');
+    check('a job the page already holds is not replaced by a resume',
+          sandbox.luDiagJob === 'sdz-1' && esInstances.length === 0);
+
+    /* The check above sets luDiagJob BEFORE calling luDiagResume, so it
+     * cannot tell whether the "if (luDiagJob) return;" guard sits before or
+     * after the fetch -- a mutant moving it earlier still passes it. These
+     * hold the list fetch open with a deferred promise so a page-owned job
+     * can land WHILE it is still in flight, which only the correct
+     * (post-fetch) placement of the guard survives. */
+    const deferredResumeRace = async (landJob) => {
+        fetches.length = 0;
+        esInstances.length = 0;
+        sandbox.luDiagJob = '';
+        els.get('diag-head').innerHTML = idleHead;
+        els.get('diag-dot').classList.remove('running');
+        els.get('diag-cancel').disabled = true;
+
+        const originalFetch = sandbox.fetch;
+        let heldResolve = null;
+        sandbox.fetch = (url, opts) => {
+            fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
+            // Only the FIRST call (luDiagResume's own list request) is held
+            // open; anything the landed job triggers (a verdict fetch, a
+            // confirmed start) goes through the real mock so it settles.
+            if (heldResolve) return originalFetch(url, opts);
+            return new Promise((resolve) => { heldResolve = resolve; });
+        };
+
+        const resumePromise = sandbox.luDiagResume();
+        await landJob();
+        sandbox.fetch = originalFetch;
+        heldResolve({ json: () => Promise.resolve(
+            { jobs: [{ job: 'sdq-300', disk: 'sdq', mtime: 300, running: true }] }) });
+        await resumePromise;
+    };
+
+    await deferredResumeRace(() => { sandbox.luDiagOpen('sdr-1'); return Promise.resolve(); });
+    check('a reopened verdict landing while resume\'s list fetch is in flight is not overwritten',
+          sandbox.luDiagJob === 'sdr-1' && esInstances.length === 0);
+
+    fetchResponse = { ok: true, job: 'sdt-1', disk: 'sdt' };
+    await deferredResumeRace(() => sandbox.luDiagnose('sdt'));
+    check('a confirmed start landing while resume\'s list fetch is in flight is not overwritten',
+          sandbox.luDiagJob === 'sdt-1' && esInstances.length === 1);
 }
 
 tail().then(() => {

@@ -105,6 +105,13 @@ check('every kill in the dispatch uses the unambiguous kill -SIG -- form',
 check('status and list both use the shared per-job running check',
       substr_count($dispatchCode, 'diag_job_running(') >= 2);
 
+// diagnose_view.js's reload-resume reads list's job/disk/running keys and
+// attaches only when exactly one job reports running. Renaming a key here
+// turns resume back into the idle view, silently.
+check('list reports job, disk and per-job running for the reload-resume',
+      str_contains($dispatchCode, "\$jobs[] = ['job' => \$job, 'disk' => \$disk,")
+      && str_contains($dispatchCode, "'running' => \$running]"));
+
 // The engine is invoked with --events, or the whole live view has nothing to
 // read, and with the disk as an explicit /dev path.
 check('the engine is invoked with --events', str_contains($code, '--events'));

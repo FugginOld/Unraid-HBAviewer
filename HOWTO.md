@@ -100,12 +100,15 @@ tools) but performs none of them.
 
 **The job outlives the tab.** Diagnose launches its engine as its own
 detached process; closing the browser tab, or the whole browser, does not
-stop it. While the *same* Live Job tab stays open, the view resumes on its
-own after any connection drop — an automatic browser-level reconnect carries
-the last position back to the server, with no action needed from you.
-Reloading the page, or opening HBAviewer fresh in a new tab, does not get
-that: there is currently no way to re-attach the Live view to a job that is
-already running. The drive's badge in the sidebar drive list reads
+stop it. While the Live Job view stays open, it resumes on its own after any
+connection drop — an automatic browser-level reconnect carries the last
+position back to the server, with no action needed from you. Reloading the
+page, or opening HBAviewer fresh, re-attaches the Live view to a running
+job and replays it from the start, so the surface map shows everything
+scanned before the reload (the elapsed-time readout restarts from the
+reload). That needs exactly one job running: with jobs on two or more
+drives at once, the header names them and the view attaches to none rather
+than pick one. The drive's badge in the sidebar drive list reads
 **SCANNING** until the job ends, then shows its verdict — but the sidebar row's
 **Diagnose** button always starts a *new* job, even on a drive with a
 finished verdict; it is not a link back to that result. The **Recent
