@@ -7,7 +7,7 @@
  *
  * The event file is the source of truth. This file holds a byte offset and
  * nothing else durable: it buys a transparent reconnect within one page
- * life, not a resume across a reload. The browser's automatic EventSource
+ * life; luDiagResume() covers a reload by replaying the file from 0. The browser's automatic EventSource
  * retry replays via Last-Event-ID, which diagnose_stream.php prefers over
  * the URL param, so a dropped connection picks up where it left off without
  * this file tracking anything the browser doesn't already know.
@@ -277,6 +277,26 @@
           .catch(function () { logLine('cancel request failed', 'crit'); });
     };
 
+    /* Point both screens at one job and reset the Live view for it. Shared
+       by a fresh start (luDiagnose) and a reattach after a reload
+       (luDiagResume), so the two cannot drift on what a running job
+       enables. Closes any stream it replaces; the caller logs and opens
+       the new one. */
+    function attach(job, disk) {
+        if (st.es) { st.es.close(); st.es = null; }
+        st = freshState();
+        el('diag-map').innerHTML = '';
+        el('diag-stream').innerHTML = '';
+        el('diag-hotzone').textContent = '';
+        el('diag-head').innerHTML = 'Diagnosing <code>/dev/' + fesc(disk) + '</code>';
+        el('diag-pause').textContent = 'Pause';
+        luDiagJob = job;
+        el('diag-dot').classList.add('running');
+        el('diag-dot').setAttribute('aria-label', 'Job running');
+        el('diag-pause').disabled = false;
+        el('diag-cancel').disabled = false;
+    }
+
     /* The disk NAME, never a /dev path: diagnose.php validates
        /^[a-z0-9]{2,32}$/ and a "/dev/sdb" would be refused. One spelling on
        both sides of the wire. */
@@ -290,23 +310,11 @@
           .then(function (d) {
             if (d.error) { logLine('refused: ' + d.error, 'crit'); return; }
             /* Close out the PREVIOUS job's stream only now that a NEW job is
-               confirmed started. Tearing the view down before knowing the
-               start succeeded left a refused start (e.g. the per-disk lock
-               rejecting a double-click) with a permanently blanked,
-               unrecoverable view of a still-running job -- there is no
-               reload-resume (luDiagJob is '' on page load) and no re-open. */
-            if (st.es) { st.es.close(); st.es = null; }
-            st = freshState();
-            el('diag-map').innerHTML = '';
-            el('diag-stream').innerHTML = '';
-            el('diag-hotzone').textContent = '';
-            el('diag-head').innerHTML = 'Diagnosing <code>/dev/' + fesc(disk) + '</code>';
-            el('diag-pause').textContent = 'Pause';
-            luDiagJob = d.job;
-            el('diag-dot').classList.add('running');
-            el('diag-dot').setAttribute('aria-label', 'Job running');
-            el('diag-pause').disabled = false;
-            el('diag-cancel').disabled = false;
+               confirmed started -- attach() does the closing. Tearing the
+               view down before knowing the start succeeded left a refused
+               start (e.g. the per-disk lock rejecting a double-click) with a
+               blanked view of a job that was still running. */
+            attach(d.job, disk);
             logLine('job ' + d.job + ' started', 'ok');
             openStream();
             /* Only after the start is CONFIRMED, not right after luDiagShow --
@@ -353,5 +361,37 @@
             el('diag-drives').textContent = 'Could not load the drive list.';
           });
     };
+
+    /* Reattach after a reload. The event file is the source of truth, so a
+       page that finds a running job replays it from offset 0 and the map
+       comes back whole. Exactly one running job attaches. With several
+       (the lock is per DISK, so different disks can run at once) the Live
+       screen, which shows one job, names them and attaches to none --
+       picking one would put Cancel on a disk nobody chose. The luDiagJob
+       check sits inside the .then, not before the fetch: a start or a
+       reopened verdict that lands while this is in flight wins. Called
+       once, on load, not from luTab(): luTab() leaves st and the stream
+       alone, and hbaviewer.js runs luTab(?tab=) before this file loads. */
+    window.luDiagResume = function () {
+        return fetch('/plugins/hbaviewer/diagnose.php?action=list')
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (luDiagJob) return;
+            var run = ((d && d.jobs) || []).filter(function (j) { return j.running === true; });
+            if (run.length === 1) {
+                attach(run[0].job, run[0].disk);
+                logLine('reattached to running job ' + run[0].job, 'ok');
+                openStream();
+            } else if (run.length > 1) {
+                el('diag-head').innerHTML = '<span class="lu-muted">' + fesc(run.length
+                    + ' jobs running (' + run.map(function (j) { return '/dev/' + j.disk; }).join(', ')
+                    + '). The live view follows one job at a time, so it is attached to none of them;'
+                    + ' each keeps running and reads SCANNING in the drive list.') + '</span>';
+            }
+          })
+          .catch(function () { /* the idle view is already the right fallback */ });
+    };
+
+    luDiagResume();
 
 })();

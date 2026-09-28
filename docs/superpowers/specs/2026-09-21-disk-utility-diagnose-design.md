@@ -101,6 +101,10 @@ with a byte offset, so reopening the tab mid-scan resumes the live view
 instead of starting over — the file itself is the source of truth, not
 anything held in the PHP worker, consistent with `cached_read()`'s "the
 foreground request never blocks on the producer" rule.
+A fresh page finds the running job through `diagnose.php`'s `list` and
+replays it from offset 0. The lock is per disk, so two disks can run at
+once, and the Live screen shows one job: with more than one running, it
+names them and attaches to none.
 
 ### Entry points
 
