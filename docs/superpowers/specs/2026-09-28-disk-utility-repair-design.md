@@ -43,37 +43,56 @@ one place that already understands chunk boundaries. This is deliberately the en
 not something `diagnose.php` derives or writes, so CLI and User Scripts callers populate it
 identically to the web path — the same reason baseline tracking lives there and not in PHP.
 
-**Format**, tab-separated, one row per confirmed-or-candidate chunk:
+**Format**, tab-separated, one row per chunk that has ever failed a check:
 
 ```
-chunk_start  confirm_count  first_run_id  last_run_id  last_evidence  updated_ts
+chunk_start  confirm_count  first_run_id  last_run_id  last_class  updated_ts
 ```
 
-- `chunk_start` — the failing range's start LBA, rounded down to its containing chunk. Chunk size
+- `chunk_start` — the tested range's start LBA, rounded down to its containing chunk. Chunk size
   is the existing `CHUNK="2048"` constant (`drive_triage.sh`'s targeted re-test chunk) — matching
   the granularity the engine already re-tests at, and the granularity a future `sg_reassign` call
   operates on, rather than inventing a second chunk size. Rounding, not exact-match, because two
   runs' own dmesg harvests are not guaranteed to report byte-identical start offsets for the same
   physical defect.
-- `confirm_count` — how many *distinct* runs have flagged this chunk. Phase 2a's "confirmed" bar
-  for display is `confirm_count >= 2` (the proposal's own stated precondition).
+- `last_class` — the range's class from its most recent triage, one of four:
+
+  | class | VERIFY | READ | meaning |
+  | --- | --- | --- | --- |
+  | `media` | failed | any | the drive cannot read its own platters here |
+  | `transport` | clean | failed | fine inside the drive, failed crossing the link |
+  | `intermittent` | clean (or not run) | clean | flagged before, did not recur this run |
+  | `unresolved` | not run (`HAVE_SG=0`) | failed | failed, but no VERIFY to say where |
+
+  The same four-way split `sas-bench`'s `discriminate()` uses (`sas_test_tool.sh:468-476`), applied
+  per range rather than per disk. `triage_disk()` today folds its per-range results into two
+  disk-level flags (`vfail`/`rfail`); the per-range result already exists inside its range loop
+  (`drive_triage.sh:725-741`) and is recorded there instead of being discarded.
+- `confirm_count` — how many *distinct* runs classified this chunk `media`. **Only `media` counts.**
+  A `transport` range is healthy inside the drive; remapping it would retire a good sector and
+  leave the actual fault (cable, backplane, expander, HBA) in place. An `intermittent` or
+  `unresolved` result is not evidence of a bad sector either. Phase 2a's "confirmed" bar is
+  `confirm_count >= 2` (the proposal's own stated precondition), so a confirmed row means "failed
+  VERIFY on two separate runs", which is the precondition Phase 2b's repair gate will check.
 - `first_run_id` / `last_run_id` — the job-id string of the earliest and most recent run that
-  flagged this chunk. Kept as two scalars, not a list, on purpose (see "Forward path to a full
+  tested this chunk. Kept as two scalars, not a list, on purpose (see "Forward path to a full
   audit trail" below).
-- `last_evidence` — `vfail`, `rfail`, or `both`, from that chunk's most recent triage. Enough for
-  Phase 2a's table; not a substitute for the Verdict screen's own detailed per-range evidence,
-  which stays where it is.
 - `updated_ts` — unix seconds, last write.
 
-**Update logic**, at the same point `drive_triage.sh` already writes `$STATE` (end of a run, after
-`triage_disk()` has populated `$RUN/ranges-$dev.txt` candidates for the *next* run — read the
-existing code path closely here, this is describing where in the script the write happens, not
-introducing a new phase): for each range in this run's own failure set, compute its chunk_start,
-and either bump the matching row's `confirm_count`/`last_run_id`/`last_evidence`/`updated_ts`, or
-insert a new row at `confirm_count = 1`. A chunk that has stopped failing is not removed — a
-disk whose defects "stopped climbing between runs" (the proposal's own "watch" case) is a real,
-useful state to show, and silently deleting the row would erase exactly the evidence that
-distinction needs.
+**Update logic.** Inside `triage_disk()`'s range loop, each tested range's class is recorded for
+this run. At the end of the run, beside the existing `$STATE` write, the ledger is updated from
+that record:
+
+- a range whose class is `media`, `transport` or `unresolved` either updates its chunk's row
+  (`last_class`, `last_run_id`, `updated_ts`, and `confirm_count + 1` only if the class is
+  `media`) or inserts a new row (`confirm_count` 1 if `media`, else 0);
+- a range whose class is `intermittent` updates an existing row's `last_class`/`last_run_id`/
+  `updated_ts` and never inserts one. In particular the no-evidence fallback (`0:256` spot-check,
+  `drive_triage.sh:715-720`) writes nothing when it comes back clean.
+
+A chunk that has stopped failing is not removed. Its row stays, its `last_class` becomes
+`intermittent`, and its `confirm_count` keeps the history — silently deleting it would erase
+exactly the evidence that says a defect was real on earlier runs.
 
 **New flag**, mirroring `--state`: `--badrange-state <path>`. Empty/unset by default, matching the
 existing `EVENTS=""` / no-`--state` convention that keeps CLI and User Scripts behavior unchanged
@@ -86,8 +105,7 @@ baseline — one physical-drive-identity reset clears both files together.
 
 ### Forward path to a full audit trail
 
-You said you'll want the fuller picture later (every failed chunk, every run, not just a tally).
-This shape is deliberately compatible with that without a rewrite: `first_run_id`/`last_run_id`
+A fuller picture is wanted later (every failed chunk, every run, not just a tally). This shape is deliberately compatible with that without a rewrite: `first_run_id`/`last_run_id`
 already exist as separate columns rather than being collapsed into one, and a later addition can
 introduce a companion per-chunk history file (or a `run_ids` column holding a bounded list) that
 the tally file's own read/write logic doesn't need to change to accommodate — the tally stays the
@@ -112,14 +130,18 @@ and inventing one here is exactly the kind of scope creep Phase 2a is trying to 
 small shared helper so the two call sites cannot disagree, not duplicated.
 
 **Unassigned disk:** a plain table of every `confirm_count >= 2` row from that disk's
-`badranges.tsv` — start LBA, block count (fixed at the chunk size), confirm count, last evidence,
-last-seen run. **No checkboxes, no typed-confirmation field, no action button.** This is the whole
-scope cut from the mockup described above.
+`badranges.tsv` — start LBA, block count (fixed at the chunk size), media-confirm count, last
+class, last-seen run. **No checkboxes, no typed-confirmation field, no action button.** This is the
+whole scope cut from the mockup described above. Below the table, one line counts any rows whose
+`last_class` is `transport` ("N ranges failed only over the link — these point at the cable, slot
+or HBA, not the drive, and are not repair candidates"), so a range the user saw flagged on the
+Verdict screen does not silently disappear from Repair without a reason.
 
-**Empty state:** an unassigned disk with no confirmed rows (a MEDIA/TRANSPORT verdict from a
-single run, `confirm_count` still at 1) shows a plain note that repair evidence needs a second
-confirming run, with a pointer back to the Diagnose tab to run one — not a blank screen, and not a
-false "no issues" message.
+**Empty state:** an unassigned disk with no confirmed rows shows a plain note that says which case
+it is — no media-class range yet (a TRANSPORT verdict, or only intermittent results), or media
+ranges seen on only one run so far (`confirm_count` 1, needs a second confirming run) — with a
+pointer back to the Diagnose tab to run one. Not a blank screen, and not a false "no issues"
+message.
 
 ## Surface area
 
@@ -154,29 +176,43 @@ false "no issues" message.
 
 ## Testing
 
-- `tests/drive_triage_test.sh`: new golden cases for the ledger — a fresh run creates a row at
-  count 1; a second run on the same chunk (allowing for a slightly different start offset within
-  the same 2048-block window) increments to 2 and updates `last_run_id`/`last_evidence`; a chunk
-  that stops failing keeps its row unchanged rather than being removed; `--reset-baseline` with
-  `--badrange-state` given clears it; the flag being absent leaves behavior byte-identical to
-  today (regression guard, matching the precedent set for `--state`'s own backward-compatibility
-  test in the Task 16 baseline-persistence fix round).
+- `tests/drive_triage_test.sh`: new golden cases for the ledger, driven by the existing stubbed
+  `sg_verify`/`sg_read` so each class can be forced:
+  - a `media` range on a fresh ledger creates a row at `confirm_count` 1; a second `media` run on
+    the same chunk (with a start offset shifted inside the same 2048-block window) makes it 2 and
+    updates `last_run_id`/`last_class`;
+  - a `transport` range creates a row at `confirm_count` 0, and a second `transport` run leaves it
+    at 0. This is the discriminating case: an implementation that counts every failure reaches 2
+    here;
+  - a `media` row that comes back `intermittent` keeps its `confirm_count` and changes only
+    `last_class`; it is not removed;
+  - a clean `0:256` spot-check on a disk with no evidence writes no row;
+  - `--reset-baseline` with `--badrange-state` given clears the ledger;
+  - the flag being absent leaves behavior byte-identical to today (regression guard, matching the
+    precedent set for `--state`'s own backward-compatibility test in the Task 16
+    baseline-persistence fix round).
 - `tests/diagnose_test.php`: `diag_badrange_path()` and the extracted `diag_array_disk()` helper,
   directly callable, no mocks needed (same style as the existing `diag_baseline_path()`/
   `diag_slice()` tests).
 - `tests/diagnose_php_test.php`: source-assertion pins for the new `repair` action's dispatch
   shape and its reuse of `diag_array_disk()` (not a re-implementation), same style as the existing
   pins on `diagnose.php`'s other actions.
-- `tests/diagnose_render_test.php`: `renderDiagRepair()`'s three states (array-disk guidance,
-  unassigned-disk table, empty state) with injected data — no real disk, no real job, matching
-  `renderDiagVerdict()`'s existing test shape.
+- `tests/diagnose_render_test.php`: `renderDiagRepair()` with injected data — no real disk, no
+  real job, matching `renderDiagVerdict()`'s existing test shape. Cases: array-disk guidance (and
+  no table, even when the ledger has confirmed rows); unassigned-disk table listing only
+  `confirm_count >= 2` rows; a `transport` row absent from the table but counted in the link line;
+  both empty-state variants (no media range yet, media seen on one run only).
 - `tests/diagnose_js_test.js`: the new Verdict-screen "Repair" link's visibility rule (shown only
   on a non-CLEAN verdict) and `luDiagRepair()`'s navigation call.
-- Hardware verification: a real cross-run ledger update (run Diagnose twice on a disk with a real
-  flagged range, confirm `confirm_count` reaches 2 and the Repair screen's table shows it) — same
-  "Commands I run myself" treatment Task 16 gave Phase 1, since a ledger written by a real
-  `drive_triage.sh` run against real hardware is the only thing that actually proves the chunk-
-  rounding tolerance is right for this fleet's dmesg harvest.
+- Hardware verification, same "Commands I run myself" treatment Task 16 gave Phase 1:
+  - on Golem, a clean run (e.g. `sdq`, whose triage currently has no recorded failing sectors and
+    spot-checks `0:256` clean) leaves no ledger row — confirms the no-evidence path writes nothing;
+  - a real cross-run `media` update (two runs, `confirm_count` reaches 2, the Repair table shows it)
+    needs a disk that actually fails VERIFY. Golem may not have one today. If not, this is the one
+    check the plan records as not verified on hardware rather than claims, and it is the first
+    thing to run when a failing drive turns up — a bench drive already classified MEDIA by
+    `sas-bench` is the natural candidate. Only a ledger written by a real run proves the
+    chunk-rounding tolerance is right for real dmesg harvests.
 
 ## Deferred to Phase 2b (explicitly not decided here)
 
@@ -191,6 +227,21 @@ false "no issues" message.
   which gates the surface-scan `sg_verify`/`sg_read` chunk size and was already confirmed at
   `1.30` in Task 16 Block A — that confirmation says nothing about `sg_reassign` support).
 - The full per-run audit trail noted above as a forward-compatible but unbuilt extension.
+
+## Follow-ups outside this phase (read-only, engine-side)
+
+Found while comparing against `sas-bench` (the Fedora bench tool), which already checks both. Each
+is a small Tier 0 addition to `drive_triage.sh`, planned as its own change rather than folded into
+Phase 2a:
+
+- **Format check.** Refurbished SAS drives often ship with 520/528-byte sectors or T10 protection
+  information, which alone can make a healthy disk error out under Linux/Unraid. Detect it from
+  `/sys/block/<dev>/queue/logical_block_size` and `sg_readcap --16`'s `prot_en`. The fix
+  (`sg_format --fmtpinfo=0`) is destructive and belongs to Phase 3; the detection is a read.
+- **Uncorrected write errors.** Unraid disables a disk when a write fails, and the drive logs those
+  itself (SCSI error counter log page 0x02). `snap()` tracks uncorrected *reads* only. Adding
+  `uncorr_write` gives the Verdict screen the most direct answer to "why did Unraid disable this
+  disk", even when a read-only triage finds nothing today.
 
 ## Out of scope (this phase and the next)
 
