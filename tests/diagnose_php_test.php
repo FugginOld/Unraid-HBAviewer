@@ -148,6 +148,10 @@ check('every frame carries the offset as its SSE id', str_contains($scode, 'id: 
 check('a reconnect is honoured via Last-Event-ID',
       str_contains($scode, 'HTTP_LAST_EVENT_ID'));
 check('the stream reads through diag_slice()', str_contains($scode, 'diag_slice('));
+check('the stream frames through diag_sse_frames(), not the old batched echo',
+      str_contains($scode, 'diag_sse_frames($s') || str_contains($scode, 'diag_sse_frames( $s'));
+check('the old batched-echo shape is gone (no bare data: loop before one blank line)',
+      !preg_match('/foreach\s*\([^)]*explode\("\\\\n"/', $scode));
 // The end-of-stream check must ask per-JOB liveness (diag_job_running), not
 // the per-disk lock -- the lock is held by whichever job currently owns the
 // disk, not by the specific job this connection is streaming.

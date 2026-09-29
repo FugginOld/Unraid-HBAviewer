@@ -58,23 +58,15 @@ $start = time();
 while (true) {
     $s = diag_slice($file, $offset, DIAG_SSE_CHUNK);
     if ($s['bytes'] !== '') {
-        $offset = $s['offset'];
-        /* The id is the offset. That is the entire resume mechanism: the
-           browser stores it and hands it back as Last-Event-ID, so the server
-           holds no per-client state at all. */
-        echo 'id: ' . $offset . "\n";
-        // This framing assumes the producer (drive_triage.sh) never emits a
-        // single event line longer than DIAG_SSE_CHUNK. diag_slice() itself
-        // allows a raw, non-newline-terminated chunk once its window fills
-        // with no newline, which this loop cannot render as a distinct SSE
-        // message -- not reachable today (the producer's records are short
-        // and fixed-shape, pinned by tests/drive_triage_test.sh:88), just a
-        // note for the next reader.
-        foreach (explode("\n", rtrim($s['bytes'], "\n")) as $line) {
-            echo 'data: ' . $line . "\n";
+        foreach (diag_sse_frames($s['bytes'], $offset) as $frame) {
+            /* One frame, one SSE message: this is the whole fix. The id is
+               PER LINE now, not per slice -- a client that reconnects mid-
+               batch resumes after only the events it actually received. */
+            echo 'id: ' . $frame['id'] . "\n";
+            echo 'data: ' . $frame['data'] . "\n\n";
         }
-        echo "\n";
         flush();
+        $offset = $s['offset'];
     }
 
     /* The job is over when it is no longer the ACTIVE job for its disk (see

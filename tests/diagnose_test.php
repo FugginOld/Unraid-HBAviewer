@@ -277,6 +277,36 @@ $rl2 = diag_slice($longFile, $rl1['offset'], 10);
 check('the offset keeps advancing on the next call',
       $rl2['offset'] > $rl1['offset']);
 
+/* ── diag_sse_frames(): one ndjson line, one SSE frame ──────────────────
+   Fix round: diagnose_stream.php used to write N `data:` lines under ONE
+   trailing blank line for a multi-line slice. Per the SSE spec that joins
+   them into ONE event whose data is the lines glued with "\n" -- not
+   valid JSON, so the browser's JSON.parse(m.data) silently drops the
+   WHOLE batch. This is why a resume's offset-0 replay (guaranteed more
+   than one line) never redrew the map on real hardware. */
+check('a missing diag_sse_frames means the old bug is still there',
+      function_exists('diag_sse_frames'));
+
+$frames = diag_sse_frames("{\"a\":1}\n{\"b\":2}\n", 0);
+check('two lines become two frames, not one',
+      count($frames) === 2);
+check('each frame carries exactly one ndjson line',
+      $frames[0]['data'] === '{"a":1}' && $frames[1]['data'] === '{"b":2}');
+check('ids are the running per-line offset, not just the final one',
+      $frames[0]['id'] === 8 && $frames[1]['id'] === 16);
+
+check('empty bytes produce no frames', diag_sse_frames('', 0) === []);
+
+check('resuming mid-stream keeps ids relative to the real file offset',
+      diag_sse_frames("{\"c\":3}\n", 16) === [['id' => 24, 'data' => '{"c":3}']]);
+
+// diag_slice()'s own oversized-single-record fallback: no newline at all.
+// One frame, and its id is exactly what diag_slice itself would report,
+// matching this function's behavior before it existed for this case.
+$raw = str_repeat('x', 10);
+check('a single unterminated fragment (diag_slice\'s over-long-line case) is one frame',
+      diag_sse_frames($raw, 5) === [['id' => 15, 'data' => $raw]]);
+
 /* ── diag_evidence_file(): the engine stamps its OWN run subdirectory ────
    inside --out (OUTDIR/STAMP), so sense-<dev>.txt / dmesg-<dev>.txt land at
    $dir/<STAMP>/name, never at $dir/name directly. Reading the flat path is

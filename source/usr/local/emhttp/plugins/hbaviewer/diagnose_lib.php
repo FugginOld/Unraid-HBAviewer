@@ -217,6 +217,36 @@ function diag_slice(string $file, int $offset, int $maxBytes): array {
     return ['bytes' => $buf, 'offset' => $next, 'eof' => $next >= $size];
 }
 
+/* Turns one diag_slice() read into distinct SSE frames, one per ndjson
+   line, each with its own running id:. Sending several `data:` lines
+   under one trailing blank line joins them per the SSE spec into ONE
+   event whose data is those lines glued with "\n" -- not valid JSON, so
+   the browser's JSON.parse(m.data) throws and diagnose_view.js's
+   onmessage silently drops the whole batch. This is why a resume's
+   offset-0 replay -- guaranteed more than one line for any job with more
+   than one event already written -- never redrew anything. $offset is
+   the byte offset this SLICE started from, not diag_slice()'s own
+   advanced $s['offset']; the caller still uses that to know where to
+   read from next. */
+function diag_sse_frames(string $bytes, int $offset): array {
+    if ($bytes === '') return [];
+    $hasNl = substr($bytes, -1) === "\n";
+    $lines = explode("\n", rtrim($bytes, "\n"));
+    $n = count($lines);
+    $pos = $offset;
+    $frames = [];
+    foreach ($lines as $i => $line) {
+        // diag_slice() guarantees every line but a possible final raw
+        // fragment ends in "\n" -- that fragment appears alone
+        // (diag_slice's own over-long-line fallback, pinned by
+        // tests/diagnose_test.php) and its id is the slice's own
+        // offset, same as before this function existed.
+        $pos += strlen($line) + ($i < $n - 1 || $hasNl ? 1 : 0);
+        $frames[] = ['id' => $pos, 'data' => $line];
+    }
+    return $frames;
+}
+
 /* Is the array mid-parity-op? mdResync is nonzero during a check or rebuild.
    Fails closed the way flash_array_stopped() does: an unreadable state is a
    refusal, not a pass. */
