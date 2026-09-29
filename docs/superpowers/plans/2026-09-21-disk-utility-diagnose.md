@@ -1,5 +1,12 @@
 # Disk Utility Phase 1 — Diagnose Implementation Plan
 
+> **Status: COMPLETE.** All 16 tasks. Hardware verification blocks A–F confirmed on Golem,
+> 2026-09-22 through 2026-09-28. `sg_verify` reported `1.30`. Two fix rounds landed during Block E
+> verification: `docs/superpowers/plans/2026-09-27-diagnose-reload-resume.md` (the Live view never
+> reattached to a running job after a reload) and `docs/superpowers/plans/2026-09-28-diagnose-sse-framing.md`
+> (the SSE stream silently dropped any batch of more than one event, which sat underneath the first
+> fix and hid the whole Live view's phase/map/counter rendering on every prior test).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** HBAviewer gains a read-only "Diagnose" job that runs the VERIFY-vs-READ media/transport discriminator on one disk, streams its progress live to the Monitor, and ends in an explained verdict.
