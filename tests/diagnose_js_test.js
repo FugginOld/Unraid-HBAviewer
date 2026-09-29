@@ -153,6 +153,11 @@ check('a counter event renders the delta',
 A({ t: 'verdict', disk: 'sdb', v: 'TRANSPORT', why: 'verify clean, read failed x3' });
 check('a verdict event switches to the verdict screen',
       els.get('diag-verdict').hidden === false && els.get('diag-live').hidden === true);
+// STANDBY is not a fault -- the drive was simply left asleep -- so it must
+// not log at the same 'crit' severity as an actual TRANSPORT/MEDIA verdict.
+A({ t: 'verdict', disk: 'sdd', v: 'STANDBY', why: 'left asleep -- Diagnose never spins a disk up' });
+check('a STANDBY verdict logs at warn severity, not crit',
+      els.get('diag-stream')._html.includes('lu-warn'));
 
 /* ── starting a job, EventSource lifecycle, and the pause fix ───────────── */
 /* Async because openStream() -- and the EventSource it opens -- only runs

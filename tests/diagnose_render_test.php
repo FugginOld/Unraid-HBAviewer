@@ -55,6 +55,19 @@ check('the third card is counter movement',
 check('a clean verify reads as clean',  str_contains(strtolower($cards[0]['result']), 'clean'));
 check('a failed read reads as failed',  str_contains(strtolower($cards[1]['result']), 'fail'));
 
+/* ── counter movement is tri-state: absence is not health ──────────────── */
+// No counter event at all: the counters were never collected (no triage ran),
+// which is a different fact from "collected and flat" -- must not read 'none'.
+check('with no counter events, the third card reads not run, not none',
+      diag_evidence_cards([])[2]['result'] === 'not run');
+// Counter events present but every delta is zero: this IS "collected and
+// flat", so the other side of the tri-state must still read 'none'.
+$flatCounters = diag_events_decode(
+    "{\"t\":\"counter\",\"key\":\"disp\",\"before\":210,\"after\":210}\n" .
+    "{\"t\":\"counter\",\"key\":\"uncorr\",\"before\":3,\"after\":3}\n");
+check('counter events present with all-zero deltas still reads none',
+      diag_evidence_cards($flatCounters)[2]['result'] === 'none');
+
 /* ── the tested-ranges table ───────────────────────────────────────────── */
 $rows = diag_ranges_rows($events, ['0x3' => 4], 92);
 check('one row per tested range',            count($rows) === 1);
@@ -113,6 +126,34 @@ $evil = renderDiagVerdict([
 ]);
 check('the disk name is escaped', !str_contains($evil, '<img src=x>'));
 check('the reason is escaped',    !str_contains($evil, '<script>bad()'));
+
+/* ── STANDBY: a Diagnose that reached a sleeping disk, nothing read ────── */
+$sw = diag_verdict_words('STANDBY');
+check('STANDBY title says left asleep', str_contains($sw['title'], 'Left asleep'));
+
+$standbySteps = diag_next_steps('STANDBY', false);
+check('STANDBY next steps say to spin the drive up',
+      str_contains(strtolower(implode(' ', $standbySteps)), 'spin'));
+check('STANDBY next steps say HBAviewer never wakes a drive on purpose',
+      str_contains(strtolower(implode(' ', $standbySteps)), 'never wakes a sleeping drive'));
+
+$standbyHtml = renderDiagVerdict([
+    'disk' => 'sdd', 'verdict' => 'STANDBY', 'why' => 'left asleep -- Diagnose never spins a disk up',
+    'events' => [], 'sense' => [], 'max_cmd_age' => null,
+    'array_disk' => true, 'ports' => [], 'recent' => [],
+]);
+check('the STANDBY screen shows the Left asleep title',
+      str_contains($standbyHtml, 'Left asleep'));
+check('the STANDBY screen carries both next steps',
+      str_contains($standbyHtml, 'Spin the drive up')
+      && str_contains($standbyHtml, 'never wakes a sleeping drive'));
+// No block was read, so all three evidence cards -- VERIFY, READ, and counter
+// movement -- must read 'not run', never 'clean' or 'none': absence is not
+// health (docs/review-policy.md).
+check('all three evidence cards read not run on the STANDBY screen',
+      substr_count($standbyHtml, 'not run') === 3);
+check('the STANDBY screen says no range was tested',
+      str_contains($standbyHtml, 'No range was tested'));
 
 /* ── the drive list sidebar ────────────────────────────────────────────── */
 $drives = [

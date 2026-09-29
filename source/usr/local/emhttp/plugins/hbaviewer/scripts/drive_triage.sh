@@ -217,8 +217,22 @@ tri_chunk() {  # lba n op ms ok(0|1)
 tri_counter() {  # key before after
     tri_emit "\"t\":\"counter\",\"key\":\"$1\",\"before\":$2,\"after\":$3"
 }
+VERDICT_SENT=0
 tri_verdict() {  # disk v why
+    VERDICT_SENT=1
     tri_emit "\"t\":\"verdict\",\"disk\":\"$(tri_esc "$1")\",\"v\":\"$2\",\"why\":\"$(tri_esc "$3")\""
+}
+
+# Is the drive asleep? `smartctl -n standby` exits 2 exactly when it is, so
+# this must not be a `smartctl | grep -q` pipeline: under `set -o pipefail`
+# that pipeline returns smartctl's 2 and reads "asleep" as false -- which is
+# how this check never fired on a real sleeping drive (Golem, sdd, Task 16
+# Block F). Capture first, then match smartctl's own decline message, which
+# it prints only when -n made it leave the drive alone.
+tri_asleep() {  # dev
+    local out
+    out="$(smartctl -n standby -i -d auto "/dev/$1" 2>&1)"
+    grep -qE '^Device is in [A-Z_ ]+ mode' <<< "$out"
 }
 
 # Milliseconds elapsed since $1 (a value from tri_now_ms).
@@ -372,7 +386,7 @@ tri_phase "-" baseline 0
 
 DATA="$RUN/data.tsv"
 : > "$DATA"
-declare -A LBS_OF HOST_OF
+declare -A LBS_OF HOST_OF STANDBY_OF
 
 while IFS=$'\t' read -r name dev status mderr id; do
     # Test-only gate: TRIAGE_SKIP_DEV_CHECK allows test harness to run the
@@ -401,10 +415,8 @@ while IFS=$'\t' read -r name dev status mderr id; do
     done
 
     standby=0
-    if [[ "$SKIP_STANDBY" == "yes" ]]; then
-        if smartctl -n standby -i -d auto "/dev/$dev" 2>&1 | grep -qi 'STANDBY\|SLEEP'; then
-            standby=1
-        fi
+    if [[ "$SKIP_STANDBY" == "yes" ]] && tri_asleep "$dev"; then
+        standby=1; STANDBY_OF["$dev"]=1
     fi
 
     if [[ "$standby" -eq 1 ]]; then
@@ -708,6 +720,16 @@ triage_disk() {
     local name="$1" dev="$2" verdict="$3"
     sect "TRIAGE: $name (/dev/$dev)  [$verdict]"
 
+    # Re-check here, not only at the sweep: this is the one entry every triage
+    # goes through, and sg_verify/sg_read below have no standby guard of their
+    # own. A drive can also spin down between the sweep and this point.
+    if [[ "$SKIP_STANDBY" == "yes" ]] && tri_asleep "$dev"; then
+        warn "$name (/dev/$dev) is in standby -- left asleep, not triaged (VERIFY and READ would spin it up)"
+        SUMMARY+=("$name ($dev): left asleep -- not triaged")
+        STANDBY_OF["$dev"]=1
+        return 0
+    fi
+
     snap "$dev" | grep -E '^[a-z]+=[0-9]+$' > "$RUN/before-$dev.txt"
     local dmark; dmark="$(dmesg | wc -l)"
     local ranges vfail=0 rfail=0 vran=0
@@ -848,6 +870,15 @@ if [[ ${#FLAGGED[@]} -gt 0 && "$AUTO_TRIAGE" == "yes" ]]; then
         [[ $n -gt $MAX_TRIAGE ]] && { warn "hit MAX_TRIAGE=$MAX_TRIAGE, stopping"; break; }
         triage_disk "$name" "$dev" "$verdict"
     done
+fi
+
+# A web Diagnose names one disk. If it was left asleep, nothing above sent a
+# verdict, and the Verdict screen would report "did not classify". Say why,
+# once, here -- one emission point, so a sleeping disk that was also flagged
+# does not emit twice.
+if [[ -n "$DEV_OVERRIDE" && "$VERDICT_SENT" -eq 0 \
+      && -n "${STANDBY_OF[$(basename "$DEV_OVERRIDE")]:-}" ]]; then
+    tri_verdict manual STANDBY "left asleep -- Diagnose never spins a disk up"
 fi
 
 # ============================================================================

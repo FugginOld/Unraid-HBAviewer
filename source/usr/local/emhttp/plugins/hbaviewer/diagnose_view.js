@@ -208,7 +208,7 @@
             st.deltas[ev.key] = { before: ev.before, after: ev.after };
             if (!st.paused) drawCounters();
         } else if (ev.t === 'verdict') {
-            logLine('verdict: ' + ev.v + ' — ' + ev.why, ev.v === 'CLEAN' ? 'ok' : 'crit');
+            logLine('verdict: ' + ev.v + ' — ' + ev.why, ev.v === 'CLEAN' ? 'ok' : (ev.v === 'STANDBY' ? 'warn' : 'crit'));
             /* No arguments: the verdict screen is rendered server-side from the
                job id in luDiagJob, because it needs the sense keys and the
                cmd_age this event does not carry. Passing `ev` here would imply

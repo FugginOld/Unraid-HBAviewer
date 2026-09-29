@@ -23,17 +23,39 @@ trap 'rm -rf "$WORK"' EXIT
 # Every stub records its own argv, so a test can assert which flags were used.
 cat > "$STUBDIR/smartctl" <<'STUB'
 #!/bin/bash
+if [ "${STUB_ASLEEP:-}" = "1" ]; then
+    case " $* " in
+        *" -n standby "*)
+            echo "smartctl $*" >> "$STUB_ARGS"
+            cat "$STUB_SMART_ASLEEP"
+            exit 2
+            ;;
+        *)
+            echo "WOKE smartctl $*" >> "$STUB_ARGS"
+            cat "$STUB_SMART"
+            exit 0
+            ;;
+    esac
+fi
 echo "smartctl $*" >> "$STUB_ARGS"
 cat "$STUB_SMART"
 STUB
 cat > "$STUBDIR/sg_verify" <<'STUB'
 #!/bin/bash
-echo "sg_verify $*" >> "$STUB_ARGS"
+if [ "${STUB_ASLEEP:-}" = "1" ]; then
+    echo "WOKE sg_verify $*" >> "$STUB_ARGS"
+else
+    echo "sg_verify $*" >> "$STUB_ARGS"
+fi
 exit "${STUB_VERIFY_RC:-0}"
 STUB
 cat > "$STUBDIR/sg_read" <<'STUB'
 #!/bin/bash
-echo "sg_read $*" >> "$STUB_ARGS"
+if [ "${STUB_ASLEEP:-}" = "1" ]; then
+    echo "WOKE sg_read $*" >> "$STUB_ARGS"
+else
+    echo "sg_read $*" >> "$STUB_ARGS"
+fi
 exit "${STUB_READ_RC:-0}"
 STUB
 cat > "$STUBDIR/sg_logs" <<'STUB'
@@ -52,6 +74,7 @@ chmod +x "$STUBDIR"/*
 
 # A real SAS capture, already in the repo and already evidence.
 export STUB_SMART="$PWD/fixtures/smart/sas_drive.txt"
+export STUB_SMART_ASLEEP="$PWD/fixtures/smart/sas_standby.txt"
 export STUB_DMESG="$WORK/dmesg.txt"; : > "$STUB_DMESG"
 export STUB_ARGS="$ARGS"
 
@@ -210,6 +233,75 @@ TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
 mutleft=$(grep '^smartctl ' "$ARGS" | grep -v -- '-n standby' || true)
 [ -n "$mutleft" ] && ok "the standby assertion is able to fail (mutant caught)" \
                   || bad "the standby assertion is able to fail" "mutant passed -- the assertion proves nothing"
+: > "$STUB_DMESG"
+
+# ── A drive that is actually asleep must be seen as asleep, not zeroed. ────
+# `-n standby` exits 2 for a sleeping drive; smartctl the stub, and sg_verify/
+# sg_read, all mark a real hardware access with a WOKE line when STUB_ASLEEP=1.
+cat > "$STUBDIR/sg_verify" <<'STUB'
+#!/bin/bash
+if [ "${STUB_ASLEEP:-}" = "1" ]; then
+    echo "WOKE sg_verify $*" >> "$STUB_ARGS"
+else
+    echo "sg_verify $*" >> "$STUB_ARGS"
+fi
+exit "${STUB_VERIFY_RC:-0}"
+STUB
+cat > "$STUBDIR/sg_read" <<'STUB'
+#!/bin/bash
+if [ "${STUB_ASLEEP:-}" = "1" ]; then
+    echo "WOKE sg_read $*" >> "$STUB_ARGS"
+else
+    echo "sg_read $*" >> "$STUB_ARGS"
+fi
+exit "${STUB_READ_RC:-0}"
+STUB
+chmod +x "$STUBDIR/sg_verify" "$STUBDIR/sg_read"
+
+# A -- a sleeping drive is seen as asleep.
+SF_A="$WORK/state_a.tsv"
+printf 'manual\t1700000000\t7\t0\t0\t0\t0\tmanual\n' > "$SF_A"
+outA=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 run --state "$SF_A" --no-triage)
+RUNDIR_A=$(ls -1d "$WORK/out"/*/ 2>/dev/null | head -1)
+has "A: a sleeping drive's slot row ends SLEEPING" "$outA" "SLEEPING"
+smartfile_a=$(find "$RUNDIR_A" -iname 'smart-sdX.txt' 2>/dev/null)
+[ -z "$smartfile_a" ] && ok "A: no smart-sdX.txt is written for a sleeping drive" \
+                       || bad "A: no smart-sdX.txt is written for a sleeping drive" "found: $smartfile_a"
+gotUncorrA=$(awk -F'\t' '$1=="manual"{print $3; exit}' "$SF_A")
+[ "$gotUncorrA" = "7" ] && ok "A: the state file's manual row keeps uncorr=7" \
+                         || bad "A: the state file's manual row keeps uncorr=7" "got '$gotUncorrA'"
+
+# B -- a sleeping, flagged drive is not woken.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+outB=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all)
+wokeB=$(grep -cE '^(WOKE|sg_verify|sg_read)' "$ARGS" || true)
+[ "${wokeB:-0}" -eq 0 ] && ok "B: a sleeping flagged drive is never woken" \
+                         || bad "B: a sleeping flagged drive is never woken" "$wokeB line(s): $(cat "$ARGS")"
+has "B: output says the drive was left asleep" "$outB" "left asleep"
+
+# C -- exactly one STANDBY verdict, flagged and unflagged.
+: > "$EV"
+outC1=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+vcountC1=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountC1" -eq 1 ] && ok "C: exactly one verdict event (flagged+asleep)" \
+                       || bad "C: exactly one verdict event (flagged+asleep)" "got $vcountC1"
+has "C: that verdict is STANDBY (flagged+asleep)" "$(cat "$EV")" '"v":"STANDBY"'
+
+: > "$EV"
+: > "$STUB_DMESG"
+outC2=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+vcountC2=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountC2" -eq 1 ] && ok "C: exactly one verdict event (unflagged+asleep)" \
+                       || bad "C: exactly one verdict event (unflagged+asleep)" "got $vcountC2"
+has "C: that verdict is STANDBY (unflagged+asleep)" "$(cat "$EV")" '"v":"STANDBY"'
+
+# D -- an awake drive is unchanged (regression guard; passes before and after).
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+outD=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+has "D: an awake flagged drive still runs sg_verify" "$(cat "$ARGS")" "sg_verify"
+has "D: an awake flagged drive still runs sg_read"   "$(cat "$ARGS")" "sg_read"
+hasnt "D: an awake drive gets no STANDBY verdict" "$(cat "$EV")" '"v":"STANDBY"'
 : > "$STUB_DMESG"
 
 echo

@@ -521,3 +521,18 @@ moving says nothing about whether the cron sampler is running.
   extended: a guard that holds only on the probe is a guard the next edit
   removes without noticing. Asserted, with a mutation check, in
   `tests/drive_triage_test.sh`.
+- **`smartctl -n standby` exits 2 when the drive is asleep — never pipe it into
+  `grep -q` under `pipefail`.** The pipeline's status is smartctl's 2, so the
+  check reads "awake" for every sleeping drive. `drive_triage.sh` shipped that
+  way and treated every sleeping drive as awake: zeroed counters reported as
+  clean, a zeroed baseline, and a flagged drive spun up by `sg_verify`.
+  `tri_asleep()` captures the output first and matches smartctl's own
+  `Device is in ... mode` decline message. The Verdict screen's "Counter
+  movement" evidence card is tri-state for the same reason absence-is-not-
+  health applies everywhere else: no counter event at all (a STANDBY run, or
+  one that never classified) reads `not run`, distinct from counter events
+  present with every delta at zero, which reads `none`.
+- **`hdparm -C` is not a power-state check for SAS drives.** It sends an ATA
+  command SAS drives reject, then prints `standby` or `unknown` whatever the
+  real state. Use `smartctl -n standby` or `sg_requests`; Unraid's own
+  `disks.ini` `spundown` agrees with both.

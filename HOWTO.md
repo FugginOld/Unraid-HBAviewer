@@ -125,7 +125,9 @@ stopped being read.
 
 **A drive in standby is left asleep.** Diagnose never spins one up to test
 it — every SMART and log-page read passes `-n standby`, and a sleeping
-drive's row in the run is skipped rather than woken.
+drive's row in the run is skipped rather than woken. A Diagnose that reaches
+a sleeping drive ends with a **"Left asleep — not tested"** result; spin the
+drive up first, then run Diagnose again.
 
 **The first run only establishes a baseline.** The counters a verdict is
 argued from (grown defects, uncorrected reads, non-medium errors, invalid

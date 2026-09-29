@@ -46,6 +46,10 @@ function diag_verdict_words(string $v): array {
             'title' => 'No fault reproduced',
             'lead'  => 'Every tested block read cleanly, internally and over the link. The fault did not reproduce — re-run under load, or enable the full-surface scan.',
         ];
+        case 'STANDBY': return [
+            'title' => 'Left asleep — not tested',
+            'lead'  => 'The drive was in standby when this run reached it. Diagnose never spins a disk up, so no block was read and this run says nothing about the drive\'s health.',
+        ];
     }
     return [
         'title' => 'Unknown — this run did not classify',
@@ -59,12 +63,13 @@ function diag_verdict_words(string $v): array {
 function diag_evidence_cards(array $events): array {
     $n = ['verify' => 0, 'read' => 0];
     $f = ['verify' => 0, 'read' => 0];
-    $media = 0; $path = 0;
+    $media = 0; $path = 0; $counterEvents = 0;
     foreach ($events as $e) {
         if (($e['t'] ?? '') === 'chunk' && isset($n[$e['op'] ?? ''])) {
             $n[$e['op']]++;
             if (($e['ok'] ?? true) === false) $f[$e['op']]++;
         } elseif (($e['t'] ?? '') === 'counter') {
+            $counterEvents++;
             $d = (int) ($e['after'] ?? 0) - (int) ($e['before'] ?? 0);
             if ($d <= 0) continue;
             if (in_array($e['key'] ?? '', ['grown', 'uncorr'], true)) $media += $d;
@@ -83,8 +88,13 @@ function diag_evidence_cards(array $events): array {
          'result' => $word($n['read'], $f['read']),
          'detail' => 'The same blocks moved over the wire. Clean VERIFY with a failing READ is a transport fault.'],
         ['title'  => 'Counter movement',
-         'result' => $media === 0 && $path === 0 ? 'none'
-                     : "media +$media · path +$path",
+         // Tri-state, not boolean: no counter event at all means the counters
+         // were never collected (no triage ran -- STANDBY, or a run that did
+         // not classify), which is a different fact from "collected and flat".
+         // 'none' would claim they were checked; absence is not health.
+         'result' => $counterEvents === 0 ? 'not run'
+                     : ($media === 0 && $path === 0 ? 'none'
+                        : "media +$media · path +$path"),
          'detail' => 'Media counters are the platters (grown defects, uncorrected reads); path counters are the wire (running disparity, invalid DWORD, loss of sync).'],
     ];
 }
@@ -164,6 +174,12 @@ function diag_next_steps(string $verdict, bool $arrayDisk): array {
             'This drive is not assigned to the array or a pool, so there is nothing for parity to disagree with.',
             'Plan its replacement. The drive cannot read its own platters at these blocks, and a defect list that keeps growing between runs is a drive on its way out.',
             'Re-run Diagnose in a few hours and compare the counts before deciding: one bad block that never moves again is a different drive from one gaining blocks every run.',
+        ];
+    }
+    if ($verdict === 'STANDBY') {
+        return [
+            'Spin the drive up first — from the Main page, or by reading a file from it — then run Diagnose again.',
+            'It was left asleep on purpose: HBAviewer never wakes a sleeping drive, including to test it.',
         ];
     }
     if ($verdict === 'CLEAN') {

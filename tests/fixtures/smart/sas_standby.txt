@@ -1,0 +1,4 @@
+smartctl 7.5 2025-04-30 r5714 [x86_64-linux-6.18.38-Unraid] (local build)
+Copyright (C) 2002-25, Bruce Allen, Christian Franke, www.smartmontools.org
+
+Device is in STANDBY BY COMMAND mode, exit(2)
