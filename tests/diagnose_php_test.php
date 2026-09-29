@@ -152,6 +152,17 @@ check('the stream frames through diag_sse_frames(), not the old batched echo',
       str_contains($scode, 'diag_sse_frames($s') || str_contains($scode, 'diag_sse_frames( $s'));
 check('the old batched-echo shape is gone (no bare data: loop before one blank line)',
       !preg_match('/foreach\s*\([^)]*explode\("\\\\n"/', $scode));
+// The two checks above only pin that diag_sse_frames() gets called and that
+// the old explode()-based loop is gone -- reverting the loop BODY back to N
+// `data:` echoes under one shared trailing blank line, while still calling
+// diag_sse_frames() to do the splitting, passes both of them. Pin the actual
+// per-frame framing instead: each `data:` echo must carry its OWN blank-line
+// terminator in the SAME statement, and no standalone blank-line echo may
+// exist to serve as one shared terminator for a whole batch.
+check('each frame\'s data: echo carries its own blank-line terminator inline',
+      preg_match('/echo\s*[\'"]data:\s*[\'"]\s*\.\s*\$frame\[[\'"]data[\'"]\]\s*\.\s*"\\\\n\\\\n"/', $scode) === 1);
+check('no standalone blank-line echo exists to terminate a shared batch',
+      !preg_match('/echo\s*"\\\\n"\s*;/', $scode));
 // The end-of-stream check must ask per-JOB liveness (diag_job_running), not
 // the per-disk lock -- the lock is held by whichever job currently owns the
 // disk, not by the specific job this connection is streaming.

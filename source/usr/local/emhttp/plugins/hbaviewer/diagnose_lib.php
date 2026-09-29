@@ -231,7 +231,7 @@ function diag_slice(string $file, int $offset, int $maxBytes): array {
 function diag_sse_frames(string $bytes, int $offset): array {
     if ($bytes === '') return [];
     $hasNl = substr($bytes, -1) === "\n";
-    $lines = explode("\n", rtrim($bytes, "\n"));
+    $lines = explode("\n", $hasNl ? substr($bytes, 0, -1) : $bytes);
     $n = count($lines);
     $pos = $offset;
     $frames = [];

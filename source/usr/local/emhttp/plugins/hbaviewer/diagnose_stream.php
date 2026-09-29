@@ -58,10 +58,19 @@ $start = time();
 while (true) {
     $s = diag_slice($file, $offset, DIAG_SSE_CHUNK);
     if ($s['bytes'] !== '') {
-        foreach (diag_sse_frames($s['bytes'], $offset) as $frame) {
-            /* One frame, one SSE message: this is the whole fix. The id is
-               PER LINE now, not per slice -- a client that reconnects mid-
-               batch resumes after only the events it actually received. */
+        /* The frame base must be diag_slice()'s OWN returned offset minus the
+           bytes it actually read, not the offset the caller asked it for:
+           diag_slice() silently resets to 0 when the requested offset is
+           negative or past the file's current end (a reconnect after the
+           file was trimmed or replaced, or a stale Last-Event-ID), and after
+           that reset $offset no longer matches where the read actually
+           started. $s['offset'] - strlen($s['bytes']) holds regardless,
+           because both of diag_slice()'s non-empty-bytes return paths
+           satisfy offset == effectiveStart + strlen(bytes). */
+        foreach (diag_sse_frames($s['bytes'], $s['offset'] - strlen($s['bytes'])) as $frame) {
+            /* The id is the per-frame offset. That is the entire resume
+               mechanism: the browser stores it and hands it back as
+               Last-Event-ID, so the server holds no per-client state at all. */
             echo 'id: ' . $frame['id'] . "\n";
             echo 'data: ' . $frame['data'] . "\n\n";
         }

@@ -297,6 +297,20 @@ check('ids are the running per-line offset, not just the final one',
 
 check('empty bytes produce no frames', diag_sse_frames('', 0) === []);
 
+// Post-review fix: rtrim($bytes, "\n") strips EVERY trailing newline, not just
+// the one diag_slice() guarantees -- for a pathological slice ending in "\n\n"
+// that swallows a real trailing blank line and leaves the last id one byte
+// short of the true offset. Stripping exactly one trailing newline keeps that
+// blank line as its own (empty) frame.
+$dblNl = "{\"a\":1}\n{\"b\":2}\n\n";
+$dblFrames = diag_sse_frames($dblNl, 0);
+check('a slice ending in two newlines yields three frames, not two',
+      count($dblFrames) === 3);
+check('the extra trailing newline becomes its own empty final frame',
+      $dblFrames[2]['data'] === '');
+check('the last id lands at the true byte length, not one short',
+      end($dblFrames)['id'] === strlen($dblNl));
+
 check('resuming mid-stream keeps ids relative to the real file offset',
       diag_sse_frames("{\"c\":3}\n", 16) === [['id' => 24, 'data' => '{"c":3}']]);
 
@@ -306,6 +320,27 @@ check('resuming mid-stream keeps ids relative to the real file offset',
 $raw = str_repeat('x', 10);
 check('a single unterminated fragment (diag_slice\'s over-long-line case) is one frame',
       diag_sse_frames($raw, 5) === [['id' => 15, 'data' => $raw]]);
+
+// Post-review fix: diag_slice() silently resets to offset 0 internally when
+// the requested offset is negative or past the file's current end (a client
+// reconnecting after the file was trimmed/replaced, or a stale
+// Last-Event-ID). The frame base must come from diag_slice()'s OWN returned
+// offset, not the offset the caller asked it to read from -- otherwise every
+// frame id is wrong by the stale requested offset. Reproduces the reviewer's
+// case: a 16-byte 2-line file, requesting offset 5000 (past EOF) must give
+// frame ids 8,16, not 5008,5016.
+$resetBytes = "{\"a\":1}\n{\"b\":2}\n";
+$resetEv = "$jd/reset.ndjson";
+file_put_contents($resetEv, $resetBytes);
+$rs = diag_slice($resetEv, 5000, 4096);
+check('an offset past EOF makes diag_slice() reset internally to zero',
+      $rs['offset'] === strlen($resetBytes));
+$rsFrames = diag_sse_frames($rs['bytes'], $rs['offset'] - strlen($rs['bytes']));
+check('the frame base derives from diag_slice()\'s own offset, so ids land at 8 and 16',
+      $rsFrames[0]['id'] === 8 && $rsFrames[1]['id'] === 16);
+check('the last frame id equals diag_slice()\'s returned offset, not the stale requested one',
+      end($rsFrames)['id'] === $rs['offset']);
+@unlink($resetEv);
 
 /* ── diag_evidence_file(): the engine stamps its OWN run subdirectory ────
    inside --out (OUTDIR/STAMP), so sense-<dev>.txt / dmesg-<dev>.txt land at
