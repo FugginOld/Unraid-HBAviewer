@@ -23,6 +23,30 @@ trap 'rm -rf "$WORK"' EXIT
 # Every stub records its own argv, so a test can assert which flags were used.
 cat > "$STUBDIR/smartctl" <<'STUB'
 #!/bin/bash
+# Counter mode: the standby PROBE ( -n standby -i ... , tri_asleep's own call)
+# answers differently by call number, to race the sweep's probe against
+# triage_disk()'s re-check. Keyed on " -i " specifically -- snap()'s "-x"
+# call, the initial "-x" collection call, and the self-test "-t"/"-l" calls
+# must never be counted or answered by this branch.
+if [ -n "${STUB_PROBE_COUNTER:-}" ]; then
+    case " $* " in
+        *" -i "*)
+            n=$(( $(cat "$STUB_PROBE_COUNTER" 2>/dev/null || echo 0) + 1 ))
+            echo "$n" > "$STUB_PROBE_COUNTER"
+            asleep=0
+            [ -n "${STUB_PROBE_ASLEEP_MAX:-}" ] && [ "$n" -le "$STUB_PROBE_ASLEEP_MAX" ] && asleep=1
+            [ -n "${STUB_PROBE_AWAKE_MAX:-}" ]  && [ "$n" -gt "$STUB_PROBE_AWAKE_MAX" ]  && asleep=1
+            echo "smartctl $*" >> "$STUB_ARGS"
+            if [ "$asleep" = "1" ]; then
+                cat "$STUB_SMART_ASLEEP"
+                exit 2
+            else
+                cat "$STUB_SMART"
+                exit 0
+            fi
+            ;;
+    esac
+fi
 if [ "${STUB_ASLEEP:-}" = "1" ]; then
     case " $* " in
         *" -n standby "*)
@@ -302,6 +326,49 @@ outD=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --a
 has "D: an awake flagged drive still runs sg_verify" "$(cat "$ARGS")" "sg_verify"
 has "D: an awake flagged drive still runs sg_read"   "$(cat "$ARGS")" "sg_read"
 hasnt "D: an awake drive gets no STANDBY verdict" "$(cat "$EV")" '"v":"STANDBY"'
+: > "$STUB_DMESG"
+
+# E -- VERDICT_SENT guard: asleep at the sweep, awake again by the time
+# triage_disk() re-checks it. The sweep's own probe is call 1 (declines,
+# asleep); triage_disk()'s re-check is call 2 (answers normally, awake), so
+# triage runs for real and tri_verdict() sends the actual verdict. Without
+# VERDICT_SENT, the end-of-run check would not know a verdict already went
+# out and would append a second, false STANDBY on top of it.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+PC_E="$WORK/probe_e"; rm -f "$PC_E"
+outE=$(STUB_PROBE_COUNTER="$PC_E" STUB_PROBE_ASLEEP_MAX=1 \
+       TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+       run --auto-triage --all --events "$EV")
+has "E: the sweep saw it asleep (SLEEPING row)" "$outE" "SLEEPING"
+has "E: triage_disk found it awake and actually ran (sg_verify called)" "$(cat "$ARGS")" "sg_verify"
+vcountE=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountE" -eq 1 ] && ok "E: exactly one verdict (asleep at sweep, awake by triage)" \
+                      || bad "E: exactly one verdict (asleep at sweep, awake by triage)" "got $vcountE: $(cat "$EV")"
+hasnt "E: that verdict is not STANDBY -- triage's real verdict must win" "$(cat "$EV")" '"v":"STANDBY"'
+: > "$STUB_DMESG"
+
+# F -- STANDBY_OF guard (reverse race): awake at the sweep, asleep by the
+# time triage_disk() re-checks it. The sweep's probe is call 1 (answers
+# normally, awake, so it is flagged and queued for triage); triage_disk()'s
+# re-check is call 2 (declines, asleep), so triage_disk marks STANDBY_OF
+# itself -- the sweep never saw this disk asleep. Without that mark, nothing
+# records the disk as asleep and the end-of-run check stays silent instead of
+# telling the Verdict screen why nothing was tested.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+PC_F="$WORK/probe_f"; rm -f "$PC_F"
+outF=$(STUB_PROBE_COUNTER="$PC_F" STUB_PROBE_AWAKE_MAX=1 \
+       TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+       run --auto-triage --all --events "$EV")
+hasnt "F: the sweep saw it awake (no SLEEPING row)" "$outF" "SLEEPING"
+vcountF=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountF" -eq 1 ] && ok "F: exactly one verdict (awake at sweep, asleep by triage)" \
+                      || bad "F: exactly one verdict (awake at sweep, asleep by triage)" "got $vcountF: $(cat "$EV")"
+has "F: that verdict is STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
+wokeF=$(grep -cE '^(WOKE|sg_verify|sg_read)' "$ARGS" || true)
+[ "${wokeF:-0}" -eq 0 ] && ok "F: triage_disk's re-check caught it before any wake" \
+                         || bad "F: triage_disk's re-check caught it before any wake" "$wokeF line(s): $(cat "$ARGS")"
 : > "$STUB_DMESG"
 
 echo
