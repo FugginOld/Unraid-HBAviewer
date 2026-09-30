@@ -469,6 +469,8 @@ vcountJ=$(grep -c '"t":"verdict"' "$EV")
 [ "$vcountJ" -eq 1 ] && ok "J: exactly one verdict" || bad "J: exactly one verdict" "got $vcountJ: $(cat "$EV")"
 has "J: that verdict is STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
 hasnt "J: no counter movement is reported" "$(cat "$EV")" '"t":"counter"'
+smartfile_j=$(find "$WORK/out" -iname 'smart-sdX.txt' 2>/dev/null)
+[ -z "$smartfile_j" ] && ok "J: the declined before-snap leaves no smart-sdX.txt behind"                        || bad "J: the declined before-snap leaves no smart-sdX.txt behind" "found: $smartfile_j"
 
 # K -- the after-snap declines (asleep again by the end of triage). Its
 # zeros must not be compared against the before-snap: that would report the
@@ -479,7 +481,10 @@ outK=$(STUB_X_DECLINE_FROM=3 STUB_X_COUNTER="$XC_K" TRIAGE_SKIP_DEV_CHECK=1 TRIA
        run --auto-triage --all --events "$EV")
 has "K: triage ran (sg_verify called)" "$(cat "$ARGS")" "sg_verify"
 hasnt "K: a declined after-snap reports no counter movement" "$(cat "$EV")" '"t":"counter"'
-hasnt "K: triage's own verdict stands, not STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
+vcountK=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountK" -eq 1 ] && ok "K: exactly one verdict" || bad "K: exactly one verdict" "got $vcountK: $(cat "$EV")"
+has "K: triage's own verdict stands (CLEAN), not STANDBY" "$(cat "$EV")" '"v":"CLEAN"'
+hasnt "K: the deltas header is not printed with nothing under it" "$outK" "counter deltas across this triage"
 : > "$STUB_DMESG"
 
 echo

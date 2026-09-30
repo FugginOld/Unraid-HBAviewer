@@ -764,6 +764,7 @@ triage_disk() {
     # check reads the file it left rather than anything it set.
     snap "$dev" | grep -E '^[a-z]+=[0-9]+$' > "$RUN/before-$dev.txt"
     if tri_declined "$(< "$RUN/smart-$dev.txt")"; then
+        rm -f "$RUN/smart-$dev.txt" "$RUN/before-$dev.txt"
         tri_left_alone "$name" "$dev"; return 0
     fi
     local dmark; dmark="$(dmesg | wc -l)"
@@ -854,7 +855,7 @@ triage_disk() {
         : > "$RUN/after-$dev.txt"
     fi
     log ""
-    log "  counter deltas across this triage:"
+    [[ -s "$RUN/after-$dev.txt" ]] && log "  counter deltas across this triage:"
     local dmedia=0 dpath=0
     while IFS='=' read -r k v2; do
         local v1; v1="$(grep -m1 "^$k=" "$RUN/before-$dev.txt" | cut -d= -f2)"

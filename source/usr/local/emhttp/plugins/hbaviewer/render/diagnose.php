@@ -94,7 +94,8 @@ function diag_evidence_cards(array $events): array {
         ['title'  => 'Counter movement',
          // Tri-state, not boolean: no counter event at all means the counters
          // were never collected (no triage ran -- STANDBY, or a run that did
-         // not classify), which is a different fact from "collected and flat".
+         // not classify -- or the drive declined the after-triage read), which
+         // is a different fact from "collected and flat".
          // 'none' would claim they were checked; absence is not health.
          'result' => $counterEvents === 0 ? 'not run'
                      : ($media === 0 && $path === 0 ? 'none'
