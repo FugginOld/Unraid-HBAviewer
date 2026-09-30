@@ -541,7 +541,8 @@ sed 's/^MAX_TRIAGE="3"/MAX_TRIAGE="0"/' "$DT" > "$MUT0"
 grep -q '^MAX_TRIAGE="0"' "$MUT0" || bad "L: MAX_TRIAGE mutant built" "sed did not match"
 : > "$ARGS"; : > "$EV"
 TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
-    PATH="$STUBDIR:$PATH" bash "$MUT0" --out "$WORK/m0out" --auto-triage --all --events "$EV" /dev/sdX >/dev/null 2>&1
+    PATH="$STUBDIR:$PATH" bash "$MUT0" --out "$WORK/m0out" --auto-triage --all --events "$EV" /dev/sdX > "$WORK/m0.log" 2>&1
+has "L: the MAX_TRIAGE=0 run finished (it is not passing by crashing)" "$(cat "$WORK/m0.log")" "no slots flagged"
 hasnt "L: MAX_TRIAGE=0 leaves the named disk untested" "$(cat "$ARGS")" "sg_verify"
 
 # The CLI without --all keeps TRIAGE_EVIDENCE_ONLY: a clean named disk has no
