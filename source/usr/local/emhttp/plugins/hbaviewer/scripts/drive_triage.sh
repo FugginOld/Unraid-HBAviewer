@@ -897,6 +897,19 @@ triage_disk() {
     [[ $dmedia -gt 0 ]] && bad "media counters rose by $dmedia during this run"
 }
 
+# A named disk (a web Diagnose) is a request to test that disk. One the sweep
+# did not flag used to get no triage and no verdict, and the Verdict screen
+# said "did not classify" about a healthy drive. Queue it like a flagged disk
+# with no recorded sectors: the LBA 0 spot-check, and a real verdict. A disk
+# left alone at the sweep stays that way -- triage_disk() re-checks it anyway.
+if [[ -n "$DEV_OVERRIDE" && "$AUTO_TRIAGE" == "yes" ]]; then
+    ndev="$(basename "$DEV_OVERRIDE")"
+    if [[ -z "${STANDBY_OF[$ndev]:-}" ]] \
+       && ! printf '%s\n' "${FLAGGED[@]}" | grep -q ":$ndev:"; then
+        FLAGGED+=("0:manual:$ndev:clean")
+    fi
+fi
+
 if [[ ${#FLAGGED[@]} -gt 0 && "$AUTO_TRIAGE" == "yes" ]]; then
     # worst first, by score
     mapfile -t ORDERED < <(printf '%s\n' "${FLAGGED[@]}" | sort -t: -k1,1nr)

@@ -487,5 +487,27 @@ has "K: triage's own verdict stands (CLEAN), not STANDBY" "$(cat "$EV")" '"v":"C
 hasnt "K: the deltas header is not printed with nothing under it" "$outK" "counter deltas across this triage"
 : > "$STUB_DMESG"
 
+# L -- a web Diagnose on a healthy, awake drive the sweep does not flag.
+# It used to get no triage and so no verdict, and the Verdict screen said
+# "did not classify". The drive the user named is always tested: the LBA 0
+# spot-check, and a real verdict.
+: > "$STUB_DMESG"
+: > "$EV"
+outL=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+has "L: an unflagged named drive is still triaged (sg_verify called)" "$(cat "$ARGS")" "sg_verify"
+vcountL=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountL" -eq 1 ] && ok "L: exactly one verdict" || bad "L: exactly one verdict" "got $vcountL: $(cat "$EV")"
+has "L: that verdict is CLEAN" "$(cat "$EV")" '"v":"CLEAN"'
+# A named drive already left asleep at the sweep is not queued as well: one
+# power probe, not a second one from triage_disk()'s re-check.
+: > "$EV"
+outL3=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+probesL3=$(grep -c ' -i ' "$ARGS")
+[ "$probesL3" -eq 1 ] && ok "L: a named drive asleep at the sweep is probed once, not queued" \
+                       || bad "L: a named drive asleep at the sweep is probed once, not queued" "got $probesL3 probes"
+# Without --auto-triage (CLI sweep only) nothing is triaged, as before.
+outL2=$(TRIAGE_SKIP_DEV_CHECK=1 run --no-triage)
+hasnt "L: --no-triage still triages nothing" "$(cat "$ARGS")" "sg_verify"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }
