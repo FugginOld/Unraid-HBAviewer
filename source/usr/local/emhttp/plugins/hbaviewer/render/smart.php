@@ -37,6 +37,13 @@ function smart_state(array $s): string {
     return ((int) ($s['defects'] ?? 0) > 0 || (int) ($s['pending'] ?? 0) > 0) ? 'warn' : 'ok';
 }
 
+/* What to call a 'nodata' drive. "standby" is a measured power state: only a
+   read smartctl declined because the drive was asleep earns it. A missing
+   smartctl, a failed read or output nothing parsed is "no data". */
+function smart_nodata_label(array $s): string {
+    return (($s['standby'] ?? '') === '1') ? 'standby' : 'no data';
+}
+
 /* The colours those states have always rendered as, kept in step across the
    SMART table, the per-drive line and the bay map. */
 function smart_state_color(string $state): string {
@@ -65,7 +72,7 @@ function renderSmartTable(array $data, ?int $ageSecs = null, array $roles = [], 
         $s     = $d['smart'] ?? [];
         $state = smart_state($s);
         $hb    = $state === 'nodata'
-            ? '<span class="lu-muted">standby</span>'
+            ? '<span class="lu-muted">' . smart_nodata_label($s) . '</span>'
             : '<span style="color:' . smart_state_color($state) . ';font-weight:700">'
               . htmlspecialchars($s['health']) . '</span>';
         $cell = fn($v, $suf = '') => ($v ?? '') !== '' ? htmlspecialchars((string) $v) . $suf : $dash;

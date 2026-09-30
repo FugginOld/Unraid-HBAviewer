@@ -958,6 +958,19 @@ check('smart_state warn on defects', smart_state(['health'=>'OK','defects'=>'1']
 check('smart_state fail',    smart_state(['health'=>'FAILED']) === 'fail');
 check('smart_state nodata on empty', smart_state([]) === 'nodata');
 check('smart_state nodata is uncoloured', smart_state_color('nodata') === '');
+// "standby" is a measured power state, not a synonym for "no data": only a
+// read smartctl declined because the drive was asleep earns it. A missing
+// smartctl or a failed read is just no data.
+check('no-data label is standby only when smartctl said so',
+      smart_nodata_label(['standby' => '1']) === 'standby');
+check('no-data label without the standby flag is no data',
+      smart_nodata_label([]) === 'no data' && smart_nodata_label(['standby' => '']) === 'no data');
+$ndHtml = renderSmartTable(['drives' => [
+    ['dev' => '/dev/sdy', 'serial' => 'A', 'model' => 'M', 'smart' => []],
+    ['dev' => '/dev/sdz', 'serial' => 'B', 'model' => 'M', 'smart' => ['standby' => '1']],
+]]);
+check('the SMART table says no data for an unread drive and standby for a sleeping one',
+      substr_count($ndHtml, '>no data<') === 1 && substr_count($ndHtml, '>standby<') === 1);
 
 check('drive_dev_name prefers os_name', drive_dev_name(['os_name'=>'/dev/sdb','serial'=>'X'], ['X'=>'/dev/sdq']) === '/dev/sdb');
 check('drive_dev_name null without serial', drive_dev_name(['serial'=>''], ['X'=>'/dev/sdq']) === null);
@@ -1084,7 +1097,7 @@ $h = renderSmartTable(['drives' => [
      'smart'=>['health'=>'PASSED','temp'=>'34','defects'=>'0','pending'=>'0','power_on_hours'=>'12345']],
     ['dev'=>'/dev/sdc','model'=>'WD80EFAX','serial'=>'WD-XYZ',
      'smart'=>['health'=>'PASSED','temp'=>'36','defects'=>'2','pending'=>'0','power_on_hours'=>'900']],
-    ['dev'=>'/dev/sdd','model'=>'HUH721','serial'=>'K1234','smart'=>[]],
+    ['dev'=>'/dev/sdd','model'=>'HUH721','serial'=>'K1234','smart'=>['standby'=>'1']],
 ]]);
 check('smart healthy green',  str_contains($h, '#2ecc71'));
 check('smart defects amber',  str_contains($h, '#f39c12'));

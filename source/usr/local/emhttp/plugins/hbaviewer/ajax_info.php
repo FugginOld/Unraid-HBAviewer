@@ -142,7 +142,7 @@ if ($type === 'smart') {
     $raw = shell_exec('bash ' . escapeshellarg("$scripts/read_smart.sh") . ' ' . escapeshellarg($dev));
     $s = json_decode((string) $raw, true) ?: [];
     if (($s['health'] ?? '') === '' && ($s['temp'] ?? '') === '') {
-        echo '<span class="lu-muted">standby (not read)</span>'; exit;
+        echo '<span class="lu-muted">' . smart_nodata_label($s) . ' (not read)</span>'; exit;
     }
 
     $color = smart_state_color(smart_state($s));

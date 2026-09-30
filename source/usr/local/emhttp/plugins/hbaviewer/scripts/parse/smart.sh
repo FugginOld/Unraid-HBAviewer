@@ -14,7 +14,10 @@ TRAN="${1:-}"   # "sas" | "sata" | "" — from lsblk, injected by read_smart.sh.
 awk -v tran="$TRAN" '
 function afterColon(s){ sub(/^[^:]*:[ \t]*/,"",s); gsub(/[ \t]+$/,"",s); return s }
 BEGIN { health=""; temp=""; trip=""; poh=""; defects=""; pending=""; nonmed="";
-        st=""; sp=""; sd=""; spd=""; is_sas=0; is_sata=0 }
+        st=""; sp=""; sd=""; spd=""; is_sas=0; is_sata=0; standby="" }
+# smartctl -n standby declined because the drive is asleep. The only line
+# that proves a power state: every other empty result is just "no data".
+/^Device is in [A-Z_ ]+ mode/                { standby="1" }
 # ── SAS: named fields ────────────────────────────────────────────────────────
 # These fields only ever appear in SCSI/SAS log-page output, never in an ATA
 # passthrough read — so seeing one is proof of the drives own vocabulary,
@@ -55,7 +58,7 @@ END {
     if (is_sas)        transport = "sas"
     else if (is_sata)  transport = "sata"
     else                transport = tran
-    printf "{\"health\":\"%s\",\"temp\":\"%s\",\"trip_temp\":\"%s\",\"power_on_hours\":\"%s\",\"defects\":\"%s\",\"pending\":\"%s\",\"nonmedium\":\"%s\",\"transport\":\"%s\"}", \
-        health, temp, trip, poh, defects, pending, nonmed, transport
+    printf "{\"health\":\"%s\",\"temp\":\"%s\",\"trip_temp\":\"%s\",\"power_on_hours\":\"%s\",\"defects\":\"%s\",\"pending\":\"%s\",\"nonmedium\":\"%s\",\"transport\":\"%s\",\"standby\":\"%s\"}", \
+        health, temp, trip, poh, defects, pending, nonmed, transport, standby
 }
 '

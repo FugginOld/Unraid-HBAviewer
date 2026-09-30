@@ -75,6 +75,7 @@ STUB_FIXTURE="$PWD/fixtures/smart/sas_drive.txt"
 out=$(run sas); args=$(cat "$STUB_ARGS")
 arghas "sas bus: -n standby (a SAS read woke a sleeping drive on Golem)" '-n standby'
 has      "sas bus + SAS drive: transport is sas"                        '"transport":"sas"'
+has      "sas bus, awake: not reported as standby"                      '"standby":""'
 
 # ── sata bus, real SATA drive: the spin-up guard applies, and
 # the drive's own ATA vocabulary agrees with the bus. ───────────────────────
@@ -112,6 +113,7 @@ STUB_FIXTURE="$PWD/fixtures/smart/sas_drive.txt"
 out=$(STUB_ASLEEP_FIXTURE="$PWD/fixtures/smart/sas_standby.txt" run sas)
 has "sas bus, asleep: no health reported"      '"health":""'
 has "sas bus, asleep: no temperature reported" '"temp":""'
+has "sas bus, asleep: the decline is reported as standby" '"standby":"1"'
 
 echo
 [ $fail -eq 0 ] && { echo "read_smart: all pass"; exit 0; } || { echo "read_smart: FAILURES"; exit 1; }
