@@ -422,9 +422,8 @@ if [ -x "$LSIUTIL" ]; then
         run "02-raw/lsiutil_p${p}_eventlog.txt" hba_query -e -p"$p" -a 35,0
     done
 fi
-# TRAN is the SAS-vs-SATA signal. read_smart.sh already branches on it (a SAS
-# log-page read does not spin a drive up; an ATA one can), but nothing recorded
-# it, so no bundle could answer "are these drives SATA?" without asking.
+# TRAN is the SAS-vs-SATA bus signal. Nothing else recorded it, so no bundle
+# could answer "are these drives SATA?" without asking.
 run 02-raw/lsblk.txt lsblk -S -P -o NAME,TRAN,WWN,SERIAL,MODEL
 
 # ── Section 3: sysfs ─────────────────────────────────────────────────────────

@@ -722,9 +722,9 @@ run_read() {
 # -n standby on EVERY call, including the ones inside a triage that has already
 # decided the disk is awake. HBAviewer's standing guarantee is that nothing it
 # does wakes a sleeping disk, and a guard that holds only on the probe is a
-# guard the next edit removes without noticing. This is deliberately stricter
-# than scripts/read_smart.sh, which skips the flag on the SAS bus because a
-# log-page read is electronics-only; that exception is not extended here.
+# guard the next edit removes without noticing. scripts/read_smart.sh once
+# skipped it on the SAS bus as "electronics-only"; that woke a sleeping SAS
+# drive on Golem, and it no longer does.
 snap() {  # device -> summed counters, one key per line
     local S="$RUN/smart-$1.txt"
     smartctl -x -d auto -n standby "/dev/$1" > "$S" 2>&1

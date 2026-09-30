@@ -515,12 +515,16 @@ moving says nothing about whether the cron sampler is running.
   `kill -0` signals the caller's own process group — the php-fpm pool — and
   `kill -1` signals everything the user can reach, and both are what a
   truncated pgid file most easily produces.
-- **`-n standby` is absolute on the Diagnose and disk-alert paths**, and that is
-  deliberately stricter than `scripts/read_smart.sh`, which skips the flag on
-  the SAS bus because a log-page read is electronics-only. The exception is not
-  extended: a guard that holds only on the probe is a guard the next edit
-  removes without noticing. Asserted, with a mutation check, in
-  `tests/drive_triage_test.sh`.
+- **`-n standby` is absolute on every SMART read, SAS included.**
+  `scripts/read_smart.sh` (the SMART tab and the drive popup) used to skip it
+  on the SAS bus, on the theory that a SAS log-page read is electronics-only.
+  It is not: on Golem (2026-09-29) `smartctl -a` spun a sleeping SAS drive up
+  within a second, and that path had been waking drives every time the SMART
+  tab collected. A guard that holds only on some paths is a guard the next
+  edit removes without noticing. Asserted in `tests/drive_triage_test.sh`
+  (with a mutation check) and `tests/read_smart_test.sh`. The one deliberate
+  exception is `locate_drive.sh`, whose whole job is to make the activity LED
+  blink.
 - **`smartctl -n standby` exits 2 when the drive is asleep — never pipe it into
   `grep -q` under `pipefail`.** The pipeline's status is smartctl's 2, so the
   check reads "awake" for every sleeping drive. `drive_triage.sh` shipped that

@@ -59,11 +59,13 @@ run() {  # $1 = STUB_TRAN
     STUB_TRAN="$1" PATH="$STUBDIR:$PATH" bash "$RS" /dev/sdX
 }
 
-# ── sas bus, real SAS drive: bus decision skips the spin-up guard, and the
-# drive's own SAS vocabulary happens to agree with the bus. ─────────────────
+# ── sas bus, real SAS drive: -n standby like every other bus. The read used
+# to skip it on the theory that a SAS log-page read is electronics-only;
+# on Golem (2026-09-29) `smartctl -a` spun a sleeping SAS drive (sdd) up
+# within a second. The drive's own SAS vocabulary agrees with the bus. ──────
 STUB_FIXTURE="$PWD/fixtures/smart/sas_drive.txt"
 out=$(run sas); args=$(cat "$STUB_ARGS")
-arghasnt "sas bus: no -n standby (electronics-only read wakes nothing)" '-n standby'
+arghas "sas bus: -n standby (a SAS read woke a sleeping drive on Golem)" '-n standby'
 has      "sas bus + SAS drive: transport is sas"                        '"transport":"sas"'
 
 # ── sata bus, real SATA drive: bus decision respects the spin-up guard, and
@@ -88,15 +90,21 @@ out=$(run ""); args=$(cat "$STUB_ARGS")
 has "empty bus, silent drive: fallback argument forwarded as empty" '"transport":""'
 
 # ── issue #10 (@jac2424, SAS9207-8i): a SATA drive behind a SAS HBA. lsblk
-# calls the bus "sas" -- same as a real SAS drive -- so the spin-up guard is
-# STILL skipped here. That is the known, deliberately-unfixed gap (see the
-# comment in read_smart.sh): an ATA passthrough read gets no -n standby guard
-# on this path. What this plan DOES fix: the drive's own ATA attribute table
-# overrides the "sas" bus guess in the reported transport. ──────────────────
+# calls the bus "sas" -- same as a real SAS drive. It used to skip the
+# spin-up guard for that reason; now nothing does. The drive's own ATA
+# attribute table overrides the "sas" bus guess in the reported transport. ──
 STUB_FIXTURE="$PWD/fixtures/smart/sata_drive.txt"
 out=$(run sas); args=$(cat "$STUB_ARGS")
-arghasnt "SATA-behind-SAS: no -n standby (the known, unfixed spin-up gap)" '-n standby'
+arghas "SATA-behind-SAS: -n standby (issue #10's spin-up gap is closed)" '-n standby'
 has      "SATA-behind-SAS: drive's ATA vocabulary overrides the sas bus"   '"transport":"sata"'
+
+# ── sas bus, drive asleep: smartctl's decline (Golem's captured reply) reports
+# no health and no temperature, which the SMART tab and the drive popup show
+# as standby -- never as a reading. ────────────────────────────────────────
+STUB_FIXTURE="$PWD/fixtures/smart/sas_standby.txt"
+out=$(run sas)
+has "sas bus, asleep: no health reported"      '"health":""'
+has "sas bus, asleep: no temperature reported" '"temp":""'
 
 echo
 [ $fail -eq 0 ] && { echo "read_smart: all pass"; exit 0; } || { echo "read_smart: FAILURES"; exit 1; }
