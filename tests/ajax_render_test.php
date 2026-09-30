@@ -775,6 +775,12 @@ check('baymap unplaceable drive still appears, with a null key',
    that guard), and no constant in the file is used before its declaration. */
 check('the SMART cache path is declared above the dispatch guard', defined('SMART_CACHE_PATH'));
 
+// The drive popup's no-data label goes through the same helper as the table;
+// a literal "standby" there would claim a power state nobody measured.
+check('the drive popup labels no data through smart_nodata_label()',
+      str_contains((string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php'),
+                   "smart_nodata_label(\$s) . ' (not read)"));
+
 // ajax_info.php's dispatch/fetch requires every render/*.php file at load time
 // (see the CLI-seam comment above), so the same "declared before it's used"
 // guarantee has to scan those too, or a render file is a blind spot for it.

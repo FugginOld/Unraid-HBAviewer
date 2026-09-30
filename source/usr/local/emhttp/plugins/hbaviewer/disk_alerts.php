@@ -99,7 +99,9 @@ function disk_alert_run(array $defects, array $kmsg, ?callable $send = null,
     /* Merged, not replaced: a disk asleep now is absent from $defects (read
        with -n standby), and dropping its count would make the rise it brings
        back when it wakes read as a first sighting. array_replace, not
-       array_merge, so an all-digit disk id is not renumbered. */
+       array_merge, so an all-digit disk id is not renumbered. A removed
+       disk's entry is kept on purpose: by-id keys name the physical drive,
+       so if it comes back, its old count is the right baseline. */
     disk_alert_state_write(['seq' => $maxSeq, 'boot_id' => (string) ($bootId ?? ''),
                             'defects' => array_replace($prev['defects'], $defects)], $path);
     return ['defects' => $rises, 'medium' => $medium, 'seq' => $maxSeq];

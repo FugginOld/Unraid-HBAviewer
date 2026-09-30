@@ -115,6 +115,15 @@ $sent = [];
 disk_alert_run(['ata-X' => 4, 'ata-Y' => 3], ['max_seq' => 12, 'events' => []], $send, $state, 1_700_001_000);
 check('a defect rise across a sleep still alerts',
       count($sent) === 1 && str_contains($sent[0][0], 'ata-Y') && str_contains($sent[0][1], 'Was 1, now 3'));
+// An all-digit id comes back from the JSON state as an int key, which
+// array_merge would renumber to 0 and lose.
+@unlink($state);
+disk_alert_run(['12345' => 1], ['max_seq' => 20, 'events' => []], $send, $state, 1_700_001_100);
+disk_alert_run(['ata-X' => 4], ['max_seq' => 21, 'events' => []], $send, $state, 1_700_001_200);
+$sent = [];
+disk_alert_run(['12345' => 3, 'ata-X' => 4], ['max_seq' => 22, 'events' => []], $send, $state, 1_700_001_300);
+check('an all-digit disk id keeps its baseline across a sleep',
+      count($sent) === 1 && str_contains($sent[0][0], '12345'));
 
 @unlink($state);
 echo $fails === 0 ? "disk_alerts: all pass\n" : "disk_alerts: $fails FAILED\n";

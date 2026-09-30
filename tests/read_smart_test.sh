@@ -52,7 +52,7 @@ smartctl 7.5 2025-04-30 r5714 [x86_64-linux-6.18.38-Unraid] (local build)
 
 === START OF INFORMATION SECTION ===
 Device Model:     Unknown
-Device is in STANDBY mode, suppress additional output with -n
+Device is in STANDBY mode, exit(2)
 FIXTURE
 
 export STUB_ARGS
@@ -91,6 +91,7 @@ STUB_FIXTURE="$STUBDIR/neutral_smart.txt"
 out=$(run usb); args=$(cat "$STUB_ARGS")
 arghas "usb bus: -n standby (unknown bus respects spin-up guard)" '-n standby'
 has    "usb bus, silent drive: fallback argument forwarded"       '"transport":"usb"'
+has    "usb bus: the ATA form of the decline is reported as standby" '"standby":"1"'
 
 # ── unknown/empty bus (lsblk reported nothing usable), drive silent too:
 # fallback carries the empty string through, never inventing a guess. ───────
