@@ -498,6 +498,11 @@ has "L: an unflagged named drive is still triaged (sg_verify called)" "$(cat "$A
 vcountL=$(grep -c '"t":"verdict"' "$EV")
 [ "$vcountL" -eq 1 ] && ok "L: exactly one verdict" || bad "L: exactly one verdict" "got $vcountL: $(cat "$EV")"
 has "L: that verdict is CLEAN" "$(cat "$EV")" '"v":"CLEAN"'
+has "L: its why says nothing was on record" "$(cat "$EV")" '"why":"no fault on record'
+# Testing the named disk is not the sweep flagging it: no "flagged" summary,
+# and so no Unraid notification about a healthy drive.
+has   "L: the summary still says no slots flagged" "$outL" "no slots flagged"
+hasnt "L: the summary does not list it as flagged" "$outL" "slot(s) flagged"
 # A named drive already left asleep at the sweep is not queued as well: one
 # power probe, not a second one from triage_disk()'s re-check.
 : > "$EV"
@@ -505,6 +510,32 @@ outL3=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --
 probesL3=$(grep -c ' -i ' "$ARGS")
 [ "$probesL3" -eq 1 ] && ok "L: a named drive asleep at the sweep is probed once, not queued" \
                        || bad "L: a named drive asleep at the sweep is probed once, not queued" "got $probesL3 probes"
+vcountL3=$(grep -c '"v":"STANDBY"' "$EV")
+[ "$vcountL3" -eq 1 ] && ok "L: ...and gets exactly one STANDBY verdict" || bad "L: ...and gets exactly one STANDBY verdict" "got $vcountL3"
+
+# M -- a named disk the sweep skipped (not a block device: a typo'd CLI path)
+# is never triaged. With VERIFY failing as it would on a missing node, the
+# old queueing produced a false MEDIA verdict.
+: > "$EV"
+outM=$(STUB_VERIFY_RC=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+hasnt "M: a disk the sweep skipped is not triaged" "$(cat "$ARGS")" "sg_verify"
+hasnt "M: ...and gets no verdict" "$(cat "$EV")" '"t":"verdict"'
+
+# N -- a named disk the sweep DID flag is triaged once, not twice.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+outN=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all --events "$EV")
+tcountN=$(grep -c 'TRIAGE: manual' <<< "$outN")
+[ "$tcountN" -eq 1 ] && ok "N: a flagged named disk is triaged once" || bad "N: a flagged named disk is triaged once" "got $tcountN"
+vcountN=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountN" -eq 1 ] && ok "N: ...with exactly one verdict" || bad "N: ...with exactly one verdict" "got $vcountN"
+hasnt "N: ...whose why is the flagged wording, not 'no fault on record'" "$(cat "$EV")" 'no fault on record'
+: > "$STUB_DMESG"
+# The CLI without --all keeps TRIAGE_EVIDENCE_ONLY: a clean named disk has no
+# evidence to test against and is not triaged, as before.
+: > "$EV"
+outL4=$(TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --events "$EV")
+hasnt "L: --auto-triage without --all leaves a clean named disk untested" "$(cat "$ARGS")" "sg_verify"
 # Without --auto-triage (CLI sweep only) nothing is triaged, as before.
 outL2=$(TRIAGE_SKIP_DEV_CHECK=1 run --no-triage)
 hasnt "L: --no-triage still triages nothing" "$(cat "$ARGS")" "sg_verify"

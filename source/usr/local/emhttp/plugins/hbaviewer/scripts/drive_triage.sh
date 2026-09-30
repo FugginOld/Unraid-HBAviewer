@@ -888,27 +888,22 @@ triage_disk() {
         SUMMARY+=("$name ($dev): MEDIA -- replace")
         tri_verdict "$name" MEDIA "verify failed on the drive's own media"
     else
-        ok "$name VERDICT: no fault reproduced"
-        info "intermittent. re-run under load, or enable SURFACE_SCAN."
-        SUMMARY+=("$name ($dev): not reproduced")
-        tri_verdict "$name" CLEAN "no fault reproduced"
+        if [[ "$verdict" == "clean" ]]; then
+            # Nothing was on record: only the spot-check was read, so there
+            # was no fault to reproduce.
+            ok "$name VERDICT: no fault on record; spot-check clean"
+            SUMMARY+=("$name ($dev): nothing on record, spot-check clean")
+            tri_verdict "$name" CLEAN "no fault on record; LBA 0 spot-check and self-test clean"
+        else
+            ok "$name VERDICT: no fault reproduced"
+            info "intermittent. re-run under load, or enable SURFACE_SCAN."
+            SUMMARY+=("$name ($dev): not reproduced")
+            tri_verdict "$name" CLEAN "no fault reproduced"
+        fi
     fi
     [[ $dpath -gt 0 && $dmedia -eq 0 ]] && warn "counters moved on the PATH side only (+$dpath)"
     [[ $dmedia -gt 0 ]] && bad "media counters rose by $dmedia during this run"
 }
-
-# A named disk (a web Diagnose) is a request to test that disk. One the sweep
-# did not flag used to get no triage and no verdict, and the Verdict screen
-# said "did not classify" about a healthy drive. Queue it like a flagged disk
-# with no recorded sectors: the LBA 0 spot-check, and a real verdict. A disk
-# left alone at the sweep stays that way -- triage_disk() re-checks it anyway.
-if [[ -n "$DEV_OVERRIDE" && "$AUTO_TRIAGE" == "yes" ]]; then
-    ndev="$(basename "$DEV_OVERRIDE")"
-    if [[ -z "${STANDBY_OF[$ndev]:-}" ]] \
-       && ! printf '%s\n' "${FLAGGED[@]}" | grep -q ":$ndev:"; then
-        FLAGGED+=("0:manual:$ndev:clean")
-    fi
-fi
 
 if [[ ${#FLAGGED[@]} -gt 0 && "$AUTO_TRIAGE" == "yes" ]]; then
     # worst first, by score
@@ -925,6 +920,19 @@ if [[ ${#FLAGGED[@]} -gt 0 && "$AUTO_TRIAGE" == "yes" ]]; then
         [[ $n -gt $MAX_TRIAGE ]] && { warn "hit MAX_TRIAGE=$MAX_TRIAGE, stopping"; break; }
         triage_disk "$name" "$dev" "$verdict"
     done
+fi
+
+# A named disk (a web Diagnose passes --all) is a request to test that disk.
+# One the sweep swept awake and did not flag used to get no triage and no
+# verdict, and the Verdict screen said "did not classify" about a healthy
+# drive. Test it directly -- not through FLAGGED, which would report it as
+# flagged and send a notification. VERDICT_OF is "clean" only for a disk the
+# sweep actually read awake: never for one it skipped (not a block device)
+# or left alone.
+ndev="${DEV_OVERRIDE##*/}"
+if [[ -n "$DEV_OVERRIDE" && "$AUTO_TRIAGE" == "yes" && "$TRIAGE_EVIDENCE_ONLY" == "no" ]] \
+   && [[ "$MAX_TRIAGE" -ge 1 && "${VERDICT_OF[$ndev]:-}" == "clean" ]]; then
+    triage_disk manual "$ndev" clean
 fi
 
 # A web Diagnose names one disk. If it was left asleep, nothing above sent a
