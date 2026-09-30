@@ -96,6 +96,11 @@ function disk_alert_run(array $defects, array $kmsg, ?callable $send = null,
             . '. The drive has remapped more sectors since the last check.', 'warning');
     }
 
-    disk_alert_state_write(['seq' => $maxSeq, 'boot_id' => (string) ($bootId ?? ''), 'defects' => $defects], $path);
+    /* Merged, not replaced: a disk asleep now is absent from $defects (read
+       with -n standby), and dropping its count would make the rise it brings
+       back when it wakes read as a first sighting. array_replace, not
+       array_merge, so an all-digit disk id is not renumbered. */
+    disk_alert_state_write(['seq' => $maxSeq, 'boot_id' => (string) ($bootId ?? ''),
+                            'defects' => array_replace($prev['defects'], $defects)], $path);
     return ['defects' => $rises, 'medium' => $medium, 'seq' => $maxSeq];
 }

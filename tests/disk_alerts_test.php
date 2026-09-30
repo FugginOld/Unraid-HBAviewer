@@ -104,6 +104,18 @@ $sent = [];
 $r = disk_alert_run(['ata-X' => 4], ['max_seq' => 100, 'events' => []], $send, $state, 1_700_000_700);
 check('5-arg call (no bootId) still works',        count($sent) === 0);
 
+/* A disk asleep at a check is missing from $defects (get_defects.sh reads
+   with -n standby). Its baseline must survive that absence, or the rise it
+   brings back when it wakes reads as a first sighting and never alerts. */
+@unlink($state);
+$sent = [];
+disk_alert_run(['ata-X' => 4, 'ata-Y' => 1], ['max_seq' => 10, 'events' => []], $send, $state, 1_700_000_800);
+disk_alert_run(['ata-X' => 4],               ['max_seq' => 11, 'events' => []], $send, $state, 1_700_000_900);
+$sent = [];
+disk_alert_run(['ata-X' => 4, 'ata-Y' => 3], ['max_seq' => 12, 'events' => []], $send, $state, 1_700_001_000);
+check('a defect rise across a sleep still alerts',
+      count($sent) === 1 && str_contains($sent[0][0], 'ata-Y') && str_contains($sent[0][1], 'Was 1, now 3'));
+
 @unlink($state);
 echo $fails === 0 ? "disk_alerts: all pass\n" : "disk_alerts: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
