@@ -218,7 +218,12 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
     </div>
   </div>
 
-  <div id="diag-verdict" class="lu-diag-screen" hidden></div>
+  <div id="diag-verdict" class="lu-diag-screen" hidden>
+    <!-- Static, above the body: the verdict fetch replaces #diag-verdict-body
+         wholesale, and nothing else ever returns to the drive list. -->
+    <p><button class="lu-refresh-btn" type="button" onclick="luDiagShow('live')">Back to drives</button></p>
+    <div id="diag-verdict-body"></div>
+  </div>
 </div>
 
 <!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->

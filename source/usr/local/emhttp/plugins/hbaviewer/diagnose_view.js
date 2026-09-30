@@ -335,9 +335,9 @@
         return fetch('/plugins/hbaviewer/diagnose.php?action=verdict&job='
                      + encodeURIComponent(luDiagJob))
           .then(function (r) { return r.text(); })
-          .then(function (h) { el('diag-verdict').innerHTML = h; })
+          .then(function (h) { el('diag-verdict-body').innerHTML = h; })
           .catch(function () {
-            el('diag-verdict').textContent = 'Could not load the verdict — the run is on disk, reload the tab.';
+            el('diag-verdict-body').textContent = 'Could not load the verdict — the run is on disk, reload the tab.';
           });
     };
 

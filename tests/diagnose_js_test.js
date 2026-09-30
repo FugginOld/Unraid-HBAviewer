@@ -42,7 +42,7 @@ function mkEl(id) {
 const ids = ['diag-live','diag-verdict','diag-head','diag-dot','diag-pause','diag-cancel',
              'diag-pills','diag-progress','diag-hotzone','diag-map','diag-hist',
              'diag-counters','diag-interp','diag-stream','diag-newjob','diag-standby',
-             'diag-drives'];
+             'diag-drives','diag-verdict-body'];
 ids.forEach(i => els.set(i, mkEl(i)));
 
 const fetches = [];
@@ -351,6 +351,21 @@ async function tail() {
     await deferredResumeRace(() => sandbox.luDiagnose('sdt'));
     check('a confirmed start landing while resume\'s list fetch is in flight is not overwritten',
           sandbox.luDiagJob === 'sdt-1' && esInstances.length === 1);
+
+    /* The Verdict screen's way back lives in its static markup; the verdict
+       fetch must write below it, never over it. The stub fetch has no text(),
+       so this lands on the error path -- which must spare the button too. */
+    els.get('diag-verdict')._html = 'BACK-BUTTON';
+    els.get('diag-verdict').textContent = '';
+    await sandbox.luDiagRenderVerdict();
+    check('the verdict fetch writes into #diag-verdict-body, not over the back button',
+          els.get('diag-verdict')._html === 'BACK-BUTTON'
+          && els.get('diag-verdict').textContent === ''
+          && els.get('diag-verdict-body').textContent.includes('Could not load'));
+    sandbox.luDiagShow('verdict');
+    sandbox.luDiagShow('live');
+    check('luDiagShow(live) brings the drive list back from the verdict screen',
+          els.get('diag-live').hidden === false && els.get('diag-verdict').hidden === true);
 }
 
 tail().then(() => {

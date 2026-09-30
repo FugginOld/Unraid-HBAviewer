@@ -254,9 +254,16 @@ check('the tab button is a real tab, not a link',
 foreach (['diag-live', 'diag-verdict', 'diag-head', 'diag-dot', 'diag-pause',
           'diag-cancel', 'diag-pills', 'diag-progress', 'diag-hotzone',
           'diag-map', 'diag-hist', 'diag-counters', 'diag-interp',
-          'diag-stream', 'diag-newjob', 'diag-standby', 'diag-drives'] as $id) {
+          'diag-stream', 'diag-newjob', 'diag-standby', 'diag-drives',
+          'diag-verdict-body'] as $id) {
     check("the Live Job markup carries #$id", str_contains($hb, 'id="' . $id . '"'));
 }
+
+// The Verdict screen replaced the drive list with no way back: nothing but a
+// new job ever called luDiagShow('live'). The button sits in the static
+// markup, above the body the verdict fetch overwrites.
+check('the Verdict screen has a Back to drives button above its fetched body',
+      (bool) preg_match('/id="diag-verdict"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagShow\(.live.\)"[^>]*>[^<]*<\/button>.*id="diag-verdict-body"/s', $hb));
 
 // Never-wake has no opt-out, so no control may suggest one: an unticked box
 // that nothing reads would promise a wake the engine refuses.
