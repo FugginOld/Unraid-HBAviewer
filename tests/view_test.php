@@ -263,7 +263,7 @@ foreach (['diag-live', 'diag-verdict', 'diag-head', 'diag-dot', 'diag-pause',
 // new job ever called luDiagShow('live'). The button sits in the static
 // markup, above the body the verdict fetch overwrites.
 check('the Verdict screen has a Back to drives button above its fetched body',
-      (bool) preg_match('/id="diag-verdict"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagShow\(.live.\)"[^>]*>[^<]*<\/button>.*id="diag-verdict-body"/s', $hb));
+      (bool) preg_match('/id="diag-verdict"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagBack\(\)"[^>]*>[^<]*<\/button>.*id="diag-verdict-body"/s', $hb));
 
 // Never-wake has no opt-out, so no control may suggest one: an unticked box
 // that nothing reads would promise a wake the engine refuses.

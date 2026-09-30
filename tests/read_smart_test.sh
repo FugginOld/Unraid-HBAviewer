@@ -1,10 +1,9 @@
 #!/bin/bash
-# Self-asserting checks for read_smart.sh: it makes one decision -- which
-# smartctl flags to use (the spin-up guard, from lsblk's TRAN) -- and forwards
-# that same TRAN to parse/smart.sh as a fallback only. Neither was covered by
-# anything. Stub lsblk/smartctl on PATH (same approach as flash_test.sh's
-# stub/flasher) so the real spin-up policy and the real fallback argument are
-# exercised without hardware.
+# Self-asserting checks for read_smart.sh: every read passes the spin-up
+# guard (-n standby) whatever the bus, and lsblk's TRAN reaches parse/smart.sh
+# as a fallback only. Stub lsblk/smartctl on PATH (same approach as
+# flash_test.sh's stub/flasher) so the real spin-up guard and the real
+# fallback argument are exercised without hardware.
 #   bash tests/read_smart_test.sh   ->  "read_smart: all pass" (exit 0)
 cd "$(dirname "$0")" || exit 2
 RS="../source/usr/local/emhttp/plugins/hbaviewer/scripts/read_smart.sh"
@@ -27,9 +26,18 @@ echo "$STUB_TRAN"
 STUB
 # smartctl stub: record the exact flags read_smart.sh chose, then hand back a
 # real SMART capture so parse/smart.sh downstream has something to parse.
+# STUB_ASLEEP_FIXTURE models a sleeping drive: with -n standby smartctl
+# declines (that capture), without it the drive is woken and answers in full.
 cat > "$STUBDIR/smartctl" <<'STUB'
 #!/bin/bash
 echo "$*" >> "$STUB_ARGS"
+if [ -n "${STUB_ASLEEP_FIXTURE:-}" ]; then
+    case " $* " in
+        *" -n standby "*) cat "$STUB_ASLEEP_FIXTURE" ;;
+        *)                cat "$STUB_FIXTURE" ;;
+    esac
+    exit 0
+fi
 cat "$STUB_FIXTURE"
 STUB
 chmod +x "$STUBDIR/lsblk" "$STUBDIR/smartctl"
@@ -68,15 +76,14 @@ out=$(run sas); args=$(cat "$STUB_ARGS")
 arghas "sas bus: -n standby (a SAS read woke a sleeping drive on Golem)" '-n standby'
 has      "sas bus + SAS drive: transport is sas"                        '"transport":"sas"'
 
-# ── sata bus, real SATA drive: bus decision respects the spin-up guard, and
+# ── sata bus, real SATA drive: the spin-up guard applies, and
 # the drive's own ATA vocabulary agrees with the bus. ───────────────────────
 STUB_FIXTURE="$PWD/fixtures/smart/sata_drive.txt"
 out=$(run sata); args=$(cat "$STUB_ARGS")
 arghas "sata bus: -n standby (ATA read can spin the disk up)" '-n standby'
 has    "sata bus + SATA drive: transport is sata"              '"transport":"sata"'
 
-# ── usb (or any non-sas bus): spin-up guard still applies (bus decision only
-# knows "not sas"). The drive says nothing classifiable, so parse/smart.sh's
+# ── usb (or any other bus): the spin-up guard applies. The drive says nothing classifiable, so parse/smart.sh's
 # fallback carries the bus guess through verbatim -- this asserts the
 # fallback ARGUMENT, not anything the drive told us. ────────────────────────
 STUB_FIXTURE="$STUBDIR/neutral_smart.txt"
@@ -101,8 +108,8 @@ has      "SATA-behind-SAS: drive's ATA vocabulary overrides the sas bus"   '"tra
 # ── sas bus, drive asleep: smartctl's decline (Golem's captured reply) reports
 # no health and no temperature, which the SMART tab and the drive popup show
 # as standby -- never as a reading. ────────────────────────────────────────
-STUB_FIXTURE="$PWD/fixtures/smart/sas_standby.txt"
-out=$(run sas)
+STUB_FIXTURE="$PWD/fixtures/smart/sas_drive.txt"
+out=$(STUB_ASLEEP_FIXTURE="$PWD/fixtures/smart/sas_standby.txt" run sas)
 has "sas bus, asleep: no health reported"      '"health":""'
 has "sas bus, asleep: no temperature reported" '"temp":""'
 

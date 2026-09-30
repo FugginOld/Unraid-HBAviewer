@@ -102,7 +102,7 @@ Multiple controllers are shown side by side. Both SAS and SATA drives are suppor
   keep a disk awake indefinitely.
 - **SMART tab** — health, temperature, grown defects, pending sectors, and
   power-on hours for every drive, collected **in the background** so it never
-  blocks the UI and (on SAS) **never spins up a standby drive**. The collection
+  blocks the UI and **never spins up a standby drive**. The collection
   is **kept until you press Refresh** rather than expiring on a timer — reading
   every drive takes ~1 s each and the numbers change over weeks — and every
   screen that shows it states how old it is.

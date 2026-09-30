@@ -184,6 +184,16 @@
         el('diag-verdict').hidden = (which !== 'verdict');
     };
 
+    /* The Verdict screen's way out. The drive list is refetched because its
+       badges changed when this verdict landed; focus moves to the header
+       because the button that had it is now hidden. */
+    window.luDiagBack = function () {
+        luDiagShow('live');
+        luDiagDrives();
+        var h = el('diag-head');
+        if (h.focus) h.focus();
+    };
+
     /* One decoded event -> the screen. Exported because this is the whole
        rendering contract and a test that cannot call it has to assert on the
        stream plumbing instead, which is the part least likely to be wrong. */
@@ -215,6 +225,10 @@
                otherwise and would go unused. */
             window.luDiagRenderVerdict();
             luDiagShow('verdict');
+            // Job ids are <disk>-<epoch>; the live header must stop saying
+            // "Diagnosing" once there is a verdict to come back from.
+            el('diag-head').innerHTML = 'Last run: <code>/dev/'
+                + fesc(String(luDiagJob).replace(/-\d+$/, '')) + '</code>';
             luDiagDrives();
             el('diag-dot').classList.remove('running');
             el('diag-dot').setAttribute('aria-label', 'No job running');

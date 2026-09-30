@@ -165,7 +165,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
       <!-- Header strip: identity, dev path, model, host/phy, what the job is
            doing in plain language, the live dot, and the two controls. -->
       <div class="lu-tab-toolbar">
-        <div id="diag-head"><span class="lu-muted">No job running. Pick a drive on the Drives tab and press Diagnose.</span></div>
+        <div id="diag-head" tabindex="-1"><span class="lu-muted">No job running. Pick a drive on the Drives tab and press Diagnose.</span></div>
         <span>
           <span id="diag-dot" class="lu-diag-dot" role="img" aria-label="No job running"></span>
           <button class="lu-refresh-btn" id="diag-pause"  type="button" onclick="luDiagPause()"  disabled>Pause</button>
@@ -221,7 +221,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   <div id="diag-verdict" class="lu-diag-screen" hidden>
     <!-- Static, above the body: the verdict fetch replaces #diag-verdict-body
          wholesale, and nothing else ever returns to the drive list. -->
-    <p><button class="lu-refresh-btn" type="button" onclick="luDiagShow('live')">Back to drives</button></p>
+    <p><button class="lu-refresh-btn" type="button" onclick="luDiagBack()">Back to drives</button></p>
     <div id="diag-verdict-body"></div>
   </div>
 </div>

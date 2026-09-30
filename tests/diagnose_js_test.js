@@ -362,10 +362,30 @@ async function tail() {
           els.get('diag-verdict')._html === 'BACK-BUTTON'
           && els.get('diag-verdict').textContent === ''
           && els.get('diag-verdict-body').textContent.includes('Could not load'));
-    sandbox.luDiagShow('verdict');
-    sandbox.luDiagShow('live');
-    check('luDiagShow(live) brings the drive list back from the verdict screen',
+    // The success path is the one that overwrote the screen on Golem.
+    const stubFetch = sandbox.fetch;
+    sandbox.fetch = () => Promise.resolve({ text: () => Promise.resolve('<p>V</p>') });
+    await sandbox.luDiagRenderVerdict();
+    sandbox.fetch = stubFetch;
+    check('a loaded verdict lands in #diag-verdict-body and spares the back button',
+          els.get('diag-verdict')._html === 'BACK-BUTTON'
+          && els.get('diag-verdict-body')._html === '<p>V</p>');
+    /* Back to drives: the live screen, a FRESH drive list (badges changed
+       since the verdict landed), and a header that no longer claims a
+       finished job is still running. */
+    sandbox.luDiagJob = 'sdd-1790737945';
+    els.get('diag-head')._html = 'Diagnosing <code>/dev/sdd</code>';
+    sandbox.luDiagApply({ t: 'verdict', disk: 'manual', v: 'CLEAN', why: 'x' });
+    check('a verdict turns the header into Last run',
+          els.get('diag-head')._html.includes('Last run')
+          && els.get('diag-head')._html.includes('/dev/sdd')
+          && !els.get('diag-head')._html.includes('Diagnosing'));
+    fetches.length = 0;
+    sandbox.luDiagBack();
+    check('luDiagBack brings the drive list back from the verdict screen',
           els.get('diag-live').hidden === false && els.get('diag-verdict').hidden === true);
+    check('luDiagBack refreshes the drive list',
+          fetches.some(f => f.url.includes('action=drivelist')));
 }
 
 tail().then(() => {
