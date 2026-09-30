@@ -1,11 +1,21 @@
 # Disk Utility Phase 1 — Diagnose Implementation Plan
 
 > **Status: COMPLETE.** All 16 tasks. Hardware verification blocks A–F confirmed on Golem,
-> 2026-09-22 through 2026-09-28. `sg_verify` reported `1.30`. Two fix rounds landed during Block E
-> verification: `docs/superpowers/plans/2026-09-27-diagnose-reload-resume.md` (the Live view never
-> reattached to a running job after a reload) and `docs/superpowers/plans/2026-09-28-diagnose-sse-framing.md`
-> (the SSE stream silently dropped any batch of more than one event, which sat underneath the first
-> fix and hid the whole Live view's phase/map/counter rendering on every prior test).
+> 2026-09-22 through 2026-09-29. `sg_verify` reported `1.30`. Three fix rounds landed during
+> verification:
+> - Block E: `docs/superpowers/plans/2026-09-27-diagnose-reload-resume.md` (the Live view never
+>   reattached to a running job after a reload) and `docs/superpowers/plans/2026-09-28-diagnose-sse-framing.md`
+>   (the SSE stream silently dropped any batch of more than one event, which sat underneath the first
+>   fix and hid the whole Live view's phase/map/counter rendering on every prior test).
+> - Block F: `docs/superpowers/plans/2026-09-29-diagnose-standby-detection.md`. Block F's first
+>   recorded pass (2026-09-28) was **invalid**: it relied on `hdparm -C`, which reports `standby` or
+>   `unknown` for SAS drives regardless of state, and the drive tested was awake throughout. With a
+>   drive genuinely spun down, the engine turned out never to detect sleep at all (`smartctl -n
+>   standby | grep -q` under `pipefail`). Fixed in `997547e`/`e773487`; Block F re-run on 2026-09-29
+>   against `sdd` spun down via Unraid: `SLEEPING` row, no SMART read, one `STANDBY` verdict, drive
+>   still asleep by `disks.ini`, `sg_requests` and `smartctl`. Not reproducible on Golem (no drive
+>   has kernel-log sector errors): a sleeping *flagged* drive being left untested — covered by
+>   `tests/drive_triage_test.sh` cases B, C, E and F only.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
