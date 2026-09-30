@@ -499,6 +499,10 @@ vcountL=$(grep -c '"t":"verdict"' "$EV")
 [ "$vcountL" -eq 1 ] && ok "L: exactly one verdict" || bad "L: exactly one verdict" "got $vcountL: $(cat "$EV")"
 has "L: that verdict is CLEAN" "$(cat "$EV")" '"v":"CLEAN"'
 has "L: its why says nothing was on record" "$(cat "$EV")" '"why":"no fault on record'
+# The fixture has no self-test pass line, and the self-test never feeds the
+# verdict -- so the why must not claim it passed.
+hasnt "L: its why claims nothing about the self-test" "$(cat "$EV")" 'self-test clean'
+has "L: the report's triage results show it though nothing was flagged" "$outL" "nothing on record, spot-check clean"
 # Testing the named disk is not the sweep flagging it: no "flagged" summary,
 # and so no Unraid notification about a healthy drive.
 has   "L: the summary still says no slots flagged" "$outL" "no slots flagged"
@@ -531,6 +535,15 @@ vcountN=$(grep -c '"t":"verdict"' "$EV")
 [ "$vcountN" -eq 1 ] && ok "N: ...with exactly one verdict" || bad "N: ...with exactly one verdict" "got $vcountN"
 hasnt "N: ...whose why is the flagged wording, not 'no fault on record'" "$(cat "$EV")" 'no fault on record'
 : > "$STUB_DMESG"
+# MAX_TRIAGE=0 is a cap on every triage, the named disk's included.
+MUT0="$WORK/maxtriage0.sh"
+sed 's/^MAX_TRIAGE="3"/MAX_TRIAGE="0"/' "$DT" > "$MUT0"
+grep -q '^MAX_TRIAGE="0"' "$MUT0" || bad "L: MAX_TRIAGE mutant built" "sed did not match"
+: > "$ARGS"; : > "$EV"
+TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+    PATH="$STUBDIR:$PATH" bash "$MUT0" --out "$WORK/m0out" --auto-triage --all --events "$EV" /dev/sdX >/dev/null 2>&1
+hasnt "L: MAX_TRIAGE=0 leaves the named disk untested" "$(cat "$ARGS")" "sg_verify"
+
 # The CLI without --all keeps TRIAGE_EVIDENCE_ONLY: a clean named disk has no
 # evidence to test against and is not triaged, as before.
 : > "$EV"

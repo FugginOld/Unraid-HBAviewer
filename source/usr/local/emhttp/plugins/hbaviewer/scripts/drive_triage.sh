@@ -890,10 +890,11 @@ triage_disk() {
     else
         if [[ "$verdict" == "clean" ]]; then
             # Nothing was on record: only the spot-check was read, so there
-            # was no fault to reproduce.
+            # was no fault to reproduce. The self-test is not claimed: its
+            # result only warns above and never feeds this verdict.
             ok "$name VERDICT: no fault on record; spot-check clean"
             SUMMARY+=("$name ($dev): nothing on record, spot-check clean")
-            tri_verdict "$name" CLEAN "no fault on record; LBA 0 spot-check and self-test clean"
+            tri_verdict "$name" CLEAN "no fault on record; LBA 0 spot-check clean"
         else
             ok "$name VERDICT: no fault reproduced"
             info "intermittent. re-run under load, or enable SURFACE_SCAN."
@@ -929,7 +930,7 @@ fi
 # flagged and send a notification. VERDICT_OF is "clean" only for a disk the
 # sweep actually read awake: never for one it skipped (not a block device)
 # or left alone.
-ndev="${DEV_OVERRIDE##*/}"
+ndev="$(basename "${DEV_OVERRIDE:-x}")"
 if [[ -n "$DEV_OVERRIDE" && "$AUTO_TRIAGE" == "yes" && "$TRIAGE_EVIDENCE_ONLY" == "no" ]] \
    && [[ "$MAX_TRIAGE" -ge 1 && "${VERDICT_OF[$ndev]:-}" == "clean" ]]; then
     triage_disk manual "$ndev" clean
@@ -952,6 +953,12 @@ sect "SUMMARY"
 
 if [[ ${#FLAGGED[@]} -eq 0 ]]; then
     ok "no slots flagged"
+    # A named disk tested without being flagged still has a result to show.
+    if [[ ${#SUMMARY[@]} -gt 0 ]]; then
+        log ""
+        log "triage results:"
+        for s in "${SUMMARY[@]}"; do log "  $s"; done
+    fi
 else
     mapfile -t ORDERED < <(printf '%s\n' "${FLAGGED[@]}" | sort -t: -k1,1nr)
     log "${#ORDERED[@]} slot(s) flagged, worst first:"
