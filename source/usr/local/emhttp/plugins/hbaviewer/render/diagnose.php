@@ -50,6 +50,10 @@ function diag_verdict_words(string $v): array {
             'title' => 'Left asleep — not tested',
             'lead'  => 'The drive was in standby when this run reached it. Diagnose never spins a disk up, so no block was read and this run says nothing about the drive\'s health.',
         ];
+        case 'POWER_UNKNOWN': return [
+            'title' => 'Power state unknown — not tested',
+            'lead'  => 'smartctl could not tell whether this drive was asleep: CHECK POWER MODE returned a value it does not recognise, or the drive does not implement it. No block was read, and this run says nothing about the drive\'s health.',
+        ];
     }
     return [
         'title' => 'Unknown — this run did not classify',
@@ -182,6 +186,12 @@ function diag_next_steps(string $verdict, bool $arrayDisk): array {
             'It was left asleep on purpose: HBAviewer never wakes a sleeping drive, including to test it.',
         ];
     }
+    if ($verdict === 'POWER_UNKNOWN') {
+        return [
+            'Diagnose never tests a drive it cannot prove is awake, so it will skip this drive on every run.',
+            'Run smartctl -n standby -i against it yourself to see the reply. A drive behind a USB bridge often reports this; connected directly it may not.',
+        ];
+    }
     if ($verdict === 'CLEAN') {
         return [
             'Nothing reproduced. Re-run while the array is under load — an intermittent link fault often needs traffic to appear.',
@@ -269,7 +279,7 @@ function renderDiagVerdict(array $in): string {
    disk the array does not know about is a different kind of fact from Disk 1,
    and mixing them implies the column means one thing when it means two. */
 const DIAG_BADGE_RANK = ['MEDIA' => 0, 'TRANSPORT' => 1, 'SCANNING' => 2,
-                         'CLEAN' => 3, 'STANDBY' => 4];
+                         'CLEAN' => 3, 'STANDBY' => 4, 'POWER_UNKNOWN' => 4];
 
 function renderDiagDriveList(array $drives, array $verdicts): string {
     $group = ['assigned' => [], 'unassigned' => []];

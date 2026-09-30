@@ -282,6 +282,19 @@ foreach (['lu-diag-map', 'lu-diag-cell', 'lu-b5', 'lu-b20', 'lu-b50',
           'lu-diag-pill'] as $cls) {
     check("chrome.css defines .$cls", str_contains($css, '.' . $cls));
 }
+
+// Every severity logLine() tags a stream line with needs a rule scoped to the
+// stream, or ok/warn/crit lines all render the same colour. The literal that
+// closes each call is read from the JS, so a new severity fails here until it
+// is styled; the ternary's branches are listed by hand.
+$js = (string) file_get_contents(
+    __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose_view.js');
+preg_match_all("/logLine\(.*'([a-z]+)'\)+;/", $js, $m);
+$sevs = array_unique(array_merge(['ok', 'warn', 'crit', 'muted'], $m[1]));
+foreach ($sevs as $sev) {
+    check("chrome.css styles .lu-$sev inside the Diagnose stream",
+          (bool) preg_match('/\.lu-diag-stream\s+\.lu-' . $sev . '\s*\{/', $css));
+}
 // This plugin is a guest inside the Dynamix webGui: it inherits the user's
 // theme through tokens.css, ships no fonts and adds no framework. A hard-coded
 // hex in a new rule is a colour no theme can reach.

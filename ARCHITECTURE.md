@@ -532,6 +532,18 @@ moving says nothing about whether the cron sampler is running.
   health applies everywhere else: no counter event at all (a STANDBY run, or
   one that never classified) reads `not run`, distinct from counter events
   present with every delta at zero, which reads `none`.
+- **A declined read must never reach the counter parser.** The sweep checks
+  its full `smartctl -x` read for the decline too, not only the probe before
+  it: a drive that spins down between the two returns a decline that parses
+  as all-zero counters and overwrites the baseline. The engine's old
+  `--no-skip-standby` flag did exactly that on every run -- it removed only the
+  probe, while every read still passed `-n standby` -- and is gone.
+- **"Cannot tell" is not "awake".** When an ATA drive answers CHECK POWER MODE
+  with a value smartctl does not know, or does not implement it, smartctl
+  prints `ignoring -n option` and reads anyway. `tri_declined()` treats that as
+  a refusal (`TRI_LEFT=unknown`): the drive is not read or triaged, and a web
+  Diagnose ends `POWER_UNKNOWN`. Such a drive is never diagnosable; that is
+  the price of the never-wake guarantee.
 - **`hdparm -C` is not a power-state check for SAS drives.** It sends an ATA
   command SAS drives reject, then prints `standby` or `unknown` whatever the
   real state. Use `smartctl -n standby` or `sg_requests`; Unraid's own

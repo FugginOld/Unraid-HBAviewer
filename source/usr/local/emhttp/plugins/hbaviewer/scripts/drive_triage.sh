@@ -50,9 +50,6 @@ OUTDIR="/tmp/hbaviewer/triage"
 # Include cache pool members and parity, not just data disks.
 INCLUDE_POOLS="no"
 
-# Leave spun-down drives asleep. Recommended for scheduled runs.
-SKIP_STANDBY="yes"
-
 # Run the deep triage on flagged disks after the sweep.
 AUTO_TRIAGE="no"
 
@@ -144,7 +141,6 @@ while [[ $# -gt 0 ]]; do
         --auto-triage)     AUTO_TRIAGE="yes" ;;
         --no-triage)       AUTO_TRIAGE="no" ;;
         --pools)           INCLUDE_POOLS="yes" ;;
-        --no-skip-standby) SKIP_STANDBY="no" ;;
         --all)             TRIAGE_EVIDENCE_ONLY="no" ;;
         --surface)         SURFACE_SCAN="yes" ;;
         --long)            LONG_SELFTEST="yes" ;;
@@ -229,10 +225,24 @@ tri_verdict() {  # disk v why
 # how this check never fired on a real sleeping drive (Golem, sdd, Task 16
 # Block F). Capture first, then match smartctl's own decline message, which
 # it prints only when -n made it leave the drive alone.
+#
+# "Asleep" here means "leave it alone": tri_declined also refuses a drive whose
+# power state smartctl cannot name, and says which in TRI_LEFT.
 tri_asleep() {  # dev
-    local out
-    out="$(smartctl -n standby -i -d auto "/dev/$1" 2>&1)"
-    grep -qE '^Device is in [A-Z_ ]+ mode' <<< "$out"
+    tri_declined "$(smartctl -n standby -i -d auto "/dev/$1" 2>&1)"
+}
+TRI_LEFT=""     # standby | unknown -- why tri_declined refused the drive
+tri_declined() {  # smartctl output
+    if grep -qE '^Device is in [A-Z_ ]+ mode' <<< "$1"; then
+        TRI_LEFT=standby; return 0
+    fi
+    # ATA: CHECK POWER MODE returned a value smartctl does not know, or is not
+    # implemented. smartctl then ignores -n and carries on. A state it cannot
+    # name is not "awake", and the next read may be the one that spins it up.
+    if grep -q 'ignoring -n option' <<< "$1"; then
+        TRI_LEFT=unknown; return 0
+    fi
+    return 1
 }
 
 # Milliseconds elapsed since $1 (a value from tri_now_ms).
@@ -414,19 +424,27 @@ while IFS=$'\t' read -r name dev status mderr id; do
         eval "$v=$x"
     done
 
+    # The drive can spin down between the probe and the full read. That read
+    # then declines, and a declined read parses as all-zero counters that
+    # would overwrite the baseline -- so the read itself is checked too.
     standby=0
-    if [[ "$SKIP_STANDBY" == "yes" ]] && tri_asleep "$dev"; then
-        standby=1; STANDBY_OF["$dev"]=1
+    if tri_asleep "$dev"; then
+        standby=1
+    else
+        smartctl -x -d auto -n standby "/dev/$dev" > "$RUN/smart-$dev.txt" 2>&1
+        if tri_declined "$(< "$RUN/smart-$dev.txt")"; then
+            standby=1; rm -f "$RUN/smart-$dev.txt"
+        fi
     fi
 
     if [[ "$standby" -eq 1 ]]; then
+        STANDBY_OF["$dev"]="$TRI_LEFT"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t0\t0\t0\t0\t0\t0\t0\t%s\t%s\t%s\t%s\t1\t0\t-\t-\n' \
             "$name" "$dev" "$id" "$status" "$host" "$mderr" \
             "$nsect" "$skmed" "$skabt" "${maxage:-0}" >> "$DATA"
         continue
     fi
 
-    smartctl -x -d auto -n standby "/dev/$dev" > "$RUN/smart-$dev.txt" 2>&1
     S="$RUN/smart-$dev.txt"
 
     uncorr="$(awk '/^read:/ {print $NF}' "$S" | head -1)"
@@ -491,8 +509,10 @@ declare -A VERDICT_OF DELTA_NOTE
 while IFS=$'\t' read -r name dev id status host mderr uncorr grown nonmed invdw loss phyrst poh nsect skmed skabt maxage standby disp att attphy; do
 
     if [[ "$standby" == "1" ]]; then
+        left="SLEEPING"
+        [[ "${STANDBY_OF[$dev]:-}" == "unknown" ]] && left="POWER UNKNOWN"
         printf '%-7s %-5s %-5s %6s %6s %6s %8s %9s %7s  %s\n' \
-            "$name" "$dev" "$host" "$mderr" "-" "-" "-" "-" "$nsect" "SLEEPING" | tee -a "$LOG"
+            "$name" "$dev" "$host" "$mderr" "-" "-" "-" "-" "$nsect" "$left" | tee -a "$LOG"
         [[ "$nsect" -gt 0 ]] && FLAGGED+=("60:$name:$dev:INVESTIGATE")
         continue
     fi
@@ -723,10 +743,15 @@ triage_disk() {
     # Re-check here, not only at the sweep: this is the one entry every triage
     # goes through, and sg_verify/sg_read below have no standby guard of their
     # own. A drive can also spin down between the sweep and this point.
-    if [[ "$SKIP_STANDBY" == "yes" ]] && tri_asleep "$dev"; then
-        warn "$name (/dev/$dev) is in standby -- left asleep, not triaged (VERIFY and READ would spin it up)"
-        SUMMARY+=("$name ($dev): left asleep -- not triaged")
-        STANDBY_OF["$dev"]=1
+    if tri_asleep "$dev"; then
+        if [[ "$TRI_LEFT" == "unknown" ]]; then
+            warn "$name (/dev/$dev) power state unknown -- left alone, not triaged (VERIFY and READ could spin it up)"
+            SUMMARY+=("$name ($dev): power state unknown -- not triaged")
+        else
+            warn "$name (/dev/$dev) is in standby -- left asleep, not triaged (VERIFY and READ would spin it up)"
+            SUMMARY+=("$name ($dev): left asleep -- not triaged")
+        fi
+        STANDBY_OF["$dev"]="$TRI_LEFT"
         return 0
     fi
 
@@ -876,9 +901,11 @@ fi
 # verdict, and the Verdict screen would report "did not classify". Say why,
 # once, here -- one emission point, so a sleeping disk that was also flagged
 # does not emit twice.
-if [[ -n "$DEV_OVERRIDE" && "$VERDICT_SENT" -eq 0 \
-      && -n "${STANDBY_OF[$(basename "$DEV_OVERRIDE")]:-}" ]]; then
-    tri_verdict manual STANDBY "left asleep -- Diagnose never spins a disk up"
+if [[ -n "$DEV_OVERRIDE" && "$VERDICT_SENT" -eq 0 ]]; then
+    case "${STANDBY_OF[$(basename "$DEV_OVERRIDE")]:-}" in
+        standby) tri_verdict manual STANDBY "left asleep -- Diagnose never spins a disk up" ;;
+        unknown) tri_verdict manual POWER_UNKNOWN "smartctl could not read the power state -- Diagnose never tests a drive it cannot prove is awake" ;;
+    esac
 fi
 
 # ============================================================================

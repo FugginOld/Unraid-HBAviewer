@@ -155,6 +155,24 @@ check('all three evidence cards read not run on the STANDBY screen',
 check('the STANDBY screen says no range was tested',
       str_contains($standbyHtml, 'No range was tested'));
 
+/* ── POWER_UNKNOWN: smartctl could not name the power state, nothing read ─ */
+$pw = diag_verdict_words('POWER_UNKNOWN');
+check('POWER_UNKNOWN has its own title, not the did-not-classify fallback',
+      str_contains($pw['title'], 'Power state unknown'));
+$pwHtml = renderDiagVerdict([
+    'disk' => 'sdx', 'verdict' => 'POWER_UNKNOWN', 'why' => 'power state unknown',
+    'events' => [], 'sense' => [], 'max_cmd_age' => null,
+    'array_disk' => true, 'ports' => [], 'recent' => [],
+]);
+check('the POWER_UNKNOWN screen says it never tests a drive it cannot prove is awake',
+      str_contains($pwHtml, 'cannot prove is awake'));
+check('the POWER_UNKNOWN screen gives no parity advice',
+      !str_contains(strtolower($pwHtml), 'parity check'));
+check('all three evidence cards read not run on the POWER_UNKNOWN screen',
+      substr_count($pwHtml, 'not run') === 3);
+check('POWER_UNKNOWN sorts with STANDBY, below CLEAN',
+      (DIAG_BADGE_RANK['POWER_UNKNOWN'] ?? 9) === DIAG_BADGE_RANK['STANDBY']);
+
 /* ── the drive list sidebar ────────────────────────────────────────────── */
 $drives = [
     ['dev' => 'sdb', 'role' => 'Disk 1'],

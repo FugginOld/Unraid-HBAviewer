@@ -158,6 +158,13 @@ check('a verdict event switches to the verdict screen',
 A({ t: 'verdict', disk: 'sdd', v: 'STANDBY', why: 'left asleep -- Diagnose never spins a disk up' });
 check('a STANDBY verdict logs at warn severity, not crit',
       els.get('diag-stream')._html.includes('lu-warn'));
+// Likewise POWER_UNKNOWN: nothing was tested. Cleared first, so an earlier
+// warn line cannot satisfy the check.
+els.get('diag-stream')._html = '';
+A({ t: 'verdict', disk: 'sdx', v: 'POWER_UNKNOWN', why: 'power state unknown' });
+check('a POWER_UNKNOWN verdict logs at warn severity, not crit',
+      els.get('diag-stream')._html.includes('lu-warn')
+      && !els.get('diag-stream')._html.includes('lu-crit'));
 
 /* ── starting a job, EventSource lifecycle, and the pause fix ───────────── */
 /* Async because openStream() -- and the EventSource it opens -- only runs

@@ -23,6 +23,27 @@ trap 'rm -rf "$WORK"' EXIT
 # Every stub records its own argv, so a test can assert which flags were used.
 cat > "$STUBDIR/smartctl" <<'STUB'
 #!/bin/bash
+# Unknown power state: an ATA drive answered CHECK POWER MODE with a value
+# smartctl does not know. smartctl then ignores -n and reads the drive anyway,
+# so every call here is a real access. The line is smartctl's own message
+# (ataprint.cpp), synthetic -- no drive on Golem produces it.
+if [ "${STUB_POWER_UNKNOWN:-}" = "1" ]; then
+    echo "WOKE smartctl $*" >> "$STUB_ARGS"
+    echo "CHECK POWER MODE returned unknown value 0x17, ignoring -n option"
+    cat "$STUB_SMART"
+    exit 0
+fi
+# Race mode: the standby probe (-i) answers awake, but the full read (-x) that
+# follows declines -- the drive spun down between the two calls.
+if [ "${STUB_X_ASLEEP:-}" = "1" ]; then
+    case " $* " in
+        *" -x "*)
+            echo "smartctl $*" >> "$STUB_ARGS"
+            cat "$STUB_SMART_ASLEEP"
+            exit 2
+            ;;
+    esac
+fi
 # Counter mode: the standby PROBE ( -n standby -i ... , tri_asleep's own call)
 # answers differently by call number, to race the sweep's probe against
 # triage_disk()'s re-check. Keyed on " -i " specifically -- snap()'s "-x"
@@ -369,6 +390,51 @@ has "F: that verdict is STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
 wokeF=$(grep -cE '^(WOKE|sg_verify|sg_read)' "$ARGS" || true)
 [ "${wokeF:-0}" -eq 0 ] && ok "F: triage_disk's re-check caught it before any wake" \
                          || bad "F: triage_disk's re-check caught it before any wake" "$wokeF line(s): $(cat "$ARGS")"
+: > "$STUB_DMESG"
+
+# G -- --no-skip-standby used to remove only the probe; every read still
+# passes -n standby and declines, and the decline parsed as all-zero counters
+# that overwrote the baseline. The flag is gone: it is ignored, and the drive
+# is still seen as asleep with its baseline intact.
+SF_G="$WORK/state_g.tsv"
+printf 'manual	1700000000	7	0	0	0	0	manual
+' > "$SF_G"
+outG=$(STUB_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 run --state "$SF_G" --no-triage --no-skip-standby)
+has "G: --no-skip-standby still leaves a sleeping drive SLEEPING" "$outG" "SLEEPING"
+gotUncorrG=$(awk -F'	' '$1=="manual"{print $3; exit}' "$SF_G")
+[ "$gotUncorrG" = "7" ] && ok "G: --no-skip-standby does not zero the baseline (uncorr=7 kept)"                          || bad "G: --no-skip-standby does not zero the baseline (uncorr=7 kept)" "got '$gotUncorrG'"
+
+# H -- the drive falls asleep between the sweep's probe and its full read.
+# The probe answers awake; the -x read declines. That declined read must be
+# treated as asleep, not parsed as zeros into the baseline.
+SF_H="$WORK/state_h.tsv"
+printf 'manual	1700000000	7	0	0	0	0	manual
+' > "$SF_H"
+outH=$(STUB_X_ASLEEP=1 TRIAGE_SKIP_DEV_CHECK=1 run --state "$SF_H" --no-triage)
+has "H: a read declined after an awake probe ends SLEEPING" "$outH" "SLEEPING"
+gotUncorrH=$(awk -F'	' '$1=="manual"{print $3; exit}' "$SF_H")
+[ "$gotUncorrH" = "7" ] && ok "H: a declined read does not zero the baseline (uncorr=7 kept)"                          || bad "H: a declined read does not zero the baseline (uncorr=7 kept)" "got '$gotUncorrH'"
+smartfile_h=$(find "$WORK/out" -iname 'smart-sdX.txt' 2>/dev/null)
+[ -z "$smartfile_h" ] && ok "H: the declined read leaves no smart-sdX.txt behind"                        || bad "H: the declined read leaves no smart-sdX.txt behind" "found: $smartfile_h"
+
+# I -- a power state smartctl cannot name is not "awake". The probe itself is
+# the only access; the drive is not read, not triaged, and the baseline keeps
+# its values. A web Diagnose gets one POWER_UNKNOWN verdict saying why.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+SF_I="$WORK/state_i.tsv"
+printf 'manual	1700000000	7	0	0	0	0	manual
+' > "$SF_I"
+outI=$(STUB_POWER_UNKNOWN=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1        run --state "$SF_I" --auto-triage --all --events "$EV")
+has "I: the sweep row says POWER UNKNOWN" "$outI" "POWER UNKNOWN"
+hasnt "I: the drive is not read in full (no smartctl -x)" "$(cat "$ARGS")" " -x "
+hasnt "I: the drive is not triaged (no sg_verify)" "$(cat "$ARGS")" "sg_verify"
+hasnt "I: the drive is not triaged (no sg_read)"   "$(cat "$ARGS")" "sg_read"
+gotUncorrI=$(awk -F'	' '$1=="manual"{print $3; exit}' "$SF_I")
+[ "$gotUncorrI" = "7" ] && ok "I: the baseline keeps uncorr=7"                          || bad "I: the baseline keeps uncorr=7" "got '$gotUncorrI'"
+vcountI=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountI" -eq 1 ] && ok "I: exactly one verdict event"                       || bad "I: exactly one verdict event" "got $vcountI: $(cat "$EV")"
+has "I: that verdict is POWER_UNKNOWN" "$(cat "$EV")" '"v":"POWER_UNKNOWN"'
 : > "$STUB_DMESG"
 
 echo

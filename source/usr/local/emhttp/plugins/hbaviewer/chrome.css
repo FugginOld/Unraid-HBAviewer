@@ -742,6 +742,10 @@
                    font-size: 11px; font-variant-numeric: tabular-nums; }
 .lu-diag-stream  { max-height: 320px; overflow-y: auto; font-family: monospace;
                    font-size: 11px; white-space: pre-wrap; }
+.lu-diag-stream .lu-ok    { color: var(--good-text); }
+.lu-diag-stream .lu-warn  { color: var(--warn-text); }
+.lu-diag-stream .lu-crit  { color: var(--crit-text); }
+.lu-diag-stream .lu-muted { font-size: inherit; }
 .lu-diag-dot     { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
                    background: var(--border); vertical-align: middle; margin-right: 6px; }
 .lu-diag-dot.running { background: var(--warn-text); }
