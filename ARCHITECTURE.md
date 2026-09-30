@@ -537,11 +537,15 @@ moving says nothing about whether the cron sampler is running.
   it: a drive that spins down between the two returns a decline that parses
   as all-zero counters and overwrites the baseline. The engine's old
   `--no-skip-standby` flag did exactly that on every run -- it removed only the
-  probe, while every read still passed `-n standby` -- and is gone.
+  probe, while every read still passed `-n standby` -- and is gone. The same
+  holds in `triage_disk()`: a declined before-snap stops the triage before
+  `sg_verify`/`sg_read` can spin the drive up, and a declined after-snap
+  reports no deltas rather than lifetime counters as movement.
 - **"Cannot tell" is not "awake".** When an ATA drive answers CHECK POWER MODE
   with a value smartctl does not know, or does not implement it, smartctl
   prints `ignoring -n option` and reads anyway. `tri_declined()` treats that as
-  a refusal (`TRI_LEFT=unknown`): the drive is not read or triaged, and a web
+  a refusal (`TRI_LEFT=unknown`): beyond that probe's own IDENTIFY, which
+  smartctl sends regardless, the drive is not read or triaged, and a web
   Diagnose ends `POWER_UNKNOWN`. Such a drive is never diagnosable; that is
   the price of the never-wake guarantee.
 - **`hdparm -C` is not a power-state check for SAS drives.** It sends an ATA

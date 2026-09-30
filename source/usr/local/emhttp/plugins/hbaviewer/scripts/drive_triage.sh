@@ -736,6 +736,17 @@ snap() {  # device -> summed counters, one key per line
 }
 
 SUMMARY=()
+tri_left_alone() {  # name dev -- after tri_asleep/tri_declined said so
+    if [[ "$TRI_LEFT" == "unknown" ]]; then
+        warn "$1 (/dev/$2) power state unknown -- left alone, not triaged (VERIFY and READ could spin it up)"
+        SUMMARY+=("$1 ($2): power state unknown -- not triaged")
+    else
+        warn "$1 (/dev/$2) is in standby -- left asleep, not triaged (VERIFY and READ would spin it up)"
+        SUMMARY+=("$1 ($2): left asleep -- not triaged")
+    fi
+    STANDBY_OF["$2"]="$TRI_LEFT"
+}
+
 triage_disk() {
     local name="$1" dev="$2" verdict="$3"
     sect "TRIAGE: $name (/dev/$dev)  [$verdict]"
@@ -744,18 +755,17 @@ triage_disk() {
     # goes through, and sg_verify/sg_read below have no standby guard of their
     # own. A drive can also spin down between the sweep and this point.
     if tri_asleep "$dev"; then
-        if [[ "$TRI_LEFT" == "unknown" ]]; then
-            warn "$name (/dev/$dev) power state unknown -- left alone, not triaged (VERIFY and READ could spin it up)"
-            SUMMARY+=("$name ($dev): power state unknown -- not triaged")
-        else
-            warn "$name (/dev/$dev) is in standby -- left asleep, not triaged (VERIFY and READ would spin it up)"
-            SUMMARY+=("$name ($dev): left asleep -- not triaged")
-        fi
-        STANDBY_OF["$dev"]="$TRI_LEFT"
-        return 0
+        tri_left_alone "$name" "$dev"; return 0
     fi
 
+    # The before-snap is a read of its own, and the drive can spin down
+    # between the probe and it. A decline here is proof it is asleep now, and
+    # its zeros are not a baseline. snap() runs in a pipeline subshell, so the
+    # check reads the file it left rather than anything it set.
     snap "$dev" | grep -E '^[a-z]+=[0-9]+$' > "$RUN/before-$dev.txt"
+    if tri_declined "$(< "$RUN/smart-$dev.txt")"; then
+        tri_left_alone "$name" "$dev"; return 0
+    fi
     local dmark; dmark="$(dmesg | wc -l)"
     local ranges vfail=0 rfail=0 vran=0
 
@@ -837,6 +847,12 @@ triage_disk() {
     fi
 
     snap "$dev" | grep -E '^[a-z]+=[0-9]+$' > "$RUN/after-$dev.txt"
+    # Asleep again by the end: its zeros against the before-snap would report
+    # the drive's lifetime counters as movement during this triage.
+    if tri_declined "$(< "$RUN/smart-$dev.txt")"; then
+        warn "  counters not re-read -- the drive declined the read, so no deltas"
+        : > "$RUN/after-$dev.txt"
+    fi
     log ""
     log "  counter deltas across this triage:"
     local dmedia=0 dpath=0

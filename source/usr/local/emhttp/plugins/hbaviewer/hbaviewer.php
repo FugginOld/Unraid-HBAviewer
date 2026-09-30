@@ -207,12 +207,11 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
             <option value="surface">Full-surface VERIFY</option>
             <option value="selftest">SMART short self-test</option>
           </select>
-          <!-- Checked by default. HBAviewer's standing guarantee is that it
-               never wakes a sleeping disk, so the protective setting is the
-               one you have to turn OFF. -->
-          <label><input type="checkbox" id="diag-standby" checked> Leave standby drives asleep</label>
+          <!-- A statement, not a setting: HBAviewer never wakes a sleeping
+               disk, and there is no opt-out for a control to offer. -->
+          <span id="diag-standby" class="lu-muted">Standby drives are always left asleep</span>
         </div>
-        <!-- Worst-first, with MEDIA / TRANSPORT / SCANNING / CLEAN / STANDBY
+        <!-- Worst-first, with MEDIA / TRANSPORT / SCANNING / CLEAN / STANDBY / POWER_UNKNOWN
              badges; unassigned drives in their own group. -->
         <div id="diag-drives"></div>
       </div>

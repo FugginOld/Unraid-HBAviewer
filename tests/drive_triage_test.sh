@@ -33,6 +33,22 @@ if [ "${STUB_POWER_UNKNOWN:-}" = "1" ]; then
     cat "$STUB_SMART"
     exit 0
 fi
+# Nth-read mode: full reads (-x) numbered STUB_X_DECLINE_FROM and later
+# decline. With one disk, read 1 is the sweep's, 2 is triage_disk's
+# before-snap, 3 its after-snap. The probe (-i) keeps answering awake.
+if [ -n "${STUB_X_DECLINE_FROM:-}" ]; then
+    case " $* " in
+        *" -x "*)
+            n=$(( $(cat "$STUB_X_COUNTER" 2>/dev/null || echo 0) + 1 ))
+            echo "$n" > "$STUB_X_COUNTER"
+            if [ "$n" -ge "$STUB_X_DECLINE_FROM" ]; then
+                echo "smartctl $*" >> "$STUB_ARGS"
+                cat "$STUB_SMART_ASLEEP"
+                exit 2
+            fi
+            ;;
+    esac
+fi
 # Race mode: the standby probe (-i) answers awake, but the full read (-x) that
 # follows declines -- the drive spun down between the two calls.
 if [ "${STUB_X_ASLEEP:-}" = "1" ]; then
@@ -435,6 +451,35 @@ gotUncorrI=$(awk -F'	' '$1=="manual"{print $3; exit}' "$SF_I")
 vcountI=$(grep -c '"t":"verdict"' "$EV")
 [ "$vcountI" -eq 1 ] && ok "I: exactly one verdict event"                       || bad "I: exactly one verdict event" "got $vcountI: $(cat "$EV")"
 has "I: that verdict is POWER_UNKNOWN" "$(cat "$EV")" '"v":"POWER_UNKNOWN"'
+: > "$STUB_DMESG"
+
+# J -- triage_disk's before-snap is a read of its own, after the probe. If
+# the drive spins down in between, that read declines: proof it is asleep
+# now. sg_verify/sg_read must not run, and the run ends STANDBY.
+echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0" > "$STUB_DMESG"
+: > "$EV"
+XC_J="$WORK/xcount_j"; rm -f "$XC_J"
+outJ=$(STUB_X_DECLINE_FROM=2 STUB_X_COUNTER="$XC_J" TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+       run --auto-triage --all --events "$EV")
+hasnt "J: the sweep read it awake (no SLEEPING row)" "$outJ" "SLEEPING"
+wokeJ=$(grep -cE '^(sg_verify|sg_read)' "$ARGS" || true)
+[ "${wokeJ:-0}" -eq 0 ] && ok "J: a declined before-snap stops triage before any VERIFY/READ" \
+                         || bad "J: a declined before-snap stops triage before any VERIFY/READ" "$wokeJ line(s)"
+vcountJ=$(grep -c '"t":"verdict"' "$EV")
+[ "$vcountJ" -eq 1 ] && ok "J: exactly one verdict" || bad "J: exactly one verdict" "got $vcountJ: $(cat "$EV")"
+has "J: that verdict is STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
+hasnt "J: no counter movement is reported" "$(cat "$EV")" '"t":"counter"'
+
+# K -- the after-snap declines (asleep again by the end of triage). Its
+# zeros must not be compared against the before-snap: that would report the
+# drive's lifetime counters as movement during this triage.
+: > "$EV"
+XC_K="$WORK/xcount_k"; rm -f "$XC_K"
+outK=$(STUB_X_DECLINE_FROM=3 STUB_X_COUNTER="$XC_K" TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+       run --auto-triage --all --events "$EV")
+has "K: triage ran (sg_verify called)" "$(cat "$ARGS")" "sg_verify"
+hasnt "K: a declined after-snap reports no counter movement" "$(cat "$EV")" '"t":"counter"'
+hasnt "K: triage's own verdict stands, not STANDBY" "$(cat "$EV")" '"v":"STANDBY"'
 : > "$STUB_DMESG"
 
 echo

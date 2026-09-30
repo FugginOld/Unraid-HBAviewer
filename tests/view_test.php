@@ -258,10 +258,11 @@ foreach (['diag-live', 'diag-verdict', 'diag-head', 'diag-dot', 'diag-pause',
     check("the Live Job markup carries #$id", str_contains($hb, 'id="' . $id . '"'));
 }
 
-// Honoured BY DEFAULT, per the spec. A toggle that protects a sleeping disk
-// and defaults off protects nothing.
-check('leave standby drives asleep is checked by default',
-      (bool) preg_match('/id="diag-standby"[^>]*\bchecked\b/', $hb));
+// Never-wake has no opt-out, so no control may suggest one: an unticked box
+// that nothing reads would promise a wake the engine refuses.
+check('standby drives are stated as always left asleep, not offered as a toggle',
+      str_contains($hb, 'Standby drives are always left asleep')
+      && !preg_match('/<input[^>]*id="diag-standby"/', $hb));
 
 // The inline <script> must declare it, above the <script src>: the static .js
 // reads it as a global and there is no templating step. $csrfToken is read
