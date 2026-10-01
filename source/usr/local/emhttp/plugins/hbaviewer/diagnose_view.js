@@ -373,12 +373,18 @@
     window.luDiagRepair = function (disk) {
         luDiagShow('repair');
         if (typeof luTab === 'function') luTab('diagnose');
+        el('diag-repair-body').innerHTML = '';
         return fetch('/plugins/hbaviewer/diagnose.php?action=repair&disk='
                      + encodeURIComponent(disk))
-          .then(function (r) { return r.text(); })
-          .then(function (h) { el('diag-repair').innerHTML = h; })
-          .catch(function () {
-            el('diag-repair').textContent = 'Could not load the repair evidence — reload the tab.';
+          .then(function (r) {
+            return r.text().then(function (h) {
+              if (!r.ok) throw new Error(h);
+              el('diag-repair-body').innerHTML = h;
+            });
+          })
+          .catch(function (e) {
+            el('diag-repair-body').textContent = (e && e.message) ||
+              'Could not load the repair evidence — reload the tab.';
           });
     };
 

@@ -42,7 +42,7 @@ function mkEl(id) {
 const ids = ['diag-live','diag-verdict','diag-repair','diag-head','diag-dot','diag-pause','diag-cancel',
              'diag-pills','diag-progress','diag-hotzone','diag-map','diag-hist',
              'diag-counters','diag-interp','diag-stream','diag-newjob','diag-standby',
-             'diag-drives','diag-verdict-body'];
+             'diag-drives','diag-verdict-body','diag-repair-body'];
 ids.forEach(i => els.set(i, mkEl(i)));
 
 const fetches = [];
@@ -359,7 +359,7 @@ async function tail() {
     const fetchBeforeRepair = sandbox.fetch;
     sandbox.fetch = (url, opts) => {
         fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
-        return Promise.resolve({ text: () => Promise.resolve('<p>REPAIR sdc</p>') });
+        return Promise.resolve({ ok: true, text: () => Promise.resolve('<p>REPAIR sdc</p>') });
     };
     await sandbox.luDiagRepair('sdc');
     sandbox.fetch = fetchBeforeRepair;
@@ -370,11 +370,28 @@ async function tail() {
     check('Repair shows only the repair screen',
           els.get('diag-repair').hidden === false && els.get('diag-verdict').hidden === true
           && els.get('diag-live').hidden === true);
-    check('the fragment lands in #diag-repair', els.get('diag-repair')._html.includes('REPAIR sdc'));
+    check('the fragment lands in #diag-repair-body', els.get('diag-repair-body')._html.includes('REPAIR sdc'));
     check('Repair leaves the page\'s job alone', sandbox.luDiagJob === 'sdb-9');
     sandbox.luDiagShow('verdict');
     check('Back to verdict hides the repair screen again',
           els.get('diag-repair').hidden === true && els.get('diag-verdict').hidden === false);
+
+    /* A failed load keeps the screen (and its static Back), shows the error in
+       the body only, and never leaves a previous disk's fragment; the disk is
+       URL-encoded. */
+    fetches.length = 0;
+    els.get('diag-repair-body')._html = '<p>STALE sdc</p>';
+    sandbox.fetch = (url) => {
+        fetches.push({ url });
+        return Promise.resolve({ ok: false, text: () => Promise.resolve('Invalid disk.') });
+    };
+    await sandbox.luDiagRepair('a&b');
+    sandbox.fetch = fetchBeforeRepair;
+    check('the disk is URL-encoded in the repair fetch', fetches[0].url.includes('disk=a%26b'));
+    check('a non-OK repair response shows its error in the body',
+          els.get('diag-repair-body').textContent === 'Invalid disk.');
+    check('and clears the previous disk\'s fragment', !String(els.get('diag-repair-body')._html).includes('STALE'));
+    check('and leaves the screen shown', els.get('diag-repair').hidden === false);
 
     /* The Verdict screen's way back lives in its static markup; the verdict
        fetch must write below it, never over it. The stub fetch has no text(),

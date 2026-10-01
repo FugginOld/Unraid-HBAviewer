@@ -247,8 +247,8 @@ function renderDiagVerdict(array $in): string {
        not in the client: a reopened past verdict never passes its verdict
        event through the browser. */
     if ($v !== 'CLEAN') {
-        $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagRepair(\''
-              . htmlspecialchars($disk, ENT_QUOTES) . '\')">Repair</button> '
+        $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagRepair('
+              . htmlspecialchars(json_encode($disk), ENT_QUOTES) . ')">Repair</button> '
               . '<span class="lu-muted">Bad-block evidence for this drive, across runs.</span></p>';
     }
     $out .= '</div>';
@@ -304,8 +304,7 @@ function renderDiagRepair(array $in): string {
     $disk = (string) ($in['disk'] ?? '');
     $rows = (array) ($in['rows'] ?? []);
     $out  = '<div class="lu-card first"><div class="lu-tab-toolbar"><h3>Repair — <code>/dev/'
-          . htmlspecialchars($disk) . '</code></h3>'
-          . '<button class="lu-refresh-btn" type="button" onclick="luDiagShow(\'verdict\')">Back to verdict</button></div>';
+          . htmlspecialchars($disk) . '</code></h3></div>';
 
     /* THE ASSIGNED-DISK RULE, same as diag_next_steps(): a block written
        straight to a disk Unraid has assigned -- array, parity or pool --

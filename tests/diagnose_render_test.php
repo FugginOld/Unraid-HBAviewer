@@ -241,6 +241,9 @@ preg_match_all('/onclick="([A-Za-z]+)\(/', $rep, $m);
 check('the only handlers are navigation and column sort -- no repair control',
       array_diff(array_unique($m[1]), ['luDiagShow', 'luSort']) === []
       && !preg_match('/<(input|select|textarea)\b/', $rep));
+check('the fragment has no button but column sort (Back is static markup)',
+      preg_match('/<button\b(?![^>]*lu-sort)/', $rep) === 0
+      && preg_match('/<button\b(?![^>]*lu-sort)/', renderDiagRepair(['disk' => 'sdb', 'array_disk' => true, 'rows' => []])) === 0);
 check('nothing on the screen names a repair tool',
       !str_contains($rep, 'sg_reassign') && !str_contains($rep, 'write-sector'));
 
@@ -292,13 +295,16 @@ $vIn = fn(string $v, string $disk = 'sdb') => [
     'disk' => $disk, 'verdict' => $v, 'why' => '', 'events' => [], 'sense' => [],
     'max_cmd_age' => null, 'array_disk' => false, 'ports' => [], 'recent' => []];
 check('a non-CLEAN verdict offers the Repair screen for its disk',
-      str_contains(renderDiagVerdict($vIn('MEDIA')), "luDiagRepair('sdb')")
-      && str_contains(renderDiagVerdict($vIn('TRANSPORT')), "luDiagRepair('sdb')"));
+      str_contains(renderDiagVerdict($vIn('MEDIA')), 'luDiagRepair(&quot;sdb&quot;)')
+      && str_contains(renderDiagVerdict($vIn('TRANSPORT')), 'luDiagRepair(&quot;sdb&quot;)'));
 check('a CLEAN verdict does not', !str_contains(renderDiagVerdict($vIn('CLEAN')), 'luDiagRepair('));
 // A run that did not classify is not clean -- absence is not health.
 check('an unclassified run still offers it', str_contains(renderDiagVerdict($vIn('')), 'luDiagRepair('));
-check('the disk in the Repair onclick is quote-escaped',
-      str_contains(renderDiagVerdict($vIn('MEDIA', "a'b")), "luDiagRepair('a&#039;b')"));
+// The browser decodes the attribute before running it as JS, so the decoded
+// value must still be one JS string literal.
+preg_match('/onclick="(luDiagRepair\([^"]*)"/', renderDiagVerdict($vIn('MEDIA', "a'b")), $om);
+check('the disk in the Repair onclick is a JS string literal that survives attribute decoding',
+      isset($om[1]) && html_entity_decode($om[1], ENT_QUOTES) === 'luDiagRepair("a\'b")');
 
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);
