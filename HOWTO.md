@@ -93,10 +93,10 @@ media or on the SAS/SATA link to it.
 **Every operation is a read.** Preflight checks, a SMART snapshot, targeted
 SCSI VERIFY/READ against the ranges the kernel log already flagged (or, when
 nothing was flagged, a fixed spot-check of LBA 0:256), and a SMART short
-self-test — nothing here ever writes to the device. Phase 1 has
-no repair or reassignment action: the Verdict screen recommends next steps
-(move the drive, re-run under load, rebuild through Unraid's own array
-tools) but performs none of them.
+self-test — nothing here ever writes to the device. Repair *execution* is
+not in this release: the Verdict screen recommends next steps (move the
+drive, re-run under load, rebuild through Unraid's own array tools) but
+performs none of them, and the Repair screen shows evidence, not actions.
 
 **The job outlives the tab.** Diagnose launches its engine as its own
 detached process; closing the browser tab, or the whole browser, does not
@@ -136,6 +136,39 @@ argued from (grown defects, uncorrected reads, non-medium errors, invalid
 DWORD, loss of sync) are compared against that disk's previous run, saved
 per disk. With no previous run there is nothing to compare against — run
 Diagnose again in a few hours for deltas that mean anything.
+
+**Repair shows evidence, not actions.** Every verdict that is not CLEAN
+carries a **Repair** button. For a disk Unraid has assigned — array, parity
+(including the second parity) or a pool — the Repair screen explains why
+direct sector repair is not offered — it bypasses parity or the pool's own
+redundancy — and lists the three safe options together: replace, rebuild
+onto itself, or keep in service and watch. They are options to weigh; the
+screen does not pick one. (Earlier releases treated parity2 and pool disks
+as unassigned, both here and in the sidebar's grouping; they now get the
+assigned-disk advice.) For an unassigned disk it lists the drive's
+**confirmed** failing ranges: 2048-block chunks where SCSI VERIFY failed —
+the drive could not read its own platters — on **two separate runs**. A
+range that failed only over the link (VERIFY clean, READ failed) never
+counts toward confirmation, because remapping it would retire a good sector
+and leave the cable, slot or HBA fault in place; those are counted in a
+line of their own instead. A chunk that stops failing keeps its row and its
+history. Nothing on the screen writes to the disk, and the only controls
+are navigation (Back to verdict) and the table's column sorting. A failed
+load shows its error under the Back button.
+
+A range's Start LBA identifies the region a defect was found in, for
+matching it across runs; it is not the exact bad block. Repair execution,
+when it comes, will locate the exact block with a fresh VERIFY first.
+
+The bad-range history is kept beside the baseline in `/tmp/hbaviewer/jobs/`
+(`sdX.badranges.tsv`), so a reboot starts it over — losing it only ever
+means "not confirmed yet". Every row is filed under the drive's own serial
+number, read from sysfs without waking the drive, so a drive that later
+takes over the same `sdX` name sees none of the previous drive's history.
+If a drive's serial cannot be read, its Repair screen says so and shows
+nothing. NVMe drives expose no such serial, so they record no bad-range
+evidence. The file's permissions follow the umask of the process that
+creates it, like the baseline file.
 
 ## Map your drive bays
 

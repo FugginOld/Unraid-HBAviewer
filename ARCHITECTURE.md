@@ -116,7 +116,7 @@ installs it; Unraid's Slackware base ships it.
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
 | `notify.php`, `scripts/notify_check.php` | Health-transition notifications (cron). |
 | `flash.php` | **The only mutating path.** See below. |
-| `diagnose.php` | The read-only disk-diagnose job runner: `start` / `status` / `cancel` / `list`. Launches `scripts/drive_triage.sh --events` under `setsid` into `/tmp/hbaviewer/jobs/<job-id>/`, one lock per disk, cancel by process group. The kernel-error baseline the engine compares each run against is deliberately NOT kept in that per-job directory — `--state` points it at a stable sibling, `/tmp/hbaviewer/jobs/<disk>.baseline.tsv`, so it survives the job-directory retention sweep instead of being deleted with the run that wrote it. Not a mutating path — every operation it starts is a read. |
+| `diagnose.php` | The read-only disk-diagnose job runner: `start` / `status` / `cancel` / `list`. Launches `scripts/drive_triage.sh --events` under `setsid` into `/tmp/hbaviewer/jobs/<job-id>/`, one lock per disk, cancel by process group. The kernel-error baseline the engine compares each run against is deliberately NOT kept in that per-job directory — `--state` points it at a stable sibling, `/tmp/hbaviewer/jobs/<disk>.baseline.tsv`, so it survives the job-directory retention sweep instead of being deleted with the run that wrote it. The bad-range ledger is the same kind of state: `--badrange-state` points it at `/tmp/hbaviewer/jobs/<disk>.badranges.tsv` (`diag_badrange_path()`), one row per 2048-block chunk that ever failed a check, and `?action=repair` reads it for the Repair screen — disk-scoped, pure PHP, no shell-out, rows filtered to the drive's serial. Not a mutating path — every operation it starts is a read. |
 | `diagnose_stream.php` | Server-Sent Events over one job's event file, resumed by byte offset. Bounded to `DIAG_SSE_MAX_SECS` per connection so a stream cannot hold a php-fpm worker indefinitely. |
 | `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
@@ -556,3 +556,35 @@ moving says nothing about whether the cron sampler is running.
   command SAS drives reject, then prints `standby` or `unknown` whatever the
   real state. Use `smartctl -n standby` or `sg_requests`; Unraid's own
   `disks.ini` `spundown` agrees with both.
+- **The bad-range ledger is keyed by the drive's serial, read from sysfs on
+  BOTH sides.** `drive_triage.sh` (`br_serial`) writes, and
+  `diag_disk_serial()` filters on, `/sys/block/<dev>/device/vpd_pg80` — the
+  kernel's cached VPD page 0x80, so no command reaches the drive and a
+  sleeping one stays asleep — normalized the same way (skip the 4-byte header,
+  printable ASCII, trim spaces). Change the source or the normalization on one
+  side alone and every row silently vanishes from the Repair screen. It is
+  NOT the slot ID `$STATE` uses: on every web-launched `/dev/<disk>` run that
+  ID is the literal `manual`. The per-disk file is still named by sd letter;
+  the reader filters it to the current drive's serial, so a drive that takes
+  over a name sees none of its predecessor's rows, and an unreadable serial
+  shows nothing rather than everything. NVMe devices have no `vpd_pg80`, so
+  they record no bad-range evidence. On the SAS/SATA disks checked (Golem)
+  the sysfs serial equals smartctl's. The reader also skips a row whose
+  `updated_ts` (7th column) is not numeric, and the file's mode follows the
+  creating process's umask, as the baseline's does.
+- **`chunk_start` in the ledger is a region key, never a write address.** A
+  tested range starts `PAD` (2000) blocks below the failing sector the kernel
+  reported, so its chunk can precede the defect. Any future write path must
+  locate the exact LBA with a fresh fine-grained VERIFY first.
+- **"Assigned" means assigned anywhere, and has one reader.**
+  `diag_array_disk()`, the Diagnose sidebar and the SMART tab all go through
+  `unraid_disk_roles()`: parity, parity2, `diskN` and pool members are
+  assigned, and an unreadable `disks.ini` counts as assigned. The Diagnose
+  screens' old inline `^disk\d+$` test called parity and pool disks
+  unassigned and gave a parity disk's MEDIA verdict the unassigned-disk
+  advice.
+- **Only a `media` result raises a bad-range row's `confirm_count`.** A
+  `transport` range is healthy inside the drive; counting it would let two
+  cable faults "confirm" a sector for remapping, retiring a good block and
+  leaving the fault in place. Asserted, with an in-suite mutation check, in
+  `tests/drive_triage_test.sh`.
