@@ -121,7 +121,7 @@ function diag_badranges_read(string $file, string $serial): array {
     $rows = [];
     foreach (explode("\n", (string) @file_get_contents($file)) as $line) {
         $c = explode("\t", rtrim($line, "\r"));
-        if (count($c) < 7 || $c[0] !== $serial || !ctype_digit($c[1]) || !ctype_digit($c[2])
+        if (count($c) < 7 || $c[0] !== $serial || !ctype_digit($c[1]) || !ctype_digit($c[2]) || !ctype_digit($c[6])
             || !in_array($c[5], ['media', 'transport', 'intermittent', 'unresolved'], true)) continue;
         $rows[] = ['chunk_start' => (int) $c[1], 'confirm_count' => (int) $c[2],
                    'first_run'   => $c[3],       'last_run'      => $c[4],

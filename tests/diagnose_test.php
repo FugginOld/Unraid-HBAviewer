@@ -91,7 +91,7 @@ check('no VPD page means no serial', diag_disk_serial('sdc', $sys) === '');
 @mkdir("$sys/block/sdd/device", 0777, true);
 file_put_contents("$sys/block/sdd/device/vpd_pg80", "\x00\x80\x00\x00");
 check('a header-only page means no serial', diag_disk_serial('sdd', $sys) === '');
-check('an invalid disk name reads nothing', diag_disk_serial('../sdb', $sys) === '');
+check('an invalid disk name reads nothing', diag_disk_serial('../block/sdb', $sys) === '');
 
 /* ── the reader: this drive's rows only, forgiving about everything else ── */
 $led = "$root/sdb.badranges.tsv";
