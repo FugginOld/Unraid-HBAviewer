@@ -70,6 +70,83 @@ check('an invalid disk name trims nothing',  diag_trim_runs('../', 1, $root) ===
 check('a baseline path sits under the root, keyed by disk',
       diag_baseline_path('sdb', $root) === "$root/sdb.baseline.tsv");
 
+/* ── the bad-range ledger: a stable per-disk path ─────────────────────────
+   Same sibling-of-the-job-dirs placement as the baseline, for the same reason:
+   the ledger spans runs, so it must not live where diag_trim_runs() sweeps. */
+check('a ledger path sits under the root, keyed by disk',
+      diag_badrange_path('sdb', $root) === "$root/sdb.badranges.tsv");
+check('and it is not the baseline file',
+      diag_badrange_path('sdb', $root) !== diag_baseline_path('sdb', $root));
+
+/* ── the drive's serial: sysfs VPD 0x80, never a command to the drive ─────
+   Same source and normalization as drive_triage.sh's br_serial(). The length
+   byte is 0x30 -- printable -- so a reader that fails to skip the 4-byte
+   header is caught rather than having the header stripped as non-printable. */
+$sys = "$root/sys";
+@mkdir("$sys/block/sdb/device", 0777, true);
+file_put_contents("$sys/block/sdb/device/vpd_pg80", "\x00\x80\x00\x30  SERIALB00001  ");
+check('the serial is read from VPD 0x80, header skipped, padding trimmed',
+      diag_disk_serial('sdb', $sys) === 'SERIALB00001');
+check('no VPD page means no serial', diag_disk_serial('sdc', $sys) === '');
+@mkdir("$sys/block/sdd/device", 0777, true);
+file_put_contents("$sys/block/sdd/device/vpd_pg80", "\x00\x80\x00\x00");
+check('a header-only page means no serial', diag_disk_serial('sdd', $sys) === '');
+check('an invalid disk name reads nothing', diag_disk_serial('../sdb', $sys) === '');
+
+/* ── the reader: this drive's rows only, forgiving about everything else ── */
+$led = "$root/sdb.badranges.tsv";
+check('a missing ledger is zero rows, not an error', diag_badranges_read($led, 'S1') === []);
+file_put_contents($led, implode("\n", [
+    "S1\t10240\t2\t20260101-000000\t20260102-000000\tmedia\t1767312000",
+    "S1\t20480\t0\t20260101-000000\t20260102-000000\ttransport\t1767312000",
+    "S1\tNaN\t1\ta\tb\tmedia\t1",                      // non-numeric chunk_start
+    "S1\t30720\t1\ta\tb",                              // too few columns
+    "S1\t40960\t1\ta\tb\tbogus\t1",                    // a class the engine never writes
+    "S1\t51200\t1\ta\tb\tmedia\t1\textra",             // a later column: the forward path
+    "S1\t61440\t1\ta\tb\tintermittent\t5\r",           // hand-edited on Windows
+    "OTHER\t10240\t2\ta\tb\tmedia\t1",                 // a previous drive on this sdX name
+    "\t71680\t2\ta\tb\tmedia\t1",                      // no serial at all
+    "",
+]));
+$rows = diag_badranges_read($led, 'S1');
+check('only this drive\'s well-formed rows are read', count($rows) === 4);
+check('a row carries chunk_start and confirm_count as ints',
+      $rows[0]['chunk_start'] === 10240 && $rows[0]['confirm_count'] === 2);
+check('and its last class and last run',
+      $rows[0]['last_class'] === 'media' && $rows[0]['last_run'] === '20260102-000000');
+check('a trailing extra column does not reject a row', $rows[2]['chunk_start'] === 51200);
+check('a CRLF line still reads, updated_ts intact',
+      $rows[3]['last_class'] === 'intermittent' && $rows[3]['updated'] === 5);
+// OTHER also has a row at 10240: unfiltered, this drive would show two.
+check('a row filed under another serial is not shown',
+      count(array_filter($rows, fn($r) => $r['chunk_start'] === 10240)) === 1
+      && count(diag_badranges_read($led, 'OTHER')) === 1);
+// Unknown serial must show NOTHING -- not the unfiltered file, and not the
+// row whose key is empty, which an equality test alone would match.
+check('an unknown serial reads nothing', diag_badranges_read($led, '') === []);
+@unlink($led);
+
+/* ── assigned-ness: assigned ANYWHERE, one reader ─────────────────────────
+   Parity, parity2 and pool members are assigned: the old inline ^disk\d+$
+   test called them unassigned, and a parity disk's MEDIA verdict got the
+   unassigned-disk advice. An unreadable disks.ini must mean ASSIGNED, the
+   stricter answer, which never suggests writing to the disk. */
+check('an unreadable disks.ini means ASSIGNED', diag_array_disk('sdb', "$root/nope.ini") === true);
+$iniF = "$root/disks.ini";
+file_put_contents($iniF, "[\"parity\"]\nname=\"parity\"\ndevice=\"sdp\"\n"
+                       . "[\"parity2\"]\nname=\"parity2\"\ndevice=\"sdq\"\n"
+                       . "[\"disk1\"]\nname=\"disk1\"\ndevice=\"sdb\"\n"
+                       . "[\"disk2\"]\nname=\"disk2\"\ndevice=\"\"\n"
+                       . "[\"cache\"]\nname=\"cache\"\ndevice=\"nvme0n1\"\n");
+check('an array data slot is assigned',   diag_array_disk('sdb', $iniF) === true);
+check('parity is assigned',               diag_array_disk('sdp', $iniF) === true);
+check('parity2 is assigned',              diag_array_disk('sdq', $iniF) === true);
+check('a pool member is assigned',        diag_array_disk('nvme0n1', $iniF) === true);
+check('a device in no slot is not',       diag_array_disk('sdz', $iniF) === false);
+@unlink($iniF);
+foreach (['sdb', 'sdd'] as $d) { @unlink("$sys/block/$d/device/vpd_pg80"); @rmdir("$sys/block/$d/device"); @rmdir("$sys/block/$d"); }
+@rmdir("$sys/block"); @rmdir($sys);
+
 /* ── the lock is per DISK, and claiming is atomic ──────────────────────── */
 $lock = diag_lock_path('sdb', $root);
 check('the lock is named for the disk, not the job', $lock === "$root/sdb.lock");

@@ -4,6 +4,7 @@
      php tests/diagnose_render_test.php  ->  "diagnose_render: all pass" */
 
 require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/render/diagnose.php';
+require_once __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose_lib.php';
 
 $fails = 0;
 function check(string $name, bool $ok): void {
@@ -197,6 +198,22 @@ $list2 = renderDiagDriveList(
     ['sda' => 'MEDIA', 'sdz' => 'CLEAN']);
 check('an assigned disk with the worst badge still sorts first',
       strpos($list2, 'sda') < strpos($list2, 'sdz'));
+
+/* ── the Phase 1 bug this phase fixes: parity and pool are ASSIGNED ─────────
+   End to end through diag_array_disk(): a MEDIA verdict on a parity or pool
+   disk must get the rebuild advice, never "not assigned to the array or a
+   pool" -- which invites writing to a disk parity or the pool depends on. */
+$pini = sys_get_temp_dir() . '/hbav_render_ini_' . getmypid() . '.ini';
+file_put_contents($pini, "[\"parity\"]\nname=\"parity\"\ndevice=\"sdp\"\n"
+                       . "[\"cache\"]\nname=\"cache\"\ndevice=\"sdc\"\n");
+foreach (['sdp' => 'parity', 'sdc' => 'pool'] as $dev => $what) {
+    $h = renderDiagVerdict(['disk' => $dev, 'verdict' => 'MEDIA', 'why' => '', 'events' => [],
+        'sense' => [], 'max_cmd_age' => null, 'array_disk' => diag_array_disk($dev, $pini),
+        'ports' => [], 'recent' => []]);
+    check("a $what disk's MEDIA verdict gets the rebuild advice, not the unassigned one",
+          str_contains($h, 'REBUILD') && !str_contains($h, 'not assigned to the array or a pool'));
+}
+@unlink($pini);
 
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

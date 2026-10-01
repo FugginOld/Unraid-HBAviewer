@@ -9,11 +9,19 @@
  * including the CLI test runner.
  */
 
+/* unraid_disk_roles(): the one disks.ini reader the SMART tab, the bay map
+   and (from Task 6) the Diagnose sidebar use. render/baymap.php holds only
+   function declarations, so requiring it here has no side effects. */
+require_once __DIR__ . '/render/baymap.php';
+
 /* Every const the CLI test runner reaches must be declared ABOVE the dispatch
    guard: functions are hoisted, top-level consts are not. See ARCHITECTURE.md
    -- a const beside its callers blanked the SMART tab once. */
 const DIAG_ROOT    = '/tmp/hbaviewer/jobs';
 const DIAG_SCRIPTS = '/usr/local/emhttp/plugins/hbaviewer/scripts';
+/* Unraid's slot assignments. Passed explicitly to unraid_disk_roles(): that
+   function's own default, UNRAID_DISKINI, is declared only in ajax_info.php. */
+const DIAG_DISKS_INI = '/var/local/emhttp/disks.ini';
 
 /* How long one SSE connection is allowed to hold a php-fpm worker before it
    closes and the browser reconnects. See diagnose_stream.php. */
@@ -76,6 +84,64 @@ function diag_lock_path(string $disk, string $root = DIAG_ROOT): string {
    moment its own job's run got trimmed. */
 function diag_baseline_path(string $disk, string $root = DIAG_ROOT): string {
     return $root . '/' . $disk . '.baseline.tsv';
+}
+
+/* The bad-range ledger drive_triage.sh keeps under --badrange-state: one row
+   per 2048-block chunk that has ever failed a check, across runs. A stable
+   per-disk sibling of the job directories, like the baseline and for the same
+   reason -- it spans runs, so diag_trim_runs() must never reach it. */
+function diag_badrange_path(string $disk, string $root = DIAG_ROOT): string {
+    return $root . '/' . $disk . '.badranges.tsv';
+}
+
+/* The drive's serial: VPD page 0x80 (unit serial number) as the kernel cached
+   it at scan. A sysfs read sends no command to the drive, so it cannot wake
+   one, and it is not a shell-out. SAME source and normalization as
+   drive_triage.sh's br_serial(), which keys the ledger rows: skip the 4-byte
+   page header, keep printable ASCII, trim spaces. Change one side alone and
+   every row silently disappears from the Repair screen. '' when unreadable. */
+function diag_disk_serial(string $disk, string $sys = '/sys'): string {
+    if (!diag_disk_valid($disk)) return '';
+    $raw = @file_get_contents("$sys/block/$disk/device/vpd_pg80");
+    if (!is_string($raw) || strlen($raw) <= 4) return '';
+    return trim((string) preg_replace('/[^\x20-\x7E]/', '', substr($raw, 4)), ' ');
+}
+
+/* THIS drive's ledger rows, in file order. Columns: serial, chunk_start,
+   confirm_count, first_run_id, last_run_id, last_class, updated_ts -- and any
+   later ones, ignored (the forward path adds columns, not a new shape).
+   Filtered to $serial: the file is named by sd letter, and a drive that takes
+   over that letter must not inherit its predecessor's evidence. An unknown
+   serial reads NOTHING, never the unfiltered file. A missing file is zero
+   rows. A malformed row -- too few columns, a non-numeric chunk or count, a
+   class the engine never writes -- is skipped, not fatal: the
+   fail-closed-per-row rule diag_slice() follows. */
+function diag_badranges_read(string $file, string $serial): array {
+    if ($serial === '') return [];
+    $rows = [];
+    foreach (explode("\n", (string) @file_get_contents($file)) as $line) {
+        $c = explode("\t", rtrim($line, "\r"));
+        if (count($c) < 7 || $c[0] !== $serial || !ctype_digit($c[1]) || !ctype_digit($c[2])
+            || !in_array($c[5], ['media', 'transport', 'intermittent', 'unresolved'], true)) continue;
+        $rows[] = ['chunk_start' => (int) $c[1], 'confirm_count' => (int) $c[2],
+                   'first_run'   => $c[3],       'last_run'      => $c[4],
+                   'last_class'  => $c[5],       'updated'       => (int) $c[6]];
+    }
+    return $rows;
+}
+
+/* Has Unraid assigned $disk ANYWHERE -- parity, parity2, a diskN slot, or a
+   pool? Asked of unraid_disk_roles(), the same reader the SMART tab, bay map
+   and Diagnose sidebar use, so no two screens can disagree about one disk.
+   Called by the verdict AND repair actions. Wrong in the permissive direction,
+   a screen would offer unassigned-disk content for a disk parity or a pool
+   depends on, so an unreadable disks.ini answers ASSIGNED -- checked here
+   first, because unraid_disk_roles() returns [] for both "unreadable" and
+   "nothing assigned". Replaces the verdict action's old inline ^disk\d+$
+   test, which called parity and pool disks unassigned (a Phase 1 bug). */
+function diag_array_disk(string $disk, string $iniFile = DIAG_DISKS_INI): bool {
+    if (!is_array(@parse_ini_file($iniFile, true))) return true;
+    return isset(unraid_disk_roles($iniFile)["/dev/$disk"]);
 }
 
 /* Claim the single-flight lock ATOMICALLY. 'x' fails when the file already

@@ -149,9 +149,14 @@ rebuild onto itself, or keep in service and watch. All three are always shown to
 to weigh rather than a recommendation the screen picks for you — trying to conditionally suppress
 "watch" based on whether the defect count has "stopped climbing" would need a new trend signal this
 spec hasn't designed (the ledger tracks confirmed chunks, not a per-run history of the total count),
-and inventing one here is exactly the kind of scope creep Phase 2a is trying to avoid. Reuses the
-`$arrayDisk` boolean the `verdict` action already computes from `disks.ini` — extracted into a
-small shared helper so the two call sites cannot disagree, not duplicated.
+and inventing one here is exactly the kind of scope creep Phase 2a is trying to avoid. Uses
+`diag_array_disk()`, one small helper both the `verdict` and `repair` actions call, so the two
+cannot disagree. It answers "assigned anywhere" — parity, parity2, any `diskN`, or a pool member —
+by asking `unraid_disk_roles()`, the disks.ini reader the SMART tab, bay map and Diagnose sidebar
+use; false only for a disk Unraid has not assigned, and true when `disks.ini` is unreadable. This
+replaces the `verdict` action's inline `^disk\d+$` test, which classed parity and pool disks as
+unassigned and gave a parity disk's MEDIA verdict the unassigned-disk advice — a Phase 1 bug fixed
+here (amended 2026-09-28).
 
 **Unassigned disk:** a plain table of every `confirm_count >= 2` row from that disk's
 `badranges.tsv` — start LBA, block count (fixed at the chunk size), media-confirm count, last
@@ -173,8 +178,11 @@ message.
   existing end-of-run write point; `--reset-baseline` also clears the badrange file when a path is
   given.
 - `diagnose_lib.php`: `diag_badrange_path($disk)` (mirrors `diag_baseline_path()`); a small
-  `diag_array_disk($disk)` helper extracted from `verdict`'s existing inline `disks.ini` check, so
-  `verdict` and the new `repair` action share one implementation.
+  `diag_array_disk($disk)` helper (assigned anywhere, via `unraid_disk_roles()`) replacing
+  `verdict`'s inline `disks.ini` check, so `verdict` and the new `repair` action share one
+  implementation; `diag_disk_serial($disk)`, the sysfs VPD 0x80 serial read; and
+  `diag_badranges_read($file, $serial)`, the ledger row reader, which returns only rows filed under
+  that serial and nothing when the serial is unknown.
 - `diagnose.php`: new `action=repair` — disk-scoped (takes `disk`, not `job`, since this reads
   ledger state rather than one job's event file), pure PHP, no shell-out (it only reads a TSV and
   `disks.ini`).
