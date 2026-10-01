@@ -1073,7 +1073,7 @@ if [[ -n "$BADRANGE_STATE" && -s "$BR_RUN" ]]; then
     BR_IN="$BADRANGE_STATE"; [[ -f "$BR_IN" ]] || BR_IN=/dev/null
     # The ledger arrives on stdin ("-"): an operand containing "=" would be
     # taken by awk as a variable assignment and silently empty the file.
-    awk -F'\t' -v OFS='\t' -v recs="$BR_RUN" -v run="$STAMP" -v now="$NOW" '
+    if awk -F'\t' -v OFS='\t' -v recs="$BR_RUN" -v run="$STAMP" -v now="$NOW" '
         function rank(c) { return c == "media" ? 3 : c == "transport" ? 2 : c == "unresolved" ? 1 : 0 }
         function bump(c) { return c == "media" ? 1 : 0 }
         FILENAME == recs {
@@ -1088,12 +1088,18 @@ if [[ -n "$BADRANGE_STATE" && -s "$BR_RUN" ]]; then
             print
         }
         END { for (k in cls) if (cls[k] != "intermittent") print k, bump(cls[k]), run, run, cls[k], now }
-    ' "$BR_RUN" - < "$BR_IN" > "$BADRANGE_STATE.new"
-    if [[ -s "$BADRANGE_STATE.new" || -f "$BADRANGE_STATE" ]]; then
-        mv -f "$BADRANGE_STATE.new" "$BADRANGE_STATE"
-        info "bad-range ledger: $(wc -l < "$BADRANGE_STATE") row(s) saved"
+    ' "$BR_RUN" - < "$BR_IN" > "$BADRANGE_STATE.new"; then
+        if [[ -s "$BADRANGE_STATE.new" || -f "$BADRANGE_STATE" ]]; then
+            mv -f "$BADRANGE_STATE.new" "$BADRANGE_STATE" \
+                && info "bad-range ledger: $(wc -l < "$BADRANGE_STATE") row(s) saved" \
+                || warn "bad-range ledger: could not replace $BADRANGE_STATE -- left unchanged"
+        else
+            rm -f "$BADRANGE_STATE.new"
+        fi
     else
+        # A failed write (full /tmp, missing directory) must never replace the ledger.
         rm -f "$BADRANGE_STATE.new"
+        warn "bad-range ledger: could not write $BADRANGE_STATE -- left unchanged"
     fi
 fi
 

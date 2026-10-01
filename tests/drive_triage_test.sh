@@ -739,6 +739,7 @@ out=$(STUB_VERIFY_RC=1 brun); rc=$?
 LEDGER="$LEDGER_KEEP"
 [ $rc -eq 0 ] && has "a ledger path in a missing directory does not abort the run" "$out" "finished" \
               || bad "a ledger path in a missing directory does not abort the run" "exit $rc"
+has "and the failed write is reported as a warning" "$out" "could not write $WORK/nodir/ledger.tsv -- left unchanged"
 [ ! -e "$WORK/nodir" ] && ok "and the engine does not create that directory" \
                        || bad "and the engine does not create that directory" "$WORK/nodir exists"
 
@@ -763,7 +764,40 @@ grep -q "^$SX"$'\t10240\t1\t' "$LEDGER" && grep -q $'^SERIALY00002\t10240\t1\t' 
     && [ "$(wc -l < "$LEDGER")" -eq 2 ] \
     && ok "a CLI sweep files each disk under its own serial" \
     || bad "a CLI sweep files each disk under its own serial" "$(cat "$LEDGER" 2>&1)"
-! grep -q '^SLOT_' "$LEDGER" 2>/dev/null && ok "and never under a slot ID" || bad "and never under a slot ID" "$(cat "$LEDGER")"
+[ -s "$LEDGER" ] && ! grep -q '^SLOT_' "$LEDGER" 2>/dev/null && ok "and never under a slot ID" || bad "and never under a slot ID" "$(cat "$LEDGER")"
+
+# A failed ledger write must leave an existing ledger byte-identical. An awk
+# that emits a partial row and exits 1 (a full /tmp) stands in for the failure;
+# it is scoped to the ledger merge (the only awk invoked with recs=).
+BADAWK="$WORK/badawk"; mkdir -p "$BADAWK"
+cat > "$BADAWK/awk" <<'STUB'
+#!/bin/bash
+case "$*" in *recs=*) "$REAL_AWK" "$@" | head -c 10; exit 1 ;; esac
+exec "$REAL_AWK" "$@"
+STUB
+chmod +x "$BADAWK/awk"
+rm -f "$LEDGER"; seed 12345
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+before=$(cat "$LEDGER")
+seed 20000
+out=$(REAL_AWK="$(command -v awk)" STUB_VERIFY_RC=1 STUB_READ_RC=1 BR_BIN="$BADAWK:$STUBDIR" brun)
+[ -n "$before" ] && [ "$(cat "$LEDGER")" = "$before" ] && [ ! -e "$LEDGER.new" ] && has "a failed write leaves the existing ledger byte-identical, with a warning" "$out" "left unchanged" \
+    || bad "a failed write leaves the existing ledger byte-identical, with a warning" "before: $before / after: $(cat "$LEDGER")"
+
+# Per-run fold to the worst class: this run's engine record is transport (VERIFY
+# clean, READ fails) and is written LAST; a sg_read stub files a media record for
+# the same serial+chunk first. Last-wins would leave count 0 / transport.
+FOLD="$WORK/foldbin"; mkdir -p "$FOLD"; cp "$STUBDIR"/* "$FOLD/"
+cat > "$FOLD/sg_read" <<'STUB'
+#!/bin/bash
+for d in "$WORK"/brout/*/; do printf '%s\t10240\tmedia\n' "$SX" >> "${d}badranges-run.tsv"; done
+exit 1
+STUB
+rm -f "$LEDGER"; seed 12345
+WORK="$WORK" SX="$SX" BR_BIN="$FOLD" brun >/dev/null
+[ "$(col 10240 3)" = 1 ] && [ "$(col 10240 6)" = media ] && [ "$(wc -l < "$LEDGER")" -eq 1 ] \
+    && ok "one run's media and transport records for a chunk fold to media, counted once" \
+    || bad "one run's media and transport records for a chunk fold to media, counted once" "row: $(row 10240)"
 rm -f "$LEDGER"; : > "$STUB_DMESG"
 
 echo
