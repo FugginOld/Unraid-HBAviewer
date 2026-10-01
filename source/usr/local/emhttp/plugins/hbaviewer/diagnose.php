@@ -74,6 +74,7 @@ if ($action === 'start') {
          . ' --out ' . escapeshellarg($dir)
          . ' --events ' . escapeshellarg("$dir/events.ndjson")
          . ' --state ' . escapeshellarg(diag_baseline_path($disk, DIAG_ROOT))
+         . ' --badrange-state ' . escapeshellarg(diag_badrange_path($disk, DIAG_ROOT))
          . ' --auto-triage --all'
          . ' ' . escapeshellarg("/dev/$disk");
     $inner = 'echo $$ > ' . escapeshellarg("$dir/pgid") . '; '
@@ -169,21 +170,11 @@ if ($action === 'verdict') {
     if (preg_match_all('/cmd_age=(\d+)/', (string) @file_get_contents(diag_evidence_file($dir, "dmesg-$disk.txt")), $m)) {
         $age = max(array_map('intval', $m[1]));
     }
-    /* Assigned-ness decides which next-steps card the screen shows, and
-       getting it wrong in the permissive direction would offer array advice
-       for an unassigned disk or, worse, the reverse. Read from Unraid's own
-       disks.ini, and treat an unreadable file as ASSIGNED -- the stricter of
-       the two cards, which never suggests writing to the disk. */
-    $ini = @parse_ini_file('/var/local/emhttp/disks.ini', true);
-    $arrayDisk = true;
-    if (is_array($ini)) {
-        $arrayDisk = false;
-        foreach ($ini as $name => $sec) {
-            if (($sec['device'] ?? '') === $disk && preg_match('/^disk\d+$/', (string) $name)) {
-                $arrayDisk = true; break;
-            }
-        }
-    }
+    /* Assigned-ness decides which next-steps card the screen shows.
+       diag_array_disk() is the one implementation -- the repair action and
+       the sidebar's reader agree with it -- and it counts parity, parity2
+       and pool members as assigned, which this inline walk did not. */
+    $arrayDisk = diag_array_disk($disk);
     $recent = [];
     foreach (glob(DIAG_ROOT . '/*', GLOB_ONLYDIR) ?: [] as $d) {
         $j = basename($d);
@@ -209,22 +200,44 @@ if ($action === 'verdict') {
     exit;
 }
 
+if ($action === 'repair') {
+    /* Disk-scoped, not job-scoped: the bad-range ledger spans runs. Pure PHP,
+       no shell-out -- it reads one TSV, disks.ini and one sysfs attribute (the
+       drive's cached VPD 0x80 serial), nothing else. Read only, like every
+       action here; repair EXECUTION is Phase 2b. Validated the same way start
+       validates, by the one validator. Rows are filtered to the drive's
+       CURRENT serial, so a drive that took over this sdX name sees none of
+       its predecessor's evidence, and an unknown serial shows nothing. */
+    $disk = (string) ($_GET['disk'] ?? '');
+    if (!(diag_disk_valid($disk) && is_file("/sys/block/$disk/dev"))) {
+        http_response_code(400); echo 'Invalid disk.'; exit;
+    }
+    header('Content-Type: text/html; charset=utf-8');
+    require_once __DIR__ . '/render/diagnose.php';
+    $serial = diag_disk_serial($disk);
+    echo renderDiagRepair([
+        'disk'       => $disk,
+        'array_disk' => diag_array_disk($disk),
+        'serial'     => $serial,
+        'rows'       => diag_badranges_read(diag_badrange_path($disk, DIAG_ROOT), $serial),
+    ]);
+    exit;
+}
+
 if ($action === 'drivelist') {
     header('Content-Type: text/html; charset=utf-8');
     require_once __DIR__ . '/render/diagnose.php';
-    /* Assigned-ness and the /dev name both come from Unraid's own disks.ini,
-       the same file the engine reads its slots from -- not from a second
-       enumeration that could disagree with it about which disk is Disk 1. */
-    $ini = @parse_ini_file('/var/local/emhttp/disks.ini', true);
+    /* Roles come from unraid_disk_roles(), the disks.ini reader the SMART tab
+       and bay map already use ("Disk 3", "Parity 2", "Cache", a pool's own
+       name) -- and the one diag_array_disk() asks, so the sidebar and the
+       Verdict/Repair screens cannot disagree about which disks are assigned.
+       The old inline rule knew only diskN and "parity", so parity2 and every
+       pool member landed in the "Unassigned" group. */
     $drives = [];
-    foreach (is_array($ini) ? $ini : [] as $name => $sec) {
-        $dev = (string) ($sec['device'] ?? '');
-        if ($dev === '' || !diag_disk_valid($dev)) continue;
-        /* "disk3" is an array slot; a pool member or an unassigned device is
-           not, and lands in the sidebar's own group. */
-        $drives[] = ['dev' => $dev,
-                     'role' => preg_match('/^disk\d+$/', (string) $name) ? 'Disk ' . preg_replace('/\D/', '', (string) $name)
-                             : (((string) $name === 'parity') ? 'Parity' : '')];
+    foreach (unraid_disk_roles(DIAG_DISKS_INI) as $path => $label) {
+        $dev = substr($path, strlen('/dev/'));
+        if (!diag_disk_valid($dev)) continue;
+        $drives[] = ['dev' => $dev, 'role' => $label];
     }
     /* A disk with a live lock is SCANNING; one with a finished run carries its
        verdict; one with neither is CLEAN only in the sense of "nothing has

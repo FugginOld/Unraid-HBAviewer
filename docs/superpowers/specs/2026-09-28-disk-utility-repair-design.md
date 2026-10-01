@@ -189,8 +189,11 @@ rather than evidence that may belong to another drive (amended 2026-09-28).
   `diag_badranges_read($file, $serial)`, the ledger row reader, which returns only rows filed under
   that serial and nothing when the serial is unknown.
 - `diagnose.php`: new `action=repair` — disk-scoped (takes `disk`, not `job`, since this reads
-  ledger state rather than one job's event file), pure PHP, no shell-out (it only reads a TSV and
-  `disks.ini`).
+  ledger state rather than one job's event file), pure PHP, no shell-out (it only reads a TSV,
+  `disks.ini` and one sysfs attribute, the drive's cached VPD 0x80 serial, and shows only rows
+  filed under that serial). The `drivelist` action's sidebar roles switch to the same
+  `unraid_disk_roles()` reader `diag_array_disk()` uses, so the sidebar and the Verdict/Repair
+  screens cannot disagree about which disks are assigned (amended 2026-09-28).
 - `render/diagnose.php`: `renderDiagRepair()`, same "PHP turns data into HTML fragment" shape as
   `renderDiagVerdict()`.
 - `diagnose_view.js`: `luDiagRepair()` navigation function and the Verdict screen's new "Repair"

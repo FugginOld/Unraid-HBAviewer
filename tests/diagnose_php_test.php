@@ -124,6 +124,11 @@ check('every engine argument is escaped',
 check('the start action passes a stable per-disk --state path, escaped',
       str_contains($code, "--state ' . escapeshellarg(diag_baseline_path("));
 
+// The ledger spans runs exactly like the baseline, so it gets the same stable
+// per-disk path, never one inside --out.
+check('the start action passes a stable per-disk --badrange-state path, escaped',
+      str_contains($code, "--badrange-state ' . escapeshellarg(diag_badrange_path("));
+
 // Read-only phase: nothing here may reach the Tier 2/3 tools, whether by
 // accident or by a later edit that thought it was helping.
 foreach (['sg_reassign', 'write-sector', 'badblocks', 'sg_format', 'sg_sanitize'] as $t) {
@@ -192,11 +197,37 @@ check('the job id is validated before use',  str_contains($scode, 'diag_job_vali
 check('the verdict action renders server-side',
       str_contains($code, "action === 'verdict'")
       && str_contains($code, 'renderDiagVerdict('));
-// An unreadable disks.ini must mean ASSIGNED, the stricter card -- it is the
-// one that never suggests writing to the disk. The permissive default here
-// would offer sector-level advice for an array member.
-check('assigned-ness defaults to true when disks.ini cannot be read',
-      str_contains($code, '$arrayDisk = true;'));
+// Assigned-ness has ONE implementation, diag_array_disk() -- its fail-closed
+// default on an unreadable disks.ini is tested directly in diagnose_test.php.
+// Verdict and repair both call it; neither re-walks disks.ini inline.
+check('the library owns assigned-ness', str_contains($lib, 'function diag_array_disk('));
+check('verdict and repair both call diag_array_disk()',
+      substr_count($code, 'diag_array_disk($disk)') === 2);
+check('the inline assigned-ness walk is gone from the dispatch',
+      !str_contains($code, '$arrayDisk = true;'));
+
+// The repair action: disk-scoped, validated like start, pure PHP.
+$repairAt = strpos($code, "action === 'repair'");
+$repairEnd = $repairAt === false ? false : strpos($code, 'if ($action ===', $repairAt + 1);
+$repair = $repairAt === false ? '' : substr($code, $repairAt, $repairEnd === false ? null : $repairEnd - $repairAt);
+check('the repair action renders server-side',
+      $repair !== '' && str_contains($repair, 'renderDiagRepair('));
+check('the repair action is disk-scoped and validated like start',
+      str_contains($repair, "\$_GET['disk']")
+      && str_contains($repair, 'diag_disk_valid($disk) && is_file("/sys/block/$disk/dev")'));
+check('the repair action reads the ledger through the library, filtered to the drive\'s serial',
+      str_contains($repair, '$serial = diag_disk_serial($disk);')
+      && str_contains($repair, 'diag_badranges_read(diag_badrange_path($disk, DIAG_ROOT), $serial)'));
+check('the repair action never shells out',
+      $repair !== '' && !preg_match('/shell_exec|\bexec\(|passthru|proc_open|popen|\bsystem\(/', $repair));
+
+// The sidebar's roles come from the same reader diag_array_disk() asks, so the
+// sidebar can never file a disk under "Unassigned" that Verdict/Repair treat
+// as assigned (parity2 and pools did exactly that under the inline rule).
+check('the drive list takes its roles from unraid_disk_roles()',
+      str_contains($code, 'unraid_disk_roles(DIAG_DISKS_INI)'));
+check('no inline diskN rule is left anywhere in the dispatch',
+      !str_contains($code, 'disk\d+'));
 // renderDiagDriveList has exactly one caller. An uncalled renderer is one
 // nobody notices breaking, and this is the surface every Diagnose job is
 // started from.
