@@ -215,5 +215,77 @@ foreach (['sdp' => 'parity', 'sdc' => 'pool'] as $dev => $what) {
 }
 @unlink($pini);
 
+/* ── the Repair screen (Phase 2a): evidence, never a control ───────────── */
+$ledger = [
+    ['chunk_start' => 10240, 'confirm_count' => 2, 'first_run' => 'r1', 'last_run' => '20260102-000000', 'last_class' => 'media',        'updated' => 1],
+    ['chunk_start' => 20480, 'confirm_count' => 1, 'first_run' => 'r1', 'last_run' => 'r1',              'last_class' => 'media',        'updated' => 1],
+    ['chunk_start' => 30720, 'confirm_count' => 0, 'first_run' => 'r1', 'last_run' => 'r2',              'last_class' => 'transport',    'updated' => 1],
+    ['chunk_start' => 4096,  'confirm_count' => 3, 'first_run' => 'r0', 'last_run' => 'r3',              'last_class' => 'intermittent', 'updated' => 1],
+    ['chunk_start' => 8192,  'confirm_count' => 2, 'first_run' => 'r0', 'last_run' => 'r4',              'last_class' => 'transport',    'updated' => 1],
+];
+$rep = renderDiagRepair(['disk' => 'sdc', 'array_disk' => false, 'serial' => 'S1', 'rows' => $ledger]);
+check('unassigned: every confirm_count >= 2 row is listed',
+      str_contains($rep, '<td>10240</td>') && str_contains($rep, '<td>4096</td>') && str_contains($rep, '<td>8192</td>'));
+check('unassigned: a single-run media row is not', !str_contains($rep, '20480'));
+check('unassigned: a never-confirmed transport row is not in the table', !str_contains($rep, '30720'));
+check('but it is counted in the link line', str_contains($rep, '1 range failed only over the link'));
+// A row media-confirmed twice whose LATEST run was transport did fail VERIFY
+// twice: it belongs in the table, and "failed only over the link" is false for it.
+check('a confirmed row whose latest run was transport stays in the table and out of the link count',
+      str_contains($rep, '<td>8192</td>') && !str_contains($rep, '2 ranges failed only over the link'));
+check('rows are ordered by start LBA',
+      strpos($rep, '<td>4096</td>') < strpos($rep, '<td>8192</td>')
+      && strpos($rep, '<td>8192</td>') < strpos($rep, '<td>10240</td>'));
+check('the block count is the chunk size', str_contains($rep, '<td>2048</td>'));
+preg_match_all('/onclick="([A-Za-z]+)\(/', $rep, $m);
+check('the only handlers are navigation and column sort -- no repair control',
+      array_diff(array_unique($m[1]), ['luDiagShow', 'luSort']) === []
+      && !preg_match('/<(input|select|textarea)\b/', $rep));
+check('nothing on the screen names a repair tool',
+      !str_contains($rep, 'sg_reassign') && !str_contains($rep, 'write-sector'));
+
+$arr = renderDiagRepair(['disk' => 'sdb', 'array_disk' => true, 'rows' => $ledger]);
+check('array disk: direct sector repair is refused, and why', str_contains(strtolower($arr), 'bypasses parity'));
+check('array disk: all three options are shown together',
+      str_contains($arr, 'Replace') && str_contains($arr, 'Rebuild onto itself')
+      && str_contains($arr, 'Keep in service and watch'));
+check('array disk: no table, even when the ledger has confirmed rows',
+      !str_contains($arr, '<table') && !str_contains($arr, '10240'));
+preg_match_all('/onclick="([A-Za-z]+)\(/', $arr, $m);
+check('array disk: no control beyond navigation', array_diff(array_unique($m[1]), ['luDiagShow']) === []);
+
+$none = renderDiagRepair(['disk' => 'sdc', 'array_disk' => false, 'serial' => 'S1', 'rows' => [$ledger[2]]]);
+check('empty state: no media range yet says so', str_contains(strtolower($none), 'no media-class range'));
+check('and is not a false all-clear', !str_contains(strtolower($none), 'no issues'));
+check('and still counts the transport row', str_contains($none, '1 range failed only over the link'));
+$one = renderDiagRepair(['disk' => 'sdc', 'array_disk' => false, 'serial' => 'S1', 'rows' => [$ledger[1]]]);
+check('empty state: media on one run only says a second run is needed',
+      str_contains(strtolower($one), 'one run only') && str_contains(strtolower($one), 'second run'));
+$zero = renderDiagRepair(['disk' => 'sdc', 'array_disk' => false, 'serial' => 'S1', 'rows' => []]);
+check('an empty ledger is the no-media note, not a blank screen',
+      str_contains(strtolower($zero), 'no media-class range'));
+check('both empty states point back to Diagnose',
+      str_contains($none, 'Run Diagnose on this drive again') && str_contains($one, 'Run Diagnose on this drive again'));
+// Unknown serial: the history cannot be matched to this drive, so it shows
+// NOTHING -- not a table (possibly another drive's), and not the no-media note
+// (which would read as a finding about this drive).
+$nos = renderDiagRepair(['disk' => 'sdc', 'array_disk' => false, 'serial' => '', 'rows' => $ledger]);
+check('unknown serial: says the history cannot be matched',
+      str_contains(strtolower($nos), 'serial could not be read'));
+check('unknown serial: no table and no ledger-derived note',
+      !str_contains($nos, '<table') && !str_contains($nos, '10240')
+      && !str_contains(strtolower($nos), 'no media-class range') && !str_contains($nos, 'failed only over the link'));
+
+$evilR = renderDiagRepair(['disk' => '<img src=x>', 'array_disk' => false, 'serial' => 'S1', 'rows' => [
+    ['chunk_start' => 1, 'confirm_count' => 2, 'first_run' => 'a', 'last_run' => '<script>bad()</script>',
+     'last_class' => 'media', 'updated' => 1]]]);
+check('repair: the disk name is escaped', !str_contains($evilR, '<img src=x>'));
+check('repair: ledger text is escaped',   !str_contains($evilR, '<script>bad()'));
+
+// The "Blocks" column is the engine's CHUNK. Two languages, one number.
+$sh = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/scripts/drive_triage.sh');
+check("the displayed block count is the engine's own CHUNK",
+      preg_match('/^CHUNK="(\d+)"/m', $sh, $cm) === 1 && (int) $cm[1] === DIAG_LEDGER_CHUNK);
+
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

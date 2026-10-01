@@ -160,17 +160,22 @@ here (amended 2026-09-28).
 
 **Unassigned disk:** a plain table of every `confirm_count >= 2` row from that disk's
 `badranges.tsv` — start LBA, block count (fixed at the chunk size), media-confirm count, last
-class, last-seen run. **No checkboxes, no typed-confirmation field, no action button.** This is the
+class, last-seen run. **No checkboxes, no typed-confirmation field, no action button** (the screen's only button is navigation, "Back to verdict", which performs no action on the drive). This is the
 whole scope cut from the mockup described above. Below the table, one line counts any rows whose
-`last_class` is `transport` ("N ranges failed only over the link — these point at the cable, slot
-or HBA, not the drive, and are not repair candidates"), so a range the user saw flagged on the
-Verdict screen does not silently disappear from Repair without a reason.
+`last_class` is `transport` and whose `confirm_count` is 0 ("N ranges failed only over the link —
+these point at the cable, slot or HBA, not the drive, and are not repair candidates"), so a range
+the user saw flagged on the Verdict screen does not silently disappear from Repair without a
+reason. A row already confirmed by two `media` runs stays in the table even if its latest run was
+`transport` — it did fail VERIFY twice, so "failed only over the link" would be false for it.
+(Narrowed during planning, 2026-09-28.)
 
 **Empty state:** an unassigned disk with no confirmed rows shows a plain note that says which case
 it is — no media-class range yet (a TRANSPORT verdict, or only intermittent results), or media
 ranges seen on only one run so far (`confirm_count` 1, needs a second confirming run) — with a
 pointer back to the Diagnose tab to run one. Not a blank screen, and not a false "no issues"
-message.
+message. An unassigned disk whose serial cannot be read shows neither a table nor a ledger-derived
+note: one plain line saying its bad-range history cannot be matched to it, so nothing is shown
+rather than evidence that may belong to another drive (amended 2026-09-28).
 
 ## Surface area
 

@@ -275,6 +275,81 @@ function renderDiagVerdict(array $in): string {
     return $out;
 }
 
+/* ── Repair screen (Phase 2a) ─────────────────────────────────────────────
+ * READ-ONLY EVIDENCE. No checkbox, no typed confirmation, no action button: a
+ * control that visibly exists and silently does nothing is the defect
+ * #diag-op/#diag-standby already are, and Phase 2b's guarded execution flow is
+ * what such controls will be wired to. The one button here navigates back.
+ *
+ * $in keys: disk (string), array_disk (bool, diag_array_disk()), serial
+ * (string, diag_disk_serial(); '' = unknown), rows (array, diag_badranges_read()
+ * -- already filtered to that serial). "Confirmed" = failed SCSI VERIFY on at
+ * least two separate runs; only a media result ever raises confirm_count
+ * (the engine's rule, drive_triage.sh's ledger block). */
+const DIAG_CONFIRM_MIN  = 2;
+const DIAG_LEDGER_CHUNK = 2048;   // drive_triage.sh CHUNK -- pinned equal by test
+
+function renderDiagRepair(array $in): string {
+    $disk = (string) ($in['disk'] ?? '');
+    $rows = (array) ($in['rows'] ?? []);
+    $out  = '<div class="lu-card first"><div class="lu-tab-toolbar"><h3>Repair — <code>/dev/'
+          . htmlspecialchars($disk) . '</code></h3>'
+          . '<button class="lu-refresh-btn" type="button" onclick="luDiagShow(\'verdict\')">Back to verdict</button></div>';
+
+    /* THE ASSIGNED-DISK RULE, same as diag_next_steps(): a block written
+       straight to a disk Unraid has assigned -- array, parity or pool --
+       bypasses parity or the pool's own redundancy. All three safe options,
+       always together -- suppressing "watch" would need a per-run trend signal
+       this phase does not have, so the screen does not pick one. */
+    if (!empty($in['array_disk'])) {
+        return $out
+            . '<p>Direct sector repair isn\'t offered for disks Unraid has assigned — array, parity or pool: it bypasses parity (or the pool\'s own redundancy). A block written straight to an assigned disk is invisible to parity: the next parity check flags it as a mismatch, and a later rebuild could bring the bad data back.</p></div>'
+            . '<div class="lu-card"><h4>Options to weigh</h4><ul>'
+            . '<li><strong>Replace</strong> — rebuild onto a new drive and retire this one.</li>'
+            . '<li><strong>Rebuild onto itself</strong> — rewrites every sector through parity, which lets the drive remap the ones it cannot read.</li>'
+            . '<li><strong>Keep in service and watch</strong> — re-run Diagnose in a few hours and compare the counts between runs.</li>'
+            . '</ul><p class="lu-muted" style="font-size:12px">All three are shown on purpose: which one fits depends on how the drive behaves across runs, and this screen does not pick for you.</p></div>';
+    }
+
+    /* The ledger is filed by drive serial. Without this drive's serial there
+       is no way to tell its history from a previous occupant's of the same
+       sdX name, so show nothing rather than something that may be wrong. */
+    if ((string) ($in['serial'] ?? '') === '') {
+        return $out . '<p class="lu-muted">This drive\'s serial could not be read, so its bad-range history cannot be matched to it. Nothing is shown rather than evidence that may belong to another drive.</p></div>';
+    }
+
+    $cnt = fn(array $r): int => (int) ($r['confirm_count'] ?? 0);
+    $confirmed = array_values(array_filter($rows, fn($r) => $cnt($r) >= DIAG_CONFIRM_MIN));
+    usort($confirmed, fn($a, $b) => (int) ($a['chunk_start'] ?? 0) <=> (int) ($b['chunk_start'] ?? 0));
+    $single = count(array_filter($rows, fn($r) => $cnt($r) === 1));
+    /* Transport AND never media-confirmed: a row that failed VERIFY on two
+       runs stays a repair candidate whatever its latest run said. */
+    $link = count(array_filter($rows, fn($r) => ($r['last_class'] ?? '') === 'transport' && $cnt($r) === 0));
+
+    $out .= '<p>Blocks this drive failed to read internally (SCSI VERIFY) on at least '
+          . DIAG_CONFIRM_MIN . ' separate runs. Repair execution is not in this release — this is the evidence it will act on.</p></div>'
+          . '<div class="lu-card"><h4>Confirmed failing ranges</h4>';
+    if ($confirmed !== []) {
+        $out .= luTable(['Start LBA', 'Blocks', 'Media confirmations', 'Last class', 'Last seen run'],
+                  array_map(fn($r) => array_map('htmlspecialchars', [
+                      (string) (int) ($r['chunk_start'] ?? 0), (string) DIAG_LEDGER_CHUNK,
+                      (string) $cnt($r), (string) ($r['last_class'] ?? ''), (string) ($r['last_run'] ?? ''),
+                  ]), $confirmed))
+              . '<p class="lu-muted" style="font-size:12px">Start LBA is where the tested range began, rounded down to a '
+              . DIAG_LEDGER_CHUNK . '-block chunk.</p>';
+    } elseif ($single > 0) {
+        $out .= '<p class="lu-muted">No confirmed ranges yet. ' . $single . ' range' . ($single === 1 ? ' has' : 's have')
+              . ' failed VERIFY on one run only — a second run that fails on the same blocks confirms them. Run Diagnose on this drive again from the Drives tab.</p>';
+    } else {
+        $out .= '<p class="lu-muted">No media-class range yet: no recorded run found this drive unable to read its own platters. A TRANSPORT verdict or intermittent results do not count toward repair. Run Diagnose on this drive again from the Drives tab if the fault recurs.</p>';
+    }
+    if ($link > 0) {
+        $out .= '<p class="lu-muted">' . $link . ' range' . ($link === 1 ? '' : 's')
+              . ' failed only over the link — these point at the cable, slot or HBA, not the drive, and are not repair candidates.</p>';
+    }
+    return $out . '</div>';
+}
+
 /* Worst-first, because the whole point of the list is to put the drive you
    should look at next at the top. Unassigned drives are their own group: a
    disk the array does not know about is a different kind of fact from Disk 1,
