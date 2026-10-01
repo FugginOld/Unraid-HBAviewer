@@ -664,5 +664,107 @@ else
 fi
 rm -f "$LEDGER"; : > "$STUB_DMESG"
 
+# ── The ledger: only media confirms. ───────────────────────────────────────
+row() { awk -F'\t' -v s="$SX" -v c="$1" '$1==s && $2==c' "$LEDGER" 2>/dev/null; }
+col() { row "$1" | cut -f"$2"; }
+
+rm -f "$LEDGER"; seed 12345
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+[ "$(col 10240 3)" = 1 ] && ok "a media range on a fresh ledger creates a row at confirm_count 1" \
+                         || bad "a media range on a fresh ledger creates a row at confirm_count 1" "row: $(row 10240)"
+[ "$(col 10240 6)" = media ] && ok "and records last_class media" || bad "and records last_class media" "row: $(row 10240)"
+run1=$(col 10240 4)
+# Each triage sleeps 1s (TRIAGE_SKIP_SELFTEST_WAIT), so the next run's
+# second-resolution STAMP is guaranteed to differ from run1.
+seed 12500    # shifted start offset, same 2048-block chunk
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+[ "$(wc -l < "$LEDGER")" -eq 1 ] && ok "a shifted start inside the same chunk updates the row, not a new one" \
+                                 || bad "a shifted start inside the same chunk updates the row, not a new one" "$(cat "$LEDGER")"
+[ "$(col 10240 3)" = 2 ] && ok "a second media run makes it 2" || bad "a second media run makes it 2" "row: $(row 10240)"
+[ -n "$run1" ] && [ "$(col 10240 4)" = "$run1" ] && ok "first_run_id is kept" || bad "first_run_id is kept" "run1='$run1' row: $(row 10240)"
+[ -n "$(col 10240 5)" ] && [ "$(col 10240 5)" != "$run1" ] && ok "last_run_id moves to the new run" \
+                        || bad "last_run_id moves to the new run" "row: $(row 10240)"
+seed 12345
+brun >/dev/null    # both stubs clean: the chunk stopped failing
+[ "$(col 10240 3)" = 2 ] && [ "$(col 10240 6)" = intermittent ] \
+    && ok "a media row that comes back clean keeps its count and becomes intermittent, not removed" \
+    || bad "a media row that comes back clean keeps its count and becomes intermittent, not removed" "row: $(row 10240)"
+
+# THE discriminating case: an implementation that counts every failure
+# reaches 2 here.
+rm -f "$LEDGER"; seed 12345
+STUB_READ_RC=1 brun >/dev/null
+STUB_READ_RC=1 brun >/dev/null
+[ "$(col 10240 3)" = 0 ] && [ "$(col 10240 6)" = transport ] \
+    && ok "two transport runs on one chunk stay at confirm_count 0" \
+    || bad "two transport runs on one chunk stay at confirm_count 0" "row: $(row 10240)"
+
+# Mutation check, in-suite like the standby one: an engine whose bump() counts
+# every non-intermittent class must be caught by the case above. If the sed
+# stops matching, the mutant IS the engine and this would pass vacuously.
+MUTL="$WORK/mutant-ledger.sh"
+sed 's/function bump(c) { return c == "media" ? 1 : 0 }/function bump(c) { return c != "intermittent" ? 1 : 0 }/' "$DT" > "$MUTL"
+if cmp -s "$DT" "$MUTL"; then
+    bad "the transport assertion is able to fail" "sed matched nothing -- the mutant is identical to the engine"
+else
+    rm -f "$LEDGER"; seed 12345
+    STUB_READ_RC=1 BR_ENGINE="$MUTL" brun >/dev/null
+    STUB_READ_RC=1 BR_ENGINE="$MUTL" brun >/dev/null
+    [ "$(col 10240 3)" = 2 ] && ok "the transport assertion is able to fail (mutant counted two transport runs to 2)" \
+                             || bad "the transport assertion is able to fail" "mutant left the count at '$(col 10240 3)'"
+fi
+
+# No evidence, clean spot-check: nothing written -- not even an empty file.
+rm -f "$LEDGER"; : > "$STUB_DMESG"
+brun >/dev/null
+[ ! -e "$LEDGER" ] && ok "a clean 0:256 spot-check on a disk with no evidence writes no ledger" \
+                   || bad "a clean 0:256 spot-check on a disk with no evidence writes no ledger" "$(cat "$LEDGER")"
+
+# A CLI sweep shares one ledger across disks: another disk's row on the SAME
+# chunk, carrying a later extra column, passes through byte for byte; a
+# malformed line is dropped on rewrite, not fatal.
+printf 'not a row\nWDC_OTHER_SERIAL\t10240\t2\tr1\tr2\tmedia\t1\textra\n' > "$LEDGER"
+seed 12345
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+grep -qx $'WDC_OTHER_SERIAL\t10240\t2\tr1\tr2\tmedia\t1\textra' "$LEDGER" \
+    && ok "another disk's row on the same chunk passes through byte for byte" \
+    || bad "another disk's row on the same chunk passes through byte for byte" "$(cat "$LEDGER")"
+[ "$(col 10240 3)" = 1 ] && ok "this disk gets its own row for that chunk" || bad "this disk gets its own row for that chunk" "$(cat "$LEDGER")"
+! grep -q '^not a row' "$LEDGER" && ok "a malformed row is dropped on rewrite" || bad "a malformed row is dropped on rewrite" "$(cat "$LEDGER")"
+
+# A ledger path in a directory that does not exist (a CLI typo) must not
+# abort the run, and the engine must not create the directory.
+LEDGER_KEEP="$LEDGER"; LEDGER="$WORK/nodir/ledger.tsv"; seed 12345
+out=$(STUB_VERIFY_RC=1 brun); rc=$?
+LEDGER="$LEDGER_KEEP"
+[ $rc -eq 0 ] && has "a ledger path in a missing directory does not abort the run" "$out" "finished" \
+              || bad "a ledger path in a missing directory does not abort the run" "exit $rc"
+[ ! -e "$WORK/nodir" ] && ok "and the engine does not create that directory" \
+                       || bad "and the engine does not create that directory" "$WORK/nodir exists"
+
+# No readable serial: a media run on a fresh ledger writes no ledger at all.
+rm -f "$LEDGER"; seed 12345
+BR_SYS="$WORK/nosys" STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+[ ! -e "$LEDGER" ] && ok "no serial: a media run writes no ledger" \
+                   || bad "no serial: a media run writes no ledger" "$(cat "$LEDGER")"
+
+# A CLI sweep (no /dev/ argument): two array disks, both failing on the SAME
+# chunk, one ledger file. Each row must be filed under its own drive's serial
+# -- never the slot IDs $STATE uses (SLOT_X/SLOT_Y here).
+mkvpd sdY SERIALY00002
+SWI="$WORK/disks.ini"
+printf '[disk1]\nname="disk1"\ndevice="sdX"\nstatus="DISK_OK"\nid="SLOT_X"\n[disk2]\nname="disk2"\ndevice="sdY"\nstatus="DISK_OK"\nid="SLOT_Y"\n' > "$SWI"
+printf 'kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector 12345 op 0x0\nkernel: sd 0:0:1:0: [sdY] tag#0 FAILED dev sdY, sector 12345 op 0x0\n' > "$STUB_DMESG"
+rm -f "$LEDGER"; : > "$ARGS"; rm -rf "$WORK/sweep"
+STUB_VERIFY_RC=1 STUB_READ_RC=1 PATH="$STUBDIR:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 \
+    TRIAGE_SKIP_SELFTEST_WAIT=1 TRIAGE_SYSFS="$WORK/sys" TRIAGE_DISKS_INI="$SWI" \
+    bash "$DT" --out "$WORK/sweep" --badrange-state "$LEDGER" --auto-triage --all >/dev/null 2>&1
+grep -q "^$SX"$'\t10240\t1\t' "$LEDGER" && grep -q $'^SERIALY00002\t10240\t1\t' "$LEDGER" \
+    && [ "$(wc -l < "$LEDGER")" -eq 2 ] \
+    && ok "a CLI sweep files each disk under its own serial" \
+    || bad "a CLI sweep files each disk under its own serial" "$(cat "$LEDGER" 2>&1)"
+! grep -q '^SLOT_' "$LEDGER" 2>/dev/null && ok "and never under a slot ID" || bad "and never under a slot ID" "$(cat "$LEDGER")"
+rm -f "$LEDGER"; : > "$STUB_DMESG"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

@@ -349,7 +349,9 @@ sect "ARRAY SLOTS"
 # ============================================================================
 
 SLOTFILE="$RUN/slots.tsv"
-DISKS_INI="/var/local/emhttp/disks.ini"
+# Test-only: TRIAGE_DISKS_INI points the slot scan at a fixture so the suite
+# can run a multi-disk sweep without a real array. Never set in production.
+DISKS_INI="${TRIAGE_DISKS_INI:-/var/local/emhttp/disks.ini}"
 
 if [[ -n "$DEV_OVERRIDE" ]]; then
     printf 'manual\t%s\tDISK_OK\t0\tmanual\n' "$(basename "$DEV_OVERRIDE")" > "$SLOTFILE"
@@ -1050,6 +1052,50 @@ while IFS=$'\t' read -r name dev id status host mderr uncorr grown nonmed invdw 
 done < "$DATA"
 mv -f "$STATE.new" "$STATE"
 info "baseline saved for $(wc -l < "$STATE") disk(s)"
+
+# ============================================================================
+# bad-range ledger (--badrange-state), one row per chunk that has ever failed:
+#   serial chunk_start confirm_count first_run_id last_run_id last_class updated_ts
+# Keyed by the drive's serial (br_serial) + chunk -- NOT $STATE's slot ID,
+# which is "manual" on every /dev/ run. chunk_start is a region key for
+# matching one defect across runs, never a write address. ONLY a media
+# result raises confirm_count (bump): a transport range is healthy inside the
+# drive, and remapping it would retire a good sector and leave the real fault
+# -- cable, backplane, expander, HBA -- in place. One run folds its records per
+# chunk to the worst class first, so it raises a count at most once. A chunk
+# that stops failing keeps its row (last_class -> intermittent); intermittent
+# never inserts, so a clean 0:256 spot-check writes nothing. Other disks' rows
+# and any columns past the seventh pass through untouched; a malformed row is
+# dropped. A run that never gets here (cancelled, killed) changes nothing.
+# ============================================================================
+BR_RUN="$RUN/badranges-run.tsv"
+if [[ -n "$BADRANGE_STATE" && -s "$BR_RUN" ]]; then
+    BR_IN="$BADRANGE_STATE"; [[ -f "$BR_IN" ]] || BR_IN=/dev/null
+    # The ledger arrives on stdin ("-"): an operand containing "=" would be
+    # taken by awk as a variable assignment and silently empty the file.
+    awk -F'\t' -v OFS='\t' -v recs="$BR_RUN" -v run="$STAMP" -v now="$NOW" '
+        function rank(c) { return c == "media" ? 3 : c == "transport" ? 2 : c == "unresolved" ? 1 : 0 }
+        function bump(c) { return c == "media" ? 1 : 0 }
+        FILENAME == recs {
+            k = $1 OFS $2
+            if (!(k in cls) || rank($3) > rank(cls[k])) cls[k] = $3
+            next
+        }
+        NF < 7 || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ { next }
+        {
+            k = $1 OFS $2
+            if (k in cls) { $3 += bump(cls[k]); $5 = run; $6 = cls[k]; $7 = now; delete cls[k] }
+            print
+        }
+        END { for (k in cls) if (cls[k] != "intermittent") print k, bump(cls[k]), run, run, cls[k], now }
+    ' "$BR_RUN" - < "$BR_IN" > "$BADRANGE_STATE.new"
+    if [[ -s "$BADRANGE_STATE.new" || -f "$BADRANGE_STATE" ]]; then
+        mv -f "$BADRANGE_STATE.new" "$BADRANGE_STATE"
+        info "bad-range ledger: $(wc -l < "$BADRANGE_STATE") row(s) saved"
+    else
+        rm -f "$BADRANGE_STATE.new"
+    fi
+fi
 
 if [[ "$KEEP_RUNS" =~ ^[0-9]+$ && "$KEEP_RUNS" -gt 0 ]]; then
     ls -1dt "$OUTDIR"/*/ 2>/dev/null | tail -n +$(( KEEP_RUNS + 1 )) | while read -r d; do rm -rf "$d"; done

@@ -46,15 +46,30 @@ identically to the web path — the same reason baseline tracking lives there an
 **Format**, tab-separated, one row per chunk that has ever failed a check:
 
 ```
-chunk_start  confirm_count  first_run_id  last_run_id  last_class  updated_ts
+serial  chunk_start  confirm_count  first_run_id  last_run_id  last_class  updated_ts
 ```
 
+- `serial` — the drive's own serial number, read from the kernel's cached copy of its VPD page
+  0x80 (`/sys/block/<dev>/device/vpd_pg80`; 4-byte header skipped, printable ASCII kept, spaces
+  trimmed): a sysfs read that sends no command to the drive, so it can never wake a sleeping one.
+  The engine writes it and the PHP reader filters on it, from the same source with the same
+  normalization, so the two cannot disagree. Not the slot ID `$STATE` uses — the literal `manual`
+  on every web-launched `/dev/<disk>` run — and not the sd letter, which shifts. `$STATE` itself is
+  unchanged. A multi-disk CLI sweep sharing one ledger file files each disk under its own serial,
+  and a drive that takes over another's device name (and so its per-disk file) sees none of the
+  previous drive's rows. No readable serial, no rows: the engine logs one line and records nothing
+  for that disk, and the reader shows nothing rather than an unfiltered table. (Added during
+  planning, amended 2026-09-28: the spec originally had no identity column.)
 - `chunk_start` — the tested range's start LBA, rounded down to its containing chunk. Chunk size
-  is the existing `CHUNK="2048"` constant (`drive_triage.sh`'s targeted re-test chunk) — matching
-  the granularity the engine already re-tests at, and the granularity a future `sg_reassign` call
-  operates on, rather than inventing a second chunk size. Rounding, not exact-match, because two
-  runs' own dmesg harvests are not guaranteed to report byte-identical start offsets for the same
-  physical defect.
+  is the existing `CHUNK="2048"` constant (`drive_triage.sh`'s targeted re-test chunk), rather than
+  inventing a second chunk size. **The key identifies a region for cross-run matching only.** A
+  tested range starts `PAD` (2000) blocks below the first failing sector the kernel reported, so
+  the chunk it rounds to may precede the defect entirely; it is never an address to write to (see
+  "Deferred to Phase 2b"). Rounding, not exact-match, because two runs' own dmesg harvests are not
+  guaranteed to report byte-identical start offsets for the same physical defect. **Known limit,
+  fail-safe:** if two runs' padded starts fall on opposite sides of a chunk boundary, the one defect
+  lands in two rows at `confirm_count` 1 each and never confirms — a false negative, never a false
+  confirmation.
 - `last_class` — the range's class from its most recent triage, one of four:
 
   | class | VERIFY | READ | meaning |
@@ -74,15 +89,24 @@ chunk_start  confirm_count  first_run_id  last_run_id  last_class  updated_ts
   `unresolved` result is not evidence of a bad sector either. Phase 2a's "confirmed" bar is
   `confirm_count >= 2` (the proposal's own stated precondition), so a confirmed row means "failed
   VERIFY on two separate runs", which is the precondition Phase 2b's repair gate will check.
-- `first_run_id` / `last_run_id` — the job-id string of the earliest and most recent run that
-  tested this chunk. Kept as two scalars, not a list, on purpose (see "Forward path to a full
+- `first_run_id` / `last_run_id` — the engine's own run stamp (`$STAMP`, the `YYYYmmdd-HHMMSS`
+  name of the run's subdirectory) of the earliest and most recent run that tested this chunk — not
+  the web job id, which the engine never receives and CLI runs do not have. Kept as two scalars,
+  not a list, on purpose (see "Forward path to a full
   audit trail" below).
 - `updated_ts` — unix seconds, last write.
+- Columns past the seventh are allowed — the forward path below adds columns, not a new shape.
+  The engine passes them through when it rewrites a row and the PHP reader ignores them. A row
+  with fewer than seven columns or a non-numeric `chunk_start`/`confirm_count` is dropped when the
+  engine rewrites the file and skipped by the reader.
 
 **Update logic.** Inside `triage_disk()`'s range loop, each tested range's class is recorded for
 this run. At the end of the run, beside the existing `$STATE` write, the ledger is updated from
 that record:
 
+- within one run, several results for the same chunk fold to the worst (`media` > `transport` >
+  `unresolved` > `intermittent`) first, so a single run raises a chunk's `confirm_count` at most
+  once — which is what makes it a count of *distinct* runs;
 - a range whose class is `media`, `transport` or `unresolved` either updates its chunk's row
   (`last_class`, `last_run_id`, `updated_ts`, and `confirm_count + 1` only if the class is
   `media`) or inserts a new row (`confirm_count` 1 if `media`, else 0);
@@ -227,6 +251,14 @@ message.
   which gates the surface-scan `sg_verify`/`sg_read` chunk size and was already confirmed at
   `1.30` in Task 16 Block A — that confirmation says nothing about `sg_reassign` support).
 - The full per-run audit trail noted above as a forward-compatible but unbuilt extension.
+- **Locating the write target — a hard rule, not an open question.** Before any write, a fresh
+  fine-grained VERIFY over the confirmed region locates the exact failing LBA(s), and only those
+  are ever written. Ledger `chunk_start` values are region keys for cross-run matching and are
+  never written to directly. (Added 2026-09-28.)
+- **Where the ledger and baseline persist.** Both live in `/tmp` today, so a reboot clears them,
+  and flash (`/boot`) writes are refused by design. Phase 2b decides whether they move to a
+  persistent non-flash location and what happens when none is available. Loss fails safe: lost
+  evidence means "not confirmed", never "confirmed". (Added 2026-09-28.)
 
 ## Follow-ups outside this phase (read-only, engine-side)
 
