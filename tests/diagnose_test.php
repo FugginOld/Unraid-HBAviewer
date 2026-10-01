@@ -87,6 +87,10 @@ $sys = "$root/sys";
 file_put_contents("$sys/block/sdb/device/vpd_pg80", "\x00\x80\x00\x30  SERIALB00001  ");
 check('the serial is read from VPD 0x80, header skipped, padding trimmed',
       diag_disk_serial('sdb', $sys) === 'SERIALB00001');
+@mkdir("$sys/block/sde/device", 0777, true);
+file_put_contents("$sys/block/sde/device/vpd_pg80", "\x00\x80\x00\x30  AB\x00C\x01D  ");
+check('control bytes in the serial are dropped, as the engine drops them',
+      diag_disk_serial('sde', $sys) === 'ABCD');
 check('no VPD page means no serial', diag_disk_serial('sdc', $sys) === '');
 @mkdir("$sys/block/sdd/device", 0777, true);
 file_put_contents("$sys/block/sdd/device/vpd_pg80", "\x00\x80\x00\x00");
@@ -144,7 +148,7 @@ check('parity2 is assigned',              diag_array_disk('sdq', $iniF) === true
 check('a pool member is assigned',        diag_array_disk('nvme0n1', $iniF) === true);
 check('a device in no slot is not',       diag_array_disk('sdz', $iniF) === false);
 @unlink($iniF);
-foreach (['sdb', 'sdd'] as $d) { @unlink("$sys/block/$d/device/vpd_pg80"); @rmdir("$sys/block/$d/device"); @rmdir("$sys/block/$d"); }
+foreach (['sdb', 'sdd', 'sde'] as $d) { @unlink("$sys/block/$d/device/vpd_pg80"); @rmdir("$sys/block/$d/device"); @rmdir("$sys/block/$d"); }
 @rmdir("$sys/block"); @rmdir($sys);
 
 /* ── the lock is per DISK, and claiming is atomic ──────────────────────── */

@@ -255,7 +255,7 @@ foreach (['diag-live', 'diag-verdict', 'diag-repair', 'diag-head', 'diag-dot', '
           'diag-cancel', 'diag-pills', 'diag-progress', 'diag-hotzone',
           'diag-map', 'diag-hist', 'diag-counters', 'diag-interp',
           'diag-stream', 'diag-newjob', 'diag-standby', 'diag-drives',
-          'diag-verdict-body', 'diag-repair-body'] as $id) {
+          'diag-verdict-body', 'diag-repair-body', 'diag-repair-back', 'diag-verdict-back'] as $id) {
     check("the Live Job markup carries #$id", str_contains($hb, 'id="' . $id . '"'));
 }
 
@@ -265,7 +265,7 @@ foreach (['diag-live', 'diag-verdict', 'diag-repair', 'diag-head', 'diag-dot', '
 check('the Verdict screen has a Back to drives button above its fetched body',
       (bool) preg_match('/id="diag-verdict"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagBack\(\)"[^>]*>[^<]*<\/button>.*id="diag-verdict-body"/s', $hb));
 check('the Repair screen has a static Back to verdict button above its fetched body',
-      (bool) preg_match('/id="diag-repair"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagShow\(\'verdict\'\)"[^>]*>[^<]*<\/button>.*id="diag-repair-body"/s', $hb));
+      (bool) preg_match('/id="diag-repair"[^>]*>\s*(?:<[^>]+>\s*)*<button[^>]*onclick="luDiagRepairBack\(\)"[^>]*>[^<]*<\/button>.*id="diag-repair-body"/s', $hb));
 
 // Never-wake has no opt-out, so no control may suggest one: an unticked box
 // that nothing reads would promise a wake the engine refuses.

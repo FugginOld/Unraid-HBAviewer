@@ -222,13 +222,13 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   <div id="diag-verdict" class="lu-diag-screen" hidden>
     <!-- Static, above the body: the verdict fetch replaces #diag-verdict-body
          wholesale, and nothing else ever returns to the drive list. -->
-    <p><button class="lu-refresh-btn" type="button" onclick="luDiagBack()">Back to drives</button></p>
+    <p><button id="diag-verdict-back" class="lu-refresh-btn" type="button" onclick="luDiagBack()">Back to drives</button></p>
     <div id="diag-verdict-body"></div>
   </div>
   <div id="diag-repair" class="lu-diag-screen" hidden>
     <!-- Static, like #diag-verdict's: a failed repair load must never remove
          the way back. luDiagRepair() fills only the body. -->
-    <p><button class="lu-refresh-btn" type="button" onclick="luDiagShow('verdict')">Back to verdict</button></p>
+    <p><button id="diag-repair-back" class="lu-refresh-btn" type="button" onclick="luDiagRepairBack()">Back to verdict</button></p>
     <div id="diag-repair-body"></div>
   </div>
 </div>

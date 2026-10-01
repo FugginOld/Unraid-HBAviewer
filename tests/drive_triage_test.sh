@@ -643,6 +643,14 @@ is "the range start rounds DOWN to its 2048-block chunk" "$(rec)" "$SX"$'\t10240
 brun >/dev/null
 is "no evidence: the 0:256 spot-check is recorded at chunk 0" "$(rec)" "$SX"$'\t0\tintermittent'
 
+# A page carrying NUL/control bytes: the engine's key must drop them, exactly
+# as diag_disk_serial() does (tests/diagnose_test.php pins the same body).
+seed 12345
+mkdir -p "$WORK/syscc/block/sdX/device"
+printf '\000\200\000\060  AB\000C\001D  ' > "$WORK/syscc/block/sdX/device/vpd_pg80"
+BR_SYS="$WORK/syscc" STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+is "control bytes in the VPD serial are dropped from the key" "$(rec)" $'ABCD\t10240\tmedia'
+
 # No readable serial: evidence that cannot be tied to a drive is not filed
 # under one. One line says so; nothing is recorded.
 seed 12345

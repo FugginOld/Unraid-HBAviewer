@@ -195,6 +195,14 @@
         if (h.focus) h.focus();
     };
 
+    /* Repair's way back: the button that had focus is now hidden, so focus
+       moves to the verdict screen's own button. */
+    window.luDiagRepairBack = function () {
+        luDiagShow('verdict');
+        var b = el('diag-verdict-back');
+        if (b.focus) b.focus();
+    };
+
     /* One decoded event -> the screen. Exported because this is the whole
        rendering contract and a test that cannot call it has to assert on the
        stream plumbing instead, which is the part least likely to be wrong. */
@@ -372,6 +380,8 @@
        changes anything. */
     window.luDiagRepair = function (disk) {
         luDiagShow('repair');
+        var b = el('diag-repair-back');
+        if (b.focus) b.focus();
         if (typeof luTab === 'function') luTab('diagnose');
         el('diag-repair-body').innerHTML = '';
         return fetch('/plugins/hbaviewer/diagnose.php?action=repair&disk='

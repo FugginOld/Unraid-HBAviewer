@@ -1,6 +1,8 @@
 # Disk Utility Phase 2a — Repair evidence (read-only) Implementation Plan
 
-> **Status: NOT STARTED.** Tasks 1–10. Task 9 is hardware verification on Golem and gates the merge.
+> **Status: Tasks 1–8 complete and reviewed; Task 9 (hardware verification on Golem) in progress — not yet verified on hardware.**
+
+> **As built — deviations from the task text below:** the Repair screen has a static "Back to verdict" button above #diag-repair-body (renderDiagRepair emits no button but luTable's sort buttons); the Repair button passes the disk as a JSON string literal (htmlspecialchars(json_encode)); luDiagRepair checks r.ok and shows errors in the body; the reader also skips a non-numeric updated_ts; the ledger write is gated on awk's exit status; Task 9 Block D's verdict is `no fault reproduced` (sdq has evidence on record); hardware blocks use `smartctl -n standby` power mode, not `hdparm -C` (SAS); ledger file mode follows umask.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

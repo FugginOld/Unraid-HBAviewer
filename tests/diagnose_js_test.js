@@ -25,6 +25,7 @@ const SRC = path.join(__dirname,
 
 /* ── the smallest DOM this file can run against ─────────────────────────── */
 const els = new Map();
+let focused = null;
 function mkEl(id) {
     const el = { id, style: {}, textContent: '', value: '', checked: false,
                  hidden: false, disabled: false, _html: '', children: [],
@@ -32,7 +33,7 @@ function mkEl(id) {
                               add(...c) { c.forEach(x => this._s.add(x)); },
                               remove(...c) { c.forEach(x => this._s.delete(x)); },
                               contains(c) { return this._s.has(c); } },
-                 setAttribute() {}, scrollTo() {},
+                 setAttribute() {}, scrollTo() {}, focus() { focused = id; },
                  appendChild(c) { el.children.push(c); } };
     Object.defineProperty(el, 'innerHTML', {
         get() { return el._html; }, set(v) { el._html = String(v); el.children = []; },
@@ -42,7 +43,7 @@ function mkEl(id) {
 const ids = ['diag-live','diag-verdict','diag-repair','diag-head','diag-dot','diag-pause','diag-cancel',
              'diag-pills','diag-progress','diag-hotzone','diag-map','diag-hist',
              'diag-counters','diag-interp','diag-stream','diag-newjob','diag-standby',
-             'diag-drives','diag-verdict-body','diag-repair-body'];
+             'diag-drives','diag-verdict-body','diag-repair-body','diag-repair-back','diag-verdict-back'];
 ids.forEach(i => els.set(i, mkEl(i)));
 
 const fetches = [];
@@ -372,7 +373,9 @@ async function tail() {
           && els.get('diag-live').hidden === true);
     check('the fragment lands in #diag-repair-body', els.get('diag-repair-body')._html.includes('REPAIR sdc'));
     check('Repair leaves the page\'s job alone', sandbox.luDiagJob === 'sdb-9');
-    sandbox.luDiagShow('verdict');
+    check('Repair moves focus to its Back to verdict button', focused === 'diag-repair-back');
+    sandbox.luDiagRepairBack();
+    check('Back to verdict moves focus to the verdict screen', focused === 'diag-verdict-back');
     check('Back to verdict hides the repair screen again',
           els.get('diag-repair').hidden === true && els.get('diag-verdict').hidden === false);
 
