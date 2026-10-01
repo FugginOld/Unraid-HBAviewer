@@ -744,6 +744,35 @@ snap() {  # device -> summed counters, one key per line
     echo "loss=$(sum_field 'Loss of DWORD synchronization' "$S")"
 }
 
+# The drive's own serial, the bad-range ledger's row key: VPD page 0x80 (unit
+# serial number) as the kernel cached it at scan. A sysfs read sends no command
+# to the drive, so it can never wake a sleeping one -- stricter than
+# smartctl -n standby, which still asks the drive its power state. NOT the
+# slot ID $STATE uses (the literal "manual" on a /dev/ run) and NOT the sd
+# letter (it shifts). diagnose_lib.php's diag_disk_serial() reads the same file
+# with the same normalization; change one and every row silently disappears
+# from the Repair screen. Prints nothing when the page is absent.
+# Test-only: TRIAGE_SYSFS replaces /sys. Never set in production.
+br_serial() {  # dev
+    local f="${TRIAGE_SYSFS:-/sys}/block/$1/device/vpd_pg80"
+    [[ -r "$f" ]] || return 0
+    tail -c +5 "$f" | LC_ALL=C tr -cd '[:print:]' | sed 's/^ *//; s/ *$//'
+}
+
+# One tested range's class, for the bad-range ledger: the four-way split
+# sas-bench's discriminate() makes, applied per range instead of per disk.
+#   media        VERIFY failed (READ either way) -- the drive's own platters
+#   transport    VERIFY clean, READ failed       -- the link, not the drive
+#   unresolved   no VERIFY (HAVE_SG=0), READ failed
+#   intermittent nothing failed this run
+br_class() {  # have_sg verify_failed read_failed
+    if [[ "$1" -eq 1 && "$2" -eq 1 ]]; then echo media
+    elif [[ "$3" -eq 1 && "$1" -eq 1 ]]; then echo transport
+    elif [[ "$3" -eq 1 ]]; then echo unresolved
+    else echo intermittent
+    fi
+}
+
 SUMMARY=()
 tri_left_alone() {  # name dev -- after tri_asleep/tri_declined said so
     if [[ "$TRI_LEFT" == "unknown" ]]; then
@@ -778,6 +807,13 @@ triage_disk() {
     fi
     local dmark; dmark="$(dmesg | wc -l)"
     local ranges vfail=0 rfail=0 vran=0
+    # Ledger key: the drive's serial (br_serial). No serial, no rows --
+    # evidence that cannot be tied to a drive must not be filed under one.
+    local brser=""
+    if [[ -n "$BADRANGE_STATE" ]]; then
+        brser="$(br_serial "$dev")"
+        [[ -n "$brser" ]] || info "bad-range ledger: no serial readable for /dev/$dev -- nothing recorded for it"
+    fi
 
     if [[ -s "$RUN/ranges-$dev.txt" ]]; then
         ranges="$(cat "$RUN/ranges-$dev.txt")"
@@ -790,21 +826,26 @@ triage_disk() {
     tri_phase "$name" targeted 0
     IFS=',' read -ra RL <<< "$ranges"
     for r in "${RL[@]}"; do
-        local rs="${r%%:*}" rc="${r##*:}"
+        local rs="${r%%:*}" rc="${r##*:}" rv=0 rr=0
         log "  LBA $rs +$rc"
         if [[ $HAVE_SG -eq 1 ]]; then
             vran=1
             if run_verify "$dev" "$rs" "$rc"; then
                 ok "  VERIFY clean -- drive read these blocks internally"
             else
-                bad "  VERIFY failed -- drive cannot read its own media here"; vfail=1
+                bad "  VERIFY failed -- drive cannot read its own media here"; vfail=1; rv=1
             fi
         fi
         if run_read "$dev" "$rs" "$rc"; then
             ok "  READ   clean"
         else
-            bad "  READ   failed -- blocks could not cross the link"; rfail=1
+            bad "  READ   failed -- blocks could not cross the link"; rfail=1; rr=1
         fi
+        # Rounded DOWN to its CHUNK: a region key for matching the same defect
+        # across runs, never a write address (the range starts PAD below the
+        # failing sector, so this chunk may precede it).
+        [[ -n "$brser" ]] && printf '%s\t%s\t%s\n' "$brser" \
+            "$(( rs / CHUNK * CHUNK ))" "$(br_class "$HAVE_SG" "$rv" "$rr")" >> "$RUN/badranges-run.tsv"
     done
 
     if [[ "$SURFACE_SCAN" == "yes" && $HAVE_SG -eq 1 ]]; then

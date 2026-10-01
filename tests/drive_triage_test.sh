@@ -620,5 +620,49 @@ d=$(diff "$WORK/files-noflag.txt" <(ls -1 "$RB" | grep -v '^badranges-run\.tsv$'
             || bad "the flag adds no run file but its own record" "$d"
 rm -f "$LEDGER"; : > "$STUB_DMESG"
 
+# ── Per-range class, recorded for the ledger under the drive's serial. ─────
+# sector 12345 -> build_ranges pads 2000 below -> range 10345:4000 -> chunk
+# 10240 (5 x 2048). The key is sdX's serial from the fake sysfs -- NOT the
+# slot ID $STATE uses, which on a /dev/ run is the literal "manual".
+rec() { local d; d=$(ls -1d "$WORK/brout"/*/ 2>/dev/null | head -1); cat "${d}badranges-run.tsv" 2>/dev/null; }
+# Exact equality, not a substring: a key with junk in front of the serial
+# (an unskipped VPD header byte) still CONTAINS the serial.
+is() { [ "$2" = "$3" ] && ok "$1" || bad "$1" "want '$3', got '$2'"; }
+rm -f "$LEDGER"; seed 12345
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+is "VERIFY failed is recorded media, keyed by the drive's serial" "$(rec)" "$SX"$'\t10240\tmedia'
+hasnt "and never by the slot ID" "$(rec)" "manual"
+STUB_READ_RC=1 brun >/dev/null
+is "VERIFY clean + READ failed is recorded transport" "$(rec)" "$SX"$'\t10240\ttransport'
+brun >/dev/null
+is "nothing failing is recorded intermittent" "$(rec)" "$SX"$'\t10240\tintermittent'
+seed 12500    # range starts at 10500: exact-match would record 10500
+brun >/dev/null
+is "the range start rounds DOWN to its 2048-block chunk" "$(rec)" "$SX"$'\t10240\tintermittent'
+: > "$STUB_DMESG"
+brun >/dev/null
+is "no evidence: the 0:256 spot-check is recorded at chunk 0" "$(rec)" "$SX"$'\t0\tintermittent'
+
+# No readable serial: evidence that cannot be tied to a drive is not filed
+# under one. One line says so; nothing is recorded.
+seed 12345
+out=$(BR_SYS="$WORK/nosys" STUB_VERIFY_RC=1 STUB_READ_RC=1 brun)
+n=$(printf '%s\n' "$out" | grep -c "no serial readable for /dev/sdX")
+[ "$n" -eq 1 ] && ok "no serial: the report says so, once" || bad "no serial: the report says so, once" "want 1 line, got $n"
+[ -z "$(rec)" ] && ok "no serial: nothing is recorded" || bad "no serial: nothing is recorded" "$(rec)"
+
+# No VERIFY available (HAVE_SG=0) + READ failed = unresolved. Needs a PATH with
+# no sg_verify/sg_logs at all; a runner with real sg3_utils cannot force it.
+NOSG="$WORK/nosg"; mkdir -p "$NOSG"
+for b in smartctl sg_read blockdev dmesg; do cp "$STUBDIR/$b" "$NOSG/"; done
+if PATH="$NOSG:$PATH" command -v sg_verify >/dev/null 2>&1 || PATH="$NOSG:$PATH" command -v sg_logs >/dev/null 2>&1; then
+    echo "SKIP  unresolved class (real sg3_utils on PATH; HAVE_SG cannot be forced to 0)"
+else
+    seed 12345
+    STUB_READ_RC=1 BR_BIN="$NOSG" brun >/dev/null
+    is "no VERIFY available + READ failed is recorded unresolved" "$(rec)" "$SX"$'\t10240\tunresolved'
+fi
+rm -f "$LEDGER"; : > "$STUB_DMESG"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }
