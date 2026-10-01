@@ -554,5 +554,71 @@ hasnt "L: --auto-triage without --all leaves a clean named disk untested" "$(cat
 outL2=$(TRIAGE_SKIP_DEV_CHECK=1 run --no-triage)
 hasnt "L: --no-triage still triages nothing" "$(cat "$ARGS")" "sg_verify"
 
+# ── --badrange-state: the Phase 2a bad-range ledger, flag plumbing. ─────────
+LEDGER="$WORK/ledger.tsv"
+# A fake sysfs holding each disk's VPD page 0x80 (unit serial number): a
+# 4-byte header, then the serial, space-padded as real drives pad it. The
+# length byte is 0x30 -- printable ('0') -- so a reader that fails to skip the
+# header is caught instead of having the header stripped as non-printable.
+mkvpd() { mkdir -p "$WORK/sys/block/$1/device"; printf '\000\200\000\060  %s  ' "$2" > "$WORK/sys/block/$1/device/vpd_pg80"; }
+SX=SERIALX00001
+mkvpd sdX "$SX"
+# One flagged triage of sdX with the ledger on. BR_BIN swaps the stub dir (a
+# box with no sg3_utils), BR_ENGINE the engine (a mutant) and BR_SYS the fake
+# sysfs (a disk with no readable serial) without a second copy of this
+# function. TRIAGE_SYSFS is ignored until Task 2 teaches the engine to read it.
+brun() {
+    : > "$ARGS"
+    OUT="$WORK/brout"; rm -rf "$OUT"
+    PATH="${BR_BIN:-$STUBDIR}:$PATH" TRIAGE_SKIP_ROOT_CHECK=1 TRIAGE_SKIP_DEV_CHECK=1 \
+        TRIAGE_SKIP_SELFTEST_WAIT=1 TRIAGE_SYSFS="${BR_SYS:-$WORK/sys}" bash "${BR_ENGINE:-$DT}" --out "$OUT" \
+        --badrange-state "$LEDGER" --auto-triage --all "$@" /dev/sdX 2>&1
+}
+seed() { echo "kernel: sd 0:0:0:0: [sdX] tag#0 FAILED dev sdX, sector $1 op 0x0" > "$STUB_DMESG"; }
+
+# /boot is flash. Same refusal --out and --state already get, and it must fire
+# before anything is created.
+out=$(PATH="$STUBDIR:$PATH" bash "$DT" --out "$WORK/bootbr" --badrange-state /boot/x.tsv /dev/sdX 2>&1); rc=$?
+[ $rc -eq 2 ] && has "--badrange-state under /boot is refused" "$out" "change --badrange-state" \
+              || bad "--badrange-state under /boot is refused" "exit was $rc, not 2"
+[ ! -e "$WORK/bootbr" ] && ok "and nothing is created before the refusal" \
+                        || bad "and nothing is created before the refusal" "$WORK/bootbr exists"
+
+# One physical-drive-identity reset clears the baseline AND the ledger.
+printf 'manual\t10240\t2\tr1\tr2\tmedia\t1\n' > "$LEDGER"
+out=$(brun --no-triage --reset-baseline)
+[ ! -e "$LEDGER" ] && ok "--reset-baseline also clears the ledger it is given" \
+                   || bad "--reset-baseline also clears the ledger it is given" "survived: $(cat "$LEDGER")"
+has "the ledger path is named in the report when the flag is given" "$out" "bad-range ledger: $LEDGER"
+
+# Flag absent = today's behavior, byte for byte -- the --state precedent
+# (413864f). Same flagged MEDIA scenario both ways; the reports may differ ONLY
+# in lines naming the ledger and the four lines carrying a time or the run's
+# own path.
+norm() { grep -v -E '^(started |results |finished |full report:)|bad-range ledger' "$1"; }
+seed 12345
+STUB_VERIFY_RC=1 STUB_READ_RC=1 TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 run --auto-triage --all >/dev/null
+RA=$(ls -1d "$WORK/out"/*/ | head -1)
+cp "${RA}report.txt" "$WORK/report-noflag.txt"
+cut -f1,3- "$WORK/out/baseline.tsv" > "$WORK/state-noflag.tsv"
+ls -1 "$RA" > "$WORK/files-noflag.txt"
+hasnt "flag absent: the report never mentions the ledger" "$(cat "$WORK/report-noflag.txt")" "bad-range ledger"
+leak=$(ls -R "$WORK/out" | grep -i badrange || true)
+[ -z "$leak" ] && ok "flag absent: no ledger or ledger record is written anywhere" \
+               || bad "flag absent: no ledger or ledger record is written anywhere" "$leak"
+rm -f "$LEDGER"
+STUB_VERIFY_RC=1 STUB_READ_RC=1 brun >/dev/null
+RB=$(ls -1d "$WORK/brout"/*/ | head -1)
+d=$(diff <(norm "$WORK/report-noflag.txt") <(norm "${RB}report.txt"))
+[ -z "$d" ] && ok "the flag changes nothing in the report but its own ledger lines" \
+            || bad "the flag changes nothing in the report but its own ledger lines" "$d"
+d=$(diff "$WORK/state-noflag.tsv" <(cut -f1,3- "$WORK/brout/baseline.tsv"))
+[ -z "$d" ] && ok "the flag changes nothing in the baseline" \
+            || bad "the flag changes nothing in the baseline" "$d"
+d=$(diff "$WORK/files-noflag.txt" <(ls -1 "$RB" | grep -v '^badranges-run\.tsv$'))
+[ -z "$d" ] && ok "the flag adds no run file but its own record" \
+            || bad "the flag adds no run file but its own record" "$d"
+rm -f "$LEDGER"; : > "$STUB_DMESG"
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

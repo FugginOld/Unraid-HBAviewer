@@ -134,6 +134,7 @@ GAP=100000
 
 DEV_OVERRIDE=""
 STATE_OVERRIDE=""
+BADRANGE_STATE=""
 while [[ $# -gt 0 ]]; do
     # User Scripts invokes with an empty argument. Never abort over an arg.
     [[ -z "$1" ]] && { shift; continue; }
@@ -148,6 +149,7 @@ while [[ $# -gt 0 ]]; do
         --out)             OUTDIR="$2"; shift ;;
         --events)          EVENTS="$2"; shift ;;
         --state)           STATE_OVERRIDE="$2"; shift ;;
+        --badrange-state)  BADRANGE_STATE="$2"; shift ;;
         --force)           ABORT_IF_BUSY="no" ;;
         --reset-baseline)  RESET_BASELINE="yes" ;;
         /dev/*)            DEV_OVERRIDE="$1" ;;
@@ -170,6 +172,9 @@ esac
 case "$STATE_OVERRIDE" in
     /boot/*) echo "refusing to write to the flash drive. change --state." >&2; exit 2 ;;
 esac
+case "$BADRANGE_STATE" in
+    /boot/*) echo "refusing to write to the flash drive. change --badrange-state." >&2; exit 2 ;;
+esac
 if ! mkdir -p "$OUTDIR" 2>/dev/null; then
     echo "cannot create $OUTDIR -- falling back to /tmp (lost on reboot)" >&2
     OUTDIR="/tmp/drive-triage"; mkdir -p "$OUTDIR" || exit 2
@@ -180,6 +185,9 @@ mkdir -p "$RUN" || exit 2
 LOG="$RUN/report.txt"
 STATE="${STATE_OVERRIDE:-$OUTDIR/baseline.tsv}"
 [[ "$RESET_BASELINE" == "yes" ]] && rm -f "$STATE"
+# A disk swap or rebuild invalidates bad-range evidence for the same reason it
+# invalidates the baseline: one physical-drive-identity reset clears both.
+[[ "$RESET_BASELINE" == "yes" && -n "$BADRANGE_STATE" ]] && rm -f "$BADRANGE_STATE"
 
 log()  { printf '%s\n' "$*" | tee -a "$LOG"; }
 info() { log "      $*"; }
@@ -307,6 +315,7 @@ else
     warn "Run again in a few hours for meaningful deltas."
     HAVE_BASELINE=0
 fi
+[[ -n "$BADRANGE_STATE" ]] && info "bad-range ledger: $BADRANGE_STATE"
 
 if have mdcmd; then
     mdcmd status > "$RUN/mdcmd.txt" 2>&1
