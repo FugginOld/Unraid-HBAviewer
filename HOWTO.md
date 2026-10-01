@@ -143,9 +143,9 @@ carries a **Repair** button. For a disk Unraid has assigned — array, parity
 direct sector repair is not offered — it bypasses parity or the pool's own
 redundancy — and lists the three safe options together: replace, rebuild
 onto itself, or keep in service and watch. They are options to weigh; the
-screen does not pick one. (Earlier releases treated parity2 and pool disks
-as unassigned, both here and in the sidebar's grouping; they now get the
-assigned-disk advice.) For an unassigned disk it lists the drive's
+screen does not pick one. (Earlier releases gave parity, parity2 and
+pool disks the unassigned-disk advice on the Verdict screen, and grouped
+parity2 and pool disks as unassigned in the sidebar.) For an unassigned disk it lists the drive's
 **confirmed** failing ranges: 2048-block chunks where SCSI VERIFY failed —
 the drive could not read its own platters — on **two separate runs**. A
 range that failed only over the link (VERIFY clean, READ failed) never
@@ -165,7 +165,7 @@ The bad-range history is kept beside the baseline in `/tmp/hbaviewer/jobs/`
 means "not confirmed yet". Every row is filed under the drive's own serial
 number, read from sysfs without waking the drive, so a drive that later
 takes over the same `sdX` name sees none of the previous drive's history.
-If a drive's serial cannot be read, its Repair screen says so and shows
+If an unassigned drive's serial cannot be read, its Repair screen says so and shows
 nothing. NVMe drives expose no such serial, so they record no bad-range
 evidence. The file's permissions follow the umask of the process that
 creates it, like the baseline file.

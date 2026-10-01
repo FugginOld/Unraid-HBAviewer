@@ -116,7 +116,7 @@ installs it; Unraid's Slackware base ships it.
 | `bundle.php` | Diagnostic bundle transport (collection lives in `scripts/bundle_support.sh`). |
 | `notify.php`, `scripts/notify_check.php` | Health-transition notifications (cron). |
 | `flash.php` | **The only mutating path.** See below. |
-| `diagnose.php` | The read-only disk-diagnose job runner: `start` / `status` / `cancel` / `list`. Launches `scripts/drive_triage.sh --events` under `setsid` into `/tmp/hbaviewer/jobs/<job-id>/`, one lock per disk, cancel by process group. The kernel-error baseline the engine compares each run against is deliberately NOT kept in that per-job directory — `--state` points it at a stable sibling, `/tmp/hbaviewer/jobs/<disk>.baseline.tsv`, so it survives the job-directory retention sweep instead of being deleted with the run that wrote it. The bad-range ledger is the same kind of state: `--badrange-state` points it at `/tmp/hbaviewer/jobs/<disk>.badranges.tsv` (`diag_badrange_path()`), one row per 2048-block chunk that ever failed a check, and `?action=repair` reads it for the Repair screen — disk-scoped, pure PHP, no shell-out, rows filtered to the drive's serial. Not a mutating path — every operation it starts is a read. |
+| `diagnose.php` | The read-only disk-diagnose job runner: `start` / `status` / `cancel` / `list`. Launches `scripts/drive_triage.sh --events` under `setsid` into `/tmp/hbaviewer/jobs/<job-id>/`, one lock per disk, cancel by process group. The kernel-error baseline the engine compares each run against is deliberately NOT kept in that per-job directory — `--state` points it at a stable sibling, `/tmp/hbaviewer/jobs/<disk>.baseline.tsv`, so it survives the job-directory retention sweep instead of being deleted with the run that wrote it. The bad-range ledger is the same kind of state: `--badrange-state` points it at `/tmp/hbaviewer/jobs/<disk>.badranges.tsv` (`diag_badrange_path()`), one row per (serial, 2048-block chunk) that ever failed a check, and `?action=repair` reads it for the Repair screen — disk-scoped, pure PHP, no shell-out, rows filtered to the drive's serial. Not a mutating path — every operation it starts is a read. |
 | `diagnose_stream.php` | Server-Sent Events over one job's event file, resumed by byte offset. Bounded to `DIAG_SSE_MAX_SECS` per connection so a stream cannot hold a php-fpm worker indefinitely. |
 | `config.php`, `settings.php`, `dashboard.php`, `hbaviewer.php` | Settings schema, settings page, dashboard tile, Monitor page markup. |
 | `hbaviewer.js` | The Monitor page's behaviour — tabs, the bay map, Locate, the SMART and Performance polls. One IIFE, no modules, no build step. |
@@ -579,7 +579,9 @@ moving says nothing about whether the cron sampler is running.
 - **"Assigned" means assigned anywhere, and has one reader.**
   `diag_array_disk()`, the Diagnose sidebar and the SMART tab all go through
   `unraid_disk_roles()`: parity, parity2, `diskN` and pool members are
-  assigned, and an unreadable `disks.ini` counts as assigned. The Diagnose
+  assigned. `unraid_disk_roles()` returns `[]` for an unreadable `disks.ini`
+  and for one with nothing assigned alike, so `diag_array_disk()` checks
+  readability first and treats an unreadable file as assigned. The Diagnose
   screens' old inline `^disk\d+$` test called parity and pool disks
   unassigned and gave a parity disk's MEDIA verdict the unassigned-disk
   advice.
