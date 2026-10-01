@@ -251,7 +251,7 @@ check('the tab button is a real tab, not a link',
 // Every container the JS writes into. A typo here renders a page that looks
 // perfectly normal and does nothing at all -- the same failure mode
 // view_test.php's <script src> check exists for.
-foreach (['diag-live', 'diag-verdict', 'diag-head', 'diag-dot', 'diag-pause',
+foreach (['diag-live', 'diag-verdict', 'diag-repair', 'diag-head', 'diag-dot', 'diag-pause',
           'diag-cancel', 'diag-pills', 'diag-progress', 'diag-hotzone',
           'diag-map', 'diag-hist', 'diag-counters', 'diag-interp',
           'diag-stream', 'diag-newjob', 'diag-standby', 'diag-drives',

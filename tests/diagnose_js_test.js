@@ -39,7 +39,7 @@ function mkEl(id) {
     });
     return el;
 }
-const ids = ['diag-live','diag-verdict','diag-head','diag-dot','diag-pause','diag-cancel',
+const ids = ['diag-live','diag-verdict','diag-repair','diag-head','diag-dot','diag-pause','diag-cancel',
              'diag-pills','diag-progress','diag-hotzone','diag-map','diag-hist',
              'diag-counters','diag-interp','diag-stream','diag-newjob','diag-standby',
              'diag-drives','diag-verdict-body'];
@@ -351,6 +351,30 @@ async function tail() {
     await deferredResumeRace(() => sandbox.luDiagnose('sdt'));
     check('a confirmed start landing while resume\'s list fetch is in flight is not overwritten',
           sandbox.luDiagJob === 'sdt-1' && esInstances.length === 1);
+
+    /* ── the Repair screen (Phase 2a) ─────────────────────────────────── */
+    fetches.length = 0;
+    sandbox.luDiagJob = 'sdb-9';
+    els.get('diag-repair').hidden = true;
+    const fetchBeforeRepair = sandbox.fetch;
+    sandbox.fetch = (url, opts) => {
+        fetches.push({ url, body: opts && opts.body ? String(opts.body) : '' });
+        return Promise.resolve({ text: () => Promise.resolve('<p>REPAIR sdc</p>') });
+    };
+    await sandbox.luDiagRepair('sdc');
+    sandbox.fetch = fetchBeforeRepair;
+    check('Repair fetches the disk-scoped repair action once',
+          fetches.length === 1 && fetches[0].url.includes('action=repair')
+          && fetches[0].url.includes('disk=sdc'));
+    check('and it is a GET: nothing is posted', fetches[0].body === '');
+    check('Repair shows only the repair screen',
+          els.get('diag-repair').hidden === false && els.get('diag-verdict').hidden === true
+          && els.get('diag-live').hidden === true);
+    check('the fragment lands in #diag-repair', els.get('diag-repair')._html.includes('REPAIR sdc'));
+    check('Repair leaves the page\'s job alone', sandbox.luDiagJob === 'sdb-9');
+    sandbox.luDiagShow('verdict');
+    check('Back to verdict hides the repair screen again',
+          els.get('diag-repair').hidden === true && els.get('diag-verdict').hidden === false);
 
     /* The Verdict screen's way back lives in its static markup; the verdict
        fetch must write below it, never over it. The stub fetch has no text(),

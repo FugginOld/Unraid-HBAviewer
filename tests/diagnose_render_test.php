@@ -287,5 +287,18 @@ $sh = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/
 check("the displayed block count is the engine's own CHUNK",
       preg_match('/^CHUNK="(\d+)"/m', $sh, $cm) === 1 && (int) $cm[1] === DIAG_LEDGER_CHUNK);
 
+/* ── the Verdict screen's way into Repair ──────────────────────────────── */
+$vIn = fn(string $v, string $disk = 'sdb') => [
+    'disk' => $disk, 'verdict' => $v, 'why' => '', 'events' => [], 'sense' => [],
+    'max_cmd_age' => null, 'array_disk' => false, 'ports' => [], 'recent' => []];
+check('a non-CLEAN verdict offers the Repair screen for its disk',
+      str_contains(renderDiagVerdict($vIn('MEDIA')), "luDiagRepair('sdb')")
+      && str_contains(renderDiagVerdict($vIn('TRANSPORT')), "luDiagRepair('sdb')"));
+check('a CLEAN verdict does not', !str_contains(renderDiagVerdict($vIn('CLEAN')), 'luDiagRepair('));
+// A run that did not classify is not clean -- absence is not health.
+check('an unclassified run still offers it', str_contains(renderDiagVerdict($vIn('')), 'luDiagRepair('));
+check('the disk in the Repair onclick is quote-escaped',
+      str_contains(renderDiagVerdict($vIn('MEDIA', "a'b")), "luDiagRepair('a&#039;b')"));
+
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

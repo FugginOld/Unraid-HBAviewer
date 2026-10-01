@@ -154,10 +154,11 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
   </div>
 </div>
 
-<!-- ── Diagnose tab: two screens, Live Job and Verdict ─────────────────────
-     Both live in one pane and are toggled by luDiagShow() rather than being
-     two routes: they render from the same job and the same event file, and a
-     verdict is a finished live view, not a different page. -->
+<!-- ── Diagnose tab: three screens, Live Job, Verdict and Repair ───────────
+     All live in one pane and are toggled by luDiagShow() rather than being
+     separate routes: Live and Verdict render from the same job and the same
+     event file, and a verdict is a finished live view, not a different page.
+     Repair is disk-scoped (the bad-range ledger spans runs) and read-only. -->
 <div id="tab-diagnose" class="lu-tab-pane" role="tabpanel" aria-labelledby="tabbtn-diagnose">
 
   <div id="diag-live" class="lu-diag-screen">
@@ -224,6 +225,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
     <p><button class="lu-refresh-btn" type="button" onclick="luDiagBack()">Back to drives</button></p>
     <div id="diag-verdict-body"></div>
   </div>
+  <div id="diag-repair" class="lu-diag-screen" hidden></div>
 </div>
 
 <!-- ── Performance tab (real-time graphs; in-browser history only) ────────── -->

@@ -240,7 +240,18 @@ function renderDiagVerdict(array $in): string {
     foreach (diag_next_steps($v, !empty($in['array_disk'])) as $s) {
         $out .= '<li>' . htmlspecialchars($s) . '</li>';
     }
-    $out .= '</ol></div>';
+    $out .= '</ol>';
+    /* The way into the Repair screen: this disk's bad-block evidence across
+       runs. Not offered on CLEAN -- nothing reproduced -- and offered on an
+       unclassified run, because "did not classify" is not clean. Decided here,
+       not in the client: a reopened past verdict never passes its verdict
+       event through the browser. */
+    if ($v !== 'CLEAN') {
+        $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagRepair(\''
+              . htmlspecialchars($disk, ENT_QUOTES) . '\')">Repair</button> '
+              . '<span class="lu-muted">Bad-block evidence for this drive, across runs.</span></p>';
+    }
+    $out .= '</div>';
 
     /* Which drives share a port. A single hot drive on a port is a lane or a
        cable; a whole hot expander is the cable to it or the expander itself --

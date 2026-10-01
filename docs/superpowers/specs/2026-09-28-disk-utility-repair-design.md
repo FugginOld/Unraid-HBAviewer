@@ -242,8 +242,12 @@ rather than evidence that may belong to another drive (amended 2026-09-28).
   no table, even when the ledger has confirmed rows); unassigned-disk table listing only
   `confirm_count >= 2` rows; a `transport` row absent from the table but counted in the link line;
   both empty-state variants (no media range yet, media seen on one run only).
-- `tests/diagnose_js_test.js`: the new Verdict-screen "Repair" link's visibility rule (shown only
-  on a non-CLEAN verdict) and `luDiagRepair()`'s navigation call.
+- `tests/diagnose_js_test.js`: `luDiagRepair()`'s navigation call — one GET to `action=repair`,
+  only the Repair screen shown, `luDiagJob` untouched. The "Repair" link's visibility rule (shown
+  only on a non-CLEAN verdict) is tested in `tests/diagnose_render_test.php` instead: the Verdict
+  screen is server-rendered and `renderDiagVerdict()` is where the verdict is known — including for
+  a reopened past verdict, whose verdict event never passes through the browser. (Moved during
+  planning, 2026-09-28.)
 - Hardware verification, same "Commands I run myself" treatment Task 16 gave Phase 1:
   - on Golem, a clean run (e.g. `sdq`, whose triage currently has no recorded failing sectors and
     spot-checks `0:256` clean) leaves no ledger row — confirms the no-evidence path writes nothing;

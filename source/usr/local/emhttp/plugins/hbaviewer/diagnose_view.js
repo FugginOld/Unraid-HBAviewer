@@ -182,6 +182,7 @@
     window.luDiagShow = function (which) {
         el('diag-live').hidden    = (which !== 'live');
         el('diag-verdict').hidden = (which !== 'verdict');
+        el('diag-repair').hidden  = (which !== 'repair');
     };
 
     /* The Verdict screen's way out. The drive list is refetched because its
@@ -362,6 +363,23 @@
         luDiagShow('verdict');
         if (typeof luTab === 'function') luTab('diagnose');
         return luDiagRenderVerdict();
+    };
+
+    /* The Repair screen: read-only bad-block evidence for one DISK, from the
+       ledger the engine keeps across runs -- so it takes a disk, not a job,
+       and leaves luDiagJob alone (the verdict it was opened from is still the
+       page's job, and "Back to verdict" returns to it). A GET: nothing here
+       changes anything. */
+    window.luDiagRepair = function (disk) {
+        luDiagShow('repair');
+        if (typeof luTab === 'function') luTab('diagnose');
+        return fetch('/plugins/hbaviewer/diagnose.php?action=repair&disk='
+                     + encodeURIComponent(disk))
+          .then(function (r) { return r.text(); })
+          .then(function (h) { el('diag-repair').innerHTML = h; })
+          .catch(function () {
+            el('diag-repair').textContent = 'Could not load the repair evidence — reload the tab.';
+          });
     };
 
     /* The sidebar drive list, worst-first with verdict badges. Server-rendered
