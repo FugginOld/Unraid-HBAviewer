@@ -68,6 +68,20 @@ $flatCounters = diag_events_decode(
     "{\"t\":\"counter\",\"key\":\"uncorr\",\"before\":3,\"after\":3}\n");
 check('counter events present with all-zero deltas still reads none',
       diag_evidence_cards($flatCounters)[2]['result'] === 'none');
+// An uncorrected write is the drive failing its own media, past the link. Any
+// key not on the media list falls through to path -- a cable fault.
+$wrote = diag_events_decode("{\"t\":\"counter\",\"key\":\"wuncorr\",\"before\":0,\"after\":2}\n");
+check('a rise in uncorrected writes is media movement, not path',
+      str_starts_with(diag_evidence_cards($wrote)[2]['result'], 'media +2 · path +0'));
+// The lifetime count is why Unraid disabled the disk, and the Verdict screen
+// shows only these cards -- so it is stated even when nothing moved this run.
+$flatWrites = diag_events_decode(
+    "{\"t\":\"counter\",\"key\":\"uncorr\",\"before\":0,\"after\":0}\n" .
+    "{\"t\":\"counter\",\"key\":\"wuncorr\",\"before\":5,\"after\":5}\n");
+check('the lifetime uncorrected-write count is on the verdict card though flat',
+      diag_evidence_cards($flatWrites)[2]['result'] === 'none · lifetime uncorrected writes: 5');
+// $flatCounters above has no wuncorr (a SATA drive): its result stays exactly
+// 'none', checked there -- no count is claimed for a drive that keeps none.
 
 /* ── the tested-ranges table ───────────────────────────────────────────── */
 $rows = diag_ranges_rows($events, ['0x3' => 4], 92);

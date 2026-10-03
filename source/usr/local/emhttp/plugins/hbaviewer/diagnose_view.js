@@ -66,7 +66,7 @@
        Both moving is genuinely ambiguous, and saying so is the honest answer:
        picking a side there sends someone to buy the wrong part. */
     window.luDiagInterp = function (d) {
-        var media = (d.grown || 0) + (d.uncorr || 0);
+        var media = (d.grown || 0) + (d.uncorr || 0) + (d.wuncorr || 0);
         var path  = (d.disp || 0) + (d.invdw || 0) + (d.loss || 0);
         if (media > 0 && path === 0)
             return 'Media counters moved (+' + media + '), path counters flat — points to MEDIA, not the cable.';
@@ -137,6 +137,7 @@
 
     function drawCounters() {
         var keys = [['grown', 'Grown defect list'], ['uncorr', 'Uncorrected verify/read'],
+                    ['wuncorr', 'Uncorrected writes'],
                     ['disp', 'Running disparity'], ['invdw', 'Invalid DWORD'],
                     ['loss', 'Loss of DWORD sync']];
         var out = '', i, k, d;

@@ -67,17 +67,18 @@ function diag_verdict_words(string $v): array {
 function diag_evidence_cards(array $events): array {
     $n = ['verify' => 0, 'read' => 0];
     $f = ['verify' => 0, 'read' => 0];
-    $media = 0; $path = 0; $counterEvents = 0;
+    $media = 0; $path = 0; $counterEvents = 0; $wuncorr = null;
     foreach ($events as $e) {
         if (($e['t'] ?? '') === 'chunk' && isset($n[$e['op'] ?? ''])) {
             $n[$e['op']]++;
             if (($e['ok'] ?? true) === false) $f[$e['op']]++;
         } elseif (($e['t'] ?? '') === 'counter') {
             $counterEvents++;
+            if (($e['key'] ?? '') === 'wuncorr') $wuncorr = (int) ($e['after'] ?? 0);
             $d = (int) ($e['after'] ?? 0) - (int) ($e['before'] ?? 0);
             if ($d <= 0) continue;
-            if (in_array($e['key'] ?? '', ['grown', 'uncorr'], true)) $media += $d;
-            else                                                       $path  += $d;
+            if (in_array($e['key'] ?? '', ['grown', 'uncorr', 'wuncorr'], true)) $media += $d;
+            else                                                                  $path  += $d;
         }
     }
     $word = function (int $total, int $failed): string {
@@ -99,8 +100,14 @@ function diag_evidence_cards(array $events): array {
          // 'none' would claim they were checked; absence is not health.
          'result' => $counterEvents === 0 ? 'not run'
                      : ($media === 0 && $path === 0 ? 'none'
-                        : "media +$media · path +$path"),
-         'detail' => 'Media counters are the platters (grown defects, uncorrected reads); path counters are the wire (running disparity, invalid DWORD, loss of sync).'],
+                        : "media +$media · path +$path")
+                     // Lifetime, not movement: the drive's own count of writes
+                     // it could not complete is why Unraid disables a disk, and
+                     // this card is the Verdict screen's only counter view. No
+                     // wuncorr event (SATA keeps no such count) claims nothing.
+                     . ($counterEvents > 0 && $wuncorr !== null
+                        ? " · lifetime uncorrected writes: $wuncorr" : ''),
+         'detail' => 'Media counters are the platters (grown defects, uncorrected reads and writes); path counters are the wire (running disparity, invalid DWORD, loss of sync).'],
     ];
 }
 

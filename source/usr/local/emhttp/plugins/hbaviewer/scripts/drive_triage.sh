@@ -740,6 +740,10 @@ snap() {  # device -> summed counters, one key per line
     local S="$RUN/smart-$1.txt"
     smartctl -x -d auto -n standby "/dev/$1" > "$S" 2>&1
     echo "uncorr=$(awk '/^read:/ {print $NF}' "$S" | head -1 | grep -o '[0-9]*' || echo 0)"
+    # Uncorrected writes: the reason Unraid disables a disk. SAS only -- SATA
+    # has no write: row, the empty value fails the caller's filter, and the key
+    # is absent rather than a false zero. No underscore: that filter is [a-z]+.
+    echo "wuncorr=$(awk '/^write:/ {print $NF}' "$S" | head -1)"
     echo "grown=$(awk '/Elements in grown defect/ {gsub(/[^0-9]/,"",$NF); print $NF}' "$S" | head -1)"
     echo "nonmed=$(awk '/Non-medium error count/ {gsub(/[^0-9]/,"",$NF); print $NF}' "$S" | head -1)"
     echo "invdw=$(sum_field 'Invalid DWORD count' "$S")"
@@ -917,7 +921,7 @@ triage_disk() {
         tri_counter "$k" "$v1" "$v2"
         if [[ $d -gt 0 ]]; then
             case "$k" in
-                uncorr|grown)      dmedia=$(( dmedia + d )) ;;
+                uncorr|grown|wuncorr) dmedia=$(( dmedia + d )) ;;
                 nonmed|invdw|loss) dpath=$(( dpath + d )) ;;
             esac
         fi

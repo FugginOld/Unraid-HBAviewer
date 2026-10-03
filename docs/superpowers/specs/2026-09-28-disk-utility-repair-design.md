@@ -290,10 +290,12 @@ Phase 2a:
   information, which alone can make a healthy disk error out under Linux/Unraid. Detect it from
   `/sys/block/<dev>/queue/logical_block_size` and `sg_readcap --16`'s `prot_en`. The fix
   (`sg_format --fmtpinfo=0`) is destructive and belongs to Phase 3; the detection is a read.
-- **Uncorrected write errors.** Unraid disables a disk when a write fails, and the drive logs those
-  itself (SCSI error counter log page 0x02). `snap()` tracks uncorrected *reads* only. Adding
-  `uncorr_write` gives the Verdict screen the most direct answer to "why did Unraid disable this
-  disk", even when a read-only triage finds nothing today.
+- **Uncorrected write errors.** *(Done 2026-10-03 as the `wuncorr` counter: lifetime count on the
+  Verdict screen's Counter movement card, SAS only; slot scan unchanged —
+  `docs/superpowers/plans/2026-10-03-uncorrected-writes.md`.)* Unraid disables a disk when a write
+  fails, and the drive logs those itself (SCSI error counter log page 0x02). `snap()` tracked
+  uncorrected *reads* only. Adding `wuncorr` gives the Verdict screen the most direct answer to
+  "why did Unraid disable this disk", even when a read-only triage finds nothing today.
 
 ## Out of scope (this phase and the next)
 

@@ -137,6 +137,8 @@ check('both moving says so rather than guessing',
       /both/i.test(I({ grown: 2, uncorr: 0, disp: 14, invdw: 0, loss: 0 })));
 check('nothing moving says nothing moved',
       /no counter|nothing/i.test(I({ grown: 0, uncorr: 0, disp: 0, invdw: 0, loss: 0 })));
+check('uncorrected writes moving points at MEDIA',
+      /MEDIA/.test(I({ wuncorr: 1, grown: 0, uncorr: 0, disp: 0, invdw: 0, loss: 0 })));
 
 /* ── applying events to the DOM ─────────────────────────────────────────── */
 const A = sandbox.luDiagApply;
@@ -151,6 +153,11 @@ A({ t: 'counter', key: 'disp', before: 210, after: 214 });
 check('a counter event renders the delta',
       els.get('diag-counters')._html.includes('214')
       || els.get('diag-counters')._html.includes('+4'));
+// The lifetime count is the point (why Unraid disabled the disk), so it is
+// listed even when this run did not move it.
+A({ t: 'counter', key: 'wuncorr', before: 3, after: 3 });
+check('the uncorrected-write counter is listed with its count',
+      /Uncorrected writes: 3 \(\+0\)/.test(els.get('diag-counters')._html));
 A({ t: 'verdict', disk: 'sdb', v: 'TRANSPORT', why: 'verify clean, read failed x3' });
 check('a verdict event switches to the verdict screen',
       els.get('diag-verdict').hidden === false && els.get('diag-live').hidden === true);

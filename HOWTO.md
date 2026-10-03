@@ -137,6 +137,13 @@ DWORD, loss of sync) are compared against that disk's previous run, saved
 per disk. With no previous run there is nothing to compare against — run
 Diagnose again in a few hours for deltas that mean anything.
 
+**Uncorrected writes answer "why was this disk disabled".** Unraid disables
+a disk when a write to it fails, and a SAS drive keeps its own lifetime count
+of writes it could not complete. The Verdict screen's Counter movement card
+states that count ("lifetime uncorrected writes") even when the read-only test
+itself finds nothing. SATA drives keep no such count, so the card says nothing
+about it for them.
+
 **Repair shows evidence, not actions.** Every verdict that is not CLEAN
 carries a **Repair** button. For a disk Unraid has assigned — array, parity
 (including the second parity) or a pool — the Repair screen explains why

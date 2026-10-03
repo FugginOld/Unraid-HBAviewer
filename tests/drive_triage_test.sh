@@ -808,5 +808,25 @@ WORK="$WORK" SX="$SX" BR_BIN="$FOLD" brun >/dev/null
     || bad "one run's media and transport records for a chunk fold to media, counted once" "row: $(row 10240)"
 rm -f "$LEDGER"; : > "$STUB_DMESG"
 
+# O -- uncorrected WRITES: SCSI error counter log page 0x02, the write: row.
+# Unraid disables a disk when a write fails, so the drive's lifetime count is
+# the Verdict screen's most direct answer to "why was it disabled". A derived
+# copy of the SAS capture, not an edited fixture: only the write: row's last
+# field differs from read:'s, so reading the wrong row reports 0, not 5.
+SMART_W="$WORK/sas_uncorr_write.txt"
+sed '/^write:/ s/[0-9][0-9]*$/5/' "$PWD/fixtures/smart/sas_drive.txt" > "$SMART_W"
+grep -q '^write:.* 5$' "$SMART_W" || bad "O: write-error capture built" "sed did not match"
+: > "$EV"
+STUB_SMART="$SMART_W" TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+    run --auto-triage --all --events "$EV" > /dev/null
+has "O: the write: row's uncorrected count is a counter event" "$(cat "$EV")" '"key":"wuncorr","before":5,"after":5'
+has "O: the read: row is still uncorr, unchanged" "$(cat "$EV")" '"key":"uncorr","before":0,"after":0'
+# SATA has no error counter log: the key is absent, never a false zero.
+: > "$EV"
+STUB_SMART="$PWD/fixtures/smart/sata_drive.txt" TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_SKIP_SELFTEST_WAIT=1 \
+    run --auto-triage --all --events "$EV" > /dev/null
+has   "O: a SATA triage still reports counters (it ran)" "$(cat "$EV")" '"t":"counter"'
+hasnt "O: ...but no uncorrected-write counter" "$(cat "$EV")" '"key":"wuncorr"'
+
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

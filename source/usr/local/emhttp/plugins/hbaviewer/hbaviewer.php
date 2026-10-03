@@ -192,7 +192,7 @@ $csrfToken = is_array($vi) ? (string) ($vi['csrf_token'] ?? '') : '';
 
     <div class="lu-diag-cols">
       <div class="lu-card">
-        <!-- grown defect list, uncorrected verify/read, running disparity,
+        <!-- grown defect list, uncorrected verify/read and writes, running disparity,
              invalid DWORD, loss of DWORD sync -- media side vs path side. -->
         <div id="diag-counters"></div>
         <p id="diag-interp" class="lu-muted"></p>
