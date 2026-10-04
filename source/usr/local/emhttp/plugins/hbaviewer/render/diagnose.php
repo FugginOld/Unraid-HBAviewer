@@ -282,8 +282,8 @@ function renderDiagVerdict(array $in): string {
     } else {
         foreach ($recent as $r) {
             $job = (string) ($r['job'] ?? '');
-            $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagOpen(\''
-                  . htmlspecialchars($job, ENT_QUOTES) . '\')">'
+            $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagOpen('
+                  . htmlspecialchars(json_encode($job), ENT_QUOTES) . ')">'
                   . htmlspecialchars($job) . '</button> '
                   . htmlspecialchars((string) ($r['disk'] ?? '')) . ' — '
                   . htmlspecialchars((string) ($r['verdict'] ?? 'unknown')) . '</p>';
@@ -395,8 +395,8 @@ function renderDiagDriveList(array $drives, array $verdicts): string {
         $out = '<p class="lu-muted" style="font-size:12px;margin:6px 0 2px">'
              . htmlspecialchars($heading) . '</p>';
         foreach ($rows as $r) {
-            $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagnose(\''
-                  . htmlspecialchars($r['dev'], ENT_QUOTES) . '\')">Diagnose</button> '
+            $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagnose('
+                  . htmlspecialchars(json_encode($r['dev']), ENT_QUOTES) . ')">Diagnose</button> '
                   . '<code>' . htmlspecialchars($r['dev']) . '</code> '
                   . ($r['role'] !== '' ? htmlspecialchars($r['role']) . ' ' : '')
                   . '<span class="lu-diag-pill">' . htmlspecialchars($r['badge']) . '</span></p>';

@@ -319,6 +319,14 @@ check('an unclassified run still offers it', str_contains(renderDiagVerdict($vIn
 preg_match('/onclick="(luDiagRepair\([^"]*)"/', renderDiagVerdict($vIn('MEDIA', "a'b")), $om);
 check('the disk in the Repair onclick is a JS string literal that survives attribute decoding',
       isset($om[1]) && html_entity_decode($om[1], ENT_QUOTES) === 'luDiagRepair("a\'b")');
+// The same rule for the screen's other two buttons (issue #24).
+preg_match('/onclick="(luDiagOpen\([^"]*)"/',
+           renderDiagVerdict(['recent' => [['job' => "a'b", 'disk' => 'sdc', 'verdict' => 'CLEAN']]] + $vIn('CLEAN')), $oo);
+check('a recent run\'s job in the onclick survives attribute decoding',
+      isset($oo[1]) && html_entity_decode($oo[1], ENT_QUOTES) === 'luDiagOpen("a\'b")');
+preg_match('/onclick="(luDiagnose\([^"]*)"/', renderDiagDriveList([['dev' => "a'b", 'role' => '']], []), $od);
+check('a drive list entry in the onclick survives attribute decoding',
+      isset($od[1]) && html_entity_decode($od[1], ENT_QUOTES) === 'luDiagnose("a\'b")');
 
 echo $fails === 0 ? "diagnose_render: all pass\n" : "diagnose_render: $fails FAILED\n";
 exit($fails === 0 ? 0 : 1);

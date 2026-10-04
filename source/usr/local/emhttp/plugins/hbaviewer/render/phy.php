@@ -272,8 +272,8 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                             . ' &middot; sync ' . number_format($o['rate']['sync'], 1)
                             . ' &middot; reset ' . number_format($o['rate']['reset'], 1) . '</span>',
                         $o['dev'] !== null
-                            ? '<button class="lu-refresh-btn" onclick="luDiagnose(\''
-                              . htmlspecialchars($o['dev'], ENT_QUOTES) . '\')">Diagnose</button>'
+                            ? '<button class="lu-refresh-btn" onclick="luDiagnose('
+                              . htmlspecialchars(json_encode($o['dev']), ENT_QUOTES) . ')">Diagnose</button>'
                             : '<span class="lu-muted" role="img" aria-label="Drive not identified"'
                               . ' title="Drive not identified">—</span>',
                     ];

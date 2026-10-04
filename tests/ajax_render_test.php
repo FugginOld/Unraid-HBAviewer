@@ -2116,12 +2116,17 @@ $dv = ['backend' => 'storcli', 'controllers' => [['drives' => [
      'port' => '1'],
 ]]]];
 $h = renderDrivesTables($dv, ['SER1' => '/dev/sdf']);
+// The browser HTML-decodes an attribute before running it as JS, so
+// htmlspecialchars() alone cannot keep a quote inside a '…' literal (issue
+// #24). Every onclick argument must decode to a JSON string literal.
+$onclick = fn(string $html, string $fn): ?string =>
+    preg_match('/onclick="(' . preg_quote($fn, '/') . '\([^"]*)"/', $html, $m)
+        ? html_entity_decode($m[1], ENT_QUOTES) : null;
 check('the Drives table has a Diagnose column', str_contains($h, 'Diagnose'));
 // The BARE name, never the /dev path: diagnose.php validates
 // /^[a-z0-9]{2,32}$/ and would refuse "/dev/sdf". One spelling on both sides.
-check('the Diagnose button passes the bare device name',
-      str_contains($h, "luDiagnose('sdf')"));
-check('and never the /dev path', !str_contains($h, "luDiagnose('/dev/sdf')"));
+check('the Diagnose button passes the bare device name, as a JS string literal',
+      $onclick($h, 'luDiagnose') === 'luDiagnose("sdf")');
 // No /dev name resolved means there is nothing to diagnose. Offering a button
 // that cannot work is the failure the Locate cell already avoids by saying why.
 check('a drive with no /dev name gets no button, and says why',
@@ -2141,6 +2146,22 @@ check('and keeps its human label',              str_contains((string) $off[0]['d
 $offNone = phy_top_offenders($offPhys, $offDelta, [], 5, []);
 check('an unidentified drive carries a null dev',
       array_key_exists('dev', $offNone[0]) && $offNone[0]['dev'] === null);
+$hOff = renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => [
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], $bl, 1000 + 3600, 5000 + 3600, $phyDrv, ['ZA1ABCDE' => '/dev/sdg']);
+check('the top-offenders Diagnose argument is a JS string literal',
+      $onclick($hOff, 'luDiagnose') === 'luDiagnose("sdg")');
+
+/* The SMART serial comes from the drive itself, not a validator: the one
+   site where a quote is reachable. The /dev name and address ride along. */
+$hQ = renderDrivesTables(['backend' => 'storcli', 'controllers' => [['drives' => [
+    ['slot' => '8:1', 'model' => 'ST10', 'serial' => "A'B", 'os_name' => "/dev/s'g", 'state' => 'Onln',
+     'size' => '10TB', 'sas_address' => '0x5', 'link' => '12G', 'firmware' => 'A1', 'port' => '0'],
+]]]], [], [], ["/dev/s'g" => '1:0:2:0']);
+check('the SMART serial survives attribute decoding as one JS string literal',
+      $onclick($hQ, 'luSmart') === 'luSmart(this,"A\'B")');
+check('the Locate arguments survive attribute decoding as JS string literals',
+      $onclick($hQ, 'luLocate') === 'luLocate(event, this, "1:0:2:0", "\/dev\/s\'g")');
 
 $completed = true;
 echo $fails === 0 ? "ajax_render: all pass\n" : "ajax_render: $fails FAILED\n";

@@ -101,15 +101,15 @@ function diag_cell(array $d, array $devBySerial): string {
     }
     $bare = preg_replace('~^/dev/~', '', $dev);
     /* The name came from lsblk or from the sysfs join, so it cannot carry a
-       quote -- htmlspecialchars is the belt, and the alnum filter is the
+       quote -- the JSON string literal is the belt, and the alnum filter is the
        braces: anything else would be refused server-side anyway, and a button
        that posts a value the server rejects is worse than no button. */
     if (!preg_match('/^[a-z0-9]{2,32}\z/', (string) $bare)) {
         return '<span class="lu-muted" role="img" aria-label="Unrecognised device name"'
              . ' title="Unrecognised device name">—</span>';
     }
-    return sprintf('<button class="lu-refresh-btn" onclick="luDiagnose(\'%s\')">Diagnose</button>',
-                   htmlspecialchars((string) $bare, ENT_QUOTES));
+    return sprintf('<button class="lu-refresh-btn" onclick="luDiagnose(%s)">Diagnose</button>',
+                   htmlspecialchars(json_encode((string) $bare), ENT_QUOTES));
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
@@ -175,13 +175,15 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             $on = in_array($addr, $locating, true);
             // The address is [0-9:] by construction (lsi_scsi_addr_by_dev drops
             // anything else) and the /dev name comes from lsblk, so neither can
-            // carry a quote into the handler — htmlspecialchars is the belt.
+            // carry a quote into the handler — the JSON string literal is the
+            // belt: the browser decodes the attribute before running it as JS,
+            // so htmlspecialchars alone cannot keep a quote inside '…'.
             return sprintf(
-                '<button class="lu-refresh-btn%s" data-locate="%s" onclick="luLocate(event, this, \'%s\', \'%s\')">%s</button>',
+                '<button class="lu-refresh-btn%s" data-locate="%s" onclick="luLocate(event, this, %s, %s)">%s</button>',
                 $on ? ' locating' : '',
                 htmlspecialchars($addr, ENT_QUOTES),
-                htmlspecialchars($addr, ENT_QUOTES),
-                htmlspecialchars((string) $dev, ENT_QUOTES),
+                htmlspecialchars(json_encode($addr), ENT_QUOTES),
+                htmlspecialchars(json_encode((string) $dev), ENT_QUOTES),
                 $on ? 'STOP' : 'Locate'
             );
         };
@@ -193,7 +195,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
             foreach ($drives as $d) {
                 $serial = $d['serial'] ?? '';
                 $smart  = $serial !== ''
-                    ? '<button class="lu-refresh-btn" onclick="luSmart(this,\'' . htmlspecialchars($serial, ENT_QUOTES) . '\')">SMART</button>'
+                    ? '<button class="lu-refresh-btn" onclick="luSmart(this,' . htmlspecialchars(json_encode($serial), ENT_QUOTES) . ')">SMART</button>'
                     : '<span class="lu-muted">—</span>';
                 $rows[] = [
                     $devCell($d),
