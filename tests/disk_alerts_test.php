@@ -33,23 +33,27 @@ check('a vanished disk is not a rise',
       disk_alert_defect_rises(['ata-X' => 4], []) === []);
 
 /* ── the run: state in, notifications out, state back ──────────────────── */
-$sent = [];
+// phpstan cannot see $send fill $sent by reference, so a bare [] would leave it
+// typed array{} and every $sent[0] read below an error. One typed empty list.
+/** @var list<array{string, string, string}> $none */
+$none = [];
+$sent = $none;
 $send = function (string $s, string $d, string $i) use (&$sent) { $sent[] = [$s, $d, $i]; };
 
 @unlink($state);
-$sent = [];
+$sent = $none;
 $r = disk_alert_run(['ata-X' => 4], ['max_seq' => 100, 'events' => []], $send, $state, 1_700_000_000);
 check('a first run notifies nothing',         $sent === []);
 check('a first run still records the cursor', $r['seq'] === 100);
 
-$sent = [];
+$sent = $none;
 $r = disk_alert_run(['ata-X' => 6], ['max_seq' => 140, 'events' => []], $send, $state, 1_700_000_100);
 check('the second run notifies the rise', count($sent) === 1);
 check('the notification names the disk',  str_contains($sent[0][0], 'ata-X'));
 check('a defect rise is a warning',       $sent[0][2] === 'warning');
 
 /* ── kernel medium errors ──────────────────────────────────────────────── */
-$sent = [];
+$sent = $none;
 $r = disk_alert_run(['ata-X' => 6], ['max_seq' => 160, 'events' => [
         ['seq' => 155, 'dev' => 'sdf', 'text' => 'critical medium error, dev sdf, sector 1234567'],
      ]], $send, $state, 1_700_000_200);
@@ -59,14 +63,14 @@ check('the cursor advances past it', $r['seq'] === 160);
 
 // The cursor is the whole point: without it one bad sector notifies every ten
 // minutes for as long as the box is up.
-$sent = [];
+$sent = $none;
 disk_alert_run(['ata-X' => 6], ['max_seq' => 160, 'events' => []], $send, $state, 1_700_000_300);
 check('a cursor already past the event is silent', $sent === []);
 
 // A reboot restarts /dev/kmsg at 0, leaving the stored cursor AHEAD of the
 // whole buffer -- which would silence the channel until the box organically
 // passed the old number. Hours of no alerts, feature still ticked.
-$sent = [];
+$sent = $none;
 $r = disk_alert_run(['ata-X' => 6], ['max_seq' => 8, 'events' => [
         ['seq' => 5, 'dev' => 'sdf', 'text' => 'critical medium error, dev sdf, sector 9'],
      ]], $send, $state, 1_700_000_400);
@@ -82,12 +86,12 @@ check('and the cursor follows the buffer back down',    $r['seq'] === 8);
 // the cursor would stay stale, silently losing a genuine early-sequence event.
 // Boot-id mismatch is the authoritative reset signal.
 @unlink($state);
-$sent = [];
+$sent = $none;
 // First boot (boot_id_1): record a low cursor (e.g. 8)
 $r = disk_alert_run(['ata-X' => 6], ['max_seq' => 8, 'events' => []], $send, $state, 1_700_000_500, 'boot_id_1');
 check('first boot records boot_id_1',               count($sent) === 0);
 
-$sent = [];
+$sent = $none;
 // SECOND reboot (boot_id_2, much higher max_seq due to boot-time log volume):
 // The sequence-only heuristic would NOT trigger reset (20 > 8).
 // Boot_id mismatch MUST detect and fire the reset.
@@ -100,7 +104,7 @@ check('early-seq event after reboot reaches alerts', $sent[0][2] === 'alert');
 
 // Verify backward compatibility: omitting bootId falls through to sequence heuristic.
 @unlink($state);
-$sent = [];
+$sent = $none;
 $r = disk_alert_run(['ata-X' => 4], ['max_seq' => 100, 'events' => []], $send, $state, 1_700_000_700);
 check('5-arg call (no bootId) still works',        count($sent) === 0);
 
@@ -108,10 +112,10 @@ check('5-arg call (no bootId) still works',        count($sent) === 0);
    with -n standby). Its baseline must survive that absence, or the rise it
    brings back when it wakes reads as a first sighting and never alerts. */
 @unlink($state);
-$sent = [];
+$sent = $none;
 disk_alert_run(['ata-X' => 4, 'ata-Y' => 1], ['max_seq' => 10, 'events' => []], $send, $state, 1_700_000_800);
 disk_alert_run(['ata-X' => 4],               ['max_seq' => 11, 'events' => []], $send, $state, 1_700_000_900);
-$sent = [];
+$sent = $none;
 disk_alert_run(['ata-X' => 4, 'ata-Y' => 3], ['max_seq' => 12, 'events' => []], $send, $state, 1_700_001_000);
 check('a defect rise across a sleep still alerts',
       count($sent) === 1 && str_contains($sent[0][0], 'ata-Y') && str_contains($sent[0][1], 'Was 1, now 3'));
@@ -120,7 +124,7 @@ check('a defect rise across a sleep still alerts',
 @unlink($state);
 disk_alert_run(['12345' => 1], ['max_seq' => 20, 'events' => []], $send, $state, 1_700_001_100);
 disk_alert_run(['ata-X' => 4], ['max_seq' => 21, 'events' => []], $send, $state, 1_700_001_200);
-$sent = [];
+$sent = $none;
 disk_alert_run(['12345' => 3, 'ata-X' => 4], ['max_seq' => 22, 'events' => []], $send, $state, 1_700_001_300);
 check('an all-digit disk id keeps its baseline across a sleep',
       count($sent) === 1 && str_contains($sent[0][0], '12345'));

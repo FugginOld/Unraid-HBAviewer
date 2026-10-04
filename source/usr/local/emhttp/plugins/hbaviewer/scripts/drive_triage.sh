@@ -658,7 +658,10 @@ sect "FAILURE RANGES"
 # ============================================================================
 
 build_ranges() {
-    local dev="$1" div=$(( ${LBS_OF[$dev]:-512} / 512 ))
+    # Two locals: every word of one `local` is expanded before any is
+    # assigned, so ${LBS_OF[$dev]} there would read the CALLER's $dev.
+    local dev="$1" div
+    div=$(( ${LBS_OF[$dev]:-512} / 512 ))
     [[ "$div" -lt 1 ]] && div=1
     awk -v div="$div" -v pad="$PAD" -v gap="$GAP" '
         { lba = int($1 / div)
@@ -706,7 +709,8 @@ run_verify() {
 }
 
 run_read() {
-    local dev="$1" start="$2" count="$3" pos=0 n rc fails=0 bs="${LBS_OF[$dev]:-512}"
+    local dev="$1" start="$2" count="$3" pos=0 n rc fails=0 bs
+    bs="${LBS_OF[$dev]:-512}"    # not in the local above: see build_ranges
     while [[ $pos -lt $count ]]; do
         n=$(( count - pos )); [[ $n -gt $CHUNK ]] && n=$CHUNK
         local t0 ms cok=1

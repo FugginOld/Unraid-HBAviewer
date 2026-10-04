@@ -8,6 +8,12 @@
 # hold in a filename.
 #   bash tests/drive_triage_test.sh   ->  "drive_triage: all pass" (exit 0)
 cd "$(dirname "$0")" || exit 2
+# Never on the box (#26): where a stub loses to the real binary, a check here
+# sends real VERIFY/READ to a real disk. See tests/run.sh.
+if [ -e /etc/unraid-version ]; then
+    echo "refusing: this is an Unraid host; run docs/install-verify.sh here instead (#26)" >&2
+    exit 2
+fi
 DT="../source/usr/local/emhttp/plugins/hbaviewer/scripts/drive_triage.sh"
 fail=0
 ok()  { echo "PASS  $1"; }
@@ -603,7 +609,7 @@ cp "${RA}report.txt" "$WORK/report-noflag.txt"
 cut -f1,3- "$WORK/out/baseline.tsv" > "$WORK/state-noflag.tsv"
 ls -1 "$RA" > "$WORK/files-noflag.txt"
 hasnt "flag absent: the report never mentions the ledger" "$(cat "$WORK/report-noflag.txt")" "bad-range ledger"
-leak=$(ls -R "$WORK/out" | grep -i badrange || true)
+leak=$(find "$WORK/out" -iname '*badrange*')
 [ -z "$leak" ] && ok "flag absent: no ledger or ledger record is written anywhere" \
                || bad "flag absent: no ledger or ledger record is written anywhere" "$leak"
 rm -f "$LEDGER"
@@ -615,7 +621,7 @@ d=$(diff <(norm "$WORK/report-noflag.txt") <(norm "${RB}report.txt"))
 d=$(diff "$WORK/state-noflag.tsv" <(cut -f1,3- "$WORK/brout/baseline.tsv"))
 [ -z "$d" ] && ok "the flag changes nothing in the baseline" \
             || bad "the flag changes nothing in the baseline" "$d"
-d=$(diff "$WORK/files-noflag.txt" <(ls -1 "$RB" | grep -v '^badranges-run\.tsv$'))
+d=$(diff "$WORK/files-noflag.txt" <(ls -1 -I badranges-run.tsv "$RB"))
 [ -z "$d" ] && ok "the flag adds no run file but its own record" \
             || bad "the flag adds no run file but its own record" "$d"
 rm -f "$LEDGER"; : > "$STUB_DMESG"
@@ -827,6 +833,20 @@ STUB_SMART="$PWD/fixtures/smart/sata_drive.txt" TRIAGE_SKIP_DEV_CHECK=1 TRIAGE_S
     run --auto-triage --all --events "$EV" > /dev/null
 has   "O: a SATA triage still reports counters (it ran)" "$(cat "$EV")" '"t":"counter"'
 hasnt "O: ...but no uncorrected-write counter" "$(cat "$EV")" '"key":"wuncorr"'
+
+# ── P: build_ranges reads the block size of the disk it was GIVEN (#25) ──
+# Every word of a `local` is expanded before any is assigned, so a lookup keyed
+# on $dev inside the same `local` read the CALLER's $dev. Called for a 4Kn disk
+# from a scope whose $dev names another disk, kernel sector 80000 must map to
+# drive LBA 10000 (padded range 8000:4000), not stay 80000 (78000:4000).
+eval "$(sed -n '/^build_ranges() {/,/^}/p' "$DT")"
+br_caller() { local dev="sdother"; build_ranges sd4k; }
+declare -A LBS_OF=([sd4k]=4096)
+RUN="$WORK/br"; mkdir -p "$RUN"; echo 80000 > "$RUN/sectors-sd4k.txt"
+PAD=2000; GAP=100000
+got=$(br_caller)
+[ "$got" = "8000:4000" ] && ok "P: build_ranges uses its own disk's block size, not the caller's" \
+                         || bad "P: build_ranges uses its own disk's block size, not the caller's" "got '$got'"
 
 echo
 [ $fail -eq 0 ] && { echo "drive_triage: all pass"; exit 0; } || { echo "drive_triage: FAILURES"; exit 1; }

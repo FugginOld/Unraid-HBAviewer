@@ -299,7 +299,8 @@ re-derived from the code each time:
 ## Testing
 
 ```bash
-bash tests/run.sh        # parser goldens + PHP unit tests; no hardware needed
+bash tests/run.sh        # parser goldens + PHP unit tests; no hardware needed,
+                         # and refuses to run on an Unraid host (#26)
 ```
 
 Two halves:

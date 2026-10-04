@@ -1,10 +1,17 @@
 #!/bin/bash
-# Run the PHP unit tests. Prefers a local php (what the Unraid box has); falls
-# back to a throwaway php:8.2-cli container (Unraid 7.x ships PHP 8.2). These
-# tests use only core PHP, so no Slackware/Unraid image is needed.
+# Run the PHP unit tests. Prefers a local php; falls back to a throwaway
+# php:8.2-cli container (Unraid 7.x ships PHP 8.2). These tests use only core
+# PHP, so no Slackware/Unraid image is needed.
 #
 #   bash tests/run_php.sh
 cd "$(dirname "$0")/.." || exit 2
+
+# Never on the box (#26): these tests read and rewrite the plugin's live /tmp
+# state (hbav_health_c*.json). See tests/run.sh.
+if [ -e /etc/unraid-version ]; then
+    echo "refusing: this is an Unraid host; run docs/install-verify.sh here instead (#26)" >&2
+    exit 2
+fi
 
 TESTS="config_test.php view_test.php event_archive_test.php cached_read_test.php
 flash_php_test.php ajax_render_test.php health_test.php notify_test.php disk_alerts_test.php
