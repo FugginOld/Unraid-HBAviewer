@@ -6,7 +6,7 @@
 #   bash tests/run_php.sh
 cd "$(dirname "$0")/.." || exit 2
 
-# Never on the box (#26): these tests read and rewrite the plugin's live /tmp
+# Never on the box (#26): these tests read and rewrite the live plugin's /tmp
 # state (hbav_health_c*.json). See tests/run.sh.
 if [ -e /etc/unraid-version ]; then
     echo "refusing: this is an Unraid host; run docs/install-verify.sh here instead (#26)" >&2

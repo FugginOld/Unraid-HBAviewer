@@ -1,15 +1,18 @@
 #!/bin/bash
-# Self-asserting checks for drive_triage.sh. The engine reads hardware through
-# six binaries and nothing else, so stubbing those on PATH exercises the real
-# control flow -- range building, classification, the report -- with no disk.
+# Self-asserting checks for drive_triage.sh. The engine reads disks through six
+# binaries, so stubbing those on PATH exercises the real control flow -- range
+# building, classification, the report -- with no disk. It also reads host
+# state (syslog, mdcmd, mover, /sys): the syslog is pinned below with
+# TRIAGE_SYSLOG_FILES; the rest is absent on CI, and the box is refused.
 #
 # Everything lives under mktemp -d: the run directories are named by timestamp
 # and the fixtures carry SCSI addresses with colons in them, which NTFS cannot
 # hold in a filename.
 #   bash tests/drive_triage_test.sh   ->  "drive_triage: all pass" (exit 0)
 cd "$(dirname "$0")" || exit 2
-# Never on the box (#26): where a stub loses to the real binary, a check here
-# sends real VERIFY/READ to a real disk. See tests/run.sh.
+# Never on the box (#26): the engine's notify() calls Unraid's real notify
+# script, so every seeded "flagged" run here becomes a real alert. The box's
+# mdcmd, mover and process table also gate runs that the stubs cannot reach.
 if [ -e /etc/unraid-version ]; then
     echo "refusing: this is an Unraid host; run docs/install-verify.sh here instead (#26)" >&2
     exit 2
@@ -144,6 +147,9 @@ export STUB_SMART="$PWD/fixtures/smart/sas_drive.txt"
 export STUB_SMART_ASLEEP="$PWD/fixtures/smart/sas_standby.txt"
 export STUB_DMESG="$WORK/dmesg.txt"; : > "$STUB_DMESG"
 export STUB_ARGS="$ARGS"
+# The engine prefers a readable /var/log/syslog over dmesg, so on a host that
+# has one (a CI runner, the box) the seeded sectors were never harvested.
+export TRIAGE_SYSLOG_FILES=""
 
 run() {  # remaining args go to the engine
     : > "$ARGS"

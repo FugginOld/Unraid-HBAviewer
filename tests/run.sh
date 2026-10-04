@@ -9,10 +9,10 @@
 #   UPDATE=1 bash tests/run.sh
 cd "$(dirname "$0")" || exit 2
 
-# Never on the box (#26). With the real storcli/lsiutil/sg3_utils on PATH and
-# the plugin's live /tmp state, the suite is not hermetic: a stub can lose to
-# the real tool and send real I/O to a real disk. On the box, the check is
-# docs/install-verify.sh.
+# Never on the box (#26): drive_triage_test.sh would send real Unraid alerts,
+# the PHP tests rewrite the live plugin's /tmp state (hbav_health_c*.json), and
+# host state turns into failures that are not the code's. On the box, the
+# check is docs/install-verify.sh.
 if [ -e /etc/unraid-version ]; then
     echo "refusing: this is an Unraid host; run docs/install-verify.sh here instead (#26)" >&2
     exit 2

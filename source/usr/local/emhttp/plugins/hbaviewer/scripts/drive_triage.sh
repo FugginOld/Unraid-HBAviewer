@@ -384,7 +384,10 @@ sect "SYSLOG HARVEST"
 
 CAT_LOG="$RUN/syslog-window.txt"
 SRC=()
-for f in /var/log/syslog /var/log/syslog.1 /var/log/messages; do
+# Test-only: TRIAGE_SYSLOG_FILES replaces the list; set empty, the harness's
+# dmesg stub is the only source, whatever the host logs. Never set in production.
+read -ra SYSLOG_FILES <<< "${TRIAGE_SYSLOG_FILES-/var/log/syslog /var/log/syslog.1 /var/log/messages}"
+for f in "${SYSLOG_FILES[@]}"; do
     [[ -r "$f" ]] && SRC+=("$f")
 done
 if [[ ${#SRC[@]} -gt 0 ]]; then
