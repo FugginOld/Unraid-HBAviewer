@@ -183,14 +183,18 @@ function phy_top_offenders(array $phys, array $deltas, array $drives, int $limit
    the decoded `drives` payload (the same shape $data carries), added last and
    defaulting to empty so every existing caller still renders exactly what it
    rendered before this plan. */
-function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = [], array $udMounts = []): string {
+function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?int $uptime = null, array $drives = [], array $devBySerial = [], array $roles = [], array $udMounts = [], ?string $diagBusy = null): string {
     $ctls    = $data['controllers'] ?? [$data];
     // Shape, not tool name: StorCLI2 (SAS4 / 9600) feeds these tables the same
     // record shape as the classic storcli backend, so one renderer serves both.
     $storcli = lsi_backend_shape($data['backend'] ?? '') === 'storcli';
     $now   ??= time();
     $uptime ??= phy_baseline_uptime();
-    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $now, $uptime, $drives, $devBySerial, $roles, $baselines, $udMounts): string {
+    /* A disabled button cannot take focus and a title never shows on touch, so
+       the reason is also stated on the page. */
+    $note = $diagBusy === null ? ''
+          : '<p class="lu-diag-hotzone" role="status">' . htmlspecialchars($diagBusy) . '</p>';
+    return $note . luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $diagBusy, $now, $uptime, $drives, $devBySerial, $roles, $baselines, $udMounts): string {
         $out = '';
         $phys = $ctl['phys'] ?? [];
         /* No claim about WHY: a backend that reports no link information and
@@ -272,8 +276,7 @@ function renderPhyTables(array $data, array $baselines = [], ?int $now = null, ?
                             . ' &middot; sync ' . number_format($o['rate']['sync'], 1)
                             . ' &middot; reset ' . number_format($o['rate']['reset'], 1) . '</span>',
                         $o['dev'] !== null
-                            ? '<button class="lu-refresh-btn" onclick="luDiagnose('
-                              . htmlspecialchars(json_encode($o['dev']), ENT_QUOTES) . ')">Diagnose</button>'
+                            ? diag_button($o['dev'], $diagBusy)
                             : '<span class="lu-muted" role="img" aria-label="Drive not identified"'
                               . ' title="Drive not identified">—</span>',
                     ];

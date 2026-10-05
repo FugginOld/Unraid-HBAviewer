@@ -93,7 +93,7 @@ function lsi_role_cell(?string $dev, array $roles, array $udMounts = []): string
    address.
    The BARE name is passed, never the /dev path: diagnose.php validates
    /^[a-z0-9]{2,32}$/ and would refuse the path. One spelling, both sides. */
-function diag_cell(array $d, array $devBySerial): string {
+function diag_cell(array $d, array $devBySerial, ?string $diagBusy = null): string {
     $dev = drive_dev_name($d, $devBySerial);
     if ($dev === null) {
         return '<span class="lu-muted" role="img" aria-label="No device name for this drive"'
@@ -108,19 +108,22 @@ function diag_cell(array $d, array $devBySerial): string {
         return '<span class="lu-muted" role="img" aria-label="Unrecognised device name"'
              . ' title="Unrecognised device name">—</span>';
     }
-    return sprintf('<button class="lu-refresh-btn" onclick="luDiagnose(%s)">Diagnose</button>',
-                   htmlspecialchars(json_encode((string) $bare), ENT_QUOTES));
+    return diag_button((string) $bare, $diagBusy);
 }
 
 /* ── Attached Drives (per controller; columns adapt to the backend) ───────── */
 function renderDrivesTables(array $data, array $devBySerial = [], array $roles = [],
                             array $addrByDev = [], array $locating = [],
-                            array $udMounts = []): string {
+                            array $udMounts = [], ?string $diagBusy = null): string {
     $ctls    = $data['controllers'] ?? [$data];
     // Shape, not tool name: StorCLI2 (SAS4 / 9600) feeds these tables the same
     // record shape as the classic storcli backend, so one renderer serves both.
     $storcli = lsi_backend_shape($data['backend'] ?? '') === 'storcli';
-    return luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $devBySerial, $roles, $addrByDev, $locating, $udMounts): string {
+    /* A disabled button cannot take focus and a title never shows on touch, so
+       the reason is also stated on the page. */
+    $note = $diagBusy === null ? ''
+          : '<p class="lu-diag-hotzone" role="status">' . htmlspecialchars($diagBusy) . '</p>';
+    return $note . luCardPerController($ctls, function (int $i, array $ctl) use ($storcli, $diagBusy, $devBySerial, $roles, $addrByDev, $locating, $udMounts): string {
         $out = '';
         // Enclosure/topology summary (storcli). VirtualSES = direct-attach, no expander.
         // storcli_drives.sh emits "eid/slot" when a drive carries an enclosure ID and a
@@ -211,7 +214,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     htmlspecialchars($d['firmware']),
                     $smart,
                     $locCell($d),
-                    diag_cell($d, $devBySerial),
+                    diag_cell($d, $devBySerial, $diagBusy),
                 ];
             }
             $out .= luTable(['Device', 'Unraid', 'Encl:Slot', 'Port', 'Model', 'Serial', 'State', 'Size', 'SAS Address', 'Link', 'Firmware', 'SMART', 'Locate', 'Diagnose'], $rows);
@@ -232,7 +235,7 @@ function renderDrivesTables(array $data, array $devBySerial = [], array $roles =
                     htmlspecialchars((string) ($d['bus'] ?? '')) . ':' . htmlspecialchars((string) ($d['target'] ?? '')),
                     $phy, $sas,
                     $locCell($d),
-                    diag_cell($d, $devBySerial),
+                    diag_cell($d, $devBySerial, $diagBusy),
                 ];
             }
             $out .= luTable(['Device', 'Unraid', 'Bus:Tgt', 'Port', 'SAS Address', 'Locate', 'Diagnose'], $rows);

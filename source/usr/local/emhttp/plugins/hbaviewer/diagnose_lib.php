@@ -174,8 +174,9 @@ function diag_preflight(array $in): array {
        the same spindle and the same link, and slows the window in which the
        array has no redundancy. Fails closed on an unreadable array state for
        the same reason flash_array_stopped() does. */
-    if (!array_key_exists('resync', $in) || (int) $in['resync'] !== 0)
-        return ['ok' => false, 'error' => 'A parity check or rebuild is running. Diagnose competes with it for the same disk — wait for it to finish.'];
+    $busy = diag_busy_reason($in['resync'] ?? null, $in['mover'] ?? null);
+    if ($busy !== null)
+        return ['ok' => false, 'error' => $busy];
     if (!array_key_exists('locked', $in) || !empty($in['locked']))
         return ['ok' => false, 'error' => 'A Diagnose job is already running on this disk.'];
     return ['ok' => true, 'error' => ''];
@@ -321,6 +322,47 @@ function diag_resync(string $varini = '/var/local/emhttp/var.ini'): int {
     $ini = @parse_ini_file($varini);
     if (!is_array($ini)) return 1;
     return (int) ($ini['mdResync'] ?? 1);
+}
+
+/* Is the mover running? The engine disables triage while it is (drive_triage.sh
+   pgrep -f '/usr/local/sbin/mover') and exits clean having written no verdict,
+   which left the screen waiting forever. Same match here, on /proc/<pid>/cmdline
+   (NUL-separated), so the page and the engine cannot disagree. Null = /proc
+   unreadable; the callers fail closed on it. */
+function diag_mover_running(string $proc = '/proc'): ?bool {
+    $dirs = is_dir($proc) ? glob("$proc/[0-9]*", GLOB_ONLYDIR) : false;
+    if (!$dirs) return null;   // a real /proc always has pid 1; none means unreadable
+    foreach ($dirs as $d) {
+        $cmd = @file_get_contents("$d/cmdline");   // a pid can vanish between glob and read
+        if ($cmd !== false && str_contains(str_replace("\0", ' ', $cmd), '/usr/local/sbin/mover')) return true;
+    }
+    return false;
+}
+
+/* The one reason Diagnose cannot start right now, or null. $resync is
+   diag_resync(), $mover is diag_mover_running(); null in either is an unreadable
+   state and is a refusal, not a pass. diag_preflight() gates the start with it
+   and the Diagnose buttons grey out with it. */
+function diag_busy_reason($resync, $mover): ?string {
+    if ($resync === null || (int) $resync !== 0)
+        return 'A parity check or rebuild is running. Diagnose competes with it for the same disk — wait for it to finish.';
+    if ($mover !== false)
+        return 'The mover is running. Diagnose is unavailable until it finishes.';
+    return null;
+}
+function diag_busy(): ?string {
+    return diag_busy_reason(diag_resync(), diag_mover_running());
+}
+
+/* The Diagnose button every tab embeds. Live, or -- while diag_busy() has a
+   reason -- disabled with that reason as its tooltip. The argument is a JSON
+   string literal so a quote cannot break out of the handler (issue #24). */
+function diag_button(string $dev, ?string $busy = null): string {
+    if ($busy !== null)
+        return '<button class="lu-refresh-btn" type="button" disabled title="'
+             . htmlspecialchars($busy, ENT_QUOTES) . '">Diagnose</button>';
+    return '<button class="lu-refresh-btn" type="button" onclick="luDiagnose('
+         . htmlspecialchars(json_encode($dev), ENT_QUOTES) . ')">Diagnose</button>';
 }
 
 function diag_kill_probe(int $pgid): bool {

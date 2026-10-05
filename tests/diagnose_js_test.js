@@ -263,6 +263,51 @@ async function tail() {
           && els.get('diag-pause').disabled === true
           && els.get('diag-cancel').disabled === true);
 
+    // A run can finish having written no verdict: the engine disables triage
+    // while the mover runs and exits clean after the preflight and baseline
+    // phases. The screen used to sit on the progress view forever; at 'end' it
+    // must now say the run ended without one. A real verdict must not say it.
+    fetches.length = 0; esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sde-1', disk: 'sde' };
+    await sandbox.luDiagnose('sde');
+    sandbox.luDiagApply({ t: 'phase', disk: '-', phase: 'preflight', lba_total: 0 });
+    esInstances[0]._listeners.end();
+    check('a run that ends with no verdict says so in the log',
+          els.get('diag-stream')._html.includes('without a verdict'));
+    check('and in the header, so it is not mistaken for a running job',
+          els.get('diag-head').innerHTML.includes('without a verdict'));
+
+    fetches.length = 0; esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sdf-1', disk: 'sdf' };
+    await sandbox.luDiagnose('sdf');
+    fetchResponse = { ok: true };
+    sandbox.luDiagApply({ t: 'verdict', disk: 'sdf', v: 'CLEAN', why: 'nothing reproduced' });
+    esInstances[0]._listeners.end();
+    check('a run that did write a verdict does not claim it did not',
+          !els.get('diag-stream')._html.includes('without a verdict')
+          && !els.get('diag-head').innerHTML.includes('without a verdict'));
+
+    // A cancel also ends with no verdict, and the user asked for it: no alarm.
+    fetches.length = 0; esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sdg-1', disk: 'sdg' };
+    await sandbox.luDiagnose('sdg');
+    fetchResponse = { ok: true };
+    sandbox.luDiagCancel(); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+    esInstances[0]._listeners.end();
+    check('a cancelled run does not claim a missing verdict as a failure',
+          !els.get('diag-stream')._html.includes('without a verdict'));
+
+    // luDiagOpen repoints luDiagJob at an old verdict without detaching the live
+    // stream, so the header must name the run that actually ended.
+    fetches.length = 0; esInstances.length = 0;
+    fetchResponse = { ok: true, job: 'sdh-1', disk: 'sdh' };
+    await sandbox.luDiagnose('sdh');
+    sandbox.luDiagJob = 'sdz-9';
+    esInstances[0]._listeners.end();
+    check('the no-verdict header names the run that ended, not whichever job the page now points at',
+          els.get('diag-head').innerHTML.includes('/dev/sdh')
+          && !els.get('diag-head').innerHTML.includes('/dev/sdz'));
+
     /* ── reattach after a reload (Task 16 Block E fix round) ─────────── */
     const idleHead = '<span class="lu-muted">No job running.</span>';
     const resumeCase = async (jobs, pageJob) => {

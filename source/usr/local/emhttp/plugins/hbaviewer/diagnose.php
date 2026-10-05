@@ -45,6 +45,7 @@ if ($action === 'start') {
         'disk'   => $disk,
         'exists' => diag_disk_valid($disk) && is_file("/sys/block/$disk/dev"),
         'resync' => diag_resync(),
+        'mover'  => diag_mover_running(),
         'locked' => !$owned,
     ]);
     if (!$pf['ok']) {
@@ -258,7 +259,7 @@ if ($action === 'drivelist') {
             if (($e['t'] ?? '') === 'verdict') $verdicts[$d['dev']] = (string) ($e['v'] ?? '');
         }
     }
-    echo renderDiagDriveList($drives, $verdicts);
+    echo renderDiagDriveList($drives, $verdicts, diag_busy());
     exit;
 }
 

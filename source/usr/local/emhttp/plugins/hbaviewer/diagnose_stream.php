@@ -56,6 +56,11 @@ while (ob_get_level() > 0) ob_end_flush();
 
 $start = time();
 while (true) {
+    /* Sampled BEFORE the read, never after: once a job has stopped nothing more
+       is appended, so "stopped, then read to EOF" is complete. Sampled after the
+       read, a verdict written between the two is missed and the client is told
+       the run ended without one. */
+    $running = diag_job_running($dir, $disk, 'diag_kill_probe');
     $s = diag_slice($file, $offset, DIAG_SSE_CHUNK);
     if ($s['bytes'] !== '') {
         /* The frame base must be diag_slice()'s OWN returned offset minus the
@@ -87,7 +92,6 @@ while (true) {
        open reconnecting for that new job's entire run, and cancelling a stale
        job's id (which unlinks the disk's lock unconditionally) must not make
        a currently-running job's stream send a false event: end. */
-    $running = diag_job_running($dir, $disk, 'diag_kill_probe');
     if (!$running && $s['eof']) {
         // No id: on this frame. It is the terminal frame, not a resumable
         // one -- the client must call EventSource.close() on it, or the

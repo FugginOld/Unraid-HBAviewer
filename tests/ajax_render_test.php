@@ -2152,6 +2152,47 @@ $hOff = renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => [
 check('the top-offenders Diagnose argument is a JS string literal',
       $onclick($hOff, 'luDiagnose') === 'luDiagnose("sdg")');
 
+/* While a parity op or the mover runs, every embedded Diagnose button is
+   disabled and says why. The tooltip is a user-visible string in an attribute,
+   so a quote in the reason must survive decoding. */
+$why = "The mover is running. Diagnose is unavailable \"until\" it's done <b>.";
+$dbtn = function (string $html) {
+    return preg_match('/<button\b[^>]*lu-refresh-btn[^>]*>Diagnose<\/button>/', $html, $m) ? $m[0] : '';
+};
+$hb = renderDrivesTables($dv, ['SER1' => '/dev/sdf'], [], [], [], [], $why);
+$b  = $dbtn($hb);
+check('busy: the Drives Diagnose button is disabled',        str_contains($b, ' disabled'));
+check('busy: it carries the reason as its tooltip',
+      preg_match('/title="([^"]*)"/', $b, $tm) === 1 && html_entity_decode($tm[1], ENT_QUOTES) === $why);
+check('busy: it no longer starts anything',                 $onclick($hb, 'luDiagnose') === null);
+// The cell for a drive with no device name is unchanged either way.
+check('busy: the no-device cell still says why, unchanged', str_contains($hb, 'No device name for this drive'));
+check('idle: the Drives Diagnose button is live and not disabled',
+      !str_contains($dbtn(renderDrivesTables($dv, ['SER1' => '/dev/sdf'])), ' disabled'));
+
+$hbp = renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => [
+    ['phy'=>0,'link'=>'up','speed'=>'12.0Gb/s','sas_addr'=>'5000CCA25319FB45','inv'=>250,'disp'=>0,'sync'=>0,'reset'=>0],
+]]]], $bl, 1000 + 3600, 5000 + 3600, $phyDrv, ['ZA1ABCDE' => '/dev/sdg'], [], [], $why);
+$b = $dbtn($hbp);
+check('busy: the top-offenders Diagnose button is disabled with the reason',
+      str_contains($b, ' disabled') && preg_match('/title="([^"]*)"/', $b, $tm) === 1
+      && html_entity_decode($tm[1], ENT_QUOTES) === $why);
+check('busy: and starts nothing', $onclick($hbp, 'luDiagnose') === null);
+// A disabled button cannot take focus and a title never shows on touch, so the
+// reason is also on the page, once, where a keyboard or touch user reads it.
+check('busy: the Drives tab states the reason visibly, once',
+      substr_count($hb, 'role="status"') === 1 && str_contains($hb, htmlspecialchars($why)));
+check('busy: the PHY tab states the reason visibly, once',
+      substr_count($hbp, 'role="status"') === 1 && str_contains($hbp, htmlspecialchars($why)));
+check('idle: neither tab shows a status note',
+      !str_contains(renderDrivesTables($dv, ['SER1' => '/dev/sdf']), 'role="status"')
+      && !str_contains(renderPhyTables(['backend' => 'storcli', 'controllers' => [['phys' => []]]]), 'role="status"'));
+
+/* The pages that render these must actually ask: a renderer that takes the
+   argument nobody passes is a button that never greys. */
+$ajaxSrc = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/ajax_info.php');
+check('the PHY and Drives routes both pass diag_busy()', substr_count($ajaxSrc, 'diag_busy()') >= 2);
+
 /* The SMART serial comes from the drive itself, not a validator: the one
    site where a quote is reachable. The /dev name and address ride along. */
 $hQ = renderDrivesTables(['backend' => 'storcli', 'controllers' => [['drives' => [

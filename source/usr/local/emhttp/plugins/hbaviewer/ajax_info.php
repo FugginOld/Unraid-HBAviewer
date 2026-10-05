@@ -21,6 +21,8 @@ require_once __DIR__ . '/bay_map.php';
 require_once __DIR__ . '/locate.php';
 // Which controllers are one physical card (a 9300-16i is two IOCs on one board).
 require_once __DIR__ . '/card_group.php';
+// diag_busy() / diag_button(): the Diagnose buttons these tables embed grey out while parity or the mover runs.
+require_once __DIR__ . '/diagnose_lib.php';
 require_once __DIR__ . '/render/table.php';
 require_once __DIR__ . '/render/smart.php';
 require_once __DIR__ . '/render/events.php';
@@ -304,13 +306,13 @@ if ($type === 'phy') {
     $ddec  = json_decode((string) shell_exec(
         'bash ' . escapeshellarg("$scripts/get_attached_drives.sh") . ' 2>/dev/null'), true);
     $ddata = is_array($ddec) ? $ddec : [];
-    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial(), unraid_disk_roles(), unraid_ud_mounts());
+    echo renderPhyTables($data, phy_baseline_read(), null, null, $ddata, lsi_dev_by_serial(), unraid_disk_roles(), unraid_ud_mounts(), diag_busy());
     exit;
 }
 
 if ($type === 'drives') {
     echo renderDrivesTables($data, lsi_dev_by_serial(), unraid_disk_roles(),
-                            lsi_scsi_addr_by_dev(), locate_active(), unraid_ud_mounts());
+                            lsi_scsi_addr_by_dev(), locate_active(), unraid_ud_mounts(), diag_busy());
     exit;
 }
 

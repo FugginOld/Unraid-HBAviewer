@@ -164,10 +164,10 @@ check('and wins again once released', diag_claim_lock($lock) === true);
 @unlink($lock);
 
 /* ── preflight: every gate fails closed ────────────────────────────────── */
-$base = ['disk' => 'sdb', 'resync' => 0, 'locked' => false, 'exists' => true];
+$base = ['disk' => 'sdb', 'resync' => 0, 'mover' => false, 'locked' => false, 'exists' => true];
 check('a clean request passes', diag_preflight($base)['ok'] === true);
 
-$r = diag_preflight(['disk' => 'sdb', 'resync' => 0, 'locked' => false, 'exists' => false]);
+$r = diag_preflight(['disk' => 'sdb', 'resync' => 0, 'mover' => false, 'locked' => false, 'exists' => false]);
 check('a device that is not there is refused', $r['ok'] === false);
 check('and the refusal names the device',      str_contains($r['error'], 'sdb'));
 
@@ -182,15 +182,41 @@ check('a running parity op is refused',
       diag_preflight(array_merge($base, ['resync' => 1]))['ok'] === false);
 check('an existing job on this disk is refused',
       diag_preflight(array_merge($base, ['locked' => true]))['ok'] === false);
+// The engine disables triage while the mover runs and exits clean having never
+// written a verdict, so the screen waited forever. Refuse the start instead.
+$r = diag_preflight(array_merge($base, ['mover' => true]));
+check('a running mover is refused', $r['ok'] === false);
+check('and the refusal says it is the mover', str_contains($r['error'], 'mover'));
 
 // Absence is refusal, not permission. flash_preflight's 'card' gate defaulted
 // to allow once and it was the most dangerous gate in the plugin; this one is
 // far cheaper but the rule is the rule, and a caller that forgets to pass a
 // key must not get a pass.
-foreach (['disk', 'resync', 'locked', 'exists'] as $k) {
+foreach (['disk', 'resync', 'mover', 'locked', 'exists'] as $k) {
     $missing = $base; unset($missing[$k]);
     check("omitting '$k' fails closed", diag_preflight($missing)['ok'] === false);
 }
+
+/* ── busy: the one reason the buttons and the start gate share ─────────── */
+check('idle is not busy',            diag_busy_reason(0, false) === null);
+check('a parity op is busy',         str_contains((string) diag_busy_reason(1, false), 'parity'));
+check('the mover is busy',           str_contains((string) diag_busy_reason(0, true), 'mover'));
+// Unreadable state fails closed, the way diag_resync() already does.
+check('an unreadable resync is busy', diag_busy_reason(null, false) !== null);
+check('an unreadable mover is busy',  diag_busy_reason(0, null) !== null);
+
+/* The mover probe reads /proc/<pid>/cmdline, the match pgrep -f makes in the
+   engine (drive_triage.sh), so the page and the engine cannot disagree. */
+$proc = "$root/proc"; @mkdir($proc, 0777, true);
+check('a /proc with no pid directories is unreadable, not "not running"', diag_mover_running($proc) === null);
+@mkdir("$proc/1", 0777, true); file_put_contents("$proc/1/cmdline", "/sbin/init");
+check('no process matches: mover not running', diag_mover_running($proc) === false);
+@mkdir("$proc/101", 0777, true); file_put_contents("$proc/101/cmdline", "vim\0/tmp/notes.txt\0");
+check('an unrelated process does not match',   diag_mover_running($proc) === false);
+@mkdir("$proc/4242", 0777, true);
+file_put_contents("$proc/4242/cmdline", "/bin/bash\0/usr/local/sbin/mover\0start\0");
+check('the mover cmdline itself matches',        diag_mover_running($proc) === true);
+check('an unreadable /proc fails closed',      diag_mover_running("$root/no-such-proc") === null);
 
 /* ── cancel kills the GROUP ────────────────────────────────────────────── */
 $jd = diag_job_dir('sdb-42', $root);

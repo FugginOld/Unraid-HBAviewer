@@ -98,6 +98,15 @@ not in this release: the Verdict screen recommends next steps (move the
 drive, re-run under load, rebuild through Unraid's own array tools) but
 performs none of them, and the Repair screen shows evidence, not actions.
 
+**Not while parity or the mover is running.** A parity check, a rebuild, or a
+mover run competes with Diagnose for the same disks, so the engine skips its
+triage then. Every Diagnose button is disabled while one runs, with the reason
+as its tooltip and as a note on the page, and the server refuses a start too.
+The buttons on the Drives and PHY Health tabs are set when the table loads:
+press **Refresh** once the operation finishes. A run that still ends without a
+verdict (the operation started after you pressed the button) says so on the
+Live Job view rather than waiting.
+
 **The job outlives the tab.** Diagnose launches its engine as its own
 detached process; closing the browser tab, or the whole browser, does not
 stop it. While the Live Job view stays open, it resumes on its own after any

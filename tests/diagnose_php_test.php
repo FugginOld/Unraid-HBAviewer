@@ -129,6 +129,17 @@ check('the start action passes a stable per-disk --state path, escaped',
 check('the start action passes a stable per-disk --badrange-state path, escaped',
       str_contains($code, "--badrange-state ' . escapeshellarg(diag_badrange_path("));
 
+// The start action must hand the preflight the mover probe, or the gate it
+// fails closed on is never fed and every start is refused -- and must not
+// swallow the reason: the client shows it.
+check('the start action feeds the preflight both busy probes',
+      str_contains($code, "'resync' => diag_resync(),")
+      && str_contains($code, "'mover'  => diag_mover_running(),"));
+
+// The sidebar is where the Diagnose page says Diagnose is unavailable.
+check('the drivelist action asks diag_busy() and hands it to the renderer',
+      str_contains($code, 'renderDiagDriveList($drives, $verdicts, diag_busy())'));
+
 // Read-only phase: nothing here may reach the Tier 2/3 tools, whether by
 // accident or by a later edit that thought it was helping.
 foreach (['sg_reassign', 'write-sector', 'badblocks', 'sg_format', 'sg_sanitize'] as $t) {
@@ -144,6 +155,12 @@ $ssrc = (string) file_get_contents(
     __DIR__ . '/../source/usr/local/emhttp/plugins/hbaviewer/diagnose_stream.php');
 $scode = (string) preg_replace('~/\*.*?\*/|//[^\n]*~s', '', $ssrc);
 
+// 'end' is only true if the job had already stopped BEFORE the slice was read:
+// sampled after, a verdict written between the read and the check is missed and
+// the client is told the run ended without one. Pin the order.
+check('the stream samples job liveness before it reads the slice',
+      ($rp = strpos($scode, 'diag_job_running(')) !== false
+      && ($sp = strpos($scode, 'diag_slice(')) !== false && $rp < $sp);
 check('the stream declares the SSE content type',
       str_contains($scode, 'text/event-stream'));
 // Every frame carries its byte offset as the SSE id, because that id is what

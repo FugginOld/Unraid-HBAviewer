@@ -304,6 +304,22 @@ $sh = (string) file_get_contents(__DIR__ . '/../source/usr/local/emhttp/plugins/
 check("the displayed block count is the engine's own CHUNK",
       preg_match('/^CHUNK="(\d+)"/m', $sh, $cm) === 1 && (int) $cm[1] === DIAG_LEDGER_CHUNK);
 
+/* ── busy: the drive list greys and explains ───────────────────────────── */
+$why = "A parity check or rebuild is running. Diagnose is unavailable \"now\" <b>.";
+$lb = renderDiagDriveList([['dev' => 'sdb', 'role' => 'Disk 1']], ['sdb' => 'CLEAN'], $why);
+check('busy: the Diagnose page says why, once, in a status region',
+      substr_count($lb, 'role="status"') === 1 && str_contains($lb, htmlspecialchars($why)));
+check('busy: the reason is escaped',        !str_contains($lb, '<b>'));
+preg_match('/<button\b[^>]*>Diagnose<\/button>/', $lb, $bm);
+check('busy: the sidebar button is disabled with the reason',
+      isset($bm[0]) && str_contains($bm[0], ' disabled')
+      && preg_match('/title="([^"]*)"/', $bm[0], $tm) === 1 && html_entity_decode($tm[1], ENT_QUOTES) === $why);
+check('busy: and starts nothing', !str_contains($lb, 'luDiagnose('));
+$li = renderDiagDriveList([['dev' => 'sdb', 'role' => 'Disk 1']], ['sdb' => 'CLEAN']);
+check('idle: no banner, and a live button',
+      !str_contains($li, 'role="status"') && str_contains($li, 'luDiagnose(&quot;sdb&quot;)')
+      && !str_contains($li, ' disabled'));
+
 /* ── the Verdict screen's way into Repair ──────────────────────────────── */
 $vIn = fn(string $v, string $disk = 'sdb') => [
     'disk' => $disk, 'verdict' => $v, 'why' => '', 'events' => [], 'sense' => [],

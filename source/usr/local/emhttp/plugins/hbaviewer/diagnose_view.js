@@ -83,7 +83,7 @@
                   ['selftest', 'SMART short test'], ['verdict', 'Verdict']];
     function freshState() {
         return { phase: '', cells: [], deltas: {}, es: null, offset: 0,
-                 paused: false, started: 0, lbaTotal: 0, lba: 0 };
+                 paused: false, started: 0, lbaTotal: 0, lba: 0, verdict: false, cancelled: false, disk: '' };
     }
     var st = freshState();
 
@@ -228,6 +228,7 @@
             st.deltas[ev.key] = { before: ev.before, after: ev.after };
             if (!st.paused) drawCounters();
         } else if (ev.t === 'verdict') {
+            st.verdict = true;
             logLine('verdict: ' + ev.v + ' — ' + ev.why, ev.v === 'CLEAN' ? 'ok' : (ev.v === 'STANDBY' || ev.v === 'POWER_UNKNOWN' ? 'warn' : 'crit'));
             /* No arguments: the verdict screen is rendered server-side from the
                job id in luDiagJob, because it needs the sense keys and the
@@ -268,6 +269,15 @@
             el('diag-pause').disabled = true;
             el('diag-cancel').disabled = true;
             logLine('job finished', 'ok');
+            /* 'end' arrives only once the job is over and every event has been
+               delivered, so no verdict by now is final: the engine skipped the
+               triage (it does while the mover runs). Say so rather than leave
+               the progress view looking stuck. */
+            if (!st.verdict && !st.cancelled) {
+                logLine('run ended without a verdict', 'crit');
+                el('diag-head').innerHTML = 'Run ended without a verdict: <code>/dev/'
+                    + fesc(st.disk) + '</code>';
+            }
             luDiagDrives();
         });
     }
@@ -297,7 +307,7 @@
         fetch('/plugins/hbaviewer/diagnose.php', { method: 'POST',
             body: new URLSearchParams({ action: 'cancel', job: luDiagJob, csrf_token: luCsrf }) })
           .then(function (r) { return r.json(); })
-          .then(function (d) { logLine(d.ok ? 'cancelled' : 'nothing to cancel', 'warn'); })
+          .then(function (d) { if (d.ok) st.cancelled = true; logLine(d.ok ? 'cancelled' : 'nothing to cancel', 'warn'); })
           .catch(function () { logLine('cancel request failed', 'crit'); });
     };
 
@@ -312,6 +322,7 @@
         el('diag-map').innerHTML = '';
         el('diag-stream').innerHTML = '';
         el('diag-hotzone').textContent = '';
+        st.disk = disk;
         el('diag-head').innerHTML = 'Diagnosing <code>/dev/' + fesc(disk) + '</code>';
         el('diag-pause').textContent = 'Pause';
         luDiagJob = job;

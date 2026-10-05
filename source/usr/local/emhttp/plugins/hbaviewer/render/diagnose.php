@@ -374,7 +374,7 @@ function renderDiagRepair(array $in): string {
 const DIAG_BADGE_RANK = ['MEDIA' => 0, 'TRANSPORT' => 1, 'SCANNING' => 2,
                          'CLEAN' => 3, 'STANDBY' => 4, 'POWER_UNKNOWN' => 4];
 
-function renderDiagDriveList(array $drives, array $verdicts): string {
+function renderDiagDriveList(array $drives, array $verdicts, ?string $diagBusy = null): string {
     $group = ['assigned' => [], 'unassigned' => []];
     foreach ($drives as $d) {
         $dev = (string) ($d['dev'] ?? '');
@@ -390,13 +390,12 @@ function renderDiagDriveList(array $drives, array $verdicts): string {
     usort($group['assigned'],   $sorter);
     usort($group['unassigned'], $sorter);
 
-    $render = function (string $heading, array $rows): string {
+    $render = function (string $heading, array $rows) use ($diagBusy): string {
         if ($rows === []) return '';
         $out = '<p class="lu-muted" style="font-size:12px;margin:6px 0 2px">'
              . htmlspecialchars($heading) . '</p>';
         foreach ($rows as $r) {
-            $out .= '<p><button class="lu-refresh-btn" type="button" onclick="luDiagnose('
-                  . htmlspecialchars(json_encode($r['dev']), ENT_QUOTES) . ')">Diagnose</button> '
+            $out .= '<p>' . diag_button($r['dev'], $diagBusy) . ' '
                   . '<code>' . htmlspecialchars($r['dev']) . '</code> '
                   . ($r['role'] !== '' ? htmlspecialchars($r['role']) . ' ' : '')
                   . '<span class="lu-diag-pill">' . htmlspecialchars($r['badge']) . '</span></p>';
@@ -412,7 +411,10 @@ function renderDiagDriveList(array $drives, array $verdicts): string {
     $order = $minRank($group['assigned']) <= $minRank($group['unassigned'])
         ? [['Array and pool', $group['assigned']], ['Unassigned', $group['unassigned']]]
         : [['Unassigned', $group['unassigned']], ['Array and pool', $group['assigned']]];
-    $out = '';
+    /* The Diagnose page's own message: why every Diagnose button is disabled.
+       Read in page order; a region inserted via innerHTML is not announced. */
+    $out = $diagBusy === null ? ''
+         : '<p class="lu-diag-hotzone" role="status">' . htmlspecialchars($diagBusy) . '</p>';
     foreach ($order as [$heading, $rows]) $out .= $render($heading, $rows);
     return $out;
 }
