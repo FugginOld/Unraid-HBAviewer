@@ -136,6 +136,11 @@ check('the start action feeds the preflight both busy probes',
       str_contains($code, "'resync' => diag_resync(),")
       && str_contains($code, "'mover'  => diag_mover_running(),"));
 
+// The badge is the newest run that HAS a verdict, through the one helper, and
+// SCANNING still comes from the lock alone (#27).
+check('the drivelist action takes each badge from diag_last_verdict()',
+      str_contains($code, "diag_last_verdict(\$d['dev'], DIAG_ROOT)"));
+
 // The sidebar is where the Diagnose page says Diagnose is unavailable.
 check('the drivelist action asks diag_busy() and hands it to the renderer',
       str_contains($code, 'renderDiagDriveList($drives, $verdicts, diag_busy())'));

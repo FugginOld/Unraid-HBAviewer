@@ -248,16 +248,8 @@ if ($action === 'drivelist') {
     $verdicts = [];
     foreach ($drives as $d) {
         if (is_file(diag_lock_path($d['dev'], DIAG_ROOT))) { $verdicts[$d['dev']] = 'SCANNING'; continue; }
-        $newest = null; $newestAt = -1;
-        foreach (glob(DIAG_ROOT . '/' . $d['dev'] . '-*', GLOB_ONLYDIR) ?: [] as $jd) {
-            if (!diag_job_valid(basename($jd))) continue;
-            $at = (int) @filemtime($jd);
-            if ($at > $newestAt) { $newestAt = $at; $newest = $jd; }
-        }
-        if ($newest === null) continue;
-        foreach (diag_events_decode((string) @file_get_contents("$newest/events.ndjson")) as $e) {
-            if (($e['t'] ?? '') === 'verdict') $verdicts[$d['dev']] = (string) ($e['v'] ?? '');
-        }
+        $v = diag_last_verdict($d['dev'], DIAG_ROOT);
+        if ($v !== null) $verdicts[$d['dev']] = $v;
     }
     echo renderDiagDriveList($drives, $verdicts, diag_busy());
     exit;

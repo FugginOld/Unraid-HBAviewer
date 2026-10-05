@@ -63,6 +63,40 @@ check('keep below 1 removes nothing',
 check('a disk with no runs is not an error', diag_trim_runs('sdz', 2, $root) === []);
 check('an invalid disk name trims nothing',  diag_trim_runs('../', 1, $root) === []);
 
+/* ── the drive list badge: newest run that HAS a verdict (#27) ───────────── */
+$vr = sys_get_temp_dir() . '/hbav_dr_' . getmypid(); @mkdir($vr, 0777, true);
+$job = function (string $id, int $mtime, array $events) use ($vr) {
+    @mkdir("$vr/$id", 0777, true);
+    file_put_contents("$vr/$id/events.ndjson",
+        implode("\n", array_map('json_encode', $events)) . "\n");
+    touch("$vr/$id", $mtime);
+};
+$verdict = fn(string $v) => ['t' => 'verdict', 'disk' => 'sdb', 'v' => $v, 'why' => 'x'];
+$phases  = [['t' => 'phase', 'disk' => '-', 'phase' => 'preflight', 'lba_total' => 0],
+            ['t' => 'phase', 'disk' => '-', 'phase' => 'baseline',  'lba_total' => 0]];
+check('no runs at all: no verdict', diag_last_verdict('sdb', $vr) === null);
+$job('sdb-100', 1_700_000_100, [$verdict('MEDIA')]);
+$job('sdb-200', 1_700_000_200, $phases);
+// The bug: the newest run skipped its triage (mover, parity, cancel, a crash)
+// and wrote no verdict, which hid the older MEDIA finding and read CLEAN.
+check('a newer run with no verdict does not hide an older one', diag_last_verdict('sdb', $vr) === 'MEDIA');
+$job('sdb-300', 1_700_000_300, array_merge($phases, [$verdict('CLEAN')]));
+check('a newer run that has a verdict wins', diag_last_verdict('sdb', $vr) === 'CLEAN');
+$job('sdc-999', 1_700_000_900, [$verdict('TRANSPORT')]);
+check('a run of another disk is never read', diag_last_verdict('sdb', $vr) === 'CLEAN');
+$job('sdbx-999', 1_700_000_950, [$verdict('MEDIA')]);
+check('a disk whose name merely starts with this one is not read', diag_last_verdict('sdb', $vr) === 'CLEAN');
+file_put_contents("$vr/sdb-300/events.ndjson", "{broken\n" . json_encode($verdict('STANDBY')) . "\n");
+check('a broken line is skipped, not fatal', diag_last_verdict('sdb', $vr) === 'STANDBY');
+check('only no-verdict runs: none', diag_last_verdict('sdd', $vr) === null);
+$job('sdd-1', 1_700_000_001, $phases);
+check('a run with phases only has no verdict', diag_last_verdict('sdd', $vr) === null);
+check('a disk name with glob characters reads nothing', diag_last_verdict('sd*', $vr) === null);
+$job('sde-1', 1_700_000_001, [$verdict('MEDIA'), $verdict('CLEAN')]);
+check('within one run the last verdict event wins', diag_last_verdict('sde', $vr) === 'CLEAN');
+foreach (glob("$vr/*") ?: [] as $d) { foreach (glob("$d/*") ?: [] as $f) @unlink($f); @rmdir($d); }
+@rmdir($vr);
+
 /* ── the baseline path is per DISK and stable across jobs ────────────────
    Distinct from diag_job_dir()'s per-job directories, which diag_trim_runs()
    sweeps -- the baseline must not live inside one of those or it would be

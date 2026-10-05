@@ -412,7 +412,7 @@
 
     /* The sidebar drive list, worst-first with verdict badges. Server-rendered
        for the same reason the verdict screen is: the badges come from each
-       disk's newest job directory, which only the server can see. */
+       disk's newest run that has a verdict, which only the server can see. */
     window.luDiagDrives = function () {
         return fetch('/plugins/hbaviewer/diagnose.php?action=drivelist')
           .then(function (r) { return r.text(); })

@@ -13,6 +13,8 @@
    and (from Task 6) the Diagnose sidebar use. render/baymap.php holds only
    function declarations, so requiring it here has no side effects. */
 require_once __DIR__ . '/render/baymap.php';
+/* diag_events_decode(), for diag_last_verdict(). Declarations only, like baymap.php. */
+require_once __DIR__ . '/render/diagnose.php';
 
 /* Every const the CLI test runner reaches must be declared ABOVE the dispatch
    guard: functions are hoisted, top-level consts are not. See ARCHITECTURE.md
@@ -69,6 +71,28 @@ function diag_trim_runs(string $disk, int $keep, string $root = DIAG_ROOT): arra
     }
     sort($doomed);
     return $doomed;
+}
+
+/* The verdict a drive's sidebar badge shows: that of its newest run THAT HAS
+   ONE. Not simply its newest run: a run can end without a verdict (triage
+   skipped while the mover or parity runs, a cancel, an engine crash), and
+   reading only that run would hide an older MEDIA finding and show CLEAN. A
+   disk name is validated before it reaches the glob. */
+function diag_last_verdict(string $disk, string $root): ?string {
+    if (!diag_disk_valid($disk)) return null;
+    $dirs = [];
+    foreach (glob($root . '/' . $disk . '-*', GLOB_ONLYDIR) ?: [] as $jd) {
+        if (diag_job_valid(basename($jd))) $dirs[$jd] = (int) @filemtime($jd);
+    }
+    uksort($dirs, fn($a, $b) => $dirs[$b] <=> $dirs[$a] ?: strcmp($b, $a));   // newest first
+    foreach (array_keys($dirs) as $jd) {
+        $v = null;
+        foreach (diag_events_decode((string) @file_get_contents("$jd/events.ndjson")) as $e) {
+            if (($e['t'] ?? '') === 'verdict') $v = (string) ($e['v'] ?? '');
+        }
+        if ($v !== null) return $v;
+    }
+    return null;
 }
 
 /* ONE LOCK PER DISK, not per job. The Tier 1 gate is "one job per disk at a
